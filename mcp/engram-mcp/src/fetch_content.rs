@@ -457,7 +457,7 @@ mod tests {
         CodeAuthorityAction, CodeBindingAuthorizer, CodeBindingCoordinator,
     };
     use engram_knowledge::{CodeBindingRepository, KnowledgeRepository};
-    use engram_store_sqlite::knowledge::{SqlCodeBindingRepository, SqlKnowledgeStore};
+    use engram_knowledge::{CoreError, CoreResult};
 
     struct PermissiveAuthorizer;
     #[async_trait::async_trait]
@@ -468,15 +468,287 @@ mod tests {
             _scope: &engram_domain::Scope,
             _repo: &engram_domain::RepoId,
             _action: CodeAuthorityAction,
-        ) -> engram_knowledge::CoreResult<()> {
+        ) -> CoreResult<()> {
             Ok(())
         }
     }
 
-    /// Builds a BOUND MCP app over a real retained snapshot: repo bound +
-    /// published at `gen-1` whose commit OID owns the retained bytes, with
-    /// knowledge chunks stamped for that generation. Returns the app plus the
-    /// retained root for deletion experiments.
+    /// Typed in-memory double of the NEUTRAL `CodeBindingRepository` port.
+    ///
+    /// The durable SQLite cell driving this same chain end to end is proven
+    /// in `engram-integration`'s `bound_source_status` target (real store,
+    /// real receipts, real publish); this double exists only so the MCP
+    /// handler's own dispatch can be tested inside the engine-neutral src
+    /// tree (the ADR-0022 gate forbids engine type names here). It holds one
+    /// published binding + generation record and nothing else.
+    struct InMemoryBindings {
+        binding: engram_domain::CodeBinding,
+        generation: CodeGeneration,
+    }
+
+    impl InMemoryBindings {
+        fn published(commit_oid: &str) -> Self {
+            Self {
+                binding: engram_domain::CodeBinding {
+                    scope: crate::scope::project_scope("bound-project", "default"),
+                    repo_id: engram_domain::RepoId("bound-repo".to_owned()),
+                    branch_ref: "refs/heads/main".to_owned(),
+                    version: 1,
+                    active_generation: Some("gen-1".to_owned()),
+                    epoch: 1,
+                },
+                generation: CodeGeneration {
+                    id: "gen-1".to_owned(),
+                    binding_version: 1,
+                    commit_oid: commit_oid.to_owned(),
+                    snapshot_digest: "b".repeat(64),
+                    parser_fingerprint: "parser".to_owned(),
+                    filter_fingerprint: "filter".to_owned(),
+                },
+            }
+        }
+    }
+
+    #[async_trait::async_trait]
+    impl engram_knowledge::CodeReadLeases for InMemoryBindings {
+        async fn acquire_read_lease(
+            &self,
+            _lease: engram_knowledge::CodeReadLease,
+            _now: engram_domain::Timestamp,
+        ) -> CoreResult<engram_knowledge::CodeReadLease> {
+            Err(CoreError::CapabilityUnsupported {
+                capability: "leases".into(),
+                reason: "test double holds no leases".into(),
+            })
+        }
+        async fn renew_read_lease(
+            &self,
+            _lease: &engram_knowledge::CodeReadLease,
+            _now: engram_domain::Timestamp,
+            _expires_at: engram_domain::Timestamp,
+        ) -> CoreResult<engram_knowledge::CodeReadLease> {
+            Err(CoreError::CapabilityUnsupported {
+                capability: "leases".into(),
+                reason: "test double holds no leases".into(),
+            })
+        }
+        async fn release_read_lease(
+            &self,
+            _lease: &engram_knowledge::CodeReadLease,
+        ) -> CoreResult<()> {
+            Ok(())
+        }
+        async fn retained_generations(
+            &self,
+            _scope: &engram_domain::Scope,
+            _now: engram_domain::Timestamp,
+            _grace_millis: u64,
+        ) -> CoreResult<Vec<String>> {
+            Ok(Vec::new())
+        }
+    }
+
+    #[async_trait::async_trait]
+    impl CodeBindingRepository for InMemoryBindings {
+        async fn register(
+            &self,
+            registration: engram_knowledge::RepositoryRegistration,
+        ) -> CoreResult<engram_knowledge::RepositoryRegistration> {
+            Ok(registration)
+        }
+        async fn bind(
+            &self,
+            binding: engram_domain::CodeBinding,
+        ) -> CoreResult<engram_domain::CodeBinding> {
+            Ok(binding)
+        }
+        async fn get_binding(
+            &self,
+            scope: &engram_domain::Scope,
+            repo_id: &engram_domain::RepoId,
+        ) -> CoreResult<Option<engram_domain::CodeBinding>> {
+            Ok(
+                (scope == &self.binding.scope && *repo_id == self.binding.repo_id)
+                    .then(|| self.binding.clone()),
+            )
+        }
+        async fn begin_attempt(
+            &self,
+            _scope: &engram_domain::Scope,
+            _repo_id: &engram_domain::RepoId,
+            _generation: CodeGeneration,
+            attempt: engram_domain::CodeAttempt,
+        ) -> CoreResult<engram_domain::CodeAttempt> {
+            Ok(attempt)
+        }
+        async fn get_attempt(
+            &self,
+            _scope: &engram_domain::Scope,
+            _repo_id: &engram_domain::RepoId,
+            _attempt_id: &str,
+        ) -> CoreResult<Option<(CodeGeneration, engram_domain::CodeAttempt)>> {
+            Ok(None)
+        }
+        async fn get_generation(
+            &self,
+            _scope: &engram_domain::Scope,
+            _repo_id: &engram_domain::RepoId,
+            generation_id: &str,
+        ) -> CoreResult<Option<CodeGeneration>> {
+            Ok((generation_id == self.generation.id).then(|| self.generation.clone()))
+        }
+        async fn put_generation(&self, generation: CodeGeneration) -> CoreResult<CodeGeneration> {
+            Ok(generation)
+        }
+        async fn put_lineage(
+            &self,
+            _scope: &engram_domain::Scope,
+            _record_id: &str,
+            lineage: engram_domain::CodeLineage,
+        ) -> CoreResult<engram_domain::CodeLineage> {
+            Ok(lineage)
+        }
+        async fn put_source_descriptor(
+            &self,
+            _scope: &engram_domain::Scope,
+            source: engram_domain::IndexedSource,
+        ) -> CoreResult<engram_domain::IndexedSource> {
+            Ok(source)
+        }
+        async fn record_receipt(
+            &self,
+            receipt: engram_knowledge::StageReceipt,
+        ) -> CoreResult<engram_knowledge::StageReceipt> {
+            Ok(receipt)
+        }
+        async fn mark_ready(
+            &self,
+            _scope: &engram_domain::Scope,
+            _repo_id: &engram_domain::RepoId,
+            _attempt_id: &str,
+            _fencing_token: u64,
+        ) -> CoreResult<engram_domain::CodeAttempt> {
+            Err(CoreError::CapabilityUnsupported {
+                capability: "binding-store".into(),
+                reason: "test double is pre-published".into(),
+            })
+        }
+        async fn publish(
+            &self,
+            _scope: &engram_domain::Scope,
+            _repo_id: &engram_domain::RepoId,
+            _attempt_id: &str,
+            _expected_epoch: u64,
+        ) -> CoreResult<engram_domain::CodeBinding> {
+            Ok(self.binding.clone())
+        }
+        async fn eligibility(
+            &self,
+            scope: &engram_domain::Scope,
+        ) -> CoreResult<engram_knowledge::CodeEligibility> {
+            let published = scope == &self.binding.scope;
+            Ok(engram_knowledge::CodeEligibility {
+                scope: scope.clone(),
+                epoch: u64::from(!published) + if published { self.binding.epoch } else { 0 },
+                generations: published
+                    .then(|| vec![self.generation.id.clone()])
+                    .unwrap_or_default(),
+                repository_ids: published
+                    .then(|| vec![self.binding.repo_id.0.clone()])
+                    .unwrap_or_default(),
+            })
+        }
+        async fn preview_reset(
+            &self,
+            _scope: &engram_domain::Scope,
+            _repo_id: &engram_domain::RepoId,
+        ) -> CoreResult<engram_domain::CodeResetPreview> {
+            Err(CoreError::CapabilityUnsupported {
+                capability: "code-reset".into(),
+                reason: "test double holds no reset preview".into(),
+            })
+        }
+        async fn journal_reset(
+            &self,
+            journal: engram_domain::CodeResetJournal,
+        ) -> CoreResult<engram_domain::CodeResetJournal> {
+            Ok(journal)
+        }
+    }
+
+    /// An in-memory `KnowledgeQuery` double seeded with one bound code chunk
+    /// stamped for gen-1 (task_017 MCP dispatch fixture). The neutral port
+    /// keeps this file inside the ADR-0022 gated tree; the durable-store
+    /// equivalent of this chain is proven in `bound_source_status`.
+    struct SeededQuery {
+        chunks: Vec<engram_domain::KnowledgeChunk>,
+    }
+
+    #[async_trait::async_trait]
+    impl engram_integration::KnowledgeQuery for SeededQuery {
+        async fn list_entities(
+            &self,
+            _scope: &engram_domain::Scope,
+        ) -> CoreResult<Vec<engram_domain::KnowledgeEntity>> {
+            Ok(Vec::new())
+        }
+        async fn list_relationships(
+            &self,
+            _scope: &engram_domain::Scope,
+        ) -> CoreResult<Vec<engram_domain::KnowledgeRelationship>> {
+            Ok(Vec::new())
+        }
+        async fn list_chunks(
+            &self,
+            _scope: &engram_domain::Scope,
+        ) -> CoreResult<Vec<engram_domain::KnowledgeChunk>> {
+            Ok(self.chunks.clone())
+        }
+    }
+
+    fn bound_knowledge(
+        scope: &engram_domain::Scope,
+        source: &str,
+    ) -> std::sync::Arc<dyn engram_integration::KnowledgeQuery> {
+        let mut stamps = engram_domain::Metadata::new();
+        stamps.insert(
+            "codeGenerationId".to_owned(),
+            serde_json::Value::String("gen-1".to_owned()),
+        );
+        stamps.insert(
+            "codeRepoId".to_owned(),
+            serde_json::Value::String("bound-repo".to_owned()),
+        );
+        let chunk = engram_domain::KnowledgeChunk {
+            id: engram_domain::Id::from("chunk-bound-1"),
+            document_id: engram_domain::Id::from("doc-bound"),
+            source_id: engram_domain::Id::from("src-bound"),
+            kind: KnowledgeChunkKind::CodeSymbol,
+            text: source.lines().next().unwrap_or_default().to_owned(),
+            summary: None,
+            location: Some(engram_domain::SourceLocation {
+                path: Some("src/bound.py".to_owned()),
+                start_line: Some(1),
+                end_line: Some(1),
+                start_offset: None,
+                end_offset: None,
+                anchor: None,
+            }),
+            entities: Vec::new(),
+            concepts: Vec::new(),
+            embedding_refs: Vec::new(),
+            content_hash: "sha256:chunk-bound-1".to_owned(),
+            provenance: fixture_provenance(),
+            policy: fixture_policy(),
+            created_at: chrono::Utc::now(),
+            updated_at: None,
+            metadata: Some(stamps),
+        };
+        std::sync::Arc::new(SeededQuery {
+            chunks: vec![chunk],
+        })
+    }
+
     fn fixture_policy() -> engram_domain::Policy {
         engram_domain::Policy {
             visibility: engram_domain::Visibility::Workspace,
@@ -505,6 +777,10 @@ mod tests {
         }
     }
 
+    /// Builds a BOUND MCP app over a real retained snapshot: repo bound +
+    /// published at `gen-1` whose commit OID owns the retained bytes, with
+    /// knowledge chunks stamped for that generation. Returns the app plus the
+    /// retained root for deletion experiments.
     fn bound_app(dir: &std::path::Path, source: &str) -> (App, std::path::PathBuf) {
         use futures::executor::block_on;
         let scope = crate::scope::project_scope("bound-project", "default");
@@ -520,142 +796,12 @@ mod tests {
             bytes: source.as_bytes().to_vec(),
         }];
         // The retention stage creates and owns its private storage root
-        // itself (0700, no links) — never pre-create it.
+        // (0700, no links) itself — never pre-create it.
         let retained_root = dir.join("retained");
         let snapshot = retain_snapshot(&retained_root, commit, &files).expect("retain snapshot");
+        let bindings = std::sync::Arc::new(InMemoryBindings::published(&snapshot.commit.oid));
 
-        // Durable binding store: bind + publish gen-1 at that commit.
-        let bindings = SqlCodeBindingRepository::open(dir.join("bound-bindings.sqlite")).unwrap();
-        block_on(bindings.bind(engram_domain::CodeBinding {
-            scope: scope.clone(),
-            repo_id: engram_domain::RepoId("bound-repo".to_owned()),
-            branch_ref: "refs/heads/main".to_owned(),
-            version: 1,
-            active_generation: None,
-            epoch: 0,
-        }))
-        .unwrap();
-        let repo_id = engram_domain::RepoId("bound-repo".to_owned());
-        let generation = CodeGeneration {
-            id: "gen-1".to_owned(),
-            binding_version: 1,
-            commit_oid: snapshot.commit.oid.clone(),
-            snapshot_digest: snapshot.digest.clone(),
-            parser_fingerprint: "parser".to_owned(),
-            filter_fingerprint: "filter".to_owned(),
-        };
-        let attempt = engram_domain::CodeAttempt {
-            id: "attempt-fetch".to_owned(),
-            idempotency_key: "idempotent-fetch".to_owned(),
-            binding_version: 1,
-            expected_epoch: 0,
-            expected_active_generation: None,
-            fencing_token: 0,
-            state: engram_domain::CodeAttemptState::Created,
-            receipt_kinds: vec![
-                engram_domain::CodeReceiptKind::Source,
-                engram_domain::CodeReceiptKind::Knowledge,
-            ],
-        };
-        block_on(bindings.begin_attempt(&scope, &repo_id, generation.clone(), attempt)).unwrap();
-        for lane in [
-            engram_domain::CodeReceiptKind::Source,
-            engram_domain::CodeReceiptKind::Knowledge,
-        ] {
-            block_on(
-                bindings.record_receipt(engram_knowledge::StageReceipt {
-                    attempt_id: "attempt-fetch".to_owned(),
-                    generation_id: "gen-1".to_owned(),
-                    lane: serde_json::to_value(&lane)
-                        .unwrap()
-                        .as_str()
-                        .unwrap()
-                        .to_owned(),
-                    digest: "d".repeat(64),
-                }),
-            )
-            .unwrap();
-        }
-        let (_, stored) = block_on(bindings.get_attempt(&scope, &repo_id, "attempt-fetch"))
-            .unwrap()
-            .unwrap();
-        block_on(bindings.mark_ready(&scope, &repo_id, "attempt-fetch", stored.fencing_token))
-            .unwrap();
-        block_on(bindings.publish(&scope, &repo_id, "attempt-fetch", 0)).unwrap();
-        let bindings = std::sync::Arc::new(bindings);
-
-        // Knowledge store with one bound code chunk stamped for gen-1.
-        let knowledge = std::sync::Arc::new(SqlKnowledgeStore::open_in_memory().unwrap());
-        block_on(knowledge.put_source(engram_domain::KnowledgeSource {
-            id: engram_domain::Id::from("src-bound"),
-            kind: engram_domain::SourceKind::GitRepository,
-            scope: scope.clone(),
-            name: "bound-repo".to_owned(),
-            uri: None,
-            version: None,
-            repository_key: Some("bound-repo".to_owned()),
-            git_ref: Some("refs/heads/main".to_owned()),
-            policy: fixture_policy(),
-            provenance: fixture_provenance(),
-            created_at: chrono::Utc::now(),
-            updated_at: None,
-            metadata: None,
-        }))
-        .unwrap();
-        block_on(knowledge.put_document(SourceDocument {
-            id: engram_domain::Id::from("doc-bound"),
-            source_id: engram_domain::Id::from("src-bound"),
-            kind: SourceDocumentKind::Code,
-            uri: None,
-            path: Some("src/bound.py".to_owned()),
-            title: None,
-            mime_type: None,
-            language: Some("python".to_owned()),
-            version: None,
-            content_hash: "sha256:bound".to_owned(),
-            provenance: fixture_provenance(),
-            policy: fixture_policy(),
-            created_at: chrono::Utc::now(),
-            updated_at: None,
-            metadata: None,
-        }))
-        .unwrap();
-        let mut stamps = engram_domain::Metadata::new();
-        stamps.insert(
-            "codeGenerationId".to_owned(),
-            serde_json::Value::String("gen-1".to_owned()),
-        );
-        stamps.insert(
-            "codeRepoId".to_owned(),
-            serde_json::Value::String("bound-repo".to_owned()),
-        );
-        block_on(knowledge.put_chunk(engram_domain::KnowledgeChunk {
-            id: engram_domain::Id::from("chunk-bound-1"),
-            document_id: engram_domain::Id::from("doc-bound"),
-            source_id: engram_domain::Id::from("src-bound"),
-            kind: KnowledgeChunkKind::CodeSymbol,
-            text: source.lines().next().unwrap_or_default().to_owned(),
-            summary: None,
-            location: Some(engram_domain::SourceLocation {
-                path: Some("src/bound.py".to_owned()),
-                start_line: Some(1),
-                end_line: Some(1),
-                start_offset: None,
-                end_offset: None,
-                anchor: None,
-            }),
-            entities: Vec::new(),
-            concepts: Vec::new(),
-            embedding_refs: Vec::new(),
-            content_hash: "sha256:chunk-bound-1".to_owned(),
-            provenance: fixture_provenance(),
-            policy: fixture_policy(),
-            created_at: chrono::Utc::now(),
-            updated_at: None,
-            metadata: Some(stamps),
-        }))
-        .unwrap();
-
+        let knowledge = bound_knowledge(&scope, source);
         let coordinator = CodeBindingCoordinator::new(
             bindings.clone() as std::sync::Arc<dyn CodeBindingRepository>,
             std::sync::Arc::new(PermissiveAuthorizer),

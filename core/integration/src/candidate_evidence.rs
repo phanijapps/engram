@@ -478,7 +478,7 @@ fn entity_is_code_kind(entity: &engram_domain::KnowledgeEntity) -> bool {
 /// graph lane stamps this default on such candidates, so the evidence path
 /// authorizes the same shape (the owning decision, not a resolver-invented
 /// bypass).
-fn graph_default_policy() -> Policy {
+pub(crate) fn graph_default_policy() -> Policy {
     Policy {
         visibility: Visibility::Workspace,
         retention: Retention::Durable,

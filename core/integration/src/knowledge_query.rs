@@ -145,6 +145,10 @@ impl MaintenanceGrant {
 pub struct AuthorizedKnowledgeQuery {
     query: Arc<dyn KnowledgeQuery>,
     coordinator: Arc<crate::code_binding::CodeBindingCoordinator>,
+    /// Owning ordinary-record policy authorizer for scopes with NO published
+    /// binding (corrective r4, canonical 3c/4): ordinary records still need
+    /// their own caller authorization, never an invented repository anchor.
+    policy_authorizer: Option<Arc<dyn engram_runtime::PolicyAuthorizer>>,
 }
 
 impl AuthorizedKnowledgeQuery {
@@ -154,7 +158,44 @@ impl AuthorizedKnowledgeQuery {
         query: Arc<dyn KnowledgeQuery>,
         coordinator: Arc<crate::code_binding::CodeBindingCoordinator>,
     ) -> Self {
-        Self { query, coordinator }
+        Self {
+            query,
+            coordinator,
+            policy_authorizer: None,
+        }
+    }
+
+    /// Attaches the owning ordinary-record policy authorizer (unbound-scope
+    /// branch). Without it, an unbound scope cannot authorize ordinary
+    /// reads and fails closed.
+    pub fn with_policy_authorizer(
+        mut self,
+        authorizer: Arc<dyn engram_runtime::PolicyAuthorizer>,
+    ) -> Self {
+        self.policy_authorizer = Some(authorizer);
+        self
+    }
+
+    /// The owning ordinary-record decision for one canonical record in an
+    /// UNBOUND scope: the request's caller against the record's scope and
+    /// the graph-lane default policy shape (entities carry no policy field).
+    fn ordinary_authorized(&self, actor: &engram_domain::Actor, scope: &Scope) -> bool {
+        let Some(authorizer) = &self.policy_authorizer else {
+            return false;
+        };
+        let requester = engram_domain::Requester {
+            actor: actor.clone(),
+            roles: Vec::new(),
+            permissions: Vec::new(),
+            on_behalf_of: None,
+        };
+        authorizer
+            .can_retrieve(
+                &requester,
+                scope,
+                &crate::candidate_evidence::graph_default_policy(),
+            )
+            .is_ok()
     }
 
     /// Authorizes the caller for every repository in the scope's published
@@ -427,24 +468,38 @@ impl AuthorizedKnowledgeQuery {
     ) -> CoreResult<Vec<KnowledgeEntity>> {
         let initial_view = self.coordinator.eligibility_view(scope, None).await?;
         if initial_view.eligible_bindings().is_empty() {
-            // No code binding exists, so there is no repository authority to
-            // pin. Preserve positively typed ordinary knowledge while denying
-            // every code-kind or lineage-bearing record without inventing a
-            // synthetic repository authority.
+            // Corrective r4 (canonical 3c/4): no published binding exists, so
+            // there is no repository authority to pin — but ordinary records
+            // still need their OWN caller authorization (never an invented
+            // anchor), and durable lineage still classifies code ownership:
+            // a staged code-owned record denies even when its kind is
+            // ordinary-looking (e.g. a Concept contributed by a staged
+            // attempt), and every code-kind record denies.
+            let caller_authorized = self.ordinary_authorized(actor, scope);
+            let code_owned: std::collections::HashSet<String> = initial_view
+                .code_records()
+                .into_iter()
+                .map(str::to_owned)
+                .collect();
             let entities = self.query.list_entities(scope).await?;
+            let ordinary: Vec<KnowledgeEntity> = entities
+                .into_iter()
+                .filter(|entity| {
+                    !entity_is_code_kind(entity)
+                        && !code_owned.contains(entity.id.as_str())
+                        && caller_authorized
+                })
+                .collect();
             if requested.is_empty() {
-                return Ok(entities
-                    .into_iter()
-                    .filter(|entity| !entity_is_code_kind(entity))
-                    .collect());
+                return Ok(ordinary);
             }
             let requested: std::collections::HashSet<&str> =
                 requested.iter().map(String::as_str).collect();
-            let selected: Vec<KnowledgeEntity> = entities
+            let selected: Vec<KnowledgeEntity> = ordinary
                 .into_iter()
                 .filter(|entity| requested.contains(entity.id.as_str()))
                 .collect();
-            if selected.len() != requested.len() || selected.iter().any(entity_is_code_kind) {
+            if selected.len() != requested.len() {
                 return Err(CoreError::InvalidRequest {
                     reason:
                         "BindingRequired: code target ids are foreign or unpublished in this scope"

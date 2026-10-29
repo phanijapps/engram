@@ -56,6 +56,72 @@ fn actor() -> Actor {
     }
 }
 
+/// Allow-all ordinary-record policy authorizer (the owning default for the
+/// unbound-branch tests; the denying variant below proves the seam).
+struct AllowAllPolicy;
+impl engram_runtime::PolicyAuthorizer for AllowAllPolicy {
+    fn can_write(
+        &self,
+        _requester: &Requester,
+        _scope: &Scope,
+        _policy: &Policy,
+    ) -> CoreResult<()> {
+        Ok(())
+    }
+    fn can_retrieve(
+        &self,
+        _requester: &Requester,
+        _scope: &Scope,
+        _policy: &Policy,
+    ) -> CoreResult<()> {
+        Ok(())
+    }
+    fn can_forget(
+        &self,
+        _requester: &Requester,
+        _scope: &Scope,
+        _policy: &Policy,
+    ) -> CoreResult<()> {
+        Ok(())
+    }
+}
+
+/// Deny-all ORDINARY-record policy authorizer (canonical 3c: an actually
+/// denied ordinary caller receives nothing in an unbound scope).
+struct DenyAllPolicy;
+impl engram_runtime::PolicyAuthorizer for DenyAllPolicy {
+    fn can_write(
+        &self,
+        _requester: &Requester,
+        _scope: &Scope,
+        _policy: &Policy,
+    ) -> CoreResult<()> {
+        Err(CoreError::PolicyDenied {
+            reason: "ordinary reads denied".to_string(),
+        })
+    }
+    fn can_retrieve(
+        &self,
+        _requester: &Requester,
+        _scope: &Scope,
+        _policy: &Policy,
+    ) -> CoreResult<()> {
+        Err(CoreError::PolicyDenied {
+            reason: "ordinary reads denied".to_string(),
+        })
+    }
+    fn can_forget(
+        &self,
+        _requester: &Requester,
+        _scope: &Scope,
+        _policy: &Policy,
+    ) -> CoreResult<()> {
+        Err(CoreError::PolicyDenied {
+            reason: "ordinary reads denied".to_string(),
+        })
+    }
+}
+
 /// Deny-everything authorizer (finding 3): even fully populated scopes deny.
 struct DenyAllAuthorizer;
 #[async_trait]
@@ -1324,7 +1390,8 @@ mod task_016 {
             .cloned()
             .expect("knowledge query handle");
         let coordinator = provider.code_bindings().expect("coordinator").clone();
-        let authorized = AuthorizedKnowledgeQuery::new(knowledge, coordinator);
+        let authorized = AuthorizedKnowledgeQuery::new(knowledge, coordinator)
+            .with_policy_authorizer(Arc::new(crate::AllowAllPolicy));
         (authorized, bindings)
     }
 
@@ -1464,7 +1531,8 @@ mod task_016 {
             Arc::new(AllowAuthorizer),
             Vec::new(),
         ));
-        let authorized = AuthorizedKnowledgeQuery::new(knowledge, coordinator);
+        let authorized = AuthorizedKnowledgeQuery::new(knowledge, coordinator)
+            .with_policy_authorizer(Arc::new(crate::AllowAllPolicy));
         let ordinary = block_on(authorized.list_entities_authorized(&actor(), &unbound, &[]))
             .expect("ordinary records survive without a code binding");
         assert_eq!(ordinary.len(), 1);
@@ -1477,6 +1545,105 @@ mod task_016 {
         assert!(
             matches!(&denied, Err(CoreError::InvalidRequest { reason }) if reason.contains("BindingRequired")),
             "unbound code IDs must deny: {denied:?}"
+        );
+    }
+
+    /// Corrective r4 (canonical 3c/4): in an UNBOUND scope (no published
+    /// binding), ordinary records flow only through their OWN caller
+    /// authorization, and DURABLE STAGED LINEAGE still classifies code
+    /// ownership: a code-owned Concept denies, an ordinary Concept survives
+    /// for a permitted caller, and an actually denied ordinary caller gets
+    /// nothing. No repository authority is invented.
+    #[test]
+    fn unbound_scope_authorizes_ordinary_and_denies_lineage() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let bindings = Arc::new(
+            SqlCodeBindingRepository::open(dir.path().join("unbound-auth.sqlite"))
+                .expect("open bindings"),
+        );
+        let knowledge = Arc::new(SqlKnowledgeStore::open_in_memory().expect("knowledge"));
+        let unbound = Scope {
+            tenant: "task-016".to_string(),
+            subject: None,
+            workspace: Some("unbound-authorized".to_string()),
+            session: None,
+            environment: None,
+        };
+        for (id, name) in [
+            ("unbound-doc", "ordinaryConcept"),
+            ("staged-concept", "stagedConcept"),
+        ] {
+            let mut record = entity(id, name, EntityKind::Concept);
+            record.scope = unbound.clone();
+            block_on(knowledge.put_entity(record)).expect("put concept");
+        }
+        // STAGED lineage: repo-x attempt never published — the concept IS
+        // code-owned by durable lineage even though its kind is ordinary.
+        block_on(bindings.bind(CodeBinding {
+            scope: unbound.clone(),
+            repo_id: RepoId("repo-x".to_string()),
+            branch_ref: "refs/heads/main".to_string(),
+            version: 1,
+            active_generation: None,
+            epoch: 0,
+        }))
+        .expect("bind repo-x");
+        block_on(bindings.put_lineage(
+            &unbound,
+            "staged-concept",
+            CodeLineage {
+                repo_id: RepoId("repo-x".to_string()),
+                generation_id: "gen-staged".to_string(),
+                source_path: "src/staged.rs".to_string(),
+                contributors: vec!["staged-concept".to_string()],
+            },
+        ))
+        .expect("staged lineage");
+
+        let allow_coordinator = CodeBindingCoordinator::new(
+            bindings.clone() as Arc<dyn CodeBindingRepository>,
+            Arc::new(crate::AllowAuthorizer),
+            Vec::new(),
+        );
+        // Permitted ordinary caller: ONLY the ordinary Concept survives.
+        let permitted =
+            AuthorizedKnowledgeQuery::new(knowledge.clone(), Arc::new(allow_coordinator))
+                .with_policy_authorizer(Arc::new(crate::AllowAllPolicy));
+        let ordinary = block_on(permitted.list_entities_authorized(&actor(), &unbound, &[]))
+            .expect("permitted unbound listing");
+        let ids: Vec<String> = ordinary.iter().map(|e| e.id.to_string()).collect();
+        assert_eq!(
+            ids,
+            vec!["unbound-doc".to_string()],
+            "only the positively authorized ordinary Concept survives: {ids:?}"
+        );
+        // The staged code-owned Concept denies even on EXPLICIT request.
+        let explicit = block_on(permitted.list_entities_authorized(
+            &actor(),
+            &unbound,
+            &["staged-concept".to_string()],
+        ));
+        assert!(
+            matches!(&explicit, Err(CoreError::InvalidRequest { reason }) if reason.contains("BindingRequired")),
+            "a lineage-owned staged Concept denies: {explicit:?}"
+        );
+
+        // An actually DENIED ordinary caller receives nothing (not the
+        // staged concept either) — code denial is not what stops this
+        // caller; their own ordinary-policy denial is.
+        let denied_coordinator = CodeBindingCoordinator::new(
+            bindings.clone() as Arc<dyn CodeBindingRepository>,
+            Arc::new(crate::AllowAuthorizer),
+            Vec::new(),
+        );
+        let denied_caller = AuthorizedKnowledgeQuery::new(knowledge, Arc::new(denied_coordinator))
+            .with_policy_authorizer(Arc::new(crate::DenyAllPolicy));
+        let empty = block_on(denied_caller.list_entities_authorized(&actor(), &unbound, &[]))
+            .expect("denied caller listing resolves");
+        assert!(
+            empty.is_empty(),
+            "a denied ordinary caller gets nothing: {:?}",
+            empty.iter().map(|e| e.id.to_string()).collect::<Vec<_>>()
         );
     }
 

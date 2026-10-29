@@ -565,11 +565,19 @@ mod a5_collector {
         );
 
         // Cross-commit equivalence: the separately-committed layout returns
-        // the identical page (the collector's merge path is exercised over
-        // multi-segment state whenever segments persist).
+        // the identical page — and the instrumented counter ASSERTS the
+        // merge path really runs over separately-committed live segments
+        // (r5 final, finding 3: cross-commit alone is not proof; the live
+        // segment count is).
+        let counters = Arc::new(DistinctTargetCounters::default());
         let split_page = split
-            .search_targets_within("quantum", 5, &targets, &allowed)
+            .search_targets_within_counted("quantum", 5, &targets, &allowed, Some(&counters))
             .expect("split page");
+        assert!(
+            counters.segments() > 1,
+            "the cross-commit layout participates through multiple live segments: {}",
+            counters.segments()
+        );
         assert_eq!(
             page_ids(&split_page),
             cold_listed,
@@ -667,6 +675,288 @@ mod a5_collector {
             page_ids(&with_late).contains(&"matrix-late"),
             "the late write is visible once its target is requested: {:?}",
             page_ids(&with_late)
+        );
+    }
+
+    /// A5 (r5 final, finding 3): the decisive collector matrix — five-key
+    /// multiplicity, shared-target excluded-only-token isolation,
+    /// duplicates/ties/zero-limit — on a FORCED multi-segment index: the
+    /// fixture is written in SEVEN separate commit transactions (one commit
+    /// per logical group), which deterministically retains seven LIVE
+    /// segment fruits (Tantivy's default merge policy does not merge this
+    /// few tiny segments; the instrumented `segments()` counter ASSERTS the
+    /// live-segment count exceeds one in every participating state). The
+    /// matrix runs on the COLD in-process index, on a CLOSED-AND-REOPENED
+    /// index, and on the SAME warm handle after a further write — the
+    /// write's target appears only when requested and the original pages
+    /// are stable.
+    #[test]
+    fn forced_multisegment_decisive_matrix_cold_reopened_warm() {
+        let dir = TempDir::new().expect("tempdir");
+        let lexical_dir = dir.path().join("lexical-a5-forced");
+        std::fs::create_dir_all(&lexical_dir).expect("mkdir");
+        let index = reopen(&lexical_dir);
+
+        // Commit 1: multiplicity key 1.
+        index
+            .upsert_stamped(
+                "multi-target",
+                "zephyr match variant 0",
+                &code_contributor_key("gen-m1"),
+            )
+            .expect("commit 1 (gen-m1)");
+        // Commit 2: multiplicity keys 2–3.
+        index
+            .upsert_batch_stamped(&[
+                (
+                    "multi-target".to_string(),
+                    "zephyr match variant 1".to_string(),
+                    code_contributor_key("gen-m2"),
+                ),
+                (
+                    "multi-target".to_string(),
+                    "zephyr match variant 2".to_string(),
+                    code_contributor_key("gen-m3"),
+                ),
+            ])
+            .expect("commit 2 (gen-m2, gen-m3)");
+        // Commit 3: multiplicity keys 4–5 + the lower-ranked tail target.
+        index
+            .upsert_batch_stamped(&[
+                (
+                    "multi-target".to_string(),
+                    "zephyr match variant 3".to_string(),
+                    code_contributor_key("gen-m4"),
+                ),
+                (
+                    "multi-target".to_string(),
+                    "zephyr match variant 4".to_string(),
+                    code_contributor_key("gen-m5"),
+                ),
+                (
+                    "tail-target".to_string(),
+                    "zephyr weaker tail".to_string(),
+                    "doc".to_string(),
+                ),
+            ])
+            .expect("commit 3 (gen-m4, gen-m5, tail)");
+        // Commit 4: the shared target's PERMITTED contribution.
+        index
+            .upsert_stamped(
+                "shared-target",
+                "atlas permitted token",
+                &code_contributor_key("gen-live"),
+            )
+            .expect("commit 4 (permitted)");
+        // Commit 5: the shared target's EXCLUDED-generation-only contribution.
+        index
+            .upsert_stamped(
+                "shared-target",
+                "boreas excluded token",
+                &code_contributor_key("gen-stale"),
+            )
+            .expect("commit 5 (excluded)");
+        // Commit 6: duplicate document one.
+        index
+            .upsert_stamped(
+                "dupe-target",
+                "quantum duplicate text",
+                &code_contributor_key("gen-d1"),
+            )
+            .expect("commit 6 (dupe 1)");
+        // Commit 7: duplicate document two + the equal-score tie pair.
+        index
+            .upsert_batch_stamped(&[
+                (
+                    "dupe-target".to_string(),
+                    "quantum duplicate text".to_string(),
+                    code_contributor_key("gen-d2"),
+                ),
+                (
+                    "tie-alpha".to_string(),
+                    "quantum tie text".to_string(),
+                    "doc".to_string(),
+                ),
+                (
+                    "tie-beta".to_string(),
+                    "quantum tie text".to_string(),
+                    "doc".to_string(),
+                ),
+            ])
+            .expect("commit 7 (dupe 2, ties)");
+
+        let multiplicity_keys = ["gen-m1", "gen-m2", "gen-m3", "gen-m4", "gen-m5"];
+        let mut multiplicity_allowed = keys(&multiplicity_keys);
+        multiplicity_allowed.insert("doc".to_string());
+        let multiplicity_targets = ids(&["multi-target", "tail-target"]);
+        let shared_targets = ids(&["shared-target"]);
+        let shared_allowed = keys(&["gen-live"]);
+        let tie_targets = ids(&["dupe-target", "tie-alpha", "tie-beta"]);
+        let mut tie_allowed = keys(&["gen-d1", "gen-d2"]);
+        tie_allowed.insert("doc".to_string());
+
+        /// The decisive matrix over ONE handle state: segment
+        /// participation (live segments > 1), five-key multiplicity, the
+        /// excluded-only-token isolation, duplicate/tie determinism and the
+        /// zero-limit contract.
+        fn assert_matrix(
+            handle: &LexicalIndex,
+            label: &str,
+            multiplicity_keys: &[&str],
+            multiplicity_allowed: &BTreeSet<String>,
+            multiplicity_targets: &BTreeSet<String>,
+            shared_targets: &BTreeSet<String>,
+            shared_allowed: &BTreeSet<String>,
+            tie_targets: &BTreeSet<String>,
+            tie_allowed: &BTreeSet<String>,
+        ) {
+            use std::sync::Arc;
+            // (a) FORCED multi-segment participation: the instrumented
+            // search must walk MORE THAN ONE live segment fruit.
+            let counters = Arc::new(DistinctTargetCounters::default());
+            let probed = handle
+                .search_targets_within_counted(
+                    "zephyr",
+                    2,
+                    multiplicity_targets,
+                    multiplicity_allowed,
+                    Some(&counters),
+                )
+                .expect("{label}: counted multiplicity page");
+            assert!(
+                counters.segments() > 1,
+                "{label}: the decisive matrix runs over MULTIPLE live segments \
+                 (instrumented segment collectors: {})",
+                counters.segments()
+            );
+            // (b) Five-key multiplicity: every contributor key holds a live
+            // matching document for multi-target ...
+            for generation in multiplicity_keys {
+                let only = handle
+                    .search_within("zephyr", 5, &keys(&[generation]))
+                    .expect("{label}: single-key search");
+                assert!(
+                    only.iter().any(|(id, _)| id == "multi-target"),
+                    "{label}: contributor {generation} holds a live matching document: {only:?}"
+                );
+            }
+            // ... and the target budget fills with DISTINCT targets.
+            let listed = page_ids(&probed);
+            assert_eq!(
+                listed.len(),
+                2,
+                "{label}: the target budget counts distinct targets: {listed:?}"
+            );
+            assert!(
+                listed.contains(&"multi-target") && listed.contains(&"tail-target"),
+                "{label}: the five same-target contributions take ONE slot and the \
+                 lower-ranked eligible target still appears: {listed:?}"
+            );
+            // (c) Excluded-only-token isolation through the shared allowed
+            // target: the permitted token matches, the excluded-only token
+            // NEVER matches.
+            let permitted = handle
+                .search_targets_within("atlas", 5, shared_targets, shared_allowed)
+                .expect("{label}: permitted token search");
+            assert!(
+                permitted.iter().any(|(id, _)| id == "shared-target"),
+                "{label}: the shared target matches through its permitted contribution: \
+                 {permitted:?}"
+            );
+            let excluded_only = handle
+                .search_targets_within("boreas", 5, shared_targets, shared_allowed)
+                .expect("{label}: excluded-only token search");
+            assert!(
+                excluded_only.is_empty(),
+                "{label}: an excluded-generation-only token cannot match through the \
+                 shared allowed target: {excluded_only:?}"
+            );
+            // (d) Duplicates collapse to one slot; ties break deterministically.
+            let tie_page = handle
+                .search_targets_within("quantum", 5, tie_targets, tie_allowed)
+                .expect("{label}: tie/duplicate page");
+            assert_eq!(
+                page_ids(&tie_page),
+                &["dupe-target", "tie-alpha", "tie-beta"],
+                "{label}: duplicate documents collapse and equal-score ties order by id"
+            );
+            // (e) Zero limit returns an explicit empty page.
+            let zero = handle
+                .search_targets_within("zephyr", 0, multiplicity_targets, multiplicity_allowed)
+                .expect("{label}: zero-limit search");
+            assert!(zero.is_empty(), "{label}: zero limit yields an empty page");
+        }
+
+        // (1) COLD in-process handle over the seven live segments.
+        assert_matrix(
+            &index,
+            "cold",
+            &multiplicity_keys,
+            &multiplicity_allowed,
+            &multiplicity_targets,
+            &shared_targets,
+            &shared_allowed,
+            &tie_targets,
+            &tie_allowed,
+        );
+
+        // (2) REOPENED handle (close + reopen from disk).
+        drop(index);
+        let warm = reopen(&lexical_dir);
+        assert_matrix(
+            &warm,
+            "reopened",
+            &multiplicity_keys,
+            &multiplicity_allowed,
+            &multiplicity_targets,
+            &shared_targets,
+            &shared_allowed,
+            &tie_targets,
+            &tie_allowed,
+        );
+
+        // (3) WARM-AFTER-WRITE: a further commit on the SAME handle keeps
+        // the original matrix pages stable, the late write appears exactly
+        // when its target is requested, and the segment count stays > 1.
+        warm.upsert_stamped(
+            "matrix-late",
+            "zephyr late arrival",
+            &code_contributor_key("gen-x3"),
+        )
+        .expect("warm write commit 8");
+        assert_matrix(
+            &warm,
+            "warm-after-write",
+            &multiplicity_keys,
+            &multiplicity_allowed,
+            &multiplicity_targets,
+            &shared_targets,
+            &shared_allowed,
+            &tie_targets,
+            &tie_allowed,
+        );
+        let mut late_allowed = multiplicity_allowed.clone();
+        late_allowed.insert(code_contributor_key("gen-x3"));
+        let late_targets = ids(&["multi-target", "tail-target", "matrix-late"]);
+        let late_counters = Arc::new(DistinctTargetCounters::default());
+        let with_late = warm
+            .search_targets_within_counted(
+                "zephyr",
+                3,
+                &late_targets,
+                &late_allowed,
+                Some(&late_counters),
+            )
+            .expect("late page");
+        assert!(
+            page_ids(&with_late).contains(&"matrix-late"),
+            "the late write is visible once its target is requested: {:?}",
+            page_ids(&with_late)
+        );
+        assert!(
+            late_counters.segments() > 1,
+            "the post-write state still runs over multiple live segments: {}",
+            late_counters.segments()
         );
     }
 }

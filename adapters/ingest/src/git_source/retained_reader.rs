@@ -36,7 +36,11 @@ fn open_regular_nonfollow(
     #[cfg(unix)]
     {
         use cap_std::fs::OpenOptionsExt;
-        options.custom_flags(libc::O_NOFOLLOW);
+        // O_NOFOLLOW rejects a symlink leaf; O_NONBLOCK guarantees a
+        // substituted FIFO cannot BLOCK the open (a FIFO opened read-only
+        // with no writer would hang). The opened handle's type is verified
+        // afterwards, and O_NONBLOCK is harmless on regular files.
+        options.custom_flags(libc::O_NOFOLLOW | libc::O_NONBLOCK);
     }
     #[cfg(windows)]
     {
@@ -85,16 +89,30 @@ impl RetainedSourceReader for RetainedSnapshotReader {
         let root = private_directory(&self.storage).map_err(|_| {
             exact_unavailable("retained source storage is unavailable or not owned")
         })?;
-        // (b) Commit directory: must exist as a real directory under the root.
+        // (b) Commit directory: must exist as a real directory under the root,
+        // and the OPENED handle must be the checked object — an identity
+        // substitution between check and open denies even when the
+        // replacement carries the same name.
+        if root
+            .dir
+            .symlink_metadata(commit_oid)
+            .map(|meta| meta.file_type().is_symlink() || !meta.is_dir())
+            .unwrap_or(true)
+        {
+            return Err(exact_unavailable(
+                "retained snapshot identity does not match the indexed commit",
+            ));
+        }
+        let checked_commit =
+            super::private_storage::named_identity(&root.dir, Path::new(commit_oid))
+                .map_err(|_| exact_unavailable("no retained snapshot for the indexed commit"))?;
         let commit_dir = root
             .dir
             .open_dir(commit_oid)
             .map_err(|_| exact_unavailable("no retained snapshot for the indexed commit"))?;
-        if root
-            .dir
-            .symlink_metadata(commit_oid)
-            .map(|meta| meta.file_type().is_symlink())
-            .unwrap_or(true)
+        if super::private_storage::directory_identity_of(&commit_dir)
+            .map_err(|_| exact_unavailable("no retained snapshot for the indexed commit"))?
+            != checked_commit
         {
             return Err(exact_unavailable(
                 "retained snapshot identity does not match the indexed commit",
@@ -116,9 +134,24 @@ impl RetainedSourceReader for RetainedSnapshotReader {
                     "retained source ancestry was substituted or is unavailable",
                 ));
             }
-            current = current
+            // Bind the checked entry to the OPENED directory handle: a
+            // substitution between check and open changes the opened
+            // directory's identity and is denied (finding 7 race).
+            let checked_ancestor =
+                super::private_storage::named_identity(&current, Path::new(component))
+                    .map_err(|_| exact_unavailable("retained source is unavailable"))?;
+            let opened = current
                 .open_dir(component)
                 .map_err(|_| exact_unavailable("retained source is unavailable"))?;
+            if super::private_storage::directory_identity_of(&opened)
+                .map_err(|_| exact_unavailable("retained source is unavailable"))?
+                != checked_ancestor
+            {
+                return Err(exact_unavailable(
+                    "retained source ancestry was substituted or is unavailable",
+                ));
+            }
+            current = opened;
         }
         // (d) Leaf: regular file, never a link (leaf substitution).
         let leaf = components.last().copied().unwrap_or_default();
@@ -289,6 +322,82 @@ mod tests {
                 if reason.contains("ExactSourceUnavailable")),
             "missing storage must deny sanitized: {gone:?}"
         );
+    }
+
+    /// Corrective r3 (finding 7 races): deterministic substitution barriers
+    /// at the check→open boundaries. A SAME-DIGEST symlink impostor (identical
+    /// bytes, so the digest alone cannot distinguish it) and a substituted
+    /// FIFO (which would block a naive blocking open) must both deny
+    /// sanitized and promptly — no hang, no replacement bytes served.
+    #[cfg(unix)]
+    #[test]
+    fn same_digest_and_fifo_substitutions_deny_without_hanging() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let storage = dir.path().join("retained");
+        let bytes = b"def alpha():\r\n    return 1\r\n".to_vec();
+        let files = vec![CommittedFile {
+            path: "src/mod.py".into(),
+            oid: "b".repeat(40),
+            mode: "100644".to_owned(),
+            bytes: bytes.clone(),
+        }];
+        let snapshot = retain_snapshot(&storage, commit(&"c".repeat(40)), &files).expect("retain");
+        let reader = RetainedSnapshotReader::new(storage.clone());
+        let digest = crate::hash::content_hash(&bytes);
+        let leaf = storage
+            .join(&snapshot.commit.oid)
+            .join("src")
+            .join("mod.py");
+
+        // Same-digest symlink impostor: the impostor file holds IDENTICAL
+        // bytes (digest matches), so only link custody can deny it.
+        let impostor = dir.path().join("same-digest-impostor.py");
+        std::fs::write(&impostor, &bytes).expect("write identical impostor");
+        std::fs::remove_file(&leaf).expect("remove leaf");
+        std::os::unix::fs::symlink(&impostor, &leaf).expect("symlink identical impostor");
+        let started = std::time::Instant::now();
+        let same_digest = reader.read_span(&snapshot.commit.oid, "src/mod.py", None, &digest);
+        assert!(
+            matches!(&same_digest, Err(engram_knowledge::CoreError::InvalidRequest { reason })
+                if reason.contains("ExactSourceUnavailable")),
+            "a same-digest symlink substitution must deny: {same_digest:?}"
+        );
+        assert!(
+            started.elapsed() < std::time::Duration::from_secs(10),
+            "the denial must be prompt, not a hang"
+        );
+
+        // FIFO substitution: a naive blocking open would hang forever; the
+        // nonblocking nofollow open must fail fast and sanitized.
+        std::fs::remove_file(&leaf).expect("remove symlink");
+        let fifo = nix_compat_fifo(&leaf);
+        let _ = fifo;
+        let started_fifo = std::time::Instant::now();
+        let fifo_result = reader.read_span(&snapshot.commit.oid, "src/mod.py", None, &digest);
+        assert!(
+            matches!(&fifo_result, Err(engram_knowledge::CoreError::InvalidRequest { reason })
+                if reason.contains("ExactSourceUnavailable")),
+            "a FIFO substitution must deny sanitized: {fifo_result:?}"
+        );
+        assert!(
+            started_fifo.elapsed() < std::time::Duration::from_secs(10),
+            "the FIFO denial must be prompt, not a blocking open"
+        );
+    }
+
+    /// Creates a FIFO at `path` without Unix-only std::os imports at module
+    /// scope (the test module already isolates platform cfg; this keeps the
+    /// creation explicit and the cleanup caller-owned).
+    #[cfg(unix)]
+    fn nix_compat_fifo(path: &std::path::Path) -> std::io::Result<()> {
+        unsafe {
+            let cpath = std::ffi::CString::new(path.as_os_str().as_encoded_bytes())
+                .map_err(|e| std::io::Error::other(e))?;
+            if libc::mkfifo(cpath.as_ptr(), 0o600) != 0 {
+                return Err(std::io::Error::last_os_error());
+            }
+        }
+        Ok(())
     }
 
     /// Portable positive custody coverage. Windows runs this against the real

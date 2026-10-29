@@ -140,7 +140,7 @@ impl CodeBindingCoordinator {
                     return Err(generation_denied(&resolved));
                 }
                 // (5) Adapter-owned custody + digest-validated read.
-                retained
+                let view = retained
                     .read_span(
                         &generation.commit_oid,
                         path,
@@ -154,7 +154,25 @@ impl CodeBindingCoordinator {
                             CoreError::InvalidRequest { reason }
                         }
                         other => other,
-                    })
+                    })?;
+                // The read window extends PAST the byte I/O: a historical
+                // lease released or expired DURING the read denies the
+                // answer — the token must still be live when the bytes are
+                // handed back (release/expiry-during-read barrier).
+                if let Some(lease) = historical_lease.as_ref()
+                    && !store
+                        .validate_historical_read_lease(
+                            lease,
+                            scope,
+                            repo_id,
+                            &resolved,
+                            chrono::Utc::now(),
+                        )
+                        .await?
+                {
+                    return Err(generation_denied(&resolved));
+                }
+                Ok(view)
             }
         })
         .await

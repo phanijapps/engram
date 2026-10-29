@@ -178,7 +178,21 @@ fn fixture(dir: &std::path::Path) -> SourceFixture {
 /// gen-new publishes), so the lease's historical eligibility covers gen-old
 /// across the publication — the explicitly authorized pinned historical read.
 fn fixture_with_historical_lease(dir: &std::path::Path) -> SourceFixture {
-    fixture_inner(dir, Arc::new(AllowAuthorizer), true)
+    fixture_inner_with_lease_window(
+        dir,
+        Arc::new(AllowAuthorizer),
+        true,
+        std::time::Duration::from_secs(600),
+    )
+}
+
+/// [`fixture_with_historical_lease`] with an explicit lease lifetime — the
+/// expiry-during-read proof pins a SHORT lease.
+fn fixture_with_historical_lease_window(
+    dir: &std::path::Path,
+    lease_window: std::time::Duration,
+) -> SourceFixture {
+    fixture_inner_with_lease_window(dir, Arc::new(AllowAuthorizer), true, lease_window)
 }
 
 fn fixture_with(
@@ -192,6 +206,20 @@ fn fixture_inner(
     dir: &std::path::Path,
     authorizer: Arc<dyn CodeBindingAuthorizer>,
     pin_historical_lease: bool,
+) -> SourceFixture {
+    fixture_inner_with_lease_window(
+        dir,
+        authorizer,
+        pin_historical_lease,
+        std::time::Duration::from_secs(600),
+    )
+}
+
+fn fixture_inner_with_lease_window(
+    dir: &std::path::Path,
+    authorizer: Arc<dyn CodeBindingAuthorizer>,
+    pin_historical_lease: bool,
+    lease_window: std::time::Duration,
 ) -> SourceFixture {
     let source = "def alpha():\r\n    return 'caf\u{e9}'\r\n\u{00e9}t\u{00e9} marker\r\n"
         .as_bytes()
@@ -265,7 +293,7 @@ fn fixture_inner(
             &actor(),
             &scope(),
             &RepoId("repo-a".to_string()),
-            std::time::Duration::from_secs(600),
+            lease_window,
         ))
         .expect("pin historical lease");
         Some(lease)
@@ -418,6 +446,276 @@ mod task_017 {
         .expect("exact read after checkout deletion");
         assert_eq!(view.bytes, fixture.source);
         assert_eq!(view.commit_oid, fixture.commit_oid);
+    }
+
+    /// Task017 r3: a lease RELEASED DURING the read denies the answer — the
+    /// reader port double releases the REAL durable lease mid-read (before
+    /// the bytes return), and the post-read revalidation must deny. The
+    /// release goes through the real lease store; only the read I/O is at
+    /// the port boundary.
+    #[test]
+    fn lease_release_during_read_denies() {
+        use engram_knowledge::RetainedSourceReader;
+
+        struct ReleasingReader {
+            inner: Arc<RetainedSnapshotReader>,
+            lease: engram_knowledge::CodeReadLease,
+            released: std::sync::atomic::AtomicBool,
+        }
+
+        #[async_trait::async_trait]
+        impl RetainedSourceReader for ReleasingReader {
+            fn read_span(
+                &self,
+                commit_oid: &str,
+                path: &str,
+                span: Option<std::ops::Range<usize>>,
+                expected_digest: &str,
+            ) -> engram_knowledge::CoreResult<engram_knowledge::ExactSourceView> {
+                let view = self
+                    .inner
+                    .read_span(commit_oid, path, span, expected_digest)?;
+                // Release the durable lease DURING the read (after the bytes
+                // were read, before they are returned).
+                if !self
+                    .released
+                    .swap(true, std::sync::atomic::Ordering::SeqCst)
+                {
+                    let coordinator = CodeBindingCoordinator::new(
+                        (self.lease_store()) as Arc<dyn CodeBindingRepository>,
+                        Arc::new(AllowAuthorizer),
+                        Vec::new(),
+                    );
+                    let lease = self.lease.clone();
+                    futures::executor::block_on(coordinator.release_read(
+                        &actor(),
+                        &RepoId("repo-a".to_string()),
+                        &lease,
+                    ))
+                    .expect("release during read");
+                }
+                Ok(view)
+            }
+        }
+
+        // Extend the double with the store handle it needs.
+        struct Releasing {
+            inner: Arc<RetainedSnapshotReader>,
+            lease: engram_knowledge::CodeReadLease,
+            store: Arc<SqlCodeBindingRepository>,
+            released: std::sync::atomic::AtomicBool,
+        }
+        #[async_trait::async_trait]
+        impl RetainedSourceReader for Releasing {
+            fn read_span(
+                &self,
+                commit_oid: &str,
+                path: &str,
+                span: Option<std::ops::Range<usize>>,
+                expected_digest: &str,
+            ) -> engram_knowledge::CoreResult<engram_knowledge::ExactSourceView> {
+                let view = self
+                    .inner
+                    .read_span(commit_oid, path, span, expected_digest)?;
+                if !self
+                    .released
+                    .swap(true, std::sync::atomic::Ordering::SeqCst)
+                {
+                    // Release on a DEDICATED thread: read_span is sync and
+                    // already runs inside the recall executor, so a nested
+                    // block_on would re-enter the LocalPool.
+                    let store = self.store.clone();
+                    let lease = self.lease.clone();
+                    std::thread::spawn(move || {
+                        let coordinator = CodeBindingCoordinator::new(
+                            store as Arc<dyn CodeBindingRepository>,
+                            Arc::new(AllowAuthorizer),
+                            Vec::new(),
+                        );
+                        futures::executor::block_on(coordinator.release_read(
+                            &actor(),
+                            &RepoId("repo-a".to_string()),
+                            &lease,
+                        ))
+                    })
+                    .join()
+                    .expect("release thread")
+                    .expect("release during read");
+                }
+                Ok(view)
+            }
+        }
+        impl ReleasingReader {
+            fn lease_store(&self) -> Arc<SqlCodeBindingRepository> {
+                unreachable!("constructor placeholder — the real double is `Releasing`")
+            }
+        }
+        let _ = ReleasingReader {
+            inner: Arc::new(RetainedSnapshotReader::new(std::path::PathBuf::from(
+                "/dev/null",
+            ))),
+            lease: engram_knowledge::CodeReadLease {
+                id: String::new(),
+                eligibility: engram_knowledge::CodeEligibility {
+                    scope: scope(),
+                    epoch: 0,
+                    generations: Vec::new(),
+                    repository_ids: Vec::new(),
+                },
+                fencing_token: 0,
+                expires_at: chrono::Utc::now(),
+            },
+            released: std::sync::atomic::AtomicBool::new(false),
+        };
+
+        let dir = tempfile::tempdir().expect("tempdir");
+        let fixture = fixture_with_historical_lease(dir.path());
+        let lease = fixture.historical_lease.clone().expect("historical lease");
+        let releasing = Arc::new(Releasing {
+            inner: Arc::new(RetainedSnapshotReader::new(fixture.retained_root.clone())),
+            lease: lease.clone(),
+            store: fixture.bindings.clone(),
+            released: std::sync::atomic::AtomicBool::new(false),
+        });
+        let coordinator = CodeBindingCoordinator::new(
+            fixture.bindings.clone() as Arc<dyn CodeBindingRepository>,
+            Arc::new(AllowAuthorizer),
+            Vec::new(),
+        );
+        let provider = EngramProviderBuilder::new(engram_integration::CapabilityReport::new(
+            CapabilityState::Supported,
+        ))
+        .code_bindings(Arc::new(coordinator))
+        .code_source(releasing as Arc<dyn RetainedSourceReader>)
+        .build();
+
+        let during = block_on(provider.code_fetch_exact_at_with_lease(
+            &actor(),
+            &scope(),
+            "repo-a",
+            "gen-old",
+            Some(&lease),
+            "src/exact.py",
+            None,
+        ));
+        assert!(
+            matches!(&during, Err(CoreError::InvalidRequest { reason }) if reason.contains("no authorized read lease")),
+            "a lease released during the read must deny the answer: {during:?}"
+        );
+    }
+
+    /// Task017 r3: a lease EXPIRING DURING the read denies the answer. The
+    /// double presents a short-lived lease (20ms) and delays the read I/O
+    /// return past expiry (50ms) — bounded margins, no unbounded waits.
+    #[test]
+    fn lease_expiry_during_read_denies() {
+        use engram_knowledge::RetainedSourceReader;
+
+        struct DelayingReader {
+            inner: Arc<RetainedSnapshotReader>,
+        }
+        #[async_trait::async_trait]
+        impl RetainedSourceReader for DelayingReader {
+            fn read_span(
+                &self,
+                commit_oid: &str,
+                path: &str,
+                span: Option<std::ops::Range<usize>>,
+                expected_digest: &str,
+            ) -> engram_knowledge::CoreResult<engram_knowledge::ExactSourceView> {
+                let view = self
+                    .inner
+                    .read_span(commit_oid, path, span, expected_digest)?;
+                std::thread::sleep(std::time::Duration::from_millis(500));
+                Ok(view)
+            }
+        }
+
+        let dir = tempfile::tempdir().expect("tempdir");
+        let fixture =
+            fixture_with_historical_lease_window(dir.path(), std::time::Duration::from_millis(250));
+        // A short-lived durable lease (250ms) pinned while gen-old was
+        // active; the reader delays 500ms past the (fast) start validation,
+        // so the lease EXPIRES DURING the read I/O. Renewal cannot shorten a
+        // lease and acquisition pins only the current view, so the short
+        // window is pinned at the fixture's authorized moment.
+        let lease = fixture.historical_lease.clone().expect("historical lease");
+        assert!(
+            lease.expires_at > chrono::Utc::now(),
+            "the lease must still be live when the read starts"
+        );
+        let short = lease;
+        let delaying = Arc::new(DelayingReader {
+            inner: Arc::new(RetainedSnapshotReader::new(fixture.retained_root.clone())),
+        });
+        let coordinator = CodeBindingCoordinator::new(
+            fixture.bindings.clone() as Arc<dyn CodeBindingRepository>,
+            Arc::new(AllowAuthorizer),
+            Vec::new(),
+        );
+        let provider = EngramProviderBuilder::new(engram_integration::CapabilityReport::new(
+            CapabilityState::Supported,
+        ))
+        .code_bindings(Arc::new(coordinator))
+        .code_source(delaying as Arc<dyn RetainedSourceReader>)
+        .build();
+
+        let during = block_on(provider.code_fetch_exact_at_with_lease(
+            &actor(),
+            &scope(),
+            "repo-a",
+            "gen-old",
+            Some(&short),
+            "src/exact.py",
+            None,
+        ));
+        assert!(
+            matches!(&during, Err(CoreError::InvalidRequest { reason }) if reason.contains("no authorized read lease")),
+            "a lease expired during the read must deny the answer: {during:?}"
+        );
+    }
+
+    /// Task017 r3 caller isolation: while caller A's historical lease is
+    /// LIVE, caller B's generation-ID-only request (no presented lease) still
+    /// denies — A's live lease never becomes B's authority.
+    #[test]
+    fn caller_isolation_live_lease_never_authorizes_generation_id_only() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let fixture = fixture_with_historical_lease(dir.path());
+        // A's lease is live and covers gen-old.
+        let lease = fixture.historical_lease.clone().expect("historical lease");
+        assert!(lease.expires_at > chrono::Utc::now());
+        // B presents only the generation id.
+        let other = engram_domain::Actor {
+            id: engram_domain::Id::from("other-caller"),
+            kind: engram_domain::ActorKind::Agent,
+            display_name: None,
+            metadata: None,
+        };
+        let denied = block_on(fixture.provider.code_fetch_exact_at(
+            &other,
+            &scope(),
+            "repo-a",
+            "gen-old",
+            "src/exact.py",
+            None,
+        ));
+        assert!(
+            matches!(&denied, Err(CoreError::InvalidRequest { reason }) if reason.contains("no authorized read lease")),
+            "another caller's live lease is not generation-id authority: {denied:?}"
+        );
+        // A (the lease holder) still succeeds with the presented lease.
+        let allowed = block_on(fixture.provider.code_fetch_exact_at_with_lease(
+            &actor(),
+            &scope(),
+            "repo-a",
+            "gen-old",
+            Some(&lease),
+            "src/exact.py",
+            None,
+        ))
+        .expect("the lease holder's presented lease still authorizes");
+        assert_eq!(allowed.bytes, b"def old():\r\n    return 0\r\n".to_vec());
     }
 
     /// source_unavailable + corrective r2 findings 2/3/7: foreign-scope and

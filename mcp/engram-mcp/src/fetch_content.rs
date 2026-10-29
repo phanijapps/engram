@@ -69,6 +69,57 @@ fn bound_code_origin(
     Ok(origin)
 }
 
+/// Mixed-generation resolution (corrective r2 finding 10, r3): retained
+/// chunks of an OLD and the CURRENT generation can coexist for one path.
+/// Blanket rejection is not resolution — resolve the CURRENT authorized
+/// binding (the scope's published active generation per stamped repository)
+/// and restrict the participating chunks to exactly that generation. Spans,
+/// symbols and the served revision then all come from ONE generation.
+fn resolve_current_generation_origin(
+    app: &App,
+    ordered: &mut Vec<&engram_domain::KnowledgeChunk>,
+) -> Result<Option<(String, String)>, String> {
+    let coordinator = app
+        .provider
+        .code_bindings()
+        .map_err(|error| format!("code binding coordinator unavailable: {error}"))?;
+    let view = futures::executor::block_on(coordinator.eligibility_view(&app.scope, None))
+        .map_err(|error| format!("eligibility resolution failed: {error}"))?;
+    let current: std::collections::BTreeSet<(String, String)> = view
+        .eligible_bindings()
+        .into_iter()
+        .map(|binding| (binding.repo_id, binding.generation_id))
+        .collect();
+    let selected: Vec<&engram_domain::KnowledgeChunk> = ordered
+        .iter()
+        .copied()
+        .filter(|chunk| {
+            let stamp_is_current = chunk.metadata.as_ref().map(|metadata| {
+                let generation = metadata
+                    .get("codeGenerationId")
+                    .and_then(|value| value.as_str());
+                let repo = metadata.get("codeRepoId").and_then(|value| value.as_str());
+                match (repo, generation) {
+                    (Some(repo), Some(generation)) => {
+                        current.contains(&(repo.to_owned(), generation.to_owned()))
+                    }
+                    _ => false,
+                }
+            });
+            stamp_is_current.unwrap_or(false)
+        })
+        .collect();
+    if selected.is_empty() {
+        return Err(
+            "matched chunks span multiple bound repository generations and none is              the current published generation"
+                .into(),
+        );
+    }
+    let origin = bound_code_origin(&selected)?;
+    *ordered = selected;
+    Ok(origin)
+}
+
 /// Resolves `symbol` against the matched (same-generation) chunks and maps
 /// its line span to byte offsets in the retained blob (finding 11).
 ///
@@ -267,12 +318,25 @@ pub fn fetch_content(app: &App, args: &Value) -> Result<Value, ToolError> {
     // working-tree fallback: a missing snapshot is an error in auto and
     // verbatim modes alike (REQ-006: exact content or an explicit
     // unavailable error, never a checkout masquerading as the revision).
-    let bound_origin = bound_code_origin(&ordered).map_err(|reason| {
-        ToolError::new(
-            -32602,
-            format!("bound source origin is ambiguous: {reason}"),
-        )
-    })?;
+    let bound_origin = match bound_code_origin(&ordered) {
+        Ok(origin) => origin,
+        Err(reason) if reason.contains("multiple bound repository generations") => {
+            // Old + current retained chunks coexist: resolve the CURRENT
+            // authorized generation instead of rejecting the mix.
+            resolve_current_generation_origin(app, &mut ordered).map_err(|reason| {
+                ToolError::new(
+                    -32602,
+                    format!("bound source origin is ambiguous: {reason}"),
+                )
+            })?
+        }
+        Err(reason) => {
+            return Err(ToolError::new(
+                -32602,
+                format!("bound source origin is ambiguous: {reason}"),
+            ));
+        }
+    };
     if mode != "chunks"
         && let Some((repo_id, generation_id)) = bound_origin
     {
@@ -656,6 +720,8 @@ mod tests {
     struct InMemoryBindings {
         binding: engram_domain::CodeBinding,
         generation: CodeGeneration,
+        /// A retained-but-superseded generation (mixed-generation fixtures).
+        retained_old: Option<CodeGeneration>,
         descriptor_digest: std::sync::Mutex<Option<String>>,
         live_lease: std::sync::Mutex<Option<engram_knowledge::CodeReadLease>>,
     }
@@ -681,7 +747,29 @@ mod tests {
                 },
                 descriptor_digest: std::sync::Mutex::new(None),
                 live_lease: std::sync::Mutex::new(None),
+                retained_old: None,
             }
+        }
+
+        /// Two retained generations with gen-2 CURRENT (mixed-generation
+        /// resolution fixtures): gen-1's snapshot is retained but no longer
+        /// active; gen-2 is the published active generation.
+        fn published_two_generations(old_commit_oid: &str, current_commit_oid: &str) -> Self {
+            let mut bindings = Self::published(current_commit_oid);
+            // The CURRENT (published active) generation is gen-2; gen-1's
+            // snapshot stays retained but superseded.
+            bindings.generation.id = "gen-2".to_owned();
+            bindings.binding.epoch = 2;
+            bindings.binding.active_generation = Some("gen-2".to_owned());
+            bindings.retained_old = Some(CodeGeneration {
+                id: "gen-1".to_owned(),
+                binding_version: 1,
+                commit_oid: old_commit_oid.to_owned(),
+                snapshot_digest: "c".repeat(64),
+                parser_fingerprint: "parser".to_owned(),
+                filter_fingerprint: "filter".to_owned(),
+            });
+            bindings
         }
 
         /// Records the durable descriptor digest the exact chain validates
@@ -792,7 +880,15 @@ mod tests {
             _repo_id: &engram_domain::RepoId,
             generation_id: &str,
         ) -> CoreResult<Option<CodeGeneration>> {
-            Ok((generation_id == self.generation.id).then(|| self.generation.clone()))
+            if generation_id == self.generation.id {
+                return Ok(Some(self.generation.clone()));
+            }
+            if let Some(old) = &self.retained_old
+                && old.id == generation_id
+            {
+                return Ok(Some(old.clone()));
+            }
+            Ok(None)
         }
         async fn target_lineage(
             &self,
@@ -884,12 +980,16 @@ mod tests {
             scope: &engram_domain::Scope,
         ) -> CoreResult<engram_knowledge::CodeEligibility> {
             let published = scope == &self.binding.scope;
+            let mut generations = published
+                .then(|| vec![self.generation.id.clone()])
+                .unwrap_or_default();
+            if let Some(old) = &self.retained_old {
+                generations.push(old.id.clone());
+            }
             Ok(engram_knowledge::CodeEligibility {
                 scope: scope.clone(),
                 epoch: u64::from(!published) + if published { self.binding.epoch } else { 0 },
-                generations: published
-                    .then(|| vec![self.generation.id.clone()])
-                    .unwrap_or_default(),
+                generations,
                 repository_ids: published
                     .then(|| vec![self.binding.repo_id.0.clone()])
                     .unwrap_or_default(),
@@ -1272,6 +1372,204 @@ mod tests {
         assert!(
             err.message.contains("symbol selection failed"),
             "missing symbols deny: {}",
+            err.message
+        );
+    }
+
+    /// Mixed-generation fixture (r3): OLD (gen-1) and CURRENT (gen-2)
+    /// retained chunks coexist for one path. In gen-1 `alpha` sat at lines
+    /// 1-2 and `gamma` existed; in gen-2 `beta` was added at 2-3 and `alpha`
+    /// MOVED to 6-7 (and `gamma` no longer exists).
+    fn mixed_generation_app(dir: &std::path::Path) -> (App, std::path::PathBuf, String, String) {
+        let scope = crate::scope::project_scope("bound-project", "default");
+        let old_source =
+            b"def alpha():\r\n    return 1\r\n\r\ndef gamma():\r\n    return 9\r\n".to_vec();
+        let current_source =
+            b"import os\r\ndef beta():\r\n    return 2\r\n\r\n\r\ndef alpha():\r\n    return 3\r\n"
+                .to_vec();
+        let old_commit = ResolvedCommit {
+            branch_ref: "refs/heads/main".to_owned(),
+            oid: "e".repeat(40),
+            object_format: "sha1".to_owned(),
+        };
+        let current_commit = ResolvedCommit {
+            branch_ref: "refs/heads/main".to_owned(),
+            oid: "a".repeat(40),
+            object_format: "sha1".to_owned(),
+        };
+        let retained_root = dir.join("retained-mixed");
+        retain_snapshot(
+            &retained_root,
+            old_commit.clone(),
+            &[CommittedFile {
+                path: "src/bound.py".into(),
+                oid: "f".repeat(40),
+                mode: "100644".to_owned(),
+                bytes: old_source.clone(),
+            }],
+        )
+        .expect("retain old");
+        retain_snapshot(
+            &retained_root,
+            current_commit.clone(),
+            &[CommittedFile {
+                path: "src/bound.py".into(),
+                oid: "b".repeat(40),
+                mode: "100644".to_owned(),
+                bytes: current_source.clone(),
+            }],
+        )
+        .expect("retain current");
+
+        let old_oid = old_commit.oid.clone();
+        let current_oid = current_commit.oid.clone();
+        let bindings = std::sync::Arc::new(InMemoryBindings::published_two_generations(
+            &old_oid,
+            &current_oid,
+        ));
+        bindings.set_descriptor_digest(
+            engram_ingest::content_hash(&current_source)
+                .trim_start_matches("sha256:")
+                .to_string(),
+        );
+        // Chunks of BOTH generations for one path (retention coexistence).
+        let stamp = |generation: &str| {
+            let mut metadata = engram_domain::Metadata::new();
+            metadata.insert(
+                "codeGenerationId".to_owned(),
+                serde_json::Value::String(generation.to_owned()),
+            );
+            metadata.insert(
+                "codeRepoId".to_owned(),
+                serde_json::Value::String("bound-repo".to_owned()),
+            );
+            metadata
+        };
+        let chunk_of = |id: &str,
+                        generation: &str,
+                        symbol: &str,
+                        start: u32,
+                        end: u32,
+                        first_line: &str|
+         -> engram_domain::KnowledgeChunk {
+            engram_domain::KnowledgeChunk {
+                id: engram_domain::Id::from(id),
+                document_id: engram_domain::Id::from("doc-bound-mixed"),
+                source_id: engram_domain::Id::from("src-bound-mixed"),
+                kind: KnowledgeChunkKind::CodeSymbol,
+                text: first_line.to_owned(),
+                summary: None,
+                location: Some(engram_domain::SourceLocation {
+                    path: Some("src/bound.py".to_owned()),
+                    start_line: Some(start),
+                    end_line: Some(end),
+                    start_offset: None,
+                    end_offset: None,
+                    anchor: None,
+                }),
+                entities: vec![engram_domain::EntityRef {
+                    id: Some(engram_domain::Id::from(id)),
+                    kind: None,
+                    name: Some(symbol.to_owned()),
+                    aliases: Vec::new(),
+                }],
+                concepts: Vec::new(),
+                embedding_refs: Vec::new(),
+                content_hash: format!("sha256:{id}"),
+                provenance: fixture_provenance(),
+                policy: fixture_policy(),
+                created_at: chrono::Utc::now(),
+                updated_at: None,
+                metadata: Some(stamp(generation)),
+            }
+        };
+        let chunks = vec![
+            // gen-1 (retained, superseded)
+            chunk_of("chunk-old-alpha", "gen-1", "alpha", 1, 2, "def alpha():"),
+            chunk_of("chunk-old-gamma", "gen-1", "gamma", 4, 5, "def gamma():"),
+            // gen-2 (current published)
+            chunk_of("chunk-new-beta", "gen-2", "beta", 2, 3, "def beta():"),
+            chunk_of("chunk-new-alpha", "gen-2", "alpha", 6, 7, "def alpha():"),
+        ];
+        let knowledge: std::sync::Arc<dyn engram_integration::KnowledgeQuery> =
+            std::sync::Arc::new(SeededQuery { chunks });
+        let coordinator = CodeBindingCoordinator::new(
+            bindings.clone() as std::sync::Arc<dyn CodeBindingRepository>,
+            std::sync::Arc::new(PermissiveAuthorizer),
+            Vec::new(),
+        );
+        let provider = EngramProviderBuilder::new(engram_integration::CapabilityReport::new(
+            engram_domain::CapabilityState::Supported,
+        ))
+        .knowledge_query(knowledge)
+        .code_bindings(std::sync::Arc::new(coordinator))
+        .code_source(std::sync::Arc::new(RetainedSnapshotReader::new(
+            retained_root.clone(),
+        )))
+        .build();
+        (
+            App {
+                provider,
+                scope,
+                ontology: OntologyConfig::default(),
+                taxonomy: TaxonomyConfig::default(),
+                storage_dir: dir.to_path_buf(),
+            },
+            retained_root,
+            current_oid,
+            current_source.len().to_string(),
+        )
+    }
+
+    /// Mixed retained generations resolve the CURRENT authorized generation:
+    /// the served revision is the current commit and the symbol span comes
+    /// from the CURRENT generation's chunks (a moved symbol serves its NEW
+    /// span, never the old generation's).
+    #[test]
+    fn mixed_generations_resolve_current_origin_and_spans() {
+        let dir = tempfile::tempdir().unwrap();
+        let (app, _retained, current_oid, _len) = mixed_generation_app(dir.path());
+        let current_source =
+            b"import os\r\ndef beta():\r\n    return 2\r\n\r\n\r\ndef alpha():\r\n    return 3\r\n";
+
+        // `alpha` exists in BOTH generations at DIFFERENT lines: the answer
+        // must come from the CURRENT generation (moved span).
+        let out = content_of(
+            &fetch_content(&app, &json!({ "path": "src/bound.py", "symbol": "alpha" })).unwrap(),
+        );
+        assert_eq!(out["source"], "exact");
+        assert_eq!(out["generation"], "gen-2");
+        assert_eq!(out["revision"], current_oid);
+        let expected_start = current_source
+            .windows(b"def alpha".len())
+            .position(|w| w == b"def alpha")
+            .expect("current alpha offset");
+        assert_eq!(out["span"]["start"], json!(expected_start));
+        let content = out["content"].as_str().unwrap();
+        assert_eq!(content, "def alpha():\r\n    return 3\r\n");
+
+        // A symbol that exists ONLY in the current generation works.
+        let beta = content_of(
+            &fetch_content(&app, &json!({ "path": "src/bound.py", "symbol": "beta" })).unwrap(),
+        );
+        assert_eq!(beta["generation"], "gen-2");
+        let beta_content = beta["content"].as_str().unwrap();
+        assert_eq!(beta_content, "def beta():\r\n    return 2\r\n");
+    }
+
+    /// An OLD-ONLY symbol (present in the superseded generation's chunks,
+    /// absent from the current generation) denies — the old retained chunks
+    /// never win symbol selection.
+    #[test]
+    fn mixed_generations_old_only_symbol_denies() {
+        let dir = tempfile::tempdir().unwrap();
+        let (app, _retained, _oid, _len) = mixed_generation_app(dir.path());
+        let err =
+            fetch_content(&app, &json!({ "path": "src/bound.py", "symbol": "gamma" })).unwrap_err();
+        assert!(
+            err.message.contains("symbol selection failed")
+                && err.message.contains("no chunk in the indexed generation"),
+            "old-only symbols must deny against the current generation: {}",
             err.message
         );
     }

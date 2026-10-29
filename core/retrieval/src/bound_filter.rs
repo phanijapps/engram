@@ -391,7 +391,7 @@ mod tests {
         // (is_code_record / code_records) while being explicitly
         // ineligible, even when its immutable generation still matches the
         // published binding, and it never participates in exact reads.
-        let eligibility = eligibility_with_lineage(
+        let mut eligibility = eligibility_with_lineage(
             &[("repo-a", "refs/heads/main", "gen-1")],
             &[
                 ("rec-retired", "repo-a", "gen-1"),

@@ -30,46 +30,34 @@ fn endpoint_key(name: &Option<String>, id: &Option<String>) -> Option<String> {
     key_of(name.as_deref(), id.as_deref())
 }
 
-#[async_trait]
-impl CommunityQuery for SqlKnowledgeStore {
-    async fn overview(&self, scope: &Scope, limit: usize) -> CoreResult<CommunityOverview> {
-        let rels = SqlKnowledgeStore::relationship_endpoints(self, scope).await?;
-        let edges: Vec<(String, String)> = rels
-            .iter()
-            .filter_map(|(sn, si, on, oi)| Some((endpoint_key(sn, si)?, endpoint_key(on, oi)?)))
-            .collect();
-        overview_from_edges(&edges, limit)
-    }
-}
-
-impl SqlKnowledgeStore {
-    /// Eligibility-constrained community overview (task_014): edges touching
-    /// a stale/retired/legacy-unbound code endpoint are removed BEFORE Louvain
-    /// so a retired generation neither shapes community structure nor leaks
-    /// into a mixed summary. Non-code endpoints always stay; an ordinary
-    /// doc-only community survives a code retirement intact.
-    pub async fn overview_eligible(
-        &self,
-        scope: &Scope,
-        limit: usize,
-        view: &BoundCodeView,
-    ) -> CoreResult<CommunityOverview> {
-        use engram_knowledge::KnowledgeRepository as _;
-        let entities = self.list_entities(scope).await?;
-        let mut removed: std::collections::HashSet<String> = Default::default();
-        for entity in &entities {
-            if !view.allows(entity.metadata.as_ref(), entity_unstamped_code(entity)) {
-                removed.insert(entity.id.to_string());
-            }
+/// Eligibility-constrained community overview (task_014): edges touching a
+/// stale/retired/legacy-unbound code endpoint are removed BEFORE Louvain so a
+/// retired generation neither shapes community structure nor leaks into a
+/// mixed summary. Non-code endpoints always stay; an ordinary doc-only
+/// community survives a code retirement intact. A free engine-specific
+/// function (the orphan rules forbid an inherent `impl SqlKnowledgeStore`
+/// here); the neutral `CommunityQuery` port stays unchanged.
+pub async fn overview_eligible(
+    store: &SqlKnowledgeStore,
+    scope: &Scope,
+    limit: usize,
+    view: &BoundCodeView,
+) -> CoreResult<CommunityOverview> {
+    use engram_knowledge::KnowledgeRepository as _;
+    let entities = store.list_entities(scope).await?;
+    let mut removed: std::collections::HashSet<String> = Default::default();
+    for entity in &entities {
+        if !view.allows(entity.metadata.as_ref(), entity_unstamped_code(entity)) {
+            removed.insert(entity.id.to_string());
         }
-        let rels = SqlKnowledgeStore::relationship_endpoints(self, scope).await?;
-        let edges: Vec<(String, String)> = rels
-            .iter()
-            .filter_map(|(sn, si, on, oi)| Some((endpoint_key(sn, si)?, endpoint_key(on, oi)?)))
-            .filter(|(subject, object)| !removed.contains(subject) && !removed.contains(object))
-            .collect();
-        overview_from_edges(&edges, limit)
     }
+    let rels = SqlKnowledgeStore::relationship_endpoints(store, scope).await?;
+    let edges: Vec<(String, String)> = rels
+        .iter()
+        .filter_map(|(sn, si, on, oi)| Some((endpoint_key(sn, si)?, endpoint_key(on, oi)?)))
+        .filter(|(subject, object)| !removed.contains(subject) && !removed.contains(object))
+        .collect();
+    overview_from_edges(&edges, limit)
 }
 
 /// True for code-symbol / code-artifact entities without a generation stamp
@@ -122,7 +110,7 @@ fn overview_from_edges(edges: &[(String, String)], limit: usize) -> CoreResult<C
         .collect();
 
     let mut ew: HashMap<(usize, usize), usize> = HashMap::new();
-    for (s, o) in &edges {
+    for (s, o) in edges {
         let (Some(ls), Some(lo)) = (name_to_label.get(s), name_to_label.get(o)) else {
             continue;
         };
@@ -153,6 +141,15 @@ fn overview_from_edges(edges: &[(String, String)], limit: usize) -> CoreResult<C
 
 #[async_trait]
 impl CommunityQuery for SqlKnowledgeStore {
+    async fn overview(&self, scope: &Scope, limit: usize) -> CoreResult<CommunityOverview> {
+        let rels = SqlKnowledgeStore::relationship_endpoints(self, scope).await?;
+        let edges: Vec<(String, String)> = rels
+            .iter()
+            .filter_map(|(sn, si, on, oi)| Some((endpoint_key(sn, si)?, endpoint_key(on, oi)?)))
+            .collect();
+        overview_from_edges(&edges, limit)
+    }
+
     async fn member_index(&self, scope: &Scope) -> CoreResult<HashMap<u32, Vec<String>>> {
         let rels = SqlKnowledgeStore::relationship_endpoints(self, scope).await?;
         let edges: Vec<(String, String)> = rels

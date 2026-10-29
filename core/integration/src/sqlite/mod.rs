@@ -17,6 +17,7 @@ mod batch;
 pub mod batch_supersession;
 mod bootstrap;
 mod community;
+pub use community::overview_eligible;
 mod conformance;
 mod consolidation_adapters;
 mod export_import;

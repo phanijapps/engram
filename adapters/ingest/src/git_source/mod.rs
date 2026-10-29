@@ -5,6 +5,7 @@ mod objects;
 mod portable_pack;
 mod portable_remote;
 mod private_storage;
+mod retained_reader;
 mod safety;
 mod snapshot;
 #[cfg(windows)]
@@ -17,5 +18,6 @@ pub use objects::{
     resolve_local_branch_with_limits,
 };
 pub(crate) use private_storage::private_directory;
+pub use retained_reader::RetainedSnapshotReader;
 pub use safety::{validate_branch_ref, validate_repo_path};
 pub use snapshot::{RetainedSnapshot, retain_snapshot, retain_snapshot_with_limits};

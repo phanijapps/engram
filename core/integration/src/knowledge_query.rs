@@ -15,7 +15,7 @@ use engram_domain::{
     ChunkId, DocumentId, KnowledgeChunk, KnowledgeEntity, KnowledgeGraph, KnowledgeRelationship,
     Scope,
 };
-use engram_runtime::CoreResult;
+use engram_runtime::{CoreError, CoreResult};
 use std::sync::Arc;
 
 /// Read port: list the entities / relationships / chunks visible to a scope.
@@ -87,95 +87,162 @@ pub trait KnowledgeQuery: Send + Sync {
 }
 
 /// Shared scoped authorization for explicit-ID code reads, wildcard listing
-/// and maintenance mutations (task_016, engine-neutral).
+/// and maintenance mutations (task_016 + corrective r2 findings 3/4,
+/// engine-neutral).
 ///
-/// One seam wraps one [`KnowledgeQuery`] and one cell-backed
-/// [`CodeEligibilityGate`] — the same authorization view serves graph
-/// traversal, explicit-ID fetches and every maintenance operation, with no
-/// second scope hierarchy:
-/// - **Explicit ids** must resolve to lineage of a PUBLISHED generation in
-///   the request scope; a foreign, staged or unknown id denies the whole
-///   request (fail closed — never a silent partial result).
-/// - **Wildcard / empty request** resolves to exactly the published set — it
-///   can never widen to staged, foreign or unbound repositories.
-/// - **Maintenance** requires explicit authorized ids; there is no
+/// One seam wraps one [`KnowledgeQuery`] and the binding COORDINATOR — so
+/// every read/maintenance call authenticates the caller through the shared
+/// `CodeBindingAuthorizer` (a denying authorizer denies even for fully
+/// populated foreign scopes) and classifies targets by DURABLE LINEAGE +
+/// record kind (metadata is never authority):
+/// - **Explicit code ids** must resolve to lineage of a PUBLISHED generation
+///   in the request scope; a foreign, staged or unknown code id denies the
+///   whole request (fail closed — never a silent partial result).
+/// - **Explicit ordinary non-code ids** stay readable: an authorized concept
+///   or document entity does not need code lineage (finding 4).
+/// - **Wildcard / empty request** resolves to exactly the published set —
+///   never staged, foreign or unbound repositories, and unstamped legacy
+///   CODE kinds are excluded from wildcard listings.
+/// - **Maintenance** requires explicit authorized CODE ids; there is no
 ///   scope-wide maintenance shortcut.
 pub struct AuthorizedKnowledgeQuery {
     query: Arc<dyn KnowledgeQuery>,
-    gate: Arc<dyn engram_knowledge::CodeEligibilityGate>,
+    coordinator: Arc<crate::code_binding::CodeBindingCoordinator>,
 }
 
 impl AuthorizedKnowledgeQuery {
-    /// Wraps a knowledge read surface and the durable eligibility gate.
+    /// Wraps a knowledge read surface and the binding coordinator (the
+    /// coordinator owns both the authorizer and the durable store).
     pub fn new(
         query: Arc<dyn KnowledgeQuery>,
-        gate: Arc<dyn engram_knowledge::CodeEligibilityGate>,
+        coordinator: Arc<crate::code_binding::CodeBindingCoordinator>,
     ) -> Self {
-        Self { query, gate }
+        Self { query, coordinator }
+    }
+
+    /// Authorizes the caller for every repository in the scope's published
+    /// set (finding 3): a denying authorizer denies even for populated
+    /// foreign scopes.
+    async fn authorize_caller(
+        &self,
+        actor: &engram_domain::Actor,
+        scope: &Scope,
+    ) -> CoreResult<()> {
+        let view = self.coordinator.eligibility_view(scope, None).await?;
+        for binding in view.eligible_bindings() {
+            self.coordinator
+                .authorize(
+                    actor,
+                    scope,
+                    &engram_domain::RepoId(binding.repo_id.clone()),
+                )
+                .await?;
+        }
+        Ok(())
     }
 
     /// Authorizes an explicit-id (or wildcard, when `requested` is empty)
-    /// code read and returns the constrained target set.
+    /// read and returns the constrained target set: published code lineage
+    /// targets only for code ids; explicitly requested ordinary non-code
+    /// records pass through as authorized non-code (finding 4).
+    #[allow(clippy::double_must_use)]
     pub async fn authorize_read(
         &self,
+        actor: &engram_domain::Actor,
         scope: &Scope,
         requested: &[String],
         limit: usize,
     ) -> CoreResult<Vec<String>> {
-        let constrained = self.gate.authorize_query(scope, requested, limit).await?;
-        Ok(constrained.target_ids)
+        self.authorize_caller(actor, scope).await?;
+        let view = self.coordinator.eligibility_view(scope, None).await?;
+        if requested.is_empty() {
+            // Wildcard: exactly the eligible code targets (durable lineage of
+            // repo-selected published bindings), bounded by the budget. It
+            // can never widen to staged, foreign or unbound repositories.
+            return Ok(eligible_lineage_records(&view, limit));
+        }
+        // Explicit ids: classify each. Code ids (durable lineage) must be
+        // eligible; ordinary non-code records are authorized non-code reads;
+        // unknown ids deny the whole request.
+        let mut authorized = Vec::with_capacity(requested.len());
+        for id in requested {
+            if view.is_code_record(id) {
+                if !view.allows(id, true) {
+                    return Err(foreign_target(&[id.clone()]));
+                }
+                authorized.push(id.clone());
+            } else {
+                // Ordinary non-code record? It must actually exist as a
+                // non-code record in the read surface — otherwise it is an
+                // unknown id and denies.
+                if await_non_code_record(&self.query, scope, id).await? {
+                    authorized.push(id.clone());
+                } else {
+                    return Err(foreign_target(&[id.clone()]));
+                }
+            }
+        }
+        Ok(authorized)
     }
 
     /// Authorizes a maintenance mutation over explicit target ids — the same
-    /// authorization view, never a wider scope.
+    /// authorization view, never a wider scope. Maintenance targets must be
+    /// ELIGIBLE CODE ids (durable lineage of published bindings).
+    #[allow(clippy::double_must_use)]
     pub async fn authorize_maintenance(
         &self,
+        actor: &engram_domain::Actor,
         scope: &Scope,
         requested: &[String],
     ) -> CoreResult<Vec<String>> {
-        self.gate.authorize_maintenance(scope, requested).await
+        if requested.is_empty() {
+            return Err(CoreError::InvalidRequest {
+                reason: "maintenance authorization requires explicit target ids".into(),
+            });
+        }
+        self.authorize_caller(actor, scope).await?;
+        let view = self.coordinator.eligibility_view(scope, None).await?;
+        let mut authorized = Vec::with_capacity(requested.len());
+        for id in requested {
+            if !view.is_code_record(id) || !view.allows(id, true) {
+                return Err(foreign_target(&[id.clone()]));
+            }
+            authorized.push(id.clone());
+        }
+        Ok(authorized)
     }
 
     /// Entities visible to `scope`, with code-derived entities constrained to
-    /// the authorized target set when one is requested: non-code entities
-    /// always flow (AC-007 keeps ordinary knowledge usable).
+    /// the authorized target set: non-code entities always flow (AC-007),
+    /// and unstamped legacy CODE kinds never appear in wildcard listings
+    /// (finding 4).
+    #[allow(clippy::double_must_use)]
     pub async fn list_entities_authorized(
         &self,
+        actor: &engram_domain::Actor,
         scope: &Scope,
         requested: &[String],
     ) -> CoreResult<Vec<KnowledgeEntity>> {
         let entities = self.query.list_entities(scope).await?;
+        let view = self.coordinator.eligibility_view(scope, None).await?;
+        self.authorize_caller(actor, scope).await?;
         if requested.is_empty() {
-            // Wildcard listing: everything EXCEPT code-derived entities not in
-            // the published set (constrain, never widen).
-            let authorized: std::collections::HashSet<String> = self
-                .authorize_read(scope, &[], usize::MAX)
-                .await?
-                .into_iter()
-                .collect();
             return Ok(entities
                 .into_iter()
-                .filter(|entity| {
-                    let stamped = entity
-                        .metadata
-                        .as_ref()
-                        .and_then(|meta| {
-                            meta.get(engram_retrieval::bound_filter::CODE_GENERATION_KEY)
-                        })
-                        .is_some();
-                    !stamped || authorized.contains(&entity.id.to_string())
-                })
+                .filter(|entity| view.allows(entity.id.as_str(), entity_is_code_kind(entity)))
                 .collect());
         }
         let authorized: std::collections::HashSet<String> = self
-            .authorize_read(scope, requested, requested.len())
+            .authorize_read(actor, scope, requested, requested.len())
             .await?
             .into_iter()
             .collect();
         Ok(entities
             .into_iter()
             .filter(|entity| {
-                !is_code_derived(entity) || authorized.contains(&entity.id.to_string())
+                // Explicit listing: authorized ids (code or ordinary) pass;
+                // everything else drops (a narrowed explicit read).
+                authorized.contains(&entity.id.to_string())
             })
             .collect())
     }
@@ -186,11 +253,58 @@ impl AuthorizedKnowledgeQuery {
     }
 }
 
-/// True when an entity carries a bound-code generation stamp.
-fn is_code_derived(entity: &KnowledgeEntity) -> bool {
-    entity
-        .metadata
-        .as_ref()
-        .and_then(|meta| meta.get(engram_retrieval::bound_filter::CODE_GENERATION_KEY))
-        .is_some()
+/// Eligible code target ids under a view (durable lineage of repo-selected
+/// published bindings), sorted and bounded by the request budget.
+fn eligible_lineage_records(view: &engram_retrieval::BoundCodeView, limit: usize) -> Vec<String> {
+    let mut eligible: Vec<String> = view
+        .code_records()
+        .into_iter()
+        .filter(|record| view.allows(record, true))
+        .map(str::to_owned)
+        .collect();
+    eligible.sort();
+    eligible.truncate(limit);
+    eligible
+}
+
+/// True when `id` names an existing NON-CODE record in the read surface
+/// (an authorized ordinary read — finding 4). Code-kind records without
+/// lineage are legacy code and are NOT ordinary reads.
+async fn await_non_code_record(
+    query: &Arc<dyn KnowledgeQuery>,
+    scope: &Scope,
+    id: &str,
+) -> CoreResult<bool> {
+    for entity in query.list_entities(scope).await? {
+        if entity.id.as_str() == id {
+            return Ok(!entity_is_code_kind(&entity));
+        }
+    }
+    Ok(false)
+}
+
+/// True for symbol / structural code-artifact entity kinds.
+fn entity_is_code_kind(entity: &KnowledgeEntity) -> bool {
+    engram_retrieval::is_code_artifact(entity)
+        || matches!(
+            entity.kind,
+            engram_domain::EntityKind::Class
+                | engram_domain::EntityKind::Function
+                | engram_domain::EntityKind::Method
+                | engram_domain::EntityKind::Struct
+                | engram_domain::EntityKind::Interface
+                | engram_domain::EntityKind::Trait
+                | engram_domain::EntityKind::TypeAlias
+                | engram_domain::EntityKind::Enum
+        )
+}
+
+/// Typed denial for foreign/unpublished/unknown code targets.
+fn foreign_target(ids: &[String]) -> CoreError {
+    CoreError::InvalidRequest {
+        reason: format!(
+            "BindingRequired: code target ids are foreign or unpublished in this scope: {}",
+            ids.join(", ")
+        ),
+    }
 }

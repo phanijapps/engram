@@ -23,18 +23,42 @@ impl CodeBindingCoordinator {
         scope: &Scope,
         requested_keys: Option<&[String]>,
     ) -> CoreResult<engram_retrieval::BoundCodeView> {
+        // Corrective r2 (findings 4/9): the view is built from durable
+        // published bindings (repository + branch + generation verified
+        // together) and the durable target lineage.
         let eligibility = self.store.eligibility(scope).await?;
-        let view = if eligibility.generations.is_empty() {
-            engram_retrieval::BoundCodeView::none_bound()
-        } else {
-            engram_retrieval::BoundCodeView::from_eligibility(
-                &engram_retrieval::BoundCodeEligibility {
-                    epoch: eligibility.epoch,
-                    generations: eligibility.generations,
-                    repositories: eligibility.repository_ids,
-                },
-            )
-        };
+        let mut bindings = Vec::with_capacity(eligibility.repository_ids.len());
+        for repo in &eligibility.repository_ids {
+            let repo_id = RepoId(repo.clone());
+            let Some(binding) = self.store.get_binding(scope, &repo_id).await? else {
+                continue;
+            };
+            if let Some(generation) = binding.active_generation {
+                bindings.push(engram_retrieval::BoundBinding {
+                    repo_id: repo.clone(),
+                    branch_ref: binding.branch_ref,
+                    generation_id: generation,
+                });
+            }
+        }
+        let lineage = self
+            .store
+            .target_lineage(scope)
+            .await?
+            .into_iter()
+            .map(|entry| engram_retrieval::DurableLineage {
+                record_id: entry.record_id,
+                repo_id: entry.repo_id,
+                generation_id: entry.generation_id,
+            })
+            .collect();
+        let view = engram_retrieval::BoundCodeView::from_eligibility(
+            &engram_retrieval::BoundCodeEligibility {
+                epoch: eligibility.epoch,
+                bindings,
+                lineage,
+            },
+        );
         Ok(view.with_requested_keys(requested_keys))
     }
 

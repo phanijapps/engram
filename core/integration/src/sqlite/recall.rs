@@ -157,6 +157,13 @@ impl UnifiedRecall for SqlUnifiedRecall {
         // ineligible code into rerank input or compose_context. A resolver
         // failure degrades the recall with a source failure rather than
         // silently running unconstrained.
+        // Corrective r2 (finding 6): an eligibility-resolution FAILURE fails
+        // CLOSED. The authority-unavailable branch does not disable the
+        // guard: code-capable candidates (chunk/entity targets — the types
+        // that require the failed authority) are denied, while independently
+        // authorized non-code results (facts-lane memories, beliefs) are
+        // preserved and the failure is surfaced as a source failure.
+        let mut authority_failed = false;
         let code_view = match &self.code_eligibility {
             Some(resolver) => {
                 let requested = request
@@ -167,6 +174,7 @@ impl UnifiedRecall for SqlUnifiedRecall {
                     Ok(view) => Some(view),
                     Err(error) => {
                         source_failures.push(lane_failure("code_eligibility", &error));
+                        authority_failed = true;
                         None
                     }
                 }
@@ -174,17 +182,21 @@ impl UnifiedRecall for SqlUnifiedRecall {
             None => None,
         };
         let eligible_candidate = |candidate: &RetrievalResult| -> bool {
-            code_view
-                .as_ref()
-                .map(|view| {
-                    view.allows(
-                        candidate.metadata.as_ref(),
-                        // Memory/belief items are never legacy code; the
-                        // stamp check owns classification.
-                        false,
-                    )
-                })
-                .unwrap_or(true)
+            if let Some(view) = code_view.as_ref() {
+                // Durable-lineage classification (finding 4): the record id
+                // drives the decision; non-lineage ids pass (the lanes own
+                // kind-based legacy denial internally).
+                return view.allows(candidate.target_id.as_str(), false);
+            }
+            if authority_failed {
+                // Fail closed for code-capable target types; keep the rest.
+                return !matches!(
+                    candidate.target_type,
+                    engram_domain::RetrievalTargetType::Chunk
+                        | engram_domain::RetrievalTargetType::Entity
+                );
+            }
+            true
         };
 
         // ---- Facts lane: memory.retrieve (already-composed ContextPayload) ----
@@ -294,8 +306,9 @@ impl UnifiedRecall for SqlUnifiedRecall {
         // compose_context: an ineligible code target that survived a lane —
         // e.g. via a stale warm index or a lane constructed without its own
         // constraint — is dropped here rather than entering the composed
-        // context budget.
-        if code_view.is_some() {
+        // context budget. On AUTHORITY FAILURE the same closed rule denies
+        // code-capable targets (finding 6).
+        if code_view.is_some() || authority_failed {
             candidates.retain(|candidate| eligible_candidate(candidate));
         }
 

@@ -70,6 +70,21 @@ pub struct VectorRetrievalIndex {
     query_provider: Arc<dyn VectorQueryProvider>,
     target_resolver: Arc<dyn VectorTargetResolver>,
     default_limit: u32,
+    /// Bound-code eligibility (corrective r2, finding 5): when wired, the
+    /// sqlite-vec candidate selection is CONSTRAINED to the allowed target
+    /// set BEFORE the top-K — the real lane never takes a global KNN page and
+    /// drops rows afterwards. Classification is durable-lineage + chunk-kind
+    /// driven (finding 4), and the request's repository narrowing applies to
+    /// the allowed set before the search.
+    eligibility: Option<VectorEligibility>,
+}
+
+/// The bound vector lane's eligibility inputs: the neutral resolver plus the
+/// knowledge store that owns canonical chunk records (classification needs
+/// the chunk kinds; both are same-crate types, so the lane stays engine-local).
+pub struct VectorEligibility {
+    resolver: Arc<dyn engram_retrieval::CodeEligibilityResolver>,
+    knowledge: std::sync::Arc<crate::knowledge::SqlKnowledgeStore>,
 }
 
 impl VectorRetrievalIndex {
@@ -100,6 +115,32 @@ impl VectorRetrievalIndex {
             query_provider,
             target_resolver,
             default_limit,
+            eligibility: None,
+        }
+    }
+
+    /// [`Self::with_default_limit`] with bound-code eligibility wired into
+    /// the REAL candidate path (finding 5): sqlite-vec searches within the
+    /// allowed target set (`target_id IN (...)` participates in the KNN
+    /// scan), so an ineligible nearest neighbor can never consume a slot an
+    /// eligible target needs — not even at top-K = 1.
+    pub fn with_default_limit_bound(
+        index: SqliteVectorIndex,
+        query_provider: Arc<dyn VectorQueryProvider>,
+        target_resolver: Arc<dyn VectorTargetResolver>,
+        default_limit: u32,
+        resolver: Arc<dyn engram_retrieval::CodeEligibilityResolver>,
+        knowledge: std::sync::Arc<crate::knowledge::SqlKnowledgeStore>,
+    ) -> Self {
+        Self {
+            index: Arc::new(Mutex::new(index)),
+            query_provider,
+            target_resolver,
+            default_limit,
+            eligibility: Some(VectorEligibility {
+                resolver,
+                knowledge,
+            }),
         }
     }
 }
@@ -112,12 +153,51 @@ impl RetrievalIndex for VectorRetrievalIndex {
     ) -> CoreResult<Vec<RetrievalResult>> {
         let query = self.query_provider.query_vector(request)?;
         let limit = search_limit(request, self.default_limit);
-        let hits = {
-            let index = self.index.lock().map_err(|_| CoreError::Adapter {
-                adapter: "engram-store-vector".to_owned(),
-                message: "vector index lock poisoned".to_owned(),
-            })?;
-            index.search(&query, limit)?
+        // Corrective r2 (findings 4/5): when eligibility is wired, build the
+        // allowed target set from DURABLE LINEAGE + chunk kinds (with the
+        // request's repository narrowing applied) and run the CONSTRAINED
+        // sqlite-vec search — eligibility applies inside the KNN scan, before
+        // the limit. A resolver error fails the lane closed (it degrades via
+        // source failures upstream), never widens to an unconstrained page.
+        let hits = match &self.eligibility {
+            Some(bound) => {
+                let view = engram_retrieval::resolve_view(
+                    bound.resolver.as_ref(),
+                    &request.scope,
+                    request
+                        .filters
+                        .as_ref()
+                        .and_then(|filters| filters.code_index_keys.as_deref()),
+                )
+                .await?;
+                let mut allowed = std::collections::BTreeSet::new();
+                for chunk in bound.knowledge.list_chunks(&request.scope).await? {
+                    let code_kind = matches!(
+                        chunk.kind,
+                        engram_domain::KnowledgeChunkKind::CodeSymbol
+                            | engram_domain::KnowledgeChunkKind::CodeBlock
+                            | engram_domain::KnowledgeChunkKind::DiffHunk
+                    );
+                    if view.allows(chunk.id.as_str(), code_kind) {
+                        allowed.insert(chunk.id.to_string());
+                    }
+                }
+                if allowed.is_empty() {
+                    return Ok(Vec::new());
+                }
+                let index = self.index.lock().map_err(|_| CoreError::Adapter {
+                    adapter: "engram-store-vector".to_owned(),
+                    message: "vector index lock poisoned".to_owned(),
+                })?;
+                index.search_constrained(&query, limit, &allowed)?
+            }
+            None => {
+                let index = self.index.lock().map_err(|_| CoreError::Adapter {
+                    adapter: "engram-store-vector".to_owned(),
+                    message: "vector index lock poisoned".to_owned(),
+                })?;
+                index.search(&query, limit)?
+            }
         };
 
         let mut results = Vec::new();

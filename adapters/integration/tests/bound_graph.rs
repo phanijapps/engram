@@ -1,21 +1,25 @@
-//! TASK-015 focused proof: graph seeds/traversal/analytics are constrained to
-//! the published bound generations BEFORE budgets, while eligible
-//! cross-repository edges survive and same names/paths from different bound
-//! repositories stay distinct endpoints (REQ-005 / AC-007).
+//! TASK-015 + TASK-016 focused proofs (corrective r2): graph
+//! seeds/traversal/analytics constrained to the published bound generations
+//! BEFORE budgets (REQ-005 / AC-007), with stable entity-id traversal
+//! (finding 10), both-endpoint authorization (finding 8), shared caller
+//! authority (finding 3), and the shared scoped authorization seam for
+//! explicit ids / wildcards / maintenance with durable lineage authority
+//! (finding 4).
 //!
-//! Every case drives REAL owned behavior: a real file-backed
-//! `SqlCodeBindingRepository` (two published repos + one staged-only repo), a
-//! real `SqlKnowledgeStore` knowledge graph, and the real provider graph
-//! composition (`code_graph_explore_bound` / `code_graph_file_dependencies_bound`).
+//! Every case drives REAL owned behavior: real file-backed
+//! `SqlCodeBindingRepository` (published + staged repos, DURABLE staged
+//! lineage), real `SqlKnowledgeStore` graph, real provider graph composition
+//! (`code_graph_explore_bound` / `code_graph_file_dependencies_bound`), and
+//! the real `AuthorizedKnowledgeQuery` seam over the same coordinator.
 
 use std::sync::Arc;
 
 use async_trait::async_trait;
 use engram_domain::*;
-use engram_integration::EngramProvider;
 use engram_integration::code_binding::{
     CodeAuthorityAction, CodeBindingAuthorizer, CodeBindingCoordinator,
 };
+use engram_integration::{EngramProvider, EngramProviderBuilder};
 use engram_knowledge::{CodeBindingRepository, KnowledgeRepository, StageReceipt};
 use engram_runtime::{CoreError, CoreResult};
 use engram_store_sqlite::knowledge::{SqlCodeBindingRepository, SqlKnowledgeStore};
@@ -33,6 +37,16 @@ fn scope() -> Scope {
     }
 }
 
+fn foreign_scope() -> Scope {
+    Scope {
+        tenant: "task-015".to_string(),
+        subject: None,
+        workspace: Some("other-workspace".to_string()),
+        session: None,
+        environment: None,
+    }
+}
+
 fn actor() -> Actor {
     Actor {
         id: Id::from("task-015-agent"),
@@ -42,23 +56,34 @@ fn actor() -> Actor {
     }
 }
 
-struct Authorizer;
+/// Deny-everything authorizer (finding 3): even fully populated scopes deny.
+struct DenyAllAuthorizer;
 #[async_trait]
-impl CodeBindingAuthorizer for Authorizer {
+impl CodeBindingAuthorizer for DenyAllAuthorizer {
     async fn authorize(
         &self,
-        actor: &Actor,
-        requested: &Scope,
+        _actor: &Actor,
+        _requested: &Scope,
         _repo: &RepoId,
         _action: CodeAuthorityAction,
     ) -> CoreResult<()> {
-        if actor.id == Id::from("task-015-agent") && requested == &scope() {
-            Ok(())
-        } else {
-            Err(CoreError::PolicyDenied {
-                reason: "fixture authorization denied".into(),
-            })
-        }
+        Err(CoreError::PolicyDenied {
+            reason: "deny-all fixture".into(),
+        })
+    }
+}
+
+struct AllowAuthorizer;
+#[async_trait]
+impl CodeBindingAuthorizer for AllowAuthorizer {
+    async fn authorize(
+        &self,
+        _actor: &Actor,
+        _requested: &Scope,
+        _repo: &RepoId,
+        _action: CodeAuthorityAction,
+    ) -> CoreResult<()> {
+        Ok(())
     }
 }
 
@@ -121,15 +146,13 @@ fn receipt(attempt_id: &str, generation_id: &str, lane: CodeReceiptKind) -> Stag
     }
 }
 
-/// Binds `repo` and publishes `generation` through the full durable state
-/// machine (receipts → ready → publish). Synchronous: drives each port call
-/// with `block_on` directly (no nested executors).
 fn publish_generation(
     store: &SqlCodeBindingRepository,
     repo: &str,
     generation_id: &str,
     expected_epoch: u64,
     expected_active: Option<&str>,
+    lineage_records: &[&str],
 ) {
     let repo_id = RepoId(repo.to_string());
     let attempt_id = format!("attempt-{repo}-{generation_id}");
@@ -154,26 +177,24 @@ fn publish_generation(
     block_on(store.mark_ready(&scope(), &repo_id, &attempt_id, stored.fencing_token))
         .expect("mark ready");
     block_on(store.publish(&scope(), &repo_id, &attempt_id, expected_epoch)).expect("publish");
+    for record in lineage_records {
+        block_on(store.put_lineage(
+            &scope(),
+            record,
+            CodeLineage {
+                repo_id: RepoId(repo.to_string()),
+                generation_id: generation_id.to_string(),
+                source_path: format!("src/{record}.rs"),
+                contributors: vec![record.to_string()],
+            },
+        ))
+        .expect("put lineage");
+    }
 }
 
-fn entity(
-    id: &str,
-    name: &str,
-    kind: EntityKind,
-    repo: Option<&str>,
-    generation: Option<&str>,
-) -> KnowledgeEntity {
-    let mut metadata = Metadata::new();
-    if let (Some(repo), Some(generation)) = (repo, generation) {
-        metadata.insert(
-            "codeRepoId".to_string(),
-            serde_json::Value::String(repo.to_string()),
-        );
-        metadata.insert(
-            "codeGenerationId".to_string(),
-            serde_json::Value::String(generation.to_string()),
-        );
-    }
+fn entity(id: &str, name: &str, kind: EntityKind) -> KnowledgeEntity {
+    // Corrective r2 (finding 4): metadata is NOT authority — the fixture's
+    // durable lineage names the code records.
     KnowledgeEntity {
         id: Id::from(id),
         graph_id: None,
@@ -189,7 +210,7 @@ fn entity(
         updated_at: None,
         valid_from: None,
         valid_until: None,
-        metadata: Some(metadata),
+        metadata: None,
         archived_at: None,
     }
 }
@@ -197,6 +218,15 @@ fn entity(
 fn ref_of(id: &str, name: &str) -> EntityRef {
     EntityRef {
         id: Some(Id::from(id)),
+        kind: None,
+        name: Some(name.to_string()),
+        aliases: Vec::new(),
+    }
+}
+
+fn ref_without_id(name: &str) -> EntityRef {
+    EntityRef {
+        id: None,
         kind: None,
         name: Some(name.to_string()),
         aliases: Vec::new(),
@@ -228,129 +258,97 @@ fn relationship(
     }
 }
 
-/// The full fixture: repo-a + repo-b PUBLISHED, repo-c staged-only (durable
-/// but never published). Same symbol names and same file paths appear in
-/// repo-a and repo-b; a high-degree stale hub sits in repo-c.
-struct GraphFixture {
-    provider: EngramProvider,
+fn name_only_edge(
+    id: &str,
+    subject: &str,
+    subject_name: &str,
+    object_name: &str,
+) -> KnowledgeRelationship {
+    KnowledgeRelationship {
+        id: Id::from(id),
+        graph_id: None,
+        predicate: "calls".to_string(),
+        subject: ref_of(subject, subject_name),
+        object: ref_without_id(object_name),
+        scope: scope(),
+        evidence: Vec::new(),
+        confidence: None,
+        provenance: provenance(),
+        created_at: chrono::Utc::now(),
+        updated_at: None,
+        code_resolution: None,
+        archived_at: None,
+    }
 }
 
-fn fixture(dir: &std::path::Path) -> GraphFixture {
-    // Durable bindings: repo-a/gen-a and repo-b/gen-b published; repo-c
-    // staged only.
-    let bindings =
-        SqlCodeBindingRepository::open(dir.join("bindings.sqlite")).expect("open binding store");
-    for repo in ["repo-a", "repo-b", "repo-c"] {
-        block_on(bindings.bind(CodeBinding {
-            scope: scope(),
-            repo_id: RepoId(repo.to_string()),
-            branch_ref: "refs/heads/main".to_string(),
-            version: 1,
-            active_generation: None,
-            epoch: 0,
-        }))
-        .expect("bind");
-    }
-    let bindings = Arc::new(bindings);
-    publish_generation(&bindings, "repo-a", "gen-a", 0, None);
-    publish_generation(&bindings, "repo-b", "gen-b", 0, None);
-    {
-        // repo-c: durable staged attempt, never published.
-        let repo_id = RepoId("repo-c".to_string());
-        let attempt_id = "attempt-repo-c-gen-c";
-        block_on(bindings.begin_attempt(
-            &scope(),
-            &repo_id,
-            generation("gen-c"),
-            attempt(attempt_id, 0, None),
-        ))
-        .expect("begin repo-c attempt");
-        block_on(bindings.record_receipt(receipt(attempt_id, "gen-c", CodeReceiptKind::Source)))
-            .expect("repo-c source receipt");
-    }
-
-    let coordinator = CodeBindingCoordinator::new(
-        bindings.clone() as Arc<dyn CodeBindingRepository>,
-        Arc::new(Authorizer),
-        Vec::new(),
+/// Durable lineage: repo-a published at gen-a (all its entities), repo-b
+/// published at gen-b, repo-c staged only.
+fn seed_graph(bindings: &SqlCodeBindingRepository, knowledge: &SqlKnowledgeStore) {
+    publish_generation(
+        bindings,
+        "repo-a",
+        "gen-a",
+        0,
+        None,
+        &["a-render", "a-render-2", "a-app-file", "a-util-file"],
     );
+    publish_generation(
+        bindings,
+        "repo-b",
+        "gen-b",
+        0,
+        None,
+        &["b-render", "b-util", "b-util-file"],
+    );
+    // repo-c: durable staged attempt + lineage, never published.
+    let repo_id = RepoId("repo-c".to_string());
+    block_on(bindings.begin_attempt(
+        &scope(),
+        &repo_id,
+        generation("gen-c"),
+        attempt("attempt-repo-c-gen-c", 0, None),
+    ))
+    .expect("begin repo-c attempt");
+    block_on(bindings.put_lineage(
+        &scope(),
+        "c-render",
+        CodeLineage {
+            repo_id: RepoId("repo-c".to_string()),
+            generation_id: "gen-c".to_string(),
+            source_path: "src/c-render.rs".to_string(),
+            contributors: vec!["c-render".to_string()],
+        },
+    ))
+    .expect("repo-c lineage");
 
-    // Knowledge graph: same names in repo-a/repo-b, cross-repo call edge,
-    // cross-repo import edge, and a stale high-degree hub in repo-c.
-    let knowledge = Arc::new(SqlKnowledgeStore::open_in_memory().expect("knowledge open"));
     let entities = vec![
-        entity(
-            "a-render",
-            "render",
-            EntityKind::Function,
-            Some("repo-a"),
-            Some("gen-a"),
-        ),
-        entity(
-            "b-render",
-            "render",
-            EntityKind::Function,
-            Some("repo-b"),
-            Some("gen-b"),
-        ),
-        entity(
-            "b-util",
-            "util",
-            EntityKind::Function,
-            Some("repo-b"),
-            Some("gen-b"),
-        ),
-        // Same names again, one per repo, at FILE kind.
-        entity(
-            "a-app-file",
-            "src/app.rs",
-            EntityKind::File,
-            Some("repo-a"),
-            Some("gen-a"),
-        ),
-        entity(
-            "b-util-file",
-            "src/util.rs",
-            EntityKind::File,
-            Some("repo-b"),
-            Some("gen-b"),
-        ),
-        // Stale staged repo-c: a hub with the SAME names plus satellites.
-        entity(
-            "c-render",
-            "render",
-            EntityKind::Function,
-            Some("repo-c"),
-            Some("gen-c"),
-        ),
-        entity(
-            "c-sat-1",
-            "renderSat1",
-            EntityKind::Function,
-            Some("repo-c"),
-            Some("gen-c"),
-        ),
-        entity(
-            "c-sat-2",
-            "renderSat2",
-            EntityKind::Function,
-            Some("repo-c"),
-            Some("gen-c"),
-        ),
-        entity(
-            "c-sat-3",
-            "renderSat3",
-            EntityKind::Function,
-            Some("repo-c"),
-            Some("gen-c"),
-        ),
+        // SAME NAME in repo-a and repo-b (and staged repo-c).
+        entity("a-render", "render", EntityKind::Function),
+        entity("b-render", "render", EntityKind::Function),
+        // SAME NAME, DIFFERENT FILE within ONE repository (finding 10).
+        entity("a-render-2", "render", EntityKind::Function),
+        entity("b-util", "util", EntityKind::Function),
+        // IDENTICAL FILE PATHS in repo-a and repo-b (finding 10).
+        entity("a-app-file", "src/app.rs", EntityKind::File),
+        entity("a-util-file", "src/util.rs", EntityKind::File),
+        entity("b-util-file", "src/util.rs", EntityKind::File),
+        // Staged repo-c hub + satellites (unpublished).
+        entity("c-render", "render", EntityKind::Function),
+        entity("c-sat-1", "renderSat1", EntityKind::Function),
+        entity("c-sat-2", "renderSat2", EntityKind::Function),
+        // An UNBOUND name-only endpoint (dangling — finding 8) and an
+        // ordinary non-code entity (authorized ordinary reads — finding 4).
+        entity("plain-doc", "ordinaryConcept", EntityKind::Concept),
     ];
     let relationships = vec![
-        // Authorized cross-repository edge between two BOUND repositories.
+        // Authorized cross-repository edge between two BOUND repos.
         relationship("r-1", "calls", "a-render", "render", "b-util", "util"),
         // Same-name edge inside repo-b.
         relationship("r-2", "calls", "b-render", "render", "b-util", "util"),
-        // Cross-repo import edge (file → module path).
+        // Second same-name symbol inside repo-a (distinct id — finding 10).
+        relationship("r-2b", "calls", "a-render-2", "render", "b-util", "util"),
+        // Cross-repo import edge: repo-a's app.rs imports "./util" with the
+        // object endpoint RESOLVED to repo-b's identical-path util.rs.
         relationship(
             "r-3",
             "imports",
@@ -359,7 +357,7 @@ fn fixture(dir: &std::path::Path) -> GraphFixture {
             "b-util-file",
             "./util",
         ),
-        // Stale edges: repo-c hub + satellites (would dominate unconstrained).
+        // Staged repo-c edges (would dominate unconstrained).
         relationship(
             "r-4",
             "calls",
@@ -376,14 +374,8 @@ fn fixture(dir: &std::path::Path) -> GraphFixture {
             "c-sat-2",
             "renderSat2",
         ),
-        relationship(
-            "r-6",
-            "calls",
-            "c-render",
-            "render",
-            "c-sat-3",
-            "renderSat3",
-        ),
+        // Dangling / name-only edges ahead of valid edges (finding 8).
+        name_only_edge("r-6", "a-render", "render", "ghostSymbol"),
         relationship("r-7", "calls", "a-render", "render", "c-render", "render"),
     ];
     for entity in entities {
@@ -392,13 +384,44 @@ fn fixture(dir: &std::path::Path) -> GraphFixture {
     for relationship in relationships {
         block_on(knowledge.put_relationship(relationship)).expect("put relationship");
     }
+}
 
-    let report = engram_integration::CapabilityReport::new(CapabilityState::Supported);
-    let provider = engram_integration::EngramProviderBuilder::new(report)
-        .knowledge_query(knowledge.clone())
-        .code_bindings(Arc::new(coordinator))
-        .build();
-    GraphFixture { provider }
+fn provider_with(
+    dir: &std::path::Path,
+    authorizer: Arc<dyn CodeBindingAuthorizer>,
+) -> (EngramProvider, Arc<SqlCodeBindingRepository>) {
+    let bindings =
+        SqlCodeBindingRepository::open(dir.join("bindings.sqlite")).expect("open binding store");
+    for repo in ["repo-a", "repo-b", "repo-c"] {
+        block_on(bindings.bind(CodeBinding {
+            scope: scope(),
+            repo_id: RepoId(repo.to_string()),
+            branch_ref: "refs/heads/main".to_string(),
+            version: 1,
+            active_generation: None,
+            epoch: 0,
+        }))
+        .expect("bind");
+    }
+    let knowledge = Arc::new(SqlKnowledgeStore::open_in_memory().expect("knowledge open"));
+    seed_graph(&bindings, &knowledge);
+    let bindings = Arc::new(bindings);
+    let coordinator = CodeBindingCoordinator::new(
+        bindings.clone() as Arc<dyn CodeBindingRepository>,
+        authorizer,
+        Vec::new(),
+    );
+    let provider = EngramProviderBuilder::new(engram_integration::CapabilityReport::new(
+        CapabilityState::Supported,
+    ))
+    .knowledge_query(knowledge)
+    .code_bindings(Arc::new(coordinator))
+    .build();
+    (provider, bindings)
+}
+
+fn fixture(dir: &std::path::Path) -> (EngramProvider, Arc<SqlCodeBindingRepository>) {
+    provider_with(dir, Arc::new(AllowAuthorizer))
 }
 
 // ---------- task_015 focused cases -----------------------------------------
@@ -406,15 +429,17 @@ fn fixture(dir: &std::path::Path) -> GraphFixture {
 mod task_015 {
     use super::*;
 
-    /// same_names_cross_repo: the same symbol name (and the same file path)
-    /// exists in two BOUND repositories and in a staged-only repo. The bound
-    /// graph keeps BOTH published endpoints distinct (repository-qualified)
-    /// and drops the staged one.
+    /// same_names_cross_repo: same symbol name across two PUBLISHED repos and
+    /// a staged-only repo; ALSO the same name twice in DIFFERENT files of
+    /// ONE repository (finding 10). All three published endpoints stay
+    /// DISTINCT (stable ids, repository-qualified labels); the staged one
+    /// never appears.
     #[test]
     fn same_names_cross_repo() {
         let dir = tempfile::tempdir().expect("tempdir");
-        let fixture = fixture(dir.path());
-        let nodes = block_on(fixture.provider.code_graph_explore_bound(
+        let (provider, _) = fixture(dir.path());
+        let nodes = block_on(provider.code_graph_explore_bound(
+            &actor(),
             &scope(),
             "render",
             Some(1),
@@ -423,30 +448,45 @@ mod task_015 {
             false,
         ))
         .expect("bound explore");
-        let names: Vec<&str> = nodes.iter().map(|node| node.name.as_str()).collect();
+        let by_id: Vec<(&str, &str)> = nodes
+            .iter()
+            .map(|n| (n.id.as_str(), n.label.as_str()))
+            .collect();
         assert!(
-            names.contains(&"repo-a::render"),
-            "repo-a's published endpoint must appear: {names:?}"
+            by_id.iter().any(|(id, _)| *id == "a-render"),
+            "repo-a's published endpoint must appear: {by_id:?}"
         );
         assert!(
-            names.contains(&"repo-b::render"),
-            "repo-b's published endpoint must appear distinctly: {names:?}"
+            by_id.iter().any(|(id, _)| *id == "b-render"),
+            "repo-b's published endpoint must appear distinctly: {by_id:?}"
         );
         assert!(
-            !names.iter().any(|name| name.starts_with("repo-c")),
-            "the staged-only repository must not appear: {names:?}"
+            by_id.iter().any(|(id, _)| *id == "a-render-2"),
+            "the SAME NAME in a different file of repo-a must stay a DISTINCT node: {by_id:?}"
+        );
+        assert!(
+            by_id.iter().all(|(_, label)| !label.starts_with("repo-c")),
+            "the staged-only repository must not appear: {by_id:?}"
+        );
+        // Labels are repository-qualified for code records (display only).
+        assert!(
+            by_id.iter().any(|(_, label)| *label == "repo-a::render"),
+            "code display labels carry the repository: {by_id:?}"
         );
     }
 
-    /// bound_cross_repo_edges: an authorized edge BETWEEN two bound published
-    /// repositories stays traversable (and importable) after constraint — the
-    /// stale repo-c edges are gone while the repo-a → repo-b edge serves.
+    /// bound_cross_repo_edges: an authorized edge BETWEEN two bound
+    /// published repositories stays traversable; an import that explicitly
+    /// targets repo-b's IDENTICAL PATH resolves there (finding 10) even
+    /// though repo-a has the same `src/util.rs`; dangling/name-only edges
+    /// never traverse (finding 8).
     #[test]
     fn bound_cross_repo_edges() {
         let dir = tempfile::tempdir().expect("tempdir");
-        let fixture = fixture(dir.path());
+        let (provider, _) = fixture(dir.path());
 
-        let nodes = block_on(fixture.provider.code_graph_explore_bound(
+        let nodes = block_on(provider.code_graph_explore_bound(
+            &actor(),
             &scope(),
             "render",
             Some(2),
@@ -455,47 +495,43 @@ mod task_015 {
             false,
         ))
         .expect("bound explore");
-        let names: Vec<&str> = nodes.iter().map(|node| node.name.as_str()).collect();
+        let ids: Vec<&str> = nodes.iter().map(|node| node.id.as_str()).collect();
         assert!(
-            names.contains(&"repo-b::util"),
-            "the cross-repository call edge (repo-a::render → repo-b::util) must stay traversable: {names:?}"
+            ids.contains(&"b-util"),
+            "the cross-repository call edge (a-render → b-util) must stay traversable: {ids:?}"
         );
         assert!(
-            !names.iter().any(|name| name.starts_with("repo-c")),
-            "staged-repository endpoints must never be reachable: {names:?}"
+            !ids.iter()
+                .any(|id| id.starts_with("c-") || id.starts_with("repo-c")),
+            "staged-repository and dangling endpoints must never be reachable: {ids:?}"
         );
 
-        let dependencies = block_on(
-            fixture
-                .provider
-                .code_graph_file_dependencies_bound(&scope()),
-        )
-        .expect("bound file dependencies");
+        let dependencies =
+            block_on(provider.code_graph_file_dependencies_bound(&actor(), &scope()))
+                .expect("bound file dependencies");
         let cross_repo = dependencies
             .iter()
             .find(|dependency| dependency.from_path == "repo-a::src/app.rs");
         let Some(cross_repo) = cross_repo else {
-            panic!(
-                "repo-a's file must keep its import edge: {:?}",
-                dependencies
-            )
+            panic!("repo-a's file must keep its import edge: {dependencies:?}");
         };
         assert_eq!(
             cross_repo.resolved_to.as_deref(),
             Some("repo-b::src/util.rs"),
-            "the import resolves to the BOUND repo-b file, crossing repositories honestly: {cross_repo:?}"
+            "the scanner-resolved endpoint wins over identical-path ambiguity: {cross_repo:?}"
         );
     }
 
     /// eligible_graph_budgets: node/edge budgets apply AFTER eligibility —
     /// with a two-node budget the page fills with eligible endpoints even
-    /// though the staged repo-c hub plus its satellites would otherwise
-    /// dominate the traversal.
+    /// though the staged repo-c hub, its satellites, the dangling edges and
+    /// the unauthorized cross edges would otherwise dominate the traversal.
     #[test]
     fn eligible_graph_budgets() {
         let dir = tempfile::tempdir().expect("tempdir");
-        let fixture = fixture(dir.path());
-        let nodes = block_on(fixture.provider.code_graph_explore_bound(
+        let (provider, _) = fixture(dir.path());
+        let nodes = block_on(provider.code_graph_explore_bound(
+            &actor(),
             &scope(),
             "render",
             Some(2),
@@ -507,19 +543,42 @@ mod task_015 {
         assert!(
             nodes.len() <= 2,
             "the node budget is respected: {:?}",
-            nodes.iter().map(|n| n.name.clone()).collect::<Vec<_>>()
+            nodes.iter().map(|n| n.id.clone()).collect::<Vec<_>>()
         );
         assert!(
-            nodes.iter().all(|node| !node.name.starts_with("repo-c")),
-            "no budget slot may be consumed by ineligible nodes: {:?}",
-            nodes.iter().map(|n| n.name.clone()).collect::<Vec<_>>()
+            nodes.iter().all(|node| !node.id.starts_with("c-")),
+            "no budget slot may be consumed by ineligible or dangling endpoints: {:?}",
+            nodes.iter().map(|n| n.id.clone()).collect::<Vec<_>>()
         );
-        // And the budgeted page still carries eligible seeds.
         assert!(
-            nodes.iter().any(|node| node.name.ends_with("::render")),
+            nodes.iter().any(|node| node.id.contains("render")),
             "eligible seeds must fill the budget: {:?}",
-            nodes.iter().map(|n| n.name.clone()).collect::<Vec<_>>()
+            nodes.iter().map(|n| n.id.clone()).collect::<Vec<_>>()
         );
+    }
+
+    /// Corrective r2 (finding 3): a DENYING authorizer denies the bound
+    /// graph reads even though the scope is fully populated — the shared
+    /// seam authenticates the caller before any lineage consult.
+    #[test]
+    fn denying_authorizer_denies_populated_scope() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let (provider, _) = provider_with(dir.path(), Arc::new(DenyAllAuthorizer));
+        let denied = block_on(provider.code_graph_explore_bound(
+            &actor(),
+            &scope(),
+            "render",
+            Some(1),
+            Some(24),
+            Some(64),
+            false,
+        ));
+        assert!(
+            matches!(&denied, Err(CoreError::PolicyDenied { reason }) if reason.contains("deny-all")),
+            "a deny-all authorizer must deny even for a populated scope: {denied:?}"
+        );
+        let deps_denied = block_on(provider.code_graph_file_dependencies_bound(&actor(), &scope()));
+        assert!(deps_denied.is_err());
     }
 }
 
@@ -528,168 +587,119 @@ mod task_015 {
 mod task_016 {
     use super::*;
     use engram_integration::knowledge_query::AuthorizedKnowledgeQuery;
-    use engram_knowledge::CodeEligibilityGate;
 
-    /// Extends the fixture with durable LINEAGE records so the cell-backed
-    /// gate has real authorization truth: repo-a/repo-b targets are published
-    /// (authorized), repo-c targets are staged-only (foreign), and one unknown
-    /// id exists nowhere.
     fn gate_fixture(
         dir: &std::path::Path,
     ) -> (AuthorizedKnowledgeQuery, Arc<SqlCodeBindingRepository>) {
-        let bindings = SqlCodeBindingRepository::open(dir.join("gate-bindings.sqlite"))
-            .expect("open binding store");
-        for repo in ["repo-a", "repo-c"] {
-            block_on(bindings.bind(CodeBinding {
-                scope: scope(),
-                repo_id: RepoId(repo.to_string()),
-                branch_ref: "refs/heads/main".to_string(),
-                version: 1,
-                active_generation: None,
-                epoch: 0,
-            }))
-            .expect("bind");
-        }
-        let bindings = Arc::new(bindings);
-        publish_generation(&bindings, "repo-a", "gen-a", 0, None);
-        // repo-c: staged attempt only — never published.
-        let repo_id = RepoId("repo-c".to_string());
-        let attempt_id = "attempt-gate-repo-c";
-        block_on(bindings.begin_attempt(
-            &scope(),
-            &repo_id,
-            generation("gen-c"),
-            attempt(&attempt_id, 0, None),
-        ))
-        .expect("begin staged attempt");
-
-        // Durable lineage: published targets, staged targets.
-        for (record_id, repo, generation_id) in [
-            ("doc-a-1", "repo-a", "gen-a"),
-            ("chunk-a-1", "repo-a", "gen-a"),
-            ("staged-c-1", "repo-c", "gen-c"),
-        ] {
-            block_on(bindings.put_lineage(
-                &scope(),
-                record_id,
-                CodeLineage {
-                    repo_id: RepoId(repo.to_string()),
-                    generation_id: generation_id.to_string(),
-                    source_path: format!("src/{record_id}.rs"),
-                    contributors: vec![record_id.to_string()],
-                },
-            ))
-            .expect("put lineage");
-        }
-
-        let knowledge = Arc::new(SqlKnowledgeStore::open_in_memory().expect("knowledge open"));
-        block_on(knowledge.put_entity(entity(
-            "chunk-a-1",
-            "publishedSymbol",
-            EntityKind::Function,
-            Some("repo-a"),
-            Some("gen-a"),
-        )))
-        .expect("put entity");
-        block_on(knowledge.put_entity(entity(
-            "staged-c-1",
-            "stagedSymbol",
-            EntityKind::Function,
-            Some("repo-c"),
-            Some("gen-c"),
-        )))
-        .expect("put entity");
-        block_on(knowledge.put_entity(entity(
-            "plain-doc",
-            "ordinaryConcept",
-            EntityKind::Concept,
-            None,
-            None,
-        )))
-        .expect("put entity");
-
-        let authorized = AuthorizedKnowledgeQuery::new(
-            knowledge,
-            bindings.clone() as Arc<dyn CodeEligibilityGate>,
-        );
+        // One provider per tempdir (the durable store must not be re-seeded
+        // through a second handle — the fencing state machine would see a
+        // concurrent writer).
+        let (provider, bindings) = provider_with(dir, Arc::new(AllowAuthorizer));
+        let knowledge = provider
+            .knowledge_query()
+            .cloned()
+            .expect("knowledge query handle");
+        let coordinator = provider.code_bindings().expect("coordinator").clone();
+        let authorized = AuthorizedKnowledgeQuery::new(knowledge, coordinator);
         (authorized, bindings)
     }
 
-    /// foreign_ids_denied: explicit ids from a staged-only generation (or that
-    /// exist nowhere) deny the whole read — even with the caller's own scope —
-    /// while published ids authorize. No partial authorization leaks through.
+    /// foreign_ids_denied: explicit ids from a staged-only generation (or
+    /// unknown) deny the whole read; published ids authorize; cross-scope
+    /// denies; and a DENYING authorizer denies for a POPULATED foreign scope
+    /// (finding 3).
     #[test]
     fn foreign_ids_denied() {
         let dir = tempfile::tempdir().expect("tempdir");
         let (authorized, bindings) = gate_fixture(dir.path());
 
-        // Published ids authorize through the REAL cell gate.
         let allowed = block_on(authorized.authorize_read(
+            &actor(),
             &scope(),
-            &["doc-a-1".to_string(), "chunk-a-1".to_string()],
+            &["a-render".to_string(), "b-util".to_string()],
             10,
         ))
         .expect("published ids authorize");
-        assert_eq!(
-            allowed,
-            vec!["doc-a-1".to_string(), "chunk-a-1".to_string()]
-        );
+        assert_eq!(allowed, vec!["a-render".to_string(), "b-util".to_string()]);
 
-        // A staged-generation id is foreign: whole-request denial.
         let mixed = block_on(authorized.authorize_read(
+            &actor(),
             &scope(),
-            &["doc-a-1".to_string(), "staged-c-1".to_string()],
+            &["a-render".to_string(), "c-render".to_string()],
             10,
         ));
         assert!(
             matches!(&mixed, Err(CoreError::InvalidRequest { reason }) if reason.contains("foreign or unpublished")),
-            "one foreign id denies the entire explicit read: {mixed:?}"
+            "one staged/foreign id denies the entire explicit read: {mixed:?}"
         );
 
-        // Unknown ids deny too.
-        let unknown =
-            block_on(authorized.authorize_read(&scope(), &["no-such-target".to_string()], 10));
+        let unknown = block_on(authorized.authorize_read(
+            &actor(),
+            &scope(),
+            &["no-such-target".to_string()],
+            10,
+        ));
         assert!(unknown.is_err(), "unknown ids never authorize");
 
-        // A DIFFERENT scope never sees this scope's targets either.
-        let mut foreign_scope = scope();
-        foreign_scope.workspace = Some("other-workspace".to_string());
-        let foreign =
-            block_on(bindings.authorize_query(&foreign_scope, &["doc-a-1".to_string()], 10));
+        // A DIFFERENT (populated) scope never authorizes this scope's ids.
+        let foreign = block_on(authorized.authorize_read(
+            &actor(),
+            &foreign_scope(),
+            &["a-render".to_string()],
+            10,
+        ));
         assert!(
             matches!(&foreign, Err(CoreError::InvalidRequest { reason }) if reason.contains("foreign or unpublished")),
             "cross-scope explicit reads deny: {foreign:?}"
         );
+
+        // Finding 3: a deny-all authorizer denies for a POPULATED scope —
+        // the seam consults authority BEFORE lineage existence. (Fresh
+        // tempdir: the durable store is seeded once per handle.)
+        let deny_dir = tempfile::tempdir().expect("deny tempdir");
+        let (deny_provider, _) = provider_with(deny_dir.path(), Arc::new(DenyAllAuthorizer));
+        let deny_authorized = AuthorizedKnowledgeQuery::new(
+            deny_provider.knowledge_query().cloned().expect("handle"),
+            deny_provider.code_bindings().expect("coordinator").clone(),
+        );
+        let denied = block_on(deny_authorized.authorize_read(
+            &actor(),
+            &scope(),
+            &["a-render".to_string()],
+            10,
+        ));
+        assert!(
+            matches!(&denied, Err(CoreError::PolicyDenied { .. })),
+            "a denying caller is denied even though the lineage exists: {denied:?}"
+        );
+        let _ = bindings;
     }
 
     /// wildcard_cannot_widen: an empty (wildcard) request resolves to exactly
     /// the PUBLISHED target set — staged repo-c records and unknown targets
-    /// never appear, and a narrowing request cannot resurrect them.
+    /// never appear; unstamped legacy CODE kinds never appear in wildcard
+    /// listings (finding 4); ordinary non-code entities DO appear.
     #[test]
     fn wildcard_cannot_widen() {
         let dir = tempfile::tempdir().expect("tempdir");
         let (authorized, _bindings) = gate_fixture(dir.path());
 
         let wildcard =
-            block_on(authorized.authorize_read(&scope(), &[], 100)).expect("wildcard authorizes");
+            block_on(authorized.authorize_read(&actor(), &scope(), &[], 100)).expect("wildcard");
         assert!(
-            wildcard.contains(&"doc-a-1".to_string())
-                && wildcard.contains(&"chunk-a-1".to_string()),
+            wildcard.contains(&"a-render".to_string()) && wildcard.contains(&"b-util".to_string()),
             "the wildcard resolves the published set: {wildcard:?}"
         );
         assert!(
-            !wildcard.contains(&"staged-c-1".to_string()),
+            !wildcard.contains(&"c-render".to_string()),
             "the wildcard can never widen to a staged generation: {wildcard:?}"
         );
-        assert!(!wildcard.iter().any(|id| id.contains("repo-c")));
 
-        // The authorized entity listing keeps non-code flowing and code
-        // constrained to the same published set.
-        let entities = block_on(authorized.list_entities_authorized(&scope(), &[]))
+        let entities = block_on(authorized.list_entities_authorized(&actor(), &scope(), &[]))
             .expect("authorized listing");
         let ids: Vec<String> = entities.iter().map(|e| e.id.to_string()).collect();
         assert!(
-            ids.contains(&"chunk-a-1".to_string()),
+            ids.contains(&"a-render".to_string()),
             "published code entity listed: {ids:?}"
         );
         assert!(
@@ -697,35 +707,55 @@ mod task_016 {
             "non-code entity preserved: {ids:?}"
         );
         assert!(
-            !ids.contains(&"staged-c-1".to_string()),
+            !ids.contains(&"c-render".to_string()),
             "staged code entity never listed: {ids:?}"
         );
     }
 
-    /// maintenance_scope_denied: maintenance requires explicit ids authorized
-    /// by the same view — a staged or unknown target denies, an empty request
-    /// (the old scope-wide shortcut) denies, and a published id authorizes.
+    /// maintenance_scope_denied (accepted name): maintenance requires
+    /// explicit ELIGIBLE CODE ids — ordinary ids, staged ids and empty
+    /// requests all deny; published code authorizes. The finding-4 companion
+    /// assertion (explicit ORDINARY reads authorize) is included: the same
+    /// seam keeps authorized non-code reads working.
     #[test]
     fn maintenance_scope_denied() {
         let dir = tempfile::tempdir().expect("tempdir");
         let (authorized, _bindings) = gate_fixture(dir.path());
 
-        // Explicit published ids authorize maintenance.
-        let maintained =
-            block_on(authorized.authorize_maintenance(&scope(), &["doc-a-1".to_string()]))
-                .expect("published maintenance authorizes");
-        assert_eq!(maintained, vec!["doc-a-1".to_string()]);
+        // Ordinary explicit read: authorized non-code.
+        let ordinary =
+            block_on(authorized.authorize_read(&actor(), &scope(), &["plain-doc".to_string()], 10))
+                .expect("an authorized ordinary entity needs no code lineage");
+        assert_eq!(ordinary, vec!["plain-doc".to_string()]);
 
-        // A staged target denies.
-        let staged =
-            block_on(authorized.authorize_maintenance(&scope(), &["staged-c-1".to_string()]));
+        // Maintenance requires ELIGIBLE CODE ids: ordinary ids deny.
+        let ordinary_maintenance = block_on(authorized.authorize_maintenance(
+            &actor(),
+            &scope(),
+            &["plain-doc".to_string()],
+        ));
         assert!(
-            matches!(&staged, Err(CoreError::InvalidRequest { reason }) if reason.contains("foreign or unpublished")),
-            "staged targets deny maintenance: {staged:?}"
+            matches!(&ordinary_maintenance, Err(CoreError::InvalidRequest { reason }) if reason.contains("foreign or unpublished")),
+            "maintenance is code-only: {ordinary_maintenance:?}"
         );
 
+        // Staged target denies maintenance; published code authorizes.
+        let staged = block_on(authorized.authorize_maintenance(
+            &actor(),
+            &scope(),
+            &["c-render".to_string()],
+        ));
+        assert!(staged.is_err(), "staged targets deny maintenance");
+        let maintained = block_on(authorized.authorize_maintenance(
+            &actor(),
+            &scope(),
+            &["a-render".to_string()],
+        ))
+        .expect("published maintenance authorizes");
+        assert_eq!(maintained, vec!["a-render".to_string()]);
+
         // The scope-wide shortcut (no explicit ids) denies.
-        let empty = block_on(authorized.authorize_maintenance(&scope(), &[]));
+        let empty = block_on(authorized.authorize_maintenance(&actor(), &scope(), &[]));
         assert!(
             matches!(&empty, Err(CoreError::InvalidRequest { reason }) if reason.contains("explicit target ids")),
             "no scope-wide maintenance shortcut exists: {empty:?}"

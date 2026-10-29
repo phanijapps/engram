@@ -87,7 +87,7 @@ pub struct EngramProvider {
     lexical_feed: Option<Arc<dyn LexicalFeed>>,
     graph_cache: Option<Arc<dyn engram_retrieval::GraphCache>>,
     code_bindings: Option<Arc<crate::code_binding::CodeBindingCoordinator>>,
-    code_source: Option<Arc<crate::code_binding::RetainedCodeSource>>,
+    code_source: Option<Arc<dyn engram_knowledge::RetainedSourceReader>>,
     schema_version: String,
     adapter_version: String,
 }
@@ -103,12 +103,12 @@ impl EngramProvider {
             })
     }
 
-    /// The retained-snapshot reader serving exact committed source bytes
-    /// (task_017). Absent handle ⇒ typed `CapabilityUnsupported`, never a
-    /// checkout fallback.
+    /// The adapter-owned retained-source reader serving exact committed
+    /// bytes (corrective r2). Absent handle ⇒ typed `CapabilityUnsupported`,
+    /// never a checkout fallback.
     pub fn retained_code_source(
         &self,
-    ) -> CoreResult<&Arc<crate::code_binding::RetainedCodeSource>> {
+    ) -> CoreResult<&Arc<dyn engram_knowledge::RetainedSourceReader>> {
         self.code_source
             .as_ref()
             .ok_or_else(|| CoreError::CapabilityUnsupported {
@@ -747,7 +747,7 @@ pub struct EngramProviderBuilder {
     lexical_feed: Option<Arc<dyn LexicalFeed>>,
     graph_cache: Option<Arc<dyn engram_retrieval::GraphCache>>,
     code_bindings: Option<Arc<crate::code_binding::CodeBindingCoordinator>>,
-    code_source: Option<Arc<crate::code_binding::RetainedCodeSource>>,
+    code_source: Option<Arc<dyn engram_knowledge::RetainedSourceReader>>,
     schema_version: String,
     adapter_version: String,
 }
@@ -983,10 +983,11 @@ impl EngramProviderBuilder {
         self
     }
 
-    /// Attaches the retained-snapshot reader serving exact committed source
-    /// bytes (task_017). Optional: without it, exact fetches report
-    /// `ExactSourceUnavailable` rather than falling back to a checkout.
-    pub fn code_source(mut self, source: Arc<crate::code_binding::RetainedCodeSource>) -> Self {
+    /// Attaches the ADAPTER-OWNED retained-source reader serving exact
+    /// committed bytes (corrective r2, finding 7: neutral core never owns
+    /// filesystem custody). Optional: without it, exact fetches report a
+    /// typed unsupported error rather than falling back to a checkout.
+    pub fn code_source(mut self, source: Arc<dyn engram_knowledge::RetainedSourceReader>) -> Self {
         self.code_source = Some(source);
         self
     }

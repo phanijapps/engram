@@ -34,4 +34,11 @@ pub trait CodeReadLeases: Send + Sync {
         now: Timestamp,
         grace_millis: u64,
     ) -> CoreResult<Vec<String>>;
+
+    /// LEASE-ONLY coverage (corrective r2, finding 2): the generations
+    /// covered by LIVE read leases (`expires_at > now`). Unlike
+    /// [`Self::retained_generations`] this EXCLUDES deletion-protection
+    /// sets — it answers exactly "which historical generations does an
+    /// explicitly authorized pinned lease currently cover?".
+    async fn leased_generations(&self, scope: &Scope, now: Timestamp) -> CoreResult<Vec<String>>;
 }

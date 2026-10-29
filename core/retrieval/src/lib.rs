@@ -21,8 +21,8 @@ mod weighted;
 
 pub use artifacts::{CODE_ARTIFACT_KINDS, is_code_artifact, suppresses_code_artifacts};
 pub use bound_filter::{
-    BoundCodeEligibility, BoundCodeView, CodeEligibilityResolver, RecordEligibility,
-    binding_required, resolve_view,
+    BoundBinding, BoundCodeEligibility, BoundCodeView, CodeEligibilityResolver, DurableLineage,
+    RecordEligibility, binding_required, resolve_view,
 };
 pub use code_eligibility::{
     CodeCandidateLane, CodeEligibilityToken, CodeLaneState, authorize_before_selection,

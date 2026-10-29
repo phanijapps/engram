@@ -60,6 +60,86 @@ fn bound_code_origin(chunks: &[&engram_domain::KnowledgeChunk]) -> Option<(Strin
     Some((repo, generation))
 }
 
+/// Resolves `symbol` against the matched (same-generation) chunks and maps
+/// its line span to byte offsets in the retained blob (finding 11).
+///
+/// `Ok(None)` — no symbol requested. `Ok(Some((start, end)))` — the unique
+/// byte span. `Err(reason)` — the symbol is missing, matches nothing in this
+/// generation, or is ambiguous across chunks.
+fn exact_symbol_span(
+    chunks: &[&engram_domain::KnowledgeChunk],
+    symbol: Option<&str>,
+    blob: &[u8],
+) -> Result<Option<(usize, usize)>, String> {
+    let Some(symbol) = symbol else {
+        return Ok(None);
+    };
+    let mut spans: Vec<(u32, u32)> = chunks
+        .iter()
+        .filter_map(|chunk| {
+            let names = chunk
+                .entities
+                .iter()
+                .filter_map(|entity| entity.name.as_deref())
+                .chain(
+                    chunk
+                        .location
+                        .as_ref()
+                        .and_then(|location| location.anchor.as_deref())
+                        .into_iter(),
+                );
+            let names: Vec<&str> = names.collect();
+            if names.is_empty() || !names.iter().any(|name| *name == symbol) {
+                return None;
+            }
+            let location = chunk.location.as_ref()?;
+            Some((
+                location.start_line.unwrap_or(1),
+                location
+                    .end_line
+                    .unwrap_or(location.start_line.unwrap_or(1)),
+            ))
+        })
+        .collect();
+    spans.sort();
+    spans.dedup();
+    match spans.as_slice() {
+        [] => Err(format!(
+            "symbol '{symbol}' has no chunk in the indexed generation for this path"
+        )),
+        [only] => {
+            let start_line = only.0.max(1) as usize;
+            let end_line = (only.1.max(only.0.max(1))) as usize;
+            // Map 1-based inclusive line numbers to byte offsets over the
+            // retained blob (line separators are \n and \r\n).
+            let mut line_start_offsets: Vec<usize> = Vec::with_capacity(end_line + 2);
+            line_start_offsets.push(0);
+            let mut index = 0usize;
+            while index < blob.len() {
+                if blob[index] == b'\n' {
+                    line_start_offsets.push(index + 1);
+                }
+                index += 1;
+            }
+            let start = *line_start_offsets
+                .get(start_line - 1)
+                .ok_or("symbol start line is outside the retained blob")?;
+            let end = line_start_offsets
+                .get(end_line)
+                .copied()
+                .unwrap_or(blob.len());
+            if start > end || end > blob.len() {
+                return Err("symbol span is outside the retained blob bounds".into());
+            }
+            Ok(Some((start, end)))
+        }
+        _ => Err(format!(
+            "symbol '{symbol}' is ambiguous across {len} chunks in the indexed generation",
+            len = spans.len()
+        )),
+    }
+}
+
 /// The `fetch_content` tool handler.
 pub fn fetch_content(app: &App, args: &Value) -> Result<Value, ToolError> {
     let path = normalize_path(req_str(args, "path")?);
@@ -181,44 +261,119 @@ pub fn fetch_content(app: &App, args: &Value) -> Result<Value, ToolError> {
     if mode != "chunks"
         && let Some((repo_id, generation_id)) = bound_code_origin(&ordered)
     {
-        let exact = futures::executor::block_on(app.provider.code_fetch_exact_at(
+        // Corrective r2 (finding 11): the exact path honors SYMBOL selection
+        // from the SAME generation (missing/ambiguous symbols deny), slices
+        // the retained bytes at same-OID byte offsets, and reports truthful
+        // digests: `content_sha256_full` hashes the whole retained blob and
+        // `content_sha256` hashes the bytes ACTUALLY RETURNED after caps.
+        // Non-UTF-8 bytes are never lossily decoded: they are returned as an
+        // explicitly labeled hex encoding of the exact bytes.
+        let actor = engram_domain::Actor {
+            id: engram_domain::Id::from("engram-mcp-fetch-content"),
+            kind: engram_domain::ActorKind::Agent,
+            display_name: None,
+            metadata: None,
+        };
+        let full_view = futures::executor::block_on(app.provider.code_fetch_exact_at(
+            &actor,
             &app.scope,
             &repo_id,
             &generation_id,
             &path,
             None,
         ));
-        return match exact {
-            Ok(view) => {
-                let total_bytes = view.bytes.len();
-                let content = String::from_utf8_lossy(&view.bytes).into_owned();
-                let (content, truncated) = truncate_bytes(&content, max_bytes);
-                Ok(protocol::text_content(
-                    json!({
-                        "path": path,
-                        "repository": repo_id,
-                        "kind": kind,
-                        "source": "exact",
-                        "revision": view.commit_oid,
-                        "generation": generation_id,
-                        "span": view.span.map(|(start, end)| json!({ "start": start, "end": end })),
-                        "content_sha256": view.served_digest,
-                        "chunk_count": ordered.len(),
-                        "total_bytes": total_bytes,
-                        "returned_bytes": content.len(),
-                        "max_bytes": max_bytes,
-                        "truncated": truncated,
-                        "content": content,
-                        "note": "exact retained committed bytes for the indexed revision (no checkout fallback)",
-                    })
-                    .to_string(),
-                ))
+        let full_view = match full_view {
+            Ok(view) => view,
+            Err(error) => {
+                return Err(ToolError::new(
+                    -32603,
+                    format!("exact retained source unavailable: {error}"),
+                ));
             }
-            Err(error) => Err(ToolError::new(
-                -32603,
-                format!("exact retained source unavailable: {error}"),
-            )),
         };
+        // Symbol selection: same-generation chunks naming the symbol decide
+        // the byte span; exactly one distinct span is required.
+        let span = match exact_symbol_span(&ordered, symbol, &full_view.bytes) {
+            Ok(span) => span,
+            Err(reason) => {
+                return Err(ToolError::new(
+                    -32602,
+                    format!("symbol selection failed: {reason}"),
+                ));
+            }
+        };
+        let (served_bytes, span_json) = match span {
+            None => (full_view.bytes.clone(), serde_json::Value::Null),
+            Some((start, end)) => (
+                full_view.bytes[start..end].to_vec(),
+                json!({ "start": start, "end": end }),
+            ),
+        };
+        let total_bytes = served_bytes.len();
+        let served_digest_before_cap = {
+            use sha2::{Digest, Sha256};
+            let mut hasher = Sha256::new();
+            hasher.update(&served_bytes);
+            hasher
+                .finalize()
+                .iter()
+                .map(|b| format!("{b:02x}"))
+                .collect::<String>()
+        };
+        // Byte-exact cap: truncate on the returned BYTE budget; UTF-8 safety
+        // is handled by the encoding branch below (no lossy replacement).
+        let (returned, truncated) = if served_bytes.len() > max_bytes {
+            (served_bytes[..max_bytes].to_vec(), true)
+        } else {
+            (served_bytes.clone(), false)
+        };
+        let served_digest = {
+            use sha2::{Digest, Sha256};
+            let mut hasher = Sha256::new();
+            hasher.update(&returned);
+            hasher
+                .finalize()
+                .iter()
+                .map(|b| format!("{b:02x}"))
+                .collect::<String>()
+        };
+        let (encoding, content) = match String::from_utf8(returned.clone()) {
+            Ok(text) => ("utf-8", text),
+            Err(_) => {
+                // Explicit non-UTF-8 handling: hex-encode the exact bytes —
+                // no lossy replacement that would change them.
+                (
+                    "hex",
+                    returned
+                        .iter()
+                        .map(|b| format!("{b:02x}"))
+                        .collect::<String>(),
+                )
+            }
+        };
+        return Ok(protocol::text_content(
+            json!({
+                "path": path,
+                "repository": repo_id,
+                "kind": kind,
+                "source": "exact",
+                "revision": full_view.commit_oid,
+                "generation": generation_id,
+                "span": span_json,
+                "content_sha256_full": full_view.full_content_digest,
+                "content_sha256": served_digest,
+                "content_sha256_served_precap": served_digest_before_cap,
+                "chunk_count": ordered.len(),
+                "total_bytes": total_bytes,
+                "returned_bytes": returned.len(),
+                "max_bytes": max_bytes,
+                "truncated": truncated,
+                "encoding": encoding,
+                "content": content,
+                "note": "exact retained committed bytes for the indexed revision (no checkout fallback); content_sha256 hashes the returned bytes, content_sha256_full the whole blob",
+            })
+            .to_string(),
+        ));
     }
 
     // --- Verbatim source read (EN-14/EN-16 fix) -------------------------
@@ -451,7 +606,9 @@ mod tests {
 
     use crate::ontology::{OntologyConfig, TaxonomyConfig};
     use engram_domain::{CodeGeneration, SourceDocument, SourceDocumentKind};
-    use engram_ingest::git_source::{CommittedFile, ResolvedCommit, retain_snapshot};
+    use engram_ingest::git_source::{
+        CommittedFile, ResolvedCommit, RetainedSnapshotReader, retain_snapshot,
+    };
     use engram_integration::EngramProviderBuilder;
     use engram_integration::code_binding::{
         CodeAuthorityAction, CodeBindingAuthorizer, CodeBindingCoordinator,
@@ -484,6 +641,8 @@ mod tests {
     struct InMemoryBindings {
         binding: engram_domain::CodeBinding,
         generation: CodeGeneration,
+        descriptor_digest: std::sync::Mutex<Option<String>>,
+        live_lease: std::sync::Mutex<Option<engram_knowledge::CodeReadLease>>,
     }
 
     impl InMemoryBindings {
@@ -505,7 +664,16 @@ mod tests {
                     parser_fingerprint: "parser".to_owned(),
                     filter_fingerprint: "filter".to_owned(),
                 },
+                descriptor_digest: std::sync::Mutex::new(None),
+                live_lease: std::sync::Mutex::new(None),
             }
+        }
+
+        /// Records the durable descriptor digest the exact chain validates
+        /// against (the durable-store equivalent is proven in
+        /// bound_source_status).
+        fn set_descriptor_digest(&self, digest: String) {
+            *self.descriptor_digest.lock().expect("digest lock") = Some(digest);
         }
     }
 
@@ -513,29 +681,28 @@ mod tests {
     impl engram_knowledge::CodeReadLeases for InMemoryBindings {
         async fn acquire_read_lease(
             &self,
-            _lease: engram_knowledge::CodeReadLease,
+            lease: engram_knowledge::CodeReadLease,
             _now: engram_domain::Timestamp,
         ) -> CoreResult<engram_knowledge::CodeReadLease> {
-            Err(CoreError::CapabilityUnsupported {
-                capability: "leases".into(),
-                reason: "test double holds no leases".into(),
-            })
+            *self.live_lease.lock().expect("lease lock") = Some(lease.clone());
+            Ok(lease)
         }
         async fn renew_read_lease(
             &self,
-            _lease: &engram_knowledge::CodeReadLease,
+            lease: &engram_knowledge::CodeReadLease,
             _now: engram_domain::Timestamp,
-            _expires_at: engram_domain::Timestamp,
+            expires_at: engram_domain::Timestamp,
         ) -> CoreResult<engram_knowledge::CodeReadLease> {
-            Err(CoreError::CapabilityUnsupported {
-                capability: "leases".into(),
-                reason: "test double holds no leases".into(),
-            })
+            let mut renewed = lease.clone();
+            renewed.expires_at = expires_at;
+            *self.live_lease.lock().expect("lease lock") = Some(renewed.clone());
+            Ok(renewed)
         }
         async fn release_read_lease(
             &self,
             _lease: &engram_knowledge::CodeReadLease,
         ) -> CoreResult<()> {
+            *self.live_lease.lock().expect("lease lock") = None;
             Ok(())
         }
         async fn retained_generations(
@@ -544,7 +711,22 @@ mod tests {
             _now: engram_domain::Timestamp,
             _grace_millis: u64,
         ) -> CoreResult<Vec<String>> {
-            Ok(Vec::new())
+            Ok(vec![self.generation.id.clone()])
+        }
+        async fn leased_generations(
+            &self,
+            _scope: &engram_domain::Scope,
+            _now: engram_domain::Timestamp,
+        ) -> CoreResult<Vec<String>> {
+            // Test double: live-lease coverage mirrors the durable cell
+            // behavior (proven against the real store in bound_source_status).
+            Ok(self
+                .live_lease
+                .lock()
+                .expect("lease lock")
+                .as_ref()
+                .map(|lease| lease.eligibility.generations.clone())
+                .unwrap_or_default())
         }
     }
 
@@ -596,6 +778,46 @@ mod tests {
             generation_id: &str,
         ) -> CoreResult<Option<CodeGeneration>> {
             Ok((generation_id == self.generation.id).then(|| self.generation.clone()))
+        }
+        async fn target_lineage(
+            &self,
+            scope: &engram_domain::Scope,
+        ) -> CoreResult<Vec<engram_knowledge::TargetLineage>> {
+            if scope != &self.binding.scope {
+                return Ok(Vec::new());
+            }
+            Ok(vec![engram_knowledge::TargetLineage {
+                record_id: "chunk-bound-1".to_owned(),
+                repo_id: self.binding.repo_id.0.clone(),
+                generation_id: self.generation.id.clone(),
+            }])
+        }
+        async fn get_source_descriptor(
+            &self,
+            scope: &engram_domain::Scope,
+            repo_id: &engram_domain::RepoId,
+            generation_id: &str,
+            path: &str,
+        ) -> CoreResult<Option<engram_domain::IndexedSource>> {
+            if scope != &self.binding.scope
+                || *repo_id != self.binding.repo_id
+                || generation_id != self.generation.id
+                || path != "src/bound.py"
+            {
+                return Ok(None);
+            }
+            Ok(Some(engram_domain::IndexedSource {
+                repo_id: self.binding.repo_id.clone(),
+                generation_id: self.generation.id.clone(),
+                commit_oid: self.generation.commit_oid.clone(),
+                path: path.to_owned(),
+                content_digest: self
+                    .descriptor_digest
+                    .lock()
+                    .expect("digest lock")
+                    .clone()
+                    .unwrap_or_default(),
+            }))
         }
         async fn put_generation(&self, generation: CodeGeneration) -> CoreResult<CodeGeneration> {
             Ok(generation)
@@ -710,6 +932,16 @@ mod tests {
         scope: &engram_domain::Scope,
         source: &str,
     ) -> std::sync::Arc<dyn engram_integration::KnowledgeQuery> {
+        bound_knowledge_impl(scope, source.as_bytes().to_vec(), "alpha", 1, 1)
+    }
+
+    fn bound_knowledge_impl(
+        scope: &engram_domain::Scope,
+        source: Vec<u8>,
+        symbol_name: &str,
+        start_line: u32,
+        end_line: u32,
+    ) -> std::sync::Arc<dyn engram_integration::KnowledgeQuery> {
         let mut stamps = engram_domain::Metadata::new();
         stamps.insert(
             "codeGenerationId".to_owned(),
@@ -724,17 +956,27 @@ mod tests {
             document_id: engram_domain::Id::from("doc-bound"),
             source_id: engram_domain::Id::from("src-bound"),
             kind: KnowledgeChunkKind::CodeSymbol,
-            text: source.lines().next().unwrap_or_default().to_owned(),
+            text: String::from_utf8_lossy(&source)
+                .lines()
+                .next()
+                .unwrap_or_default()
+                .to_owned(),
             summary: None,
             location: Some(engram_domain::SourceLocation {
                 path: Some("src/bound.py".to_owned()),
-                start_line: Some(1),
-                end_line: Some(1),
+                start_line: Some(start_line),
+                end_line: Some(end_line),
                 start_offset: None,
                 end_offset: None,
                 anchor: None,
             }),
-            entities: Vec::new(),
+            // Symbol selection input (finding 11): the chunk's entity name.
+            entities: vec![engram_domain::EntityRef {
+                id: Some(engram_domain::Id::from("entity-symbol")),
+                kind: None,
+                name: Some(symbol_name.to_owned()),
+                aliases: Vec::new(),
+            }],
             concepts: Vec::new(),
             embedding_refs: Vec::new(),
             content_hash: "sha256:chunk-bound-1".to_owned(),
@@ -782,7 +1024,62 @@ mod tests {
     /// knowledge chunks stamped for that generation. Returns the app plus the
     /// retained root for deletion experiments.
     fn bound_app(dir: &std::path::Path, source: &str) -> (App, std::path::PathBuf) {
-        use futures::executor::block_on;
+        bound_app_impl(dir, source.as_bytes().to_vec(), "alpha", 1, 1)
+    }
+
+    /// `bound_app` with a symbol-carrying chunk spanning [start_line, end_line].
+    fn bound_app_with_symbols(
+        dir: &std::path::Path,
+        source: &str,
+        start_line: u32,
+        end_line: u32,
+    ) -> (App, std::path::PathBuf) {
+        bound_app_with_symbol(dir, source, "alpha", start_line, end_line)
+    }
+
+    /// `bound_app` with an explicit symbol name on the chunk.
+    fn bound_app_with_symbol(
+        dir: &std::path::Path,
+        source: &str,
+        symbol: &str,
+        start_line: u32,
+        end_line: u32,
+    ) -> (App, std::path::PathBuf) {
+        bound_app_impl(
+            dir,
+            source.as_bytes().to_vec(),
+            symbol,
+            start_line,
+            end_line,
+        )
+    }
+
+    /// `bound_app` over raw (possibly non-UTF-8) bytes.
+    fn bound_app_with_symbols_bytes(
+        dir: &std::path::Path,
+        source: &[u8],
+        start_line: u32,
+        end_line: u32,
+    ) -> (App, std::path::PathBuf) {
+        bound_app_impl(dir, source.to_vec(), "alpha", start_line, end_line)
+    }
+
+    /// `bound_app` whose chunk set contains TWO same-named entities with
+    /// different spans (ambiguous symbol).
+    fn bound_app_with_ambiguous_symbols(
+        dir: &std::path::Path,
+        source: &str,
+    ) -> (App, std::path::PathBuf) {
+        bound_app_impl_ambiguous(dir, source.as_bytes().to_vec())
+    }
+
+    fn bound_app_impl(
+        dir: &std::path::Path,
+        source: Vec<u8>,
+        symbol_name: &str,
+        start_line: u32,
+        end_line: u32,
+    ) -> (App, std::path::PathBuf) {
         let scope = crate::scope::project_scope("bound-project", "default");
         let commit = ResolvedCommit {
             branch_ref: "refs/heads/main".to_owned(),
@@ -793,15 +1090,18 @@ mod tests {
             path: "src/bound.py".into(),
             oid: "b".repeat(40),
             mode: "100644".to_owned(),
-            bytes: source.as_bytes().to_vec(),
+            bytes: source.clone(),
         }];
-        // The retention stage creates and owns its private storage root
-        // (0700, no links) itself — never pre-create it.
         let retained_root = dir.join("retained");
         let snapshot = retain_snapshot(&retained_root, commit, &files).expect("retain snapshot");
         let bindings = std::sync::Arc::new(InMemoryBindings::published(&snapshot.commit.oid));
-
-        let knowledge = bound_knowledge(&scope, source);
+        bindings.set_descriptor_digest(
+            engram_ingest::content_hash(&source)
+                .trim_start_matches("sha256:")
+                .to_string(),
+        );
+        let knowledge =
+            bound_knowledge_impl(&scope, source.clone(), symbol_name, start_line, end_line);
         let coordinator = CodeBindingCoordinator::new(
             bindings.clone() as std::sync::Arc<dyn CodeBindingRepository>,
             std::sync::Arc::new(PermissiveAuthorizer),
@@ -812,9 +1112,9 @@ mod tests {
         ))
         .knowledge_query(knowledge)
         .code_bindings(std::sync::Arc::new(coordinator))
-        .code_source(std::sync::Arc::new(
-            engram_integration::code_binding::RetainedCodeSource::new(retained_root.clone()),
-        ))
+        .code_source(std::sync::Arc::new(RetainedSnapshotReader::new(
+            retained_root.clone(),
+        )))
         .build();
         (
             App {
@@ -826,6 +1126,228 @@ mod tests {
             },
             retained_root,
         )
+    }
+
+    fn bound_app_impl_ambiguous(
+        dir: &std::path::Path,
+        source: Vec<u8>,
+    ) -> (App, std::path::PathBuf) {
+        let scope = crate::scope::project_scope("bound-project", "default");
+        let commit = ResolvedCommit {
+            branch_ref: "refs/heads/main".to_owned(),
+            oid: "a".repeat(40),
+            object_format: "sha1".to_owned(),
+        };
+        let files = vec![CommittedFile {
+            path: "src/bound.py".into(),
+            oid: "b".repeat(40),
+            mode: "100644".to_owned(),
+            bytes: source.clone(),
+        }];
+        let retained_root = dir.join("retained2");
+        let snapshot = retain_snapshot(&retained_root, commit, &files).expect("retain");
+        let bindings = std::sync::Arc::new(InMemoryBindings::published(&snapshot.commit.oid));
+        bindings.set_descriptor_digest(
+            engram_ingest::content_hash(&source)
+                .trim_start_matches("sha256:")
+                .to_string(),
+        );
+        let knowledge = ambiguous_knowledge(&scope);
+        let coordinator = CodeBindingCoordinator::new(
+            bindings.clone() as std::sync::Arc<dyn CodeBindingRepository>,
+            std::sync::Arc::new(PermissiveAuthorizer),
+            Vec::new(),
+        );
+        let provider = EngramProviderBuilder::new(engram_integration::CapabilityReport::new(
+            engram_domain::CapabilityState::Supported,
+        ))
+        .knowledge_query(knowledge)
+        .code_bindings(std::sync::Arc::new(coordinator))
+        .code_source(std::sync::Arc::new(RetainedSnapshotReader::new(
+            retained_root.clone(),
+        )))
+        .build();
+        (
+            App {
+                provider,
+                scope,
+                ontology: OntologyConfig::default(),
+                taxonomy: TaxonomyConfig::default(),
+                storage_dir: dir.to_path_buf(),
+            },
+            retained_root,
+        )
+    }
+
+    /// Two same-named symbol chunks with DIFFERENT spans (ambiguous).
+    fn ambiguous_knowledge(
+        scope: &engram_domain::Scope,
+    ) -> std::sync::Arc<dyn engram_integration::KnowledgeQuery> {
+        let chunk = |id: &str, start: u32, end: u32| engram_domain::KnowledgeChunk {
+            id: engram_domain::Id::from(id),
+            document_id: engram_domain::Id::from("doc-bound"),
+            source_id: engram_domain::Id::from("src-bound"),
+            kind: KnowledgeChunkKind::CodeSymbol,
+            text: "def alpha():".to_owned(),
+            summary: None,
+            location: Some(engram_domain::SourceLocation {
+                path: Some("src/bound.py".to_owned()),
+                start_line: Some(start),
+                end_line: Some(end),
+                start_offset: None,
+                end_offset: None,
+                anchor: None,
+            }),
+            entities: vec![engram_domain::EntityRef {
+                id: Some(engram_domain::Id::from(id)),
+                kind: None,
+                name: Some("alpha".to_owned()),
+                aliases: Vec::new(),
+            }],
+            concepts: Vec::new(),
+            embedding_refs: Vec::new(),
+            content_hash: format!("sha256:{id}"),
+            provenance: fixture_provenance(),
+            policy: fixture_policy(),
+            created_at: chrono::Utc::now(),
+            updated_at: None,
+            metadata: {
+                let mut stamps = engram_domain::Metadata::new();
+                stamps.insert(
+                    "codeGenerationId".to_owned(),
+                    serde_json::Value::String("gen-1".to_owned()),
+                );
+                stamps.insert(
+                    "codeRepoId".to_owned(),
+                    serde_json::Value::String("bound-repo".to_owned()),
+                );
+                Some(stamps)
+            },
+        };
+        std::sync::Arc::new(SeededQuery {
+            chunks: vec![chunk("chunk-alpha-1", 1, 2), chunk("chunk-alpha-2", 4, 5)],
+        })
+    }
+
+    /// Corrective r2 (finding 11): symbol selection serves the SAME-GENERATION
+    /// byte span — only beta's lines, byte-exact with CRLF preserved — and a
+    /// MISSING symbol denies.
+    #[test]
+    fn fetch_bound_symbol_span_is_exact_and_missing_symbol_denies() {
+        let dir = tempfile::tempdir().unwrap();
+        let source = "def alpha():\r\n    return 1\r\n\r\ndef beta():\r\n    return 2\r\n";
+        let (app, _retained) = bound_app_with_symbol(dir.path(), source, "beta", 4, 5);
+        let out = content_of(
+            &fetch_content(&app, &json!({ "path": "src/bound.py", "symbol": "beta" })).unwrap(),
+        );
+        assert_eq!(out["source"], "exact");
+        assert_eq!(
+            out["span"]["start"],
+            json!(source.find("def beta").unwrap())
+        );
+        let content = out["content"].as_str().unwrap();
+        assert_eq!(
+            content, "def beta():\r\n    return 2\r\n",
+            "byte-exact symbol span"
+        );
+        assert_ne!(out["content_sha256_full"], out["content_sha256"]);
+
+        let err = fetch_content(&app, &json!({ "path": "src/bound.py", "symbol": "nosuch" }))
+            .unwrap_err();
+        assert!(
+            err.message.contains("symbol selection failed"),
+            "missing symbols deny: {}",
+            err.message
+        );
+    }
+
+    /// Corrective r2 (finding 11): an AMBIGUOUS symbol (two same-named
+    /// entities with different spans in the same generation) denies instead
+    /// of silently picking one.
+    #[test]
+    fn fetch_bound_ambiguous_symbol_denies() {
+        let dir = tempfile::tempdir().unwrap();
+        let source = "def alpha():\r\n    return 1\r\n\r\ndef alpha():\r\n    return 2\r\n";
+        let (app, _retained) = bound_app_with_ambiguous_symbols(dir.path(), source);
+        let err =
+            fetch_content(&app, &json!({ "path": "src/bound.py", "symbol": "alpha" })).unwrap_err();
+        assert!(
+            err.message.contains("ambiguous"),
+            "ambiguous symbols deny: {}",
+            err.message
+        );
+    }
+
+    /// Corrective r2 (finding 11): a byte cap at a MULTIBYTE boundary keeps
+    /// the response byte-exact (hex encoding for the invalid slice) and
+    /// `content_sha256` hashes the RETURNED bytes, not the full blob.
+    #[test]
+    fn fetch_bound_multibyte_cap_hashes_returned_bytes() {
+        let dir = tempfile::tempdir().unwrap();
+        let source = "def alpha():\r\n    return '\u{e9}\u{e9}\u{e9}'\r\n";
+        let (app, _retained) = bound_app_with_symbols(dir.path(), source, 1, 1);
+        let out = content_of(
+            &fetch_content(&app, &json!({ "path": "src/bound.py", "max_bytes": 27 })).unwrap(),
+        );
+        assert_eq!(out["truncated"], true);
+        assert_eq!(out["returned_bytes"], json!(27), "the byte cap is honored");
+        assert_eq!(out["total_bytes"], json!(source.len()));
+        let returned = &source.as_bytes()[..27];
+        let expected = {
+            use sha2::{Digest, Sha256};
+            let mut hasher = Sha256::new();
+            hasher.update(returned);
+            hasher
+                .finalize()
+                .iter()
+                .map(|b| format!("{b:02x}"))
+                .collect::<String>()
+        };
+        assert_eq!(out["content_sha256"], json!(expected));
+        assert_ne!(out["content_sha256"], out["content_sha256_full"]);
+        assert_eq!(
+            out["encoding"], "hex",
+            "a mid-character cap is hex-encoded, never lossy"
+        );
+    }
+
+    /// Corrective r2 (finding 11): NON-UTF-8 retained bytes return an
+    /// explicitly labeled hex encoding — no lossy exactness claims.
+    #[test]
+    fn fetch_bound_non_utf8_bytes_return_labeled_hex() {
+        let dir = tempfile::tempdir().unwrap();
+        let source_bytes: Vec<u8> = b"def alpha():\r\n    x = '"
+            .to_vec()
+            .into_iter()
+            .chain([0x80, 0x81, 0x82])
+            .chain(b"'\r\n".to_vec())
+            .collect();
+        let lossy = String::from_utf8_lossy(&source_bytes).into_owned();
+        let (app, _retained) = bound_app_with_symbols_bytes(dir.path(), &source_bytes, 1, 3);
+        let out = content_of(&fetch_content(&app, &json!({ "path": "src/bound.py" })).unwrap());
+        assert_eq!(out["source"], "exact");
+        assert_eq!(out["encoding"], "hex");
+        let hex = out["content"].as_str().unwrap();
+        assert_eq!(
+            hex.len(),
+            source_bytes.len() * 2,
+            "exact bytes, hex-encoded"
+        );
+        let expected = {
+            use sha2::{Digest, Sha256};
+            let mut hasher = Sha256::new();
+            hasher.update(&source_bytes);
+            hasher
+                .finalize()
+                .iter()
+                .map(|b| format!("{b:02x}"))
+                .collect::<String>()
+        };
+        assert_eq!(out["content_sha256"], json!(expected));
+        assert_ne!(
+            hex, lossy,
+            "never lossily decoded to the replacement string"
+        );
     }
 
     /// Bound code serves byte-exact RETAINED bytes with revision labels even

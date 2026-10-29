@@ -49,6 +49,11 @@ pub struct LexicalResolvedTarget {
     pub policy: Policy,
     pub explanation: Option<RetrievalExplanation>,
     pub metadata: Option<Metadata>,
+    /// True when the resolved record is a CODE KIND (symbol entity, code
+    /// chunk kind). Corrective r2 (finding 4): together with the resolver's
+    /// durable lineage this drives classification — an unstamped code-kind
+    /// record is legacy unbound code and never eligible.
+    pub code_kind: bool,
 }
 
 /// Retrieval candidate source backed by Tantivy BM25 search over chunk text.
@@ -197,13 +202,14 @@ impl RetrievalIndex for LexicalRetrievalIndex {
             // KnowledgeLexicalResolver), keeping the eligibility decision in
             // one place; the over-fetch above refills the page.
             //
-            // Bound-code classification (task_013): even after a successful
-            // rehydration, a target stamped to a stale/unpublished generation
-            // is dropped BEFORE the page budget is consumed; non-code targets
-            // always pass (AC-006). Legacy unbound code never reaches here —
-            // the bound resolver denies it at rehydration time.
+            // Bound-code classification (corrective r2, finding 4): the
+            // durable-lineage view + the resolver's CODE KIND decide — a
+            // lineage record on a non-published binding, or a code-kind
+            // record without lineage (legacy unbound code), drops BEFORE the
+            // page budget is consumed; ordinary non-code targets always pass
+            // (AC-006).
             if let Some(view) = &view
-                && !view.allows(target.metadata.as_ref(), false)
+                && !view.allows(target.target_id.as_str(), target.code_kind)
             {
                 continue;
             }
@@ -353,6 +359,7 @@ mod tests {
 
     fn resolved_chunk(id: &str) -> LexicalResolvedTarget {
         LexicalResolvedTarget {
+            code_kind: false,
             target_type: RetrievalTargetType::Chunk,
             target_id: id.to_owned(),
             content: format!("content for {id}"),

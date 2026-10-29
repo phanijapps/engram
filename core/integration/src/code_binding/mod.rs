@@ -10,7 +10,6 @@ use engram_domain::{
 };
 use engram_knowledge::{CodeBindingRepository, CoreResult, StageReceipt};
 pub use publication::CodeRebuildRequest;
-pub use source::{ExactSourceView, RetainedCodeSource, RetainedPath};
 pub use status::CodeBindingStatus;
 
 /// Engine-neutral [`CodeEligibilityResolver`] over the durable
@@ -29,16 +28,42 @@ impl engram_retrieval::CodeEligibilityResolver for RepositoryEligibilitySource {
     async fn resolve(
         &self,
         scope: &engram_domain::Scope,
-    ) -> engram_runtime::CoreResult<Option<engram_retrieval::BoundCodeEligibility>> {
+    ) -> engram_runtime::CoreResult<engram_retrieval::BoundCodeEligibility> {
+        // Corrective r2 (findings 4/9): resolve the DURABLE authority —
+        // published bindings with their immutable branch identity (read
+        // per-repo from the binding records) and the staged target lineage —
+        // never record metadata.
         let eligibility = self.store.eligibility(scope).await?;
-        if eligibility.generations.is_empty() {
-            return Ok(None);
+        let mut bindings = Vec::with_capacity(eligibility.repository_ids.len());
+        for repo in &eligibility.repository_ids {
+            let repo_id = engram_domain::RepoId(repo.clone());
+            let Some(binding) = self.store.get_binding(scope, &repo_id).await? else {
+                continue;
+            };
+            if let Some(generation) = binding.active_generation {
+                bindings.push(engram_retrieval::BoundBinding {
+                    repo_id: repo.clone(),
+                    branch_ref: binding.branch_ref,
+                    generation_id: generation,
+                });
+            }
         }
-        Ok(Some(engram_retrieval::BoundCodeEligibility {
+        let lineage = self
+            .store
+            .target_lineage(scope)
+            .await?
+            .into_iter()
+            .map(|entry| engram_retrieval::DurableLineage {
+                record_id: entry.record_id,
+                repo_id: entry.repo_id,
+                generation_id: entry.generation_id,
+            })
+            .collect();
+        Ok(engram_retrieval::BoundCodeEligibility {
             epoch: eligibility.epoch,
-            generations: eligibility.generations,
-            repositories: eligibility.repository_ids,
-        }))
+            bindings,
+            lineage,
+        })
     }
 }
 use std::sync::Arc;
@@ -111,5 +136,21 @@ impl CodeBindingCoordinator {
     pub fn with_clock(mut self, clock: Arc<dyn engram_runtime::Clock>) -> Self {
         self.clock = clock;
         self
+    }
+
+    /// Shared caller-authority check for code operations (corrective r2,
+    /// finding 3): every new seam authenticates through the SAME authorizer
+    /// as registration/publication — a denying authorizer denies even for
+    /// fully populated scopes.
+    #[allow(clippy::double_must_use)]
+    pub async fn authorize(&self, actor: &Actor, scope: &Scope, repo: &RepoId) -> CoreResult<()> {
+        self.authorizer
+            .authorize(actor, scope, repo, CodeAuthorityAction::Inspect)
+            .await
+    }
+
+    /// The durable binding store handle (shared seams read through this).
+    pub fn store(&self) -> Arc<dyn CodeBindingRepository> {
+        Arc::clone(&self.store)
     }
 }

@@ -19,6 +19,7 @@ mod ingest;
 mod maintenance;
 mod ontology;
 mod repository;
+pub mod retained_source;
 mod taxonomy;
 mod taxonomy_validation;
 
@@ -28,7 +29,7 @@ pub use batch_ledger::{SourceBatchLedger, SourceBatchRecord, SourceBatchRecordKi
 pub use changes::{KnowledgeChangeLog, ScanCheckpointStore};
 pub use code_binding::{
     AcquisitionMode, CodeBindingRepository, CodeEligibility, CodeEligibilityGate,
-    ConstrainedCodeQuery, RepositoryRegistration, StageReceipt,
+    ConstrainedCodeQuery, RepositoryRegistration, StageReceipt, TargetLineage,
 };
 pub use code_read_leases::{CodeReadLease, CodeReadLeases};
 pub use generation_staging::CodeGenerationStaging;
@@ -41,5 +42,8 @@ pub use maintenance::GraphMaintenanceRepository;
 pub use maintenance::detect_candidates;
 pub use ontology::OntologyRepository;
 pub use repository::KnowledgeRepository;
+pub use retained_source::{
+    ExactSourceView, RetainedPath, RetainedSourceReader, content_digest, exact_unavailable,
+};
 pub use taxonomy::TaxonomyRepository;
 pub use taxonomy_validation::validate_taxonomy_proposal;

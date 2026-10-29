@@ -1179,6 +1179,7 @@ dependencies = [
  "engram-domain",
  "engram-runtime",
  "serde",
+ "sha2",
  "tokio",
 ]
 

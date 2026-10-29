@@ -47,7 +47,7 @@ pub async fn overview_eligible(
     let entities = store.list_entities(scope).await?;
     let mut removed: std::collections::HashSet<String> = Default::default();
     for entity in &entities {
-        if !view.allows(entity.metadata.as_ref(), entity_unstamped_code(entity)) {
+        if !view.allows(entity.id.as_str(), entity_unstamped_code(entity)) {
             removed.insert(entity.id.to_string());
         }
     }

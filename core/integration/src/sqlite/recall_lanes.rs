@@ -28,7 +28,7 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 use engram_domain::{
-    AllowedUse, ChunkId, DeleteMode, EntityId, KnowledgeChunk, KnowledgeEntity,
+    AllowedUse, ChunkId, DeleteMode, EntityId, KnowledgeChunk, KnowledgeChunkKind, KnowledgeEntity,
     KnowledgeRelationship, Policy, Retention, RetrievalRequest, RetrievalTargetType, Scope,
     Sensitivity, Visibility,
 };
@@ -103,6 +103,31 @@ pub fn community_summary_recall_lane(
         Some(cache) => Arc::new(CommunitySummaryIndex::with_cache(source, 20, cache)),
         None => Arc::new(CommunitySummaryIndex::new(source)),
     }
+}
+
+/// Builds the REAL SQLite vector retrieval lane with bound-code eligibility
+/// wired into its candidate path (corrective r2, finding 5): sqlite-vec
+/// selection is constrained to the allowed target set BEFORE the top-K, so
+/// an ineligible nearest vector cannot crowd out an eligible one even at
+/// top-K = 1. The query embedder stays the injected `VectorQueryProvider`
+/// port (the model boundary); the vector cell and the lane are real.
+pub fn vector_recall_lane_bound(
+    store: Arc<SqlKnowledgeStore>,
+    index: engram_store_sqlite::SqliteVectorIndex,
+    query_provider: Arc<dyn engram_store_sqlite::VectorQueryProvider>,
+    eligibility: Arc<dyn CodeEligibilityResolver>,
+) -> Arc<dyn RetrievalIndex> {
+    let resolver = KnowledgeVectorResolver::new(store.clone());
+    Arc::new(
+        engram_store_sqlite::VectorRetrievalIndex::with_default_limit_bound(
+            index,
+            query_provider,
+            Arc::new(resolver),
+            20,
+            eligibility,
+            store,
+        ),
+    )
 }
 
 /// Builds the lexical (BM25) retrieval lane over a shared Tantivy index + the
@@ -394,6 +419,12 @@ async fn resolve_chunk(
 
 /// Shapes a resolved chunk as a lexical-lane retrieval target.
 fn chunk_to_lexical(chunk: KnowledgeChunk) -> LexicalResolvedTarget {
+    let code_kind = matches!(
+        chunk.kind,
+        KnowledgeChunkKind::CodeSymbol
+            | KnowledgeChunkKind::CodeBlock
+            | KnowledgeChunkKind::DiffHunk
+    );
     LexicalResolvedTarget {
         target_type: RetrievalTargetType::Chunk,
         target_id: chunk.id.to_string(),
@@ -402,6 +433,9 @@ fn chunk_to_lexical(chunk: KnowledgeChunk) -> LexicalResolvedTarget {
         policy: chunk.policy,
         explanation: None,
         metadata: chunk.metadata,
+        // Corrective r2 (finding 4): the record's KIND is classification
+        // input; durable lineage is the code authority.
+        code_kind,
     }
 }
 
@@ -409,6 +443,7 @@ fn chunk_to_lexical(chunk: KnowledgeChunk) -> LexicalResolvedTarget {
 /// The content mirrors what `scan_repo` indexed (`"{name} {kind:?}"`) so the
 /// lane's hit text stays consistent with the indexed document.
 fn entity_to_lexical(entity: KnowledgeEntity) -> LexicalResolvedTarget {
+    let code_kind = is_code_entity_kind(&entity);
     LexicalResolvedTarget {
         target_type: RetrievalTargetType::Entity,
         target_id: entity.id.to_string(),
@@ -420,7 +455,28 @@ fn entity_to_lexical(entity: KnowledgeEntity) -> LexicalResolvedTarget {
         policy: entity_symbol_policy(),
         explanation: None,
         metadata: entity.metadata,
+        // Corrective r2 (finding 4): symbol + structural-artifact entity kinds
+        // are code kinds; durable lineage is the code authority.
+        code_kind,
     }
+}
+
+/// True for symbol and structural code-artifact entity kinds (the kinds the
+/// scanner produces for code). Shared by every resolver/lane shape here so
+/// classification inputs agree.
+pub(crate) fn is_code_entity_kind(entity: &KnowledgeEntity) -> bool {
+    engram_retrieval::is_code_artifact(entity)
+        || matches!(
+            entity.kind,
+            engram_domain::EntityKind::Class
+                | engram_domain::EntityKind::Function
+                | engram_domain::EntityKind::Method
+                | engram_domain::EntityKind::Struct
+                | engram_domain::EntityKind::Interface
+                | engram_domain::EntityKind::Trait
+                | engram_domain::EntityKind::TypeAlias
+                | engram_domain::EntityKind::Enum
+        )
 }
 
 /// Default retrieval policy for indexed code-symbol entities (entities carry no

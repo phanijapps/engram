@@ -4,7 +4,7 @@ use engram_domain::{
     CodeAttempt, CodeBinding, CodeGeneration, CodeLineage, CodeResetJournal, CodeResetPreview,
     IndexedSource, Scope,
 };
-use engram_runtime::CoreResult;
+use engram_runtime::{CoreError, CoreResult};
 
 #[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct RepositoryRegistration {
@@ -61,18 +61,43 @@ pub trait CodeBindingRepository: crate::CodeReadLeases + Send + Sync {
         repo_id: &engram_domain::RepoId,
         attempt_id: &str,
     ) -> CoreResult<Option<(CodeGeneration, CodeAttempt)>>;
-    /// Reads one durable generation record (task_017: maps a published
-    /// active generation to its immutable commit OID for exact source reads).
-    /// Default: unsupported (cells implement over their generation tables).
+    /// Reads one durable generation record BOUND to this scope and repository
+    /// (corrective r2, finding 2): a generation id alone is not authority.
+    /// Cells must resolve the (scope, repository, generation) ownership
+    /// association durably; foreign scopes/repositories deny with `None`.
+    /// Default: unsupported.
     async fn get_generation(
         &self,
         _scope: &Scope,
         _repo_id: &engram_domain::RepoId,
         _generation_id: &str,
     ) -> CoreResult<Option<CodeGeneration>> {
-        Err(engram_runtime::CoreError::CapabilityUnsupported {
+        Err(CoreError::CapabilityUnsupported {
             capability: "code-generation-read".into(),
             reason: "this cell does not expose generation records".into(),
+        })
+    }
+    /// The durable target lineage for a scope (finding 4): every staged
+    /// record → repository + generation association. Default: unsupported.
+    async fn target_lineage(&self, _scope: &Scope) -> CoreResult<Vec<TargetLineage>> {
+        Err(CoreError::CapabilityUnsupported {
+            capability: "code-lineage-read".into(),
+            reason: "this cell does not expose target lineage".into(),
+        })
+    }
+    /// The durable indexed-source descriptor for one (scope, repository,
+    /// generation, path) — the retained-blob content digest authority
+    /// (finding 7). Default: unsupported.
+    async fn get_source_descriptor(
+        &self,
+        _scope: &Scope,
+        _repo_id: &engram_domain::RepoId,
+        _generation_id: &str,
+        _path: &str,
+    ) -> CoreResult<Option<IndexedSource>> {
+        Err(CoreError::CapabilityUnsupported {
+            capability: "code-source-descriptor".into(),
+            reason: "this cell does not expose source descriptors".into(),
         })
     }
     async fn put_generation(&self, generation: CodeGeneration) -> CoreResult<CodeGeneration>;
@@ -109,6 +134,18 @@ pub trait CodeBindingRepository: crate::CodeReadLeases + Send + Sync {
         repo_id: &engram_domain::RepoId,
     ) -> CoreResult<CodeResetPreview>;
     async fn journal_reset(&self, journal: CodeResetJournal) -> CoreResult<CodeResetJournal>;
+}
+
+/// One durable target-lineage association (corrective r2, finding 4): the
+/// scanner's staged lineage record binding a target id to the repository and
+/// generation that contributed it. This — not record metadata — is the
+/// authority for code classification.
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TargetLineage {
+    pub record_id: String,
+    pub repo_id: String,
+    pub generation_id: String,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]

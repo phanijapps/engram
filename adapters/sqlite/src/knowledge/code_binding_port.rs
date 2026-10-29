@@ -256,16 +256,82 @@ impl CodeBindingRepository for SqlCodeBindingRepository {
 
     async fn get_generation(
         &self,
-        _scope: &Scope,
-        _repo_id: &RepoId,
+        scope: &Scope,
+        repo_id: &RepoId,
         generation_id: &str,
     ) -> CoreResult<Option<CodeGeneration>> {
+        // Corrective r2 (finding 2): a generation id alone is not authority.
+        // The record is returned only when THIS scope + repository durably
+        // owns an attempt for that generation (code_attempts carries the
+        // tenant/scope/repo/generation ownership association); a foreign
+        // scope's or repository's generation id resolves to None here.
         let store = self.lock()?;
         let record: Option<String> = store
             .connection
             .query_row(
-                "SELECT record_json FROM code_generations WHERE generation_id = ?1",
-                [generation_id],
+                "SELECT g.record_json FROM code_generations g \
+                 WHERE g.generation_id = ?1 AND EXISTS ( \
+                   SELECT 1 FROM code_attempts a \
+                   WHERE a.generation_id = ?1 AND a.tenant = ?2 \
+                     AND a.scope_key = ?3 AND a.repo_id = ?4 )",
+                rusqlite::params![generation_id, scope.tenant, json(scope)?, repo_id.0],
+                |row| row.get(0),
+            )
+            .optional()
+            .map_err(|_| storage_error())?;
+        record
+            .map(|json| serde_json::from_str(&json).map_err(|_| storage_error()))
+            .transpose()
+    }
+
+    async fn target_lineage(
+        &self,
+        scope: &Scope,
+    ) -> CoreResult<Vec<engram_knowledge::TargetLineage>> {
+        let store = self.lock()?;
+        store
+            .connection
+            .execute_batch("CREATE TABLE IF NOT EXISTS code_stage_lineage(scope_key TEXT NOT NULL,record_id TEXT NOT NULL,repo_id TEXT NOT NULL,generation_id TEXT NOT NULL,record_json TEXT NOT NULL,PRIMARY KEY(scope_key,record_id))")
+            .map_err(|_| storage_error())?;
+        let mut statement = store
+            .connection
+            .prepare(
+                "SELECT record_id, repo_id, generation_id FROM code_stage_lineage \
+                 WHERE scope_key = ?1 ORDER BY record_id",
+            )
+            .map_err(|_| storage_error())?;
+        let rows = statement
+            .query_map(rusqlite::params![json(scope)?], |row| {
+                Ok(engram_knowledge::TargetLineage {
+                    record_id: row.get(0)?,
+                    repo_id: row.get(1)?,
+                    generation_id: row.get(2)?,
+                })
+            })
+            .map_err(|_| storage_error())?
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(|_| storage_error())?;
+        Ok(rows)
+    }
+
+    async fn get_source_descriptor(
+        &self,
+        scope: &Scope,
+        repo_id: &RepoId,
+        generation_id: &str,
+        path: &str,
+    ) -> CoreResult<Option<IndexedSource>> {
+        let store = self.lock()?;
+        store
+            .connection
+            .execute_batch("CREATE TABLE IF NOT EXISTS code_stage_sources(scope_key TEXT NOT NULL,repo_id TEXT NOT NULL,generation_id TEXT NOT NULL,path TEXT NOT NULL,record_json TEXT NOT NULL,PRIMARY KEY(scope_key,repo_id,generation_id,path))")
+            .map_err(|_| storage_error())?;
+        let record: Option<String> = store
+            .connection
+            .query_row(
+                "SELECT record_json FROM code_stage_sources \
+                 WHERE scope_key = ?1 AND repo_id = ?2 AND generation_id = ?3 AND path = ?4",
+                rusqlite::params![json(scope)?, repo_id.0, generation_id, path],
                 |row| row.get(0),
             )
             .optional()

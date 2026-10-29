@@ -193,4 +193,30 @@ impl CodeReadLeases for SqlCodeBindingRepository {
         tx.commit().map_err(|_| storage_error())?;
         Ok(retained.into_iter().collect())
     }
+
+    async fn leased_generations(&self, scope: &Scope, now: Timestamp) -> CoreResult<Vec<String>> {
+        let cutoff = now.timestamp_millis();
+        let store = self.lock()?;
+        let mut statement = store
+            .connection
+            .prepare(
+                "SELECT record_json FROM code_read_leases WHERE scope_key = ?1 AND expires_ms > ?2",
+            )
+            .map_err(|_| storage_error())?;
+        let rows = statement
+            .query_map(rusqlite::params![value(scope)?, cutoff], |row| {
+                row.get::<_, String>(0)
+            })
+            .map_err(|_| storage_error())?
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(|_| storage_error())?;
+        let mut generations: Vec<String> = Vec::new();
+        for row in rows {
+            let lease: CodeReadLease = serde_json::from_str(&row).map_err(|_| storage_error())?;
+            generations.extend(lease.eligibility.generations);
+        }
+        generations.sort();
+        generations.dedup();
+        Ok(generations)
+    }
 }

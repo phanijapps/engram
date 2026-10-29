@@ -194,4 +194,28 @@ impl CodeReadLeases for PgCodeBindingRepository {
             Ok(retained.into_iter().collect())
         })).await
     }
+
+    async fn leased_generations(&self, scope: &Scope, now: Timestamp) -> CoreResult<Vec<String>> {
+        let scope = scope.clone();
+        let cutoff = now.timestamp_millis();
+        let key = serde_json::to_string(&scope).map_err(|_| storage_error())?;
+        self.blocking(move |store| {
+            crate::connection::runtime().block_on(async {
+                let leases = store.connection.client.query(
+                "SELECT record_json FROM code_read_leases WHERE scope_key=$1 AND expires_ms>$2",
+                &[&key, &cutoff],
+            ).await.map_err(|_| storage_error())?;
+                let mut generations: Vec<String> = Vec::new();
+                for row in leases {
+                    let lease: CodeReadLease =
+                        serde_json::from_value(row.get(0)).map_err(|_| storage_error())?;
+                    generations.extend(lease.eligibility.generations);
+                }
+                generations.sort();
+                generations.dedup();
+                Ok(generations)
+            })
+        })
+        .await
+    }
 }

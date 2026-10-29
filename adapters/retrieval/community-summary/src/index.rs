@@ -101,24 +101,23 @@ impl RetrievalIndex for CommunitySummaryIndex {
             .unwrap_or(self.default_limit);
         let scope = &request.scope;
 
-        // Bound-code eligibility (task_014): resolve the published generation
-        // set once. The observed epoch gates the warm snapshot AND the cached
-        // Louvain labels — a retirement bumps the epoch, so both recompute.
+        // Bound-code eligibility (task_014 + corrective r2 findings 5/8):
+        // resolve the durable view once, applying the request's repository
+        // narrowing; the observed epoch gates the warm snapshot AND the
+        // cached Louvain labels — a retirement bumps the epoch, so both
+        // recompute.
         let (view, observed_epoch) = match &self.eligibility {
             Some(resolver) => {
-                let resolved = resolver.resolve(scope).await?;
-                match resolved {
-                    Some(eligibility) => {
-                        let epoch = eligibility.epoch;
-                        (
-                            Some(engram_retrieval::BoundCodeView::from_eligibility(
-                                &eligibility,
-                            )),
-                            Some(epoch),
-                        )
-                    }
-                    None => (Some(engram_retrieval::BoundCodeView::none_bound()), None),
-                }
+                let eligibility = resolver.resolve(scope).await?;
+                let epoch = eligibility.epoch;
+                let view = engram_retrieval::BoundCodeView::from_eligibility(&eligibility)
+                    .with_requested_keys(
+                        request
+                            .filters
+                            .as_ref()
+                            .and_then(|filters| filters.code_index_keys.as_deref()),
+                    );
+                (Some(view), Some(epoch))
             }
             None => (None, None),
         };
@@ -163,14 +162,14 @@ impl RetrievalIndex for CommunitySummaryIndex {
         // recomputed (smaller), never served stale and never dropped wholesale.
         let (entities, relationships) = match &view {
             Some(view) => {
-                let mut removed_ids: std::collections::HashSet<String> = Default::default();
+                let mut authorized_ids: std::collections::HashSet<String> = Default::default();
                 let entities = entities
                     .into_iter()
                     .filter(|entity| {
                         let allowed =
-                            view.allows(entity.metadata.as_ref(), entity_is_unstamped_code(entity));
-                        if !allowed {
-                            removed_ids.insert(entity.id.to_string());
+                            view.allows(entity.id.as_str(), entity_is_unstamped_code(entity));
+                        if allowed {
+                            authorized_ids.insert(entity.id.to_string());
                         }
                         allowed
                     })
@@ -178,14 +177,14 @@ impl RetrievalIndex for CommunitySummaryIndex {
                 let relationships = relationships
                     .into_iter()
                     .filter(|relationship| {
-                        let touches_removed = [
+                        let both_authorized = [
                             relationship.subject.id.as_ref().map(|id| id.as_str()),
                             relationship.object.id.as_ref().map(|id| id.as_str()),
                         ]
                         .into_iter()
                         .flatten()
-                        .any(|id| removed_ids.contains(id));
-                        !touches_removed
+                        .all(|id| authorized_ids.contains(id));
+                        both_authorized
                     })
                     .collect::<Vec<_>>();
                 (entities, relationships)

@@ -151,24 +151,23 @@ impl RetrievalIndex for AssociativeGraphIndex {
             .unwrap_or(self.default_limit);
         let scope = &request.scope;
 
-        // Bound-code eligibility (task_014): resolve the published generation
-        // set once. The observed epoch also gates the warm snapshot — a cached
-        // snapshot materialized under a retired epoch is a MISS.
+        // Bound-code eligibility (task_014 + corrective r2 findings 5/8):
+        // resolve the durable view (published bindings + target lineage)
+        // once, applying the request's repository narrowing so derived lanes
+        // constrain BEFORE any walk; the observed epoch gates the warm
+        // snapshot (a retired epoch's snapshot is a MISS).
         let (view, observed_epoch) = match &self.eligibility {
             Some(resolver) => {
-                let resolved = resolver.resolve(scope).await?;
-                match resolved {
-                    Some(eligibility) => {
-                        let epoch = eligibility.epoch;
-                        (
-                            Some(engram_retrieval::BoundCodeView::from_eligibility(
-                                &eligibility,
-                            )),
-                            Some(epoch),
-                        )
-                    }
-                    None => (Some(engram_retrieval::BoundCodeView::none_bound()), None),
-                }
+                let eligibility = resolver.resolve(scope).await?;
+                let epoch = eligibility.epoch;
+                let view = engram_retrieval::BoundCodeView::from_eligibility(&eligibility)
+                    .with_requested_keys(
+                        request
+                            .filters
+                            .as_ref()
+                            .and_then(|filters| filters.code_index_keys.as_deref()),
+                    );
+                (Some(view), Some(epoch))
             }
             None => (None, None),
         };
@@ -214,34 +213,38 @@ impl RetrievalIndex for AssociativeGraphIndex {
         };
 
         // Eligibility partition BEFORE seeding and edge construction
-        // (task_014): stale/retired/legacy-unbound code entities leave the
-        // universe entirely — they cannot seed, rank, or carry the walk — and
-        // every edge touching a removed node is dropped, so a stale edge can
-        // neither consume traversal budget nor bridge into another
-        // generation. Non-code entities and their edges always stay.
+        // (task_014 + corrective r2 findings 4/8): classification is driven
+        // by DURABLE LINEAGE + record kind (metadata is never authority), and
+        // an edge survives only when BOTH endpoints resolve to ids in the
+        // AUTHORIZED vertex set — dangling, name-only and unresolved
+        // endpoints are dropped outright, so they can neither surface
+        // unauthorized nodes nor consume traversal budget. Non-code entities
+        // always stay.
         let (entities, relationships) = match &view {
             Some(view) => {
-                let mut removed_ids: std::collections::HashSet<String> = Default::default();
-                let mut entities = entities;
-                entities.retain(|entity| {
-                    let allowed =
-                        view.allows(entity.metadata.as_ref(), entity_is_unstamped_code(entity));
-                    if !allowed {
-                        removed_ids.insert(entity.id.to_string());
-                    }
-                    allowed
-                });
+                let mut authorized_ids: std::collections::HashSet<String> = Default::default();
+                let entities = entities
+                    .into_iter()
+                    .filter(|entity| {
+                        let allowed =
+                            view.allows(entity.id.as_str(), entity_is_unstamped_code(entity));
+                        if allowed {
+                            authorized_ids.insert(entity.id.to_string());
+                        }
+                        allowed
+                    })
+                    .collect::<Vec<_>>();
                 let relationships = relationships
                     .into_iter()
                     .filter(|relationship| {
-                        let touches_removed = [
+                        let both_authorized = [
                             relationship.subject.id.as_ref().map(|id| id.as_str()),
                             relationship.object.id.as_ref().map(|id| id.as_str()),
                         ]
                         .into_iter()
                         .flatten()
-                        .any(|id| removed_ids.contains(id));
-                        !touches_removed
+                        .all(|id| authorized_ids.contains(id));
+                        both_authorized
                     })
                     .collect::<Vec<_>>();
                 (entities, relationships)

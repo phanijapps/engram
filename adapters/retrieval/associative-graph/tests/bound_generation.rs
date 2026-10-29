@@ -1,25 +1,29 @@
-//! TASK-014 focused proof: contributor-aware associative invalidation on the
-//! REAL `AssociativeGraphIndex` (Personalized PageRank) with a shared warm
-//! `GraphCache`.
+//! TASK-014 focused proof (corrective r2): contributor-aware associative
+//! invalidation on the REAL `AssociativeGraphIndex` (Personalized PageRank)
+//! with a shared warm `GraphCache`.
 //!
 //! Eligibility enters through the engine-neutral `CodeEligibilityResolver`
-//! port. This test drives it with a deterministic flip-fixture (a typed double
-//! at that port boundary — the durable SQLite resolver driving the same lane
-//! end to end is proven in `engram-conformance`'s `bound_retrieval` target).
-//! The behavior under proof is the adapter's own: the PPR universe, seeds and
-//! edges are constrained BEFORE the walk, and a warm snapshot materialized
-//! under a retired epoch is never served again.
+//! port. This test drives it with a deterministic flip-fixture carrying
+//! DURABLE LINEAGE (a typed double at that port boundary — the durable
+//! SQLite resolver driving the same lane end to end is proven in
+//! `engram-conformance`'s `bound_retrieval` target). The behavior under
+//! proof is the adapter's own: the PPR universe, seeds and edges are
+//! constrained BEFORE the walk (dangling/name-only endpoints drop outright —
+//! finding 8), a warm snapshot materialized under a retired epoch is never
+//! served again, and the request's repository narrowing applies before
+//! traversal (finding 5).
 
 use std::sync::{Arc, Mutex};
 
 use async_trait::async_trait;
 use chrono::Utc;
 use engram_domain::{
-    Actor, ActorKind, EntityKind, EntityRef, Id, KnowledgeEntity, KnowledgeRelationship,
-    Provenance, Requester, RetrievalRequest, Scope,
+    Actor, ActorKind, EntityKind, EntityRef, Id, KnowledgeEntity, KnowledgeRelationship, Policy,
+    Provenance, Requester, RetrievalRequest, RetrievalTargetType, Scope, Visibility,
 };
 use engram_retrieval::{
-    BoundCodeEligibility, CodeEligibilityResolver, InMemoryGraphCache, RetrievalIndex,
+    BoundBinding, BoundCodeEligibility, CodeEligibilityResolver, DurableLineage,
+    InMemoryGraphCache, RetrievalIndex,
 };
 use engram_runtime::CoreResult;
 use engram_store_associative_graph::{AssociativeGraphIndex, GraphRelationshipSource, PprConfig};
@@ -27,9 +31,9 @@ use futures::executor::block_on;
 
 // ---------- fixture ---------------------------------------------------------
 
-/// Deterministic eligibility fixture at the resolver port: starts at
-/// `epoch 1 / gen-1 published`, and flips to `epoch 2 / gen-2 published`
-/// (gen-1 retired) on command — exactly what a durable publish does.
+/// Deterministic eligibility fixture at the resolver port: epoch 1 publishes
+/// gen-1 of repo-a; the flip retires gen-1 and publishes gen-2 of repo-b.
+/// DURABLE LINEAGE entries name which record ids are code.
 struct FlipEligibility {
     current: Mutex<BoundCodeEligibility>,
 }
@@ -39,8 +43,33 @@ impl FlipEligibility {
         Self {
             current: Mutex::new(BoundCodeEligibility {
                 epoch: 1,
-                generations: vec!["gen-1".to_owned()],
-                repositories: vec!["repo-a".to_owned()],
+                bindings: vec![BoundBinding {
+                    repo_id: "repo-a".to_owned(),
+                    branch_ref: "refs/heads/main".to_owned(),
+                    generation_id: "gen-1".to_owned(),
+                }],
+                lineage: vec![
+                    DurableLineage {
+                        record_id: "entity-stale".to_owned(),
+                        repo_id: "repo-a".to_owned(),
+                        generation_id: "gen-1".to_owned(),
+                    },
+                    DurableLineage {
+                        record_id: "entity-stale-hub".to_owned(),
+                        repo_id: "repo-a".to_owned(),
+                        generation_id: "gen-1".to_owned(),
+                    },
+                    DurableLineage {
+                        record_id: "entity-eligible".to_owned(),
+                        repo_id: "repo-b".to_owned(),
+                        generation_id: "gen-2".to_owned(),
+                    },
+                    DurableLineage {
+                        record_id: "repo-b-crowd".to_owned(),
+                        repo_id: "repo-b".to_owned(),
+                        generation_id: "gen-2".to_owned(),
+                    },
+                ],
             }),
         }
     }
@@ -48,16 +77,41 @@ impl FlipEligibility {
     fn retire_gen1_publish_gen2(&self) {
         *self.current.lock().expect("flip lock") = BoundCodeEligibility {
             epoch: 2,
-            generations: vec!["gen-2".to_owned()],
-            repositories: vec!["repo-a".to_owned()],
+            bindings: vec![BoundBinding {
+                repo_id: "repo-b".to_owned(),
+                branch_ref: "refs/heads/develop".to_owned(),
+                generation_id: "gen-2".to_owned(),
+            }],
+            lineage: vec![
+                DurableLineage {
+                    record_id: "entity-stale".to_owned(),
+                    repo_id: "repo-a".to_owned(),
+                    generation_id: "gen-1".to_owned(),
+                },
+                DurableLineage {
+                    record_id: "entity-stale-hub".to_owned(),
+                    repo_id: "repo-a".to_owned(),
+                    generation_id: "gen-1".to_owned(),
+                },
+                DurableLineage {
+                    record_id: "entity-eligible".to_owned(),
+                    repo_id: "repo-b".to_owned(),
+                    generation_id: "gen-2".to_owned(),
+                },
+                DurableLineage {
+                    record_id: "repo-b-crowd".to_owned(),
+                    repo_id: "repo-b".to_owned(),
+                    generation_id: "gen-2".to_owned(),
+                },
+            ],
         };
     }
 }
 
 #[async_trait]
 impl CodeEligibilityResolver for FlipEligibility {
-    async fn resolve(&self, _scope: &Scope) -> CoreResult<Option<BoundCodeEligibility>> {
-        Ok(Some(self.current.lock().expect("flip lock").clone()))
+    async fn resolve(&self, _scope: &Scope) -> CoreResult<BoundCodeEligibility> {
+        Ok(self.current.lock().expect("flip lock").clone())
     }
 }
 
@@ -107,18 +161,25 @@ fn provenance() -> Provenance {
     }
 }
 
-fn entity(id: &str, name: &str, kind: EntityKind, generation: Option<&str>) -> KnowledgeEntity {
-    let mut metadata = engram_domain::Metadata::new();
-    if let Some(generation) = generation {
-        metadata.insert(
-            "codeGenerationId".to_owned(),
-            serde_json::Value::String(generation.to_owned()),
-        );
-        metadata.insert(
-            "codeRepoId".to_owned(),
-            serde_json::Value::String("repo-a".to_owned()),
-        );
+fn policy() -> Policy {
+    Policy {
+        visibility: Visibility::Workspace,
+        ..policy_rest()
     }
+}
+
+fn policy_rest() -> Policy {
+    Policy {
+        visibility: Visibility::Workspace,
+        retention: engram_domain::Retention::Durable,
+        sensitivity: None,
+        allowed_uses: vec![engram_domain::AllowedUse::Retrieval],
+        expires_at: None,
+        delete_mode: None,
+    }
+}
+
+fn entity(id: &str, name: &str, kind: EntityKind) -> KnowledgeEntity {
     KnowledgeEntity {
         id: Id::from(id),
         graph_id: None,
@@ -134,7 +195,10 @@ fn entity(id: &str, name: &str, kind: EntityKind, generation: Option<&str>) -> K
         updated_at: None,
         valid_from: None,
         valid_until: None,
-        metadata: Some(metadata),
+        // Corrective r2 (finding 4): metadata is NOT authority — lineage is.
+        // These entities deliberately carry NO stamps; code identity comes
+        // from the fixture's durable lineage.
+        metadata: None,
         archived_at: None,
     }
 }
@@ -148,6 +212,15 @@ fn ref_of(key: &str) -> EntityRef {
     }
 }
 
+fn ref_without_id(name: &str) -> EntityRef {
+    EntityRef {
+        id: None,
+        kind: None,
+        name: Some(name.to_owned()),
+        aliases: Vec::new(),
+    }
+}
+
 fn edge(id: &str, subject: &str, object: &str, predicate: &str) -> KnowledgeRelationship {
     KnowledgeRelationship {
         id: Id::from(id),
@@ -155,6 +228,25 @@ fn edge(id: &str, subject: &str, object: &str, predicate: &str) -> KnowledgeRela
         predicate: predicate.to_owned(),
         subject: ref_of(subject),
         object: ref_of(object),
+        scope: scope(),
+        evidence: Vec::new(),
+        confidence: None,
+        provenance: provenance(),
+        created_at: Utc::now(),
+        updated_at: None,
+        code_resolution: None,
+        archived_at: None,
+    }
+}
+
+/// A name-only edge (no object id) — the dangling-endpoint hazard (finding 8).
+fn name_only_edge(id: &str, subject: &str, object_name: &str) -> KnowledgeRelationship {
+    KnowledgeRelationship {
+        id: Id::from(id),
+        graph_id: None,
+        predicate: "calls".to_owned(),
+        subject: ref_of(subject),
+        object: ref_without_id(object_name),
         scope: scope(),
         evidence: Vec::new(),
         confidence: None,
@@ -185,36 +277,47 @@ fn request(query: &str) -> RetrievalRequest {
     }
 }
 
-/// The store KEEPS serving every record (warm store rows are not deleted by a
-/// publication); only eligibility flips. This is the exact retirement shape.
+fn request_narrowed(query: &str, keys: &[&str]) -> RetrievalRequest {
+    let mut request = request(query);
+    request.filters = Some(empty_filter_with_keys(
+        keys.iter().map(|key| key.to_string()).collect(),
+    ));
+    request
+}
+
+fn empty_filter_with_keys(keys: Vec<String>) -> engram_domain::QueryFilter {
+    engram_domain::QueryFilter {
+        memory_kinds: Vec::new(),
+        source_kinds: Vec::new(),
+        chunk_kinds: Vec::new(),
+        concept_ids: Vec::new(),
+        entity_ids: Vec::new(),
+        since: None,
+        until: None,
+        code_index_keys: Some(keys),
+        min_confidence: None,
+        include_archived: None,
+        as_of: None,
+        include_code_artifacts: None,
+    }
+}
+
+/// The store KEEPS serving every record; only eligibility flips.
 fn graph() -> StubSource {
     StubSource {
         entities: vec![
-            entity(
-                "entity-stale",
-                "staleFn",
-                EntityKind::Function,
-                Some("gen-1"),
-            ),
-            entity(
-                "entity-stale-hub",
-                "staleHub",
-                EntityKind::Struct,
-                Some("gen-1"),
-            ),
-            entity(
-                "entity-eligible",
-                "eligibleFn",
-                EntityKind::Function,
-                Some("gen-2"),
-            ),
-            // Non-code record: never stamped, always eligible.
-            entity("entity-shared", "sharedDoc", EntityKind::Concept, None),
+            entity("entity-stale", "staleFn", EntityKind::Function),
+            entity("entity-stale-hub", "staleHub", EntityKind::Struct),
+            entity("entity-eligible", "eligibleFn", EntityKind::Function),
+            entity("repo-b-crowd", "crowdFn", EntityKind::Function),
+            // Non-code record: never in lineage, always eligible.
+            entity("entity-shared", "sharedDoc", EntityKind::Concept),
         ],
         relationships: vec![
             edge("edge-1", "entity-stale", "entity-stale-hub", "calls"),
             edge("edge-2", "entity-stale", "entity-shared", "mentions"),
             edge("edge-3", "entity-eligible", "entity-shared", "mentions"),
+            edge("edge-4", "repo-b-crowd", "entity-eligible", "calls"),
         ],
     }
 }
@@ -250,8 +353,6 @@ mod task_014 {
             Arc::new(InMemoryGraphCache::new()),
         );
 
-        // Warm-up under gen-1: the stale node is legitimately ranked and its
-        // snapshot is now cached under epoch 1.
         let before = block_on(index.retrieve_candidates(&request("staleFn"))).expect("warm query");
         assert!(
             before
@@ -264,7 +365,6 @@ mod task_014 {
                 .collect::<Vec<_>>()
         );
 
-        // Retire gen-1 / publish gen-2: same warm cache handle, same store.
         eligibility.retire_gen1_publish_gen2();
         let after =
             block_on(index.retrieve_candidates(&request("staleFn"))).expect("post-retire query");
@@ -274,7 +374,6 @@ mod task_014 {
             "a retired generation must never seed, rank or traverse after epoch bump: {ids:?}"
         );
 
-        // The eligible generation still serves through the same lane/cache.
         let eligible =
             block_on(index.retrieve_candidates(&request("eligibleFn"))).expect("eligible query");
         assert!(
@@ -291,8 +390,8 @@ mod task_014 {
 
     /// mixed_lineage_recompute: a non-code record with edges into BOTH a
     /// retired generation and a surviving one keeps serving through the
-    /// surviving edge — the lane recomputes from surviving inputs instead of
-    /// dropping the record wholesale or bridging through the stale edge.
+    /// surviving edge — recomputed from surviving inputs, never dropped
+    /// wholesale and never bridging through the stale edge.
     #[test]
     fn mixed_lineage_recompute() {
         let eligibility = Arc::new(FlipEligibility::gen1());
@@ -303,9 +402,6 @@ mod task_014 {
             Arc::new(InMemoryGraphCache::new()),
         );
 
-        // Seed on the eligible symbol; the walk must reach the shared
-        // non-code record through the SURVIVING edge (edge-3), never through
-        // the retired edge-2/edge-1 chain.
         let results = block_on(index.retrieve_candidates(&request("eligibleFn"))).expect("query");
         let ids: Vec<String> = results.iter().map(|r| r.target_id.clone()).collect();
         assert!(
@@ -317,13 +413,104 @@ mod task_014 {
             "retired-generation nodes must be absent from a mixed recomputation: {ids:?}"
         );
 
-        // Seeding on the retired symbol yields nothing at all: it cannot
-        // consume the traversal budget as a bridge into the surviving graph.
         let stale = block_on(index.retrieve_candidates(&request("staleFn"))).expect("stale query");
         assert!(
             stale.is_empty(),
             "an ineligible seed must not traverse, bridge or rank: {:?}",
             stale
+                .iter()
+                .map(|r| r.target_id.clone())
+                .collect::<Vec<_>>()
+        );
+    }
+
+    /// Corrective r2 (finding 8): dangling/name-only edges never surface
+    /// unauthorized nodes nor consume traversal budget — an eligible node's
+    /// edge to a NAME-ONLY unbound symbol is dropped before the walk, while
+    /// the valid authorized edge still traverses under a tight result limit.
+    #[test]
+    fn dangling_name_only_endpoints_never_traverse_or_consume_budget() {
+        let eligibility = Arc::new(FlipEligibility::gen1());
+        eligibility.retire_gen1_publish_gen2();
+        let mut source = graph();
+        // Dangling edges AHEAD of the valid edge (they would occupy the
+        // traversal budget if endpoint authorization were absent).
+        source.relationships.insert(
+            0,
+            name_only_edge("dangling-1", "entity-eligible", "ghostSymbol"),
+        );
+        source.relationships.insert(
+            1,
+            edge("dangling-2", "entity-eligible", "entity-stale", "calls"),
+        );
+        let index = bound_index(
+            Arc::new(source),
+            eligibility,
+            Arc::new(InMemoryGraphCache::new()),
+        );
+        let mut tight = request("eligibleFn");
+        tight.limit = Some(2);
+        let results = block_on(index.retrieve_candidates(&tight)).expect("tight budget query");
+        let ids: Vec<String> = results.iter().map(|r| r.target_id.clone()).collect();
+        assert!(
+            !ids.iter().any(|id| id.contains("ghost")),
+            "a name-only endpoint must never surface as a node: {ids:?}"
+        );
+        assert!(
+            !ids.iter().any(|id| id.contains("stale")),
+            "an ineligible endpoint must never traverse: {ids:?}"
+        );
+        assert!(
+            ids.contains(&"entity-shared".to_owned()),
+            "the authorized edge must still traverse and fill the budget: {ids:?}"
+        );
+    }
+
+    /// Corrective r2 (finding 5): the request's repository narrowing applies
+    /// to the derived lane BEFORE the walk — with repo-b@refs/heads/develop
+    /// requested, repo-b's crowd node cannot crowd out… (repo-b IS selected
+    /// here); the inverse: narrowing to a WRONG ref selects nothing.
+    #[test]
+    fn requested_repository_narrowing_applies_before_the_walk() {
+        let eligibility = Arc::new(FlipEligibility::gen1());
+        eligibility.retire_gen1_publish_gen2();
+        let index = bound_index(
+            Arc::new(graph()),
+            eligibility,
+            Arc::new(InMemoryGraphCache::new()),
+        );
+
+        // Correct qualified key: repo-b's published develop binding serves.
+        let selected = block_on(index.retrieve_candidates(&request_narrowed(
+            "eligibleFn",
+            &["repo-b@refs/heads/develop"],
+        )))
+        .expect("narrowed query");
+        assert!(
+            selected
+                .iter()
+                .any(|result| result.target_id == "entity-eligible"),
+            "the correctly requested repository must serve: {:?}",
+            selected
+                .iter()
+                .map(|r| r.target_id.clone())
+                .collect::<Vec<_>>()
+        );
+
+        // Wrong ref for repo-b (published on develop, requested on main):
+        // NOTHING is selected — the wrong-ref narrowing excludes repo-b's
+        // code entirely (finding 9 semantics applied in the derived lane).
+        let wrong_ref = block_on(
+            index.retrieve_candidates(&request_narrowed("eligibleFn", &["repo-b@refs/heads/main"])),
+        )
+        .expect("wrong-ref query");
+        assert!(
+            wrong_ref
+                .iter()
+                .all(|result| result.target_type != RetrievalTargetType::Entity
+                    || result.target_id == "entity-shared"),
+            "a wrong-ref narrowing must exclude that repository's code: {:?}",
+            wrong_ref
                 .iter()
                 .map(|r| r.target_id.clone())
                 .collect::<Vec<_>>()

@@ -41,34 +41,48 @@ const CHUNK_TEXT_CAP: usize = 2 * 1024;
 mod tests {
     use super::*;
 
-    /// Pure classification slice of the constrained-lane contract: stale
-    /// generations and legacy unbound code never enter the allowed set that
-    /// backs `search_constrained`; ordinary documents always do.
+    /// Pure classification slice of the constrained-lane contract (corrective
+    /// r2, finding 4): classification is durable-lineage driven — a lineage
+    /// record on a published binding passes; a lineage record on another
+    /// generation fails; a code-kind record without lineage fails; a
+    /// non-code record without lineage passes.
     #[test]
-    fn allowed_target_classification_excludes_stale_and_unbound_code() {
-        use engram_retrieval::BoundCodeEligibility;
-        let eligibility = BoundCodeEligibility {
+    fn allowed_target_classification_uses_durable_lineage() {
+        use engram_retrieval::{BoundBinding, DurableLineage};
+        let eligibility = engram_retrieval::BoundCodeEligibility {
             epoch: 2,
-            generations: vec!["gen-published".to_owned()],
-            repositories: vec!["repo".to_owned()],
+            bindings: vec![BoundBinding {
+                repo_id: "repo".to_owned(),
+                branch_ref: "refs/heads/main".to_owned(),
+                generation_id: "gen-published".to_owned(),
+            }],
+            lineage: vec![
+                DurableLineage {
+                    record_id: "chunk-published".to_owned(),
+                    repo_id: "repo".to_owned(),
+                    generation_id: "gen-published".to_owned(),
+                },
+                DurableLineage {
+                    record_id: "chunk-stale".to_owned(),
+                    repo_id: "repo".to_owned(),
+                    generation_id: "gen-old".to_owned(),
+                },
+            ],
         };
         let view = engram_retrieval::BoundCodeView::from_eligibility(&eligibility);
-        let mut stale = Metadata::new();
-        stale.insert(
-            engram_retrieval::bound_filter::CODE_GENERATION_KEY.into(),
-            "gen-stale".into(),
+        assert!(view.allows("chunk-published", true));
+        assert!(
+            !view.allows("chunk-stale", true),
+            "lineage on a non-published generation never passes"
         );
-        let mut published = Metadata::new();
-        published.insert(
-            engram_retrieval::bound_filter::CODE_GENERATION_KEY.into(),
-            "gen-published".into(),
+        assert!(
+            !view.allows("chunk-unknown-code-kind", true),
+            "a code-kind record without durable lineage is legacy unbound code"
         );
-        assert!(!view.allows(Some(&stale).as_ref().copied().map(|_| &stale), false));
-        assert!(view.allows(
-            Some(&published).as_ref().copied().map(|_| &published),
-            false
-        ));
-        assert!(view.allows(None, false), "ordinary documents always pass");
+        assert!(
+            view.allows("chunk-ordinary", false),
+            "ordinary documents always pass"
+        );
     }
 }
 
@@ -111,7 +125,16 @@ impl PgUnifiedRecall {
             })?;
         let mut allowed = std::collections::BTreeSet::new();
         for chunk in query.list_chunks(scope).await? {
-            if view.allows(chunk.metadata.as_ref(), false) {
+            // Corrective r2 (finding 4): classification by DURABLE LINEAGE +
+            // chunk kind — an unstamped code-kind chunk is legacy unbound
+            // code and never enters the allowed set.
+            let code_kind = matches!(
+                chunk.kind,
+                engram_domain::KnowledgeChunkKind::CodeSymbol
+                    | engram_domain::KnowledgeChunkKind::CodeBlock
+                    | engram_domain::KnowledgeChunkKind::DiffHunk
+            );
+            if view.allows(chunk.id.as_str(), code_kind) {
                 allowed.insert(chunk.id.to_string());
             }
         }
@@ -273,7 +296,7 @@ impl UnifiedRecall for PgUnifiedRecall {
                 .as_ref()
                 .and_then(|filters| filters.code_index_keys.as_deref());
             let view = resolve_view(resolver.as_ref(), &request.scope, requested).await?;
-            candidates.retain(|candidate| view.allows(candidate.metadata.as_ref(), false));
+            candidates.retain(|candidate| view.allows(candidate.target_id.as_str(), false));
         }
 
         compose_context(RetrievalCompositionInput {

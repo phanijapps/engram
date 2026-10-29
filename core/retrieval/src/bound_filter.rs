@@ -2,63 +2,93 @@
 //!
 //! A retrieval lane that can surface code-derived records must constrain its
 //! candidate set BEFORE ranking, limits or budgets are applied (REQ-005:
-//! code reads are limited to authorized bound published generations). This
-//! module owns the neutral classification rules shared by every lane:
+//! code reads are limited to authorized bound published generations).
 //!
-//! - **Bound code** — a record stamped `codeGenerationId` by the bound-code
-//!   scanner is eligible only when that generation is in the scope's published
-//!   set. A staged, retired or superseded generation is ineligible no matter
-//!   how strongly it matches the query.
-//! - **Legacy unbound code** — a code record with repository provenance but no
-//!   generation stamp (pre-binding `scan_repo` output) is never eligible for
-//!   ranked retrieval: unbound code lineage yields a denial, it does not infer
-//!   a binding from a checkout or leak through a documents fallback.
-//! - **Non-code** — ordinary memory / document / knowledge records remain
-//!   eligible always; constraining code never removes them (AC-006).
+//! Corrective r2 (review findings 4/9): classification is driven by DURABLE
+//! TARGET LINEAGE — the repository-owned staged lineage records — never by
+//! record metadata. A record is code exactly when its id has a durable
+//! lineage entry; it is eligible code only when that lineage's repository and
+//! generation match a PUBLISHED binding (repository + branch + generation
+//! verified together) and the request's narrowing selects that repository.
+//! Records with no lineage but a code kind are LEGACY UNBOUND CODE and are
+//! never eligible. Ordinary non-code records stay eligible always (AC-006).
 //!
-//! Requested narrowing (`QueryFilter::code_index_keys`) can only narrow: a
-//! requested repository key selects a subset of the published set and can
-//! never widen eligibility to an unbound or unpublished repository. The
-//! wildcard `"*"` means "every eligible bound repository", nothing more.
+//! Requested narrowing (`QueryFilter::code_index_keys`) intersects the FULL
+//! immutable repository/branch identity: a qualified key `repo@refs/heads/x`
+//! selects that repository only when its published binding branch is exactly
+//! `refs/heads/x` (case-sensitive). Narrowing can never widen eligibility;
+//! `"*"` means every eligible bound repository, nothing more.
 //!
-//! This module is pure: no SQL, no storage types, no async I/O. Lanes resolve
-//! a [`BoundCodeView`] once per request (via a [`CodeEligibilityResolver`]
-//! port implemented over the neutral `CodeBindingRepository`) and then apply
-//! `allows`/`classify` while building candidates.
+//! This module is pure: no SQL, no storage types, no async I/O.
 
 use async_trait::async_trait;
-use engram_domain::{Metadata, Scope};
+use engram_domain::Scope;
 use engram_runtime::{CoreError, CoreResult};
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 
-/// Metadata key the bound-code scanner stamps on every code-derived record
-/// (see `adapters/ingest/src/generation_stage.rs`).
+/// Metadata key the bound-code scanner stamps on records. NOT an authority:
+/// only durable lineage entries establish code identity (finding 4).
 pub const CODE_GENERATION_KEY: &str = "codeGenerationId";
-/// Metadata key carrying the bound repository id (`binding.repo_id`).
+/// Metadata key carrying the bound repository id. NOT an authority.
 pub const CODE_REPOSITORY_KEY: &str = "codeRepoId";
-/// Metadata key carrying the bound branch ref.
-pub const CODE_BRANCH_KEY: &str = "branch";
 
 /// Wildcard requested-index key: all eligible bound repositories.
 pub const CODE_INDEX_WILDCARD: &str = "*";
 
-/// Published-generation eligibility for one scope, resolved once per request.
+/// One published (authorized, bound) repository binding as resolved from the
+/// durable store: repository + branch + active generation verified together.
 #[derive(Clone, Debug, PartialEq, Eq)]
+pub struct BoundBinding {
+    pub repo_id: String,
+    pub branch_ref: String,
+    pub generation_id: String,
+}
+
+/// One durable target-lineage association: `record_id` is code contributed by
+/// `generation_id` of `repo_id` (the scanner's staged lineage record).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct DurableLineage {
+    pub record_id: String,
+    pub repo_id: String,
+    pub generation_id: String,
+}
+
+/// Published-generation eligibility for one scope, resolved once per request
+/// from durable authority (bindings + lineage), never from record metadata.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct BoundCodeEligibility {
     /// Monotonic scope epoch; bumps on publish/reset. Used to key warm caches
     /// so a stale warm entry can never serve a post-retirement answer.
     pub epoch: u64,
-    /// Published (authorized, bound) generation ids.
-    pub generations: Vec<String>,
-    /// Published repository ids (bare `RepoId` strings).
-    pub repositories: Vec<String>,
+    /// Published bindings (repository + branch + generation together).
+    pub bindings: Vec<BoundBinding>,
+    /// Durable target lineage for the scope (record → repo + generation).
+    pub lineage: Vec<DurableLineage>,
 }
 
-/// Per-request resolved eligibility view: published set ∩ requested narrowing.
-#[derive(Clone, Debug, PartialEq, Eq)]
+impl BoundCodeEligibility {
+    /// Published generation ids (derived from [`Self::bindings`]).
+    pub fn generations(&self) -> Vec<String> {
+        self.bindings
+            .iter()
+            .map(|b| b.generation_id.clone())
+            .collect()
+    }
+
+    /// Published repository ids (derived from [`Self::bindings`]).
+    pub fn repositories(&self) -> Vec<String> {
+        self.bindings.iter().map(|b| b.repo_id.clone()).collect()
+    }
+}
+
+/// Per-request resolved eligibility view: published bindings ∩ durable
+/// lineage ∩ requested narrowing.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct BoundCodeView {
-    eligible_generations: BTreeSet<String>,
-    eligible_repositories: BTreeSet<String>,
+    /// repo → (branch, generation) for every published binding.
+    published: BTreeMap<String, (String, String)>,
+    /// record → (repo, generation) from durable staged lineage.
+    lineage: BTreeMap<String, (String, String)>,
     requested_keys: Option<BTreeSet<String>>,
 }
 
@@ -67,61 +97,94 @@ pub struct BoundCodeView {
 pub enum RecordEligibility {
     /// Ordinary memory / document / knowledge record — always eligible.
     NonCode,
-    /// Code from a published, authorized, bound generation.
+    /// Code whose durable lineage matches a published binding of a selected
+    /// repository (repository + generation verified together).
     EligibleCode,
-    /// Staged / retired / superseded code, or legacy unbound code, or a
-    /// repository the request's narrowing did not select.
+    /// Stale / retired / staged / cross-repo-mismatched code, or legacy
+    /// unbound code (code kind without durable lineage), or a repository the
+    /// request's narrowing did not select.
     IneligibleCode,
 }
 
 impl BoundCodeView {
     /// A view with no published bindings: no code is eligible, non-code stays
-    /// eligible. (Legacy unbound code is still classified ineligible.)
+    /// eligible, and legacy unbound code is still denied.
     pub fn none_bound() -> Self {
-        Self {
-            eligible_generations: BTreeSet::new(),
-            eligible_repositories: BTreeSet::new(),
-            requested_keys: None,
-        }
+        Self::default()
     }
 
-    /// Builds the view over a published eligibility set.
+    /// Builds the view over published bindings + durable lineage.
     pub fn from_eligibility(eligibility: &BoundCodeEligibility) -> Self {
         Self {
-            eligible_generations: eligibility.generations.iter().cloned().collect(),
-            eligible_repositories: eligibility.repositories.iter().cloned().collect(),
+            published: eligibility
+                .bindings
+                .iter()
+                .map(|binding| {
+                    (
+                        binding.repo_id.clone(),
+                        (binding.branch_ref.clone(), binding.generation_id.clone()),
+                    )
+                })
+                .collect(),
+            lineage: eligibility
+                .lineage
+                .iter()
+                .map(|entry| {
+                    (
+                        entry.record_id.clone(),
+                        (entry.repo_id.clone(), entry.generation_id.clone()),
+                    )
+                })
+                .collect(),
             requested_keys: None,
         }
     }
 
-    /// Applies the request's `code_index_keys` narrowing. Keys are qualified
-    /// (`repo@refs/heads/main`), bare repository ids, or `"*"` (all eligible).
-    /// Requesting an unbound repository selects nothing — narrowing can never
-    /// widen eligibility.
+    /// Applies the request's `code_index_keys` narrowing. Keys are the bare
+    /// repository id, the fully-qualified `repo@refs/heads/branch` form, or
+    /// `"*"` (all eligible). A qualified key selects the repository ONLY when
+    /// its published branch matches EXACTLY (case-sensitive); requesting an
+    /// unbound repository or a wrong/case-distinct ref selects nothing —
+    /// narrowing can never widen eligibility (finding 9).
     pub fn with_requested_keys(mut self, keys: Option<&[String]>) -> Self {
         self.requested_keys = keys.map(|keys| keys.iter().cloned().collect());
         self
     }
 
-    /// Published generation ids visible to this view (after narrowing by
-    /// repository, when the mapping is expressible from stamps alone).
+    /// Published bindings visible to this view (after narrowing).
+    pub fn eligible_bindings(&self) -> Vec<BoundBinding> {
+        self.published
+            .iter()
+            .filter(|(repo, _)| self.repository_selected(Some(repo)))
+            .map(|(repo, (branch, generation))| BoundBinding {
+                repo_id: repo.clone(),
+                branch_ref: branch.clone(),
+                generation_id: generation.clone(),
+            })
+            .collect()
+    }
+
+    /// Published generation ids of repo-selected bindings (for lexical
+    /// contributor keys and other pre-budget lane constraints).
     pub fn eligible_generations(&self) -> Vec<String> {
-        self.eligible_generations.iter().cloned().collect()
+        self.eligible_bindings()
+            .iter()
+            .map(|binding| binding.generation_id.clone())
+            .collect()
     }
 
-    /// Published repository ids visible to this view.
-    pub fn eligible_repositories(&self) -> Vec<String> {
-        self.eligible_repositories.iter().cloned().collect()
-    }
-
-    /// True when a requested-key filter is active (only eligible keys apply).
+    /// Whether a requested-key filter is active.
     pub fn narrows_by_request(&self) -> bool {
         self.requested_keys
             .as_ref()
             .is_some_and(|keys| !keys.is_empty())
     }
 
-    /// Whether a code record from `repository` survives request narrowing.
+    /// True when `repository` survives request narrowing: no narrowing, an
+    /// empty narrowing, the wildcard, the bare repository id, or a fully
+    /// qualified `repo@branch` whose branch equals the PUBLISHED branch
+    /// exactly (case-sensitive) — the immutable identity is intersected, not
+    /// truncated at `@`.
     fn repository_selected(&self, repository: Option<&str>) -> bool {
         let Some(requested) = self.requested_keys.as_ref() else {
             return true;
@@ -129,57 +192,74 @@ impl BoundCodeView {
         if requested.is_empty() || requested.contains(CODE_INDEX_WILDCARD) {
             return true;
         }
-        // Accept the bare repository id or any qualified `repo@ref` spelling
-        // of it; the ref part can only further narrow, never widen.
-        repository.is_some_and(|repo| {
-            requested.contains(repo)
-                || requested.iter().any(|key| {
-                    key.rsplit_once('@').is_some_and(|(bare, _)| {
-                        bare == repo && self.eligible_repositories.contains(repo)
-                    })
-                })
+        let Some(repo) = repository else {
+            return false;
+        };
+        let published_branch = self.published.get(repo).map(|(branch, _)| branch.clone());
+        requested.iter().any(|key| match key.split_once('@') {
+            None => key == repo,
+            Some((bare, ref_part)) => {
+                bare == repo
+                    && published_branch
+                        .as_deref()
+                        .is_some_and(|branch| branch == ref_part)
+            }
         })
     }
 
-    /// Classifies one code-derived record from its scanner stamps.
+    /// Classifies one record from DURABLE LINEAGE + record kind. Metadata
+    /// stamps are never consulted (finding 4).
     ///
-    /// `metadata` is the record's metadata map; `legacy_unbound_code` marks a
-    /// code record with repository provenance but no generation stamp.
-    pub fn classify(
-        &self,
-        metadata: Option<&Metadata>,
-        legacy_unbound_code: bool,
-    ) -> RecordEligibility {
-        let generation = metadata
-            .and_then(|meta| meta.get(CODE_GENERATION_KEY))
-            .and_then(|value| value.as_str())
-            .map(str::to_owned);
-        let repository = metadata
-            .and_then(|meta| meta.get(CODE_REPOSITORY_KEY))
-            .and_then(|value| value.as_str())
-            .map(str::to_owned);
-        match generation {
-            Some(generation) => {
-                if !self.eligible_generations.contains(&generation) {
-                    RecordEligibility::IneligibleCode
-                } else if !self.repository_selected(repository.as_deref()) {
-                    RecordEligibility::IneligibleCode
-                } else {
-                    RecordEligibility::EligibleCode
+    /// - `record_id` with a durable lineage entry → code: eligible only when
+    ///   the lineage repository's PUBLISHED generation equals the lineage
+    ///   generation AND that repository survives narrowing.
+    /// - No lineage + `kind_is_code` → legacy unbound code: ineligible.
+    /// - No lineage + non-code kind → `NonCode`.
+    pub fn classify(&self, record_id: &str, kind_is_code: bool) -> RecordEligibility {
+        match self.lineage.get(record_id) {
+            Some((repo, generation)) => {
+                let published = self.published.get(repo).map(|(_, generation)| generation);
+                match published {
+                    Some(published) if published == generation => {
+                        if self.repository_selected(Some(repo)) {
+                            RecordEligibility::EligibleCode
+                        } else {
+                            RecordEligibility::IneligibleCode
+                        }
+                    }
+                    _ => RecordEligibility::IneligibleCode,
                 }
             }
-            None if legacy_unbound_code => RecordEligibility::IneligibleCode,
+            None if kind_is_code => RecordEligibility::IneligibleCode,
             None => RecordEligibility::NonCode,
         }
     }
 
-    /// Convenience predicate over [`Self::classify`]: non-code and eligible
-    /// code pass; ineligible or legacy unbound code fail.
-    pub fn allows(&self, metadata: Option<&Metadata>, legacy_unbound_code: bool) -> bool {
+    /// Convenience predicate over [`Self::classify`].
+    pub fn allows(&self, record_id: &str, kind_is_code: bool) -> bool {
         !matches!(
-            self.classify(metadata, legacy_unbound_code),
+            self.classify(record_id, kind_is_code),
             RecordEligibility::IneligibleCode
         )
+    }
+
+    /// True when `record_id` carries durable code lineage (regardless of
+    /// eligibility) — the authoritative code test for seams that must treat
+    /// code and non-code differently (finding 4).
+    pub fn is_code_record(&self, record_id: &str) -> bool {
+        self.lineage.contains_key(record_id)
+    }
+
+    /// The repository a durable-lineage record belongs to, when its lineage
+    /// exists (display qualification and repo-scoped composition).
+    pub fn code_repo_of(&self, record_id: &str) -> Option<&str> {
+        self.lineage.get(record_id).map(|(repo, _)| repo.as_str())
+    }
+
+    /// Every durable-lineage record id in the scope (code records, eligible
+    /// or not) — the authoritative enumeration for wildcard authorization.
+    pub fn code_records(&self) -> Vec<&str> {
+        self.lineage.keys().map(String::as_str).collect()
     }
 }
 
@@ -190,105 +270,188 @@ pub fn binding_required() -> CoreError {
     }
 }
 
-/// Port: resolve the scope's published code eligibility once per request.
-///
-/// Implemented over the neutral `CodeBindingRepository::eligibility` port by
-/// the composition layer; lanes depend on this trait, never on a store.
+/// Port: resolve the scope's durable eligibility (published bindings + target
+/// lineage) once per request. Implemented over the neutral
+/// `CodeBindingRepository` port by the composition layer; lanes depend on
+/// this trait, never on a store.
 #[allow(clippy::double_must_use)]
 // async_trait codegen stamps #[must_use] on the boxed-future helper; CoreResult is already must_use
 #[async_trait]
 pub trait CodeEligibilityResolver: Send + Sync {
-    /// `Ok(None)` — no bindings exist in this scope (non-code still flows).
-    async fn resolve(&self, scope: &Scope) -> CoreResult<Option<BoundCodeEligibility>>;
+    /// `Ok(default)` — no bindings exist in this scope (non-code still flows).
+    async fn resolve(&self, scope: &Scope) -> CoreResult<BoundCodeEligibility>;
 }
 
 /// Resolves a request's [`BoundCodeView`] through a resolver, treating a
-/// resolver failure as a failed-closed lane error (never as "no bindings").
+/// resolver failure as a caller-visible error (the lane decides how to fail
+/// closed — never by silently widening).
 pub async fn resolve_view(
     resolver: &dyn CodeEligibilityResolver,
     scope: &Scope,
     requested_keys: Option<&[String]>,
 ) -> CoreResult<BoundCodeView> {
-    let view = match resolver.resolve(scope).await? {
-        Some(eligibility) => BoundCodeView::from_eligibility(&eligibility),
-        None => BoundCodeView::none_bound(),
-    };
-    Ok(view.with_requested_keys(requested_keys))
+    let eligibility = resolver.resolve(scope).await?;
+    Ok(BoundCodeView::from_eligibility(&eligibility).with_requested_keys(requested_keys))
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
-    fn eligibility(generations: &[&str], repositories: &[&str]) -> BoundCodeEligibility {
+    fn bindings(entries: &[(&str, &str, &str)]) -> BoundCodeEligibility {
         BoundCodeEligibility {
             epoch: 1,
-            generations: generations.iter().map(|s| s.to_string()).collect(),
-            repositories: repositories.iter().map(|s| s.to_string()).collect(),
+            bindings: entries
+                .iter()
+                .map(|(repo, branch, generation)| BoundBinding {
+                    repo_id: (*repo).to_owned(),
+                    branch_ref: (*branch).to_owned(),
+                    generation_id: (*generation).to_owned(),
+                })
+                .collect(),
+            lineage: Vec::new(),
         }
     }
 
-    fn stamps(generation: Option<&str>, repository: Option<&str>) -> Option<Metadata> {
-        let mut meta = Metadata::new();
-        if let Some(generation) = generation {
-            meta.insert(CODE_GENERATION_KEY.into(), generation.into());
+    fn eligibility_with_lineage(
+        binding_entries: &[(&str, &str, &str)],
+        lineage_entries: &[(&str, &str, &str)],
+    ) -> BoundCodeEligibility {
+        BoundCodeEligibility {
+            epoch: 2,
+            bindings: binding_entries
+                .iter()
+                .map(|(repo, branch, generation)| BoundBinding {
+                    repo_id: (*repo).to_owned(),
+                    branch_ref: (*branch).to_owned(),
+                    generation_id: (*generation).to_owned(),
+                })
+                .collect(),
+            lineage: lineage_entries
+                .iter()
+                .map(|(record, repo, generation)| DurableLineage {
+                    record_id: (*record).to_owned(),
+                    repo_id: (*repo).to_owned(),
+                    generation_id: (*generation).to_owned(),
+                })
+                .collect(),
         }
-        if let Some(repository) = repository {
-            meta.insert(CODE_REPOSITORY_KEY.into(), repository.into());
-        }
-        Some(meta)
     }
 
     #[test]
-    fn published_generation_is_eligible_and_stale_is_not() {
-        let view = BoundCodeView::from_eligibility(&eligibility(&["gen-1"], &["repo"]));
+    fn durable_lineage_is_the_code_authority_not_metadata() {
+        // Finding 4: a lineage record on a published binding is eligible; the
+        // SAME repository bound to a DIFFERENT generation is not; a forged
+        // metadata stamp on a record without lineage does nothing.
+        let eligibility = eligibility_with_lineage(
+            &[("repo-a", "refs/heads/main", "gen-1")],
+            &[
+                ("rec-eligible", "repo-a", "gen-1"),
+                ("rec-stale", "repo-a", "gen-staged"),
+            ],
+        );
+        let view = BoundCodeView::from_eligibility(&eligibility);
         assert_eq!(
-            view.classify(stamps(Some("gen-1"), Some("repo")).as_ref(), false),
+            view.classify("rec-eligible", false),
             RecordEligibility::EligibleCode
         );
         assert_eq!(
-            view.classify(stamps(Some("gen-stale"), Some("repo")).as_ref(), false),
+            view.classify("rec-stale", false),
             RecordEligibility::IneligibleCode
         );
+        // No lineage + code kind ⇒ legacy unbound code ⇒ ineligible.
+        assert_eq!(
+            view.classify("rec-forged-stamp", true),
+            RecordEligibility::IneligibleCode,
+            "a code-kind record without durable lineage never becomes eligible"
+        );
+        // No lineage + non-code kind ⇒ NonCode (ordinary records flow).
+        assert_eq!(
+            view.classify("ordinary-doc", false),
+            RecordEligibility::NonCode
+        );
+        assert!(view.is_code_record("rec-eligible"));
+        assert!(!view.is_code_record("ordinary-doc"));
     }
 
     #[test]
     fn unbound_code_and_non_code_classify_independently() {
         let view = BoundCodeView::none_bound();
         assert_eq!(
-            view.classify(stamps(None, Some("repo")).as_ref(), true),
+            view.classify("legacy-symbol", true),
             RecordEligibility::IneligibleCode,
             "legacy unbound code is never eligible"
         );
         assert_eq!(
-            view.classify(stamps(None, None).as_ref(), false),
+            view.classify("ordinary", false),
             RecordEligibility::NonCode,
             "ordinary documents stay eligible"
         );
     }
 
     #[test]
-    fn requested_keys_only_narrow() {
-        let view = BoundCodeView::from_eligibility(&eligibility(&["gen-1"], &["repo-a", "repo-b"]))
+    fn qualified_keys_intersect_the_full_immutable_identity() {
+        // Finding 9: `repo@refs/heads/develop` must NOT select repo-a's
+        // published MAIN generation; case-distinct refs are distinct.
+        let eligibility = eligibility_with_lineage(
+            &[
+                ("repo-a", "refs/heads/main", "gen-main"),
+                ("repo-b", "refs/heads/develop", "gen-dev"),
+            ],
+            &[
+                ("rec-a", "repo-a", "gen-main"),
+                ("rec-b", "repo-b", "gen-dev"),
+            ],
+        );
+        let view = BoundCodeView::from_eligibility(&eligibility)
+            .with_requested_keys(Some(&["repo-a@refs/heads/develop".to_string()]));
+        // Wrong ref for repo-a: repo-a is NOT selected.
+        assert_eq!(
+            view.classify("rec-a", false),
+            RecordEligibility::IneligibleCode,
+            "requesting repo-a@develop must not select repo-a's main generation"
+        );
+        // Correct qualified key selects exactly that binding.
+        let correct = BoundCodeView::from_eligibility(&eligibility)
             .with_requested_keys(Some(&["repo-a@refs/heads/main".to_string()]));
         assert_eq!(
-            view.classify(stamps(Some("gen-1"), Some("repo-a")).as_ref(), false),
+            correct.classify("rec-a", false),
             RecordEligibility::EligibleCode
         );
         assert_eq!(
-            view.classify(stamps(Some("gen-1"), Some("repo-b")).as_ref(), false),
+            correct.classify("rec-b", false),
             RecordEligibility::IneligibleCode
         );
-        // An unbound repository cannot be selected by requesting it.
-        let widened = BoundCodeView::from_eligibility(&eligibility(&["gen-1"], &["repo-a"]))
-            .with_requested_keys(Some(&["repo-unbound".to_string()]));
+        // Case-distinct ref is a mismatch, not a fold.
+        let case_view = BoundCodeView::from_eligibility(&eligibility)
+            .with_requested_keys(Some(&["repo-a@refs/heads/Main".to_string()]));
         assert_eq!(
-            widened.classify(stamps(Some("gen-1"), Some("repo-a")).as_ref(), false),
+            case_view.classify("rec-a", false),
+            RecordEligibility::IneligibleCode
+        );
+        // Bare repository id selects the published binding of that repo.
+        let bare = BoundCodeView::from_eligibility(&eligibility)
+            .with_requested_keys(Some(&["repo-b".to_string()]));
+        assert_eq!(
+            bare.classify("rec-b", false),
+            RecordEligibility::EligibleCode
+        );
+        assert_eq!(
+            bare.classify("rec-a", false),
             RecordEligibility::IneligibleCode
         );
         // Wildcard keeps every eligible repository, and nothing more.
-        let wildcard = BoundCodeView::from_eligibility(&eligibility(&["gen-1"], &["repo-a"]))
+        let wildcard = BoundCodeView::from_eligibility(&eligibility)
             .with_requested_keys(Some(&["*".to_string()]));
-        assert!(wildcard.allows(stamps(Some("gen-1"), Some("repo-a")).as_ref(), false));
+        assert!(wildcard.allows("rec-a", false) && wildcard.allows("rec-b", false));
+        // Requesting an unbound repository selects nothing.
+        let unbound = BoundCodeView::from_eligibility(&eligibility)
+            .with_requested_keys(Some(&["repo-unbound".to_string()]));
+        assert_eq!(
+            unbound.classify("rec-a", false),
+            RecordEligibility::IneligibleCode
+        );
+        // Narrowed bindings/generations reflect the full-key intersection.
+        assert_eq!(correct.eligible_generations(), vec!["gen-main".to_owned()]);
     }
 }

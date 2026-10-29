@@ -20,7 +20,8 @@ use engram_domain::{
     Provenance, Requester, RetrievalRequest, Scope,
 };
 use engram_retrieval::{
-    BoundCodeEligibility, CodeEligibilityResolver, InMemoryGraphCache, RetrievalIndex,
+    BoundBinding, BoundCodeEligibility, CodeEligibilityResolver, DurableLineage,
+    InMemoryGraphCache, RetrievalIndex,
 };
 use engram_runtime::CoreResult;
 use engram_store_associative_graph::GraphRelationshipSource;
@@ -40,8 +41,12 @@ impl FlipEligibility {
         Self {
             current: Mutex::new(BoundCodeEligibility {
                 epoch: 1,
-                generations: vec!["gen-1".to_owned()],
-                repositories: vec!["repo-a".to_owned()],
+                bindings: vec![BoundBinding {
+                    repo_id: "repo-a".to_owned(),
+                    branch_ref: "refs/heads/main".to_owned(),
+                    generation_id: "gen-1".to_owned(),
+                }],
+                lineage: durable_lineage(),
             }),
         }
     }
@@ -49,16 +54,41 @@ impl FlipEligibility {
     fn retire_gen1_publish_gen2(&self) {
         *self.current.lock().expect("flip lock") = BoundCodeEligibility {
             epoch: 2,
-            generations: vec!["gen-2".to_owned()],
-            repositories: vec!["repo-a".to_owned()],
+            bindings: vec![BoundBinding {
+                repo_id: "repo-a".to_owned(),
+                branch_ref: "refs/heads/main".to_owned(),
+                generation_id: "gen-2".to_owned(),
+            }],
+            lineage: durable_lineage(),
         };
     }
 }
 
+/// Durable lineage: gen-1 owns the stale members, gen-2 owns the survivor.
+fn durable_lineage() -> Vec<DurableLineage> {
+    vec![
+        DurableLineage {
+            record_id: "entity-stale".to_owned(),
+            repo_id: "repo-a".to_owned(),
+            generation_id: "gen-1".to_owned(),
+        },
+        DurableLineage {
+            record_id: "entity-stale-2".to_owned(),
+            repo_id: "repo-a".to_owned(),
+            generation_id: "gen-1".to_owned(),
+        },
+        DurableLineage {
+            record_id: "entity-eligible".to_owned(),
+            repo_id: "repo-a".to_owned(),
+            generation_id: "gen-2".to_owned(),
+        },
+    ]
+}
+
 #[async_trait]
 impl CodeEligibilityResolver for FlipEligibility {
-    async fn resolve(&self, _scope: &Scope) -> CoreResult<Option<BoundCodeEligibility>> {
-        Ok(Some(self.current.lock().expect("flip lock").clone()))
+    async fn resolve(&self, _scope: &Scope) -> CoreResult<BoundCodeEligibility> {
+        Ok(self.current.lock().expect("flip lock").clone())
     }
 }
 
@@ -108,18 +138,9 @@ fn provenance() -> Provenance {
     }
 }
 
-fn entity(id: &str, name: &str, kind: EntityKind, generation: Option<&str>) -> KnowledgeEntity {
-    let mut metadata = engram_domain::Metadata::new();
-    if let Some(generation) = generation {
-        metadata.insert(
-            "codeGenerationId".to_owned(),
-            serde_json::Value::String(generation.to_owned()),
-        );
-        metadata.insert(
-            "codeRepoId".to_owned(),
-            serde_json::Value::String("repo-a".to_owned()),
-        );
-    }
+fn entity(id: &str, name: &str, kind: EntityKind, _generation: Option<&str>) -> KnowledgeEntity {
+    // Corrective r2 (finding 4): metadata is NOT authority; the fixture's
+    // durable lineage names the code records.
     KnowledgeEntity {
         id: Id::from(id),
         graph_id: None,
@@ -135,7 +156,7 @@ fn entity(id: &str, name: &str, kind: EntityKind, generation: Option<&str>) -> K
         updated_at: None,
         valid_from: None,
         valid_until: None,
-        metadata: Some(metadata),
+        metadata: None,
         archived_at: None,
     }
 }

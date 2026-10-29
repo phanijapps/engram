@@ -46,5 +46,5 @@ pub use provenance::SqlProvenanceQuery;
 pub use recall::SqlUnifiedRecall;
 pub use recall_lanes::{
     associative_recall_lane, community_summary_recall_lane, lexical_recall_lane,
-    lexical_recall_lane_bound,
+    lexical_recall_lane_bound, vector_recall_lane_bound,
 };

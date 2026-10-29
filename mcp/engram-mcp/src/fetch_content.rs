@@ -47,7 +47,13 @@ pub const MAX_BYTES_CEILING: usize = 1024 * 1024;
 fn canonical_participating_chunks<'a>(
     app: &App,
     matched: &[&'a engram_domain::KnowledgeChunk],
-) -> Result<(Vec<&'a engram_domain::KnowledgeChunk>, Option<(String, String)>), String> {
+) -> Result<
+    (
+        Vec<&'a engram_domain::KnowledgeChunk>,
+        Option<(String, String)>,
+    ),
+    String,
+> {
     let Ok(coordinator) = app.provider.code_bindings() else {
         // No binding coordinator configured: no canonical participant can be
         // established and the exact path does not apply (the verbatim path
@@ -286,12 +292,13 @@ pub fn fetch_content(app: &App, args: &Value) -> Result<Value, ToolError> {
     // missing snapshot stays an error in auto and verbatim modes alike
     // (REQ-006: exact content or an explicit unavailable error, never a
     // checkout masquerading as the revision).
-    let (participants, bound_origin) = canonical_participating_chunks(app, &ordered).map_err(|reason| {
-        ToolError::new(
-            -32602,
-            format!("bound source origin is ambiguous: {reason}"),
-        )
-    })?;
+    let (participants, bound_origin) =
+        canonical_participating_chunks(app, &ordered).map_err(|reason| {
+            ToolError::new(
+                -32602,
+                format!("bound source origin is ambiguous: {reason}"),
+            )
+        })?;
     // A row that asserts bound-code metadata or has durable (but retired)
     // lineage cannot fall through to verbatim/stitching when no current
     // canonical participant exists. That would resurrect old-only or forged

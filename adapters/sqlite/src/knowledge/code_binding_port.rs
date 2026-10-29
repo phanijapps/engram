@@ -220,9 +220,13 @@ impl CodeBindingRepository for SqlCodeBindingRepository {
                     reason: "GenerationChanged: maintenance target has no durable lineage".into(),
                 });
             };
-            if !expected_binding_epochs.iter().any(|(repo, _)| repo.0 == repo_id) {
+            if !expected_binding_epochs
+                .iter()
+                .any(|(repo, _)| repo.0 == repo_id)
+            {
                 return Err(CoreError::Conflict {
-                    reason: "GenerationChanged: maintenance target belongs to another repository".into(),
+                    reason: "GenerationChanged: maintenance target belongs to another repository"
+                        .into(),
                 });
             }
             let retired_generation = format!("retired:{generation_id}");

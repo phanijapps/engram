@@ -1,5 +1,14 @@
 # v1 Changelog
 
+## 2026-10-30 (durable canonical spans)
+
+- Added the `CanonicalSpan` definition (1-based inclusive `startLine`/`endLine`,
+  both ≥ 1) and the optional, nullable `CodeLineage.span` field pinning a
+  lineage record's canonical lines at its generation's pinned commit (r5
+  durable canonical-span authentication; staged once at publication, never
+  re-read from mutable rows). Additive/compatible: existing lineage data
+  validates unchanged; consumers that do not read `span` are unaffected.
+
 ## 2026-10-24 (outcome loop)
 
 - Added `TaskOutcome` + `RecallOutcome` definitions with an example (F2:

@@ -2196,6 +2196,34 @@
             "minLength": 1
           },
           "minItems": 1
+        },
+        "span": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/CanonicalSpan"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "additionalProperties": false
+    },
+    "CanonicalSpan": {
+      "type": "object",
+      "required": [
+        "startLine",
+        "endLine"
+      ],
+      "properties": {
+        "startLine": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "endLine": {
+          "type": "integer",
+          "minimum": 1
         }
       },
       "additionalProperties": false

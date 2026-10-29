@@ -30,6 +30,24 @@ export const engramV1Schema = {
       ],
       "type": "object"
     },
+    "CanonicalSpan": {
+      "additionalProperties": false,
+      "properties": {
+        "endLine": {
+          "minimum": 1,
+          "type": "integer"
+        },
+        "startLine": {
+          "minimum": 1,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "startLine",
+        "endLine"
+      ],
+      "type": "object"
+    },
     "CodeAttempt": {
       "additionalProperties": false,
       "properties": {
@@ -271,6 +289,16 @@ export const engramV1Schema = {
         "sourcePath": {
           "minLength": 1,
           "type": "string"
+        },
+        "span": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/CanonicalSpan"
+            },
+            {
+              "type": "null"
+            }
+          ]
         }
       },
       "required": [

@@ -105,6 +105,7 @@ export type Verdict = "asserted_by_agent" | "grounded_in_source" | "derived";
 
 export interface EngramV1Types {
   Actor: Actor;
+  CanonicalSpan: CanonicalSpan;
   CodeAttempt: CodeAttempt;
   CodeBinding: CodeBinding;
   CodeEdgeKind: CodeEdgeKind;
@@ -190,6 +191,10 @@ export interface Actor {
 export interface Metadata {
   [k: string]: unknown;
 }
+export interface CanonicalSpan {
+  endLine: number;
+  startLine: number;
+}
 export interface CodeAttempt {
   bindingVersion: number;
   expectedActiveGeneration: string | null;
@@ -259,6 +264,7 @@ export interface CodeLineage {
   generationId: string;
   repoId: string;
   sourcePath: string;
+  span?: CanonicalSpan | null;
 }
 export interface CodeResetJournal {
   checkpoints: string[];

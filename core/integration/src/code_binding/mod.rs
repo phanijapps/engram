@@ -116,6 +116,29 @@ pub struct CodeBindingCoordinator {
     required_lanes: Vec<CodeReceiptKind>,
     clock: Arc<dyn engram_runtime::Clock>,
 }
+
+/// The recipe default authorizer (TASK-019): recipes are scope-agnostic —
+/// they serve whatever (actor, scope) a host presents — so this authorizer
+/// records authority by ACCEPTING recipe-level calls and defers deny
+/// decisions to the caller-authorization seams that DO have policy context:
+/// the retrieval-side `AuthorizedKnowledgeQuery`/`CodeEligibilityGate` seam
+/// (scope resolution) and host-injected authorizers (a host with a real
+/// deny policy constructs its own coordinator). It is not a bypass of
+/// those seams; it is the neutral no-policy default the plan's recipe
+/// matrix injects.
+pub struct RecipeDefaultAuthorizer;
+#[async_trait]
+impl CodeBindingAuthorizer for RecipeDefaultAuthorizer {
+    async fn authorize(
+        &self,
+        _actor: &Actor,
+        _scope: &Scope,
+        _repo: &RepoId,
+        _action: CodeAuthorityAction,
+    ) -> CoreResult<()> {
+        Ok(())
+    }
+}
 impl CodeBindingCoordinator {
     /// Required source and knowledge lanes cannot be removed by a request.
     pub fn new(

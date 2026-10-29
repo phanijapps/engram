@@ -73,6 +73,9 @@ struct SqliteLayoutPaths {
     outcomes: PathBuf,
     hierarchy: PathBuf,
     vectors: PathBuf,
+    /// Durable code-binding authority (TASK-019): bindings, attempts,
+    /// receipts, lineage, leases, and ref observations for bound code.
+    code_bindings: PathBuf,
 }
 
 impl SqliteLayoutPaths {
@@ -92,6 +95,7 @@ impl SqliteLayoutPaths {
                     outcomes: storage.join("outcomes.db"),
                     hierarchy: storage.join("hierarchy.db"),
                     vectors: storage.join("vectors.db"),
+                    code_bindings: storage.join("code_bindings.db"),
                 }
             }
             SqliteStorageLayout::SingleFile { file_name } => {
@@ -104,7 +108,8 @@ impl SqliteLayoutPaths {
                     proposals: shared.clone(),
                     outcomes: shared.clone(),
                     hierarchy: shared.clone(),
-                    vectors: shared,
+                    vectors: shared.clone(),
+                    code_bindings: shared,
                 }
             }
         }
@@ -210,6 +215,9 @@ pub(crate) fn bootstrap_sqlite(config: &EngramConfig) -> CoreResult<EngramProvid
     let mut knowledge_query: Option<Arc<dyn crate::KnowledgeQuery>> = None;
     let mut code_graph_state = CapabilityState::Unsupported {
         reason: CapabilityReason::FeatureDisabled,
+    };
+    let mut code_binding_state = CapabilityState::Unsupported {
+        reason: CapabilityReason::ProviderUnavailable,
     };
     let mut community_query: Option<Arc<dyn crate::CommunityQuery>> = None;
     let mut lexical_feed: Option<Arc<dyn crate::LexicalFeed>> = None;
@@ -690,6 +698,43 @@ pub(crate) fn bootstrap_sqlite(config: &EngramConfig) -> CoreResult<EngramProvid
     let contradiction_state = beliefs_state.clone();
     let maintenance_state = consolidation_state.clone();
 
+    // Bound code authority (TASK-019): the neutral binding coordinator over
+    // the REAL durable SQLite binding cell, plus the adapter-owned retained
+    // snapshot reader over `<storage>/retained`. Required handles per the
+    // plan's recipe matrix: binding/graph/source/reset. Graph handles were
+    // wired above (`graph`, `graph_maintenance`, `knowledge_query`); the
+    // reset seam rides the coordinator's durable repository
+    // (`preview_reset`/`journal_reset` ports — the exact-preview
+    // implementation lands with TASK-023/TASK-024, and recipes inject the
+    // handle now without requiring those tasks' execution).
+    let mut code_coordinator: Option<Arc<crate::code_binding::CodeBindingCoordinator>> = None;
+    let mut code_source_state = CapabilityState::Unsupported {
+        reason: CapabilityReason::ProviderUnavailable,
+    };
+    let mut code_reset_state = CapabilityState::Unsupported {
+        reason: CapabilityReason::ProviderUnavailable,
+    };
+    let mut code_source: Option<Arc<dyn engram_knowledge::RetainedSourceReader>> = None;
+    if conformance::code_binding_ok() {
+        if let Ok(bindings) =
+            engram_store_sqlite::knowledge::SqlCodeBindingRepository::open(&paths.code_bindings)
+        {
+            let coordinator = crate::code_binding::CodeBindingCoordinator::new(
+                Arc::new(bindings),
+                Arc::new(crate::code_binding::RecipeDefaultAuthorizer),
+                Vec::new(),
+            );
+            let retained_root = config.storage_path.join("retained");
+            code_source = Some(Arc::new(
+                engram_ingest::git_source::RetainedSnapshotReader::new(retained_root),
+            ));
+            code_coordinator = Some(Arc::new(coordinator));
+            code_binding_state = CapabilityState::Supported;
+            code_source_state = CapabilityState::Supported;
+            code_reset_state = CapabilityState::Supported;
+        }
+    }
+
     let report = CapabilityReport::builder()
         .memory(memory_state)
         .knowledge(knowledge_state)
@@ -704,6 +749,9 @@ pub(crate) fn bootstrap_sqlite(config: &EngramConfig) -> CoreResult<EngramProvid
         .migration(migration_state)
         .episodes_evidence(episodes_evidence_state)
         .code_graph(code_graph_state)
+        .code_binding(code_binding_state)
+        .code_source(code_source_state)
+        .code_reset(code_reset_state)
         .atomic_batch(atomic_batch_state)
         .unified_recall(unified_recall_state)
         .export_import(export_import_state)
@@ -825,6 +873,15 @@ pub(crate) fn bootstrap_sqlite(config: &EngramConfig) -> CoreResult<EngramProvid
     // is always present under the SQLite backend (no fallback when a lane is
     // absent — it is a benign empty cache in that case).
     builder = builder.graph_cache(graph_cache);
+    // Bound-code handles (TASK-019): the binding coordinator and the retained
+    // source reader are attached together — an exact-source handle without
+    // binding authority (or the reverse) would be half a contract.
+    if let Some(coordinator) = code_coordinator {
+        builder = builder.code_bindings(coordinator);
+    }
+    if let Some(source) = code_source {
+        builder = builder.code_source(source);
+    }
     Ok(builder.build())
 }
 

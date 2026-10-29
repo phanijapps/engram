@@ -19,8 +19,8 @@ use engram_integration::{
 };
 use engram_runtime::{CoreError, CoreResult};
 use engram_store_pgvector::{
-    PgBeliefStore, PgConnection, PgHierarchyStore, PgKnowledgeStore, PgMemoryService,
-    PgProcedureStore, PgVectorIndex, schema,
+    PgBeliefStore, PgCodeBindingRepository, PgConnection, PgHierarchyStore, PgKnowledgeStore,
+    PgMemoryService, PgProcedureStore, PgVectorIndex, schema,
 };
 
 use query::PgKnowledgeQuery;
@@ -127,6 +127,35 @@ pub fn open(config: &EngramConfig) -> CoreResult<EngramProvider> {
     // fail on `knowledge_query not wired` even though the cells are healthy.
     // (Constructed above, before the bound recall.)
 
+    // Bound code authority (TASK-019): the neutral binding coordinator over
+    // the REAL pgvector binding cell + the adapter-owned retained snapshot
+    // reader over `<storage>/retained` — the same required neutral
+    // binding/graph/source/reset handles the SQLite recipe injects. Graph
+    // handles were wired above (`graph`, `knowledge_query`, the recall's
+    // graph lane); the reset seam rides the coordinator's durable
+    // repository ports (`preview_reset`/`journal_reset`; the exact-preview
+    // implementation lands with TASK-023/TASK-024).
+    let code_coordinator = Arc::new(
+        engram_integration::code_binding::CodeBindingCoordinator::new(
+            Arc::new(PgCodeBindingRepository::new(mk_conn()?)?)
+                as Arc<dyn engram_knowledge::CodeBindingRepository>,
+            Arc::new(engram_integration::code_binding::RecipeDefaultAuthorizer),
+            Vec::new(),
+        ),
+    );
+    let code_source: Arc<dyn engram_knowledge::RetainedSourceReader> =
+        Arc::new(engram_ingest::git_source::RetainedSnapshotReader::new(
+            config.storage_path.join("retained"),
+        ));
+    // Optional absent lanes stay honestly unavailable (plan matrix: "A
+    // backend without a lane must report that lane unavailable"): the
+    // lexical/hybrid-composition lane is a documented pgvector gap
+    // (tsvector lexical is not wired), and vectors follow the runtime
+    // kill-switch below.
+    let hybrid_search_state = CapabilityState::Unsupported {
+        reason: CapabilityReason::UnsupportedStoreFamily,
+    };
+
     let report = CapabilityReport::builder()
         .memory(CapabilityState::Supported)
         .knowledge(CapabilityState::Supported)
@@ -143,6 +172,10 @@ pub fn open(config: &EngramConfig) -> CoreResult<EngramProvider> {
             }
         })
         .unified_recall(CapabilityState::Supported)
+        .hybrid_search(hybrid_search_state)
+        .code_binding(CapabilityState::Supported)
+        .code_source(CapabilityState::Supported)
+        .code_reset(CapabilityState::Supported)
         .build();
 
     let mut provider_builder = EngramProviderBuilder::new(report)
@@ -160,7 +193,9 @@ pub fn open(config: &EngramConfig) -> CoreResult<EngramProvider> {
     if let Some(embedder) = embedding_provider {
         provider_builder = provider_builder.embedding_provider(embedder);
     }
-    let provider = provider_builder;
+    let provider = provider_builder
+        .code_bindings(code_coordinator)
+        .code_source(code_source);
 
     Ok(provider.build())
 }

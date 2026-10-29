@@ -915,6 +915,7 @@ dependencies = [
  "chrono",
  "engram-belief",
  "engram-domain",
+ "engram-ingest",
  "engram-integration",
  "engram-knowledge",
  "engram-memory",
@@ -931,8 +932,12 @@ dependencies = [
 name = "engram-backend-sqlite"
 version = "0.1.0"
 dependencies = [
+ "engram-domain",
  "engram-integration",
+ "engram-knowledge",
  "engram-runtime",
+ "futures",
+ "tempfile",
 ]
 
 [[package]]

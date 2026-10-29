@@ -18,6 +18,7 @@ engram-belief = { path = "../../core/belief", version = "0.1.0" }
 engram-memory = { path = "../../core/memory", version = "0.1.0" }
 engram-retrieval = { path = "../../core/retrieval", version = "0.1.0" }
 engram-knowledge = { path = "../../core/knowledge", version = "0.1.0" }
+engram-ingest = { path = "../../adapters/ingest", version = "0.1.0" }
 
 [features]
 # PS2: the vector recall lane (query embedding via FastEmbed + pgvector

@@ -210,16 +210,37 @@ impl AuthorizedKnowledgeQuery {
                 reason: "maintenance authorization requires explicit target ids".into(),
             });
         }
-        let _anchor = self.authorize_caller(actor, scope).await?;
-        let view = self.coordinator.eligibility_view(scope, None).await?;
-        let mut authorized = Vec::with_capacity(requested.len());
-        for id in requested {
-            if !view.is_code_record(id) || !view.allows(id, true) {
-                return Err(foreign_target(&[id.clone()]));
-            }
-            authorized.push(id.clone());
-        }
-        Ok(authorized)
+        let anchor = self.authorize_caller(actor, scope).await?;
+        let requested = requested.to_vec();
+        let coordinator = Arc::clone(&self.coordinator);
+        let view_coordinator = Arc::clone(&coordinator);
+        // Return an authority token only from a pinned view.  A maintenance
+        // caller must consume this result before the same consistent-read
+        // window closes; a publication race retries or denies instead of
+        // handing out IDs selected under an older epoch.
+        coordinator
+            .consistent_read(
+                actor,
+                scope,
+                &anchor,
+                AUTHORIZED_QUERY_WINDOW,
+                move |_lease| {
+                    let coordinator = Arc::clone(&view_coordinator);
+                    let requested = requested.clone();
+                    async move {
+                        let view = coordinator.eligibility_view(scope, None).await?;
+                        let mut authorized = Vec::with_capacity(requested.len());
+                        for id in &requested {
+                            if !view.is_code_record(id) || !view.allows(id, true) {
+                                return Err(foreign_target(&[id.clone()]));
+                            }
+                            authorized.push(id.clone());
+                        }
+                        Ok(authorized)
+                    }
+                },
+            )
+            .await
     }
 
     /// Entities visible to `scope`, with code-derived entities constrained to

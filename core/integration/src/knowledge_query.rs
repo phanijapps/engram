@@ -16,7 +16,6 @@ use engram_domain::{
     Scope,
 };
 use engram_runtime::{CoreError, CoreResult};
-use std::future::Future;
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -95,10 +94,27 @@ pub trait KnowledgeQuery: Send + Sync {
 /// records the authorizing caller, scope, targets and the authorized view's
 /// epoch. Possession alone authorizes nothing — every use revalidates.
 #[derive(Clone, Debug)]
+pub struct MaintenanceTarget {
+    /// The canonical scope/repository/generation association selected under the grant view.
+    scope: Scope,
+    repo_id: engram_domain::RepoId,
+    generation_id: String,
+    record_id: String,
+}
+
+/// Typed owning-store maintenance operation.
+///
+/// Production callers cannot supply arbitrary callbacks: retirement is the sole
+/// supported operation and executes inside the binding store serialization domain.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum MaintenanceOperation {
+    RetireLineageTargets,
+}
+
 pub struct MaintenanceGrant {
     scope: Scope,
     actor_id: String,
-    targets: Vec<String>,
+    targets: Vec<MaintenanceTarget>,
     epoch: u64,
     /// Per-repository BINDING epochs captured at authorization — the CAS
     /// values the owned retirement fence checks (corrective r4, canonical
@@ -108,8 +124,11 @@ pub struct MaintenanceGrant {
 
 impl MaintenanceGrant {
     /// The authorized maintenance targets (pinned at authorization).
-    pub fn targets(&self) -> &[String] {
-        &self.targets
+    pub fn targets(&self) -> Vec<String> {
+        self.targets
+            .iter()
+            .map(|target| target.record_id.clone())
+            .collect()
     }
 
     /// The eligibility epoch the grant was authorized against.
@@ -372,10 +391,26 @@ impl AuthorizedKnowledgeQuery {
                             };
                             binding_epochs.push((repo, binding_record.epoch));
                         }
+                        let lineage = coordinator.store().target_lineage(&scope).await?;
+                        let targets = authorized
+                            .iter()
+                            .map(|record_id| {
+                                let entry = lineage
+                                    .iter()
+                                    .find(|entry| entry.record_id == *record_id && !entry.retired)
+                                    .ok_or_else(|| foreign_target(&[record_id.clone()]))?;
+                                Ok(MaintenanceTarget {
+                                    scope: scope.clone(),
+                                    repo_id: engram_domain::RepoId(entry.repo_id.clone()),
+                                    generation_id: entry.generation_id.clone(),
+                                    record_id: record_id.clone(),
+                                })
+                            })
+                            .collect::<CoreResult<Vec<_>>>()?;
                         Ok(MaintenanceGrant {
                             scope: scope.clone(),
                             actor_id,
-                            targets: authorized,
+                            targets,
                             epoch: eligibility.epoch,
                             binding_epochs,
                         })
@@ -385,28 +420,21 @@ impl AuthorizedKnowledgeQuery {
             .await
     }
 
-    /// USE of a maintenance grant: revalidates the grant's pinned view
-    /// (caller identity, scope, epoch, target eligibility) under a fresh
-    /// consistent-read window and only THEN performs the owned mutation.
-    /// A publication between grant and use denies with `GenerationChanged`
-    /// BEFORE the mutation runs; a publication during validation retries
-    /// once (the coordinator's window) and then denies. This is not a
-    /// cross-store ACID claim — the barrier is validated-before-mutation.
+    /// Executes a typed owning-store operation after revalidating its pinned
+    /// scope, repository/generation associations, caller, and binding epochs.
+    /// The store performs retirement and epoch comparison in one transaction.
     #[allow(clippy::double_must_use)]
-    pub async fn use_maintenance<T, F, Fut>(
+    pub async fn use_maintenance(
         &self,
         actor: &engram_domain::Actor,
         grant: &MaintenanceGrant,
-        mutation: F,
-    ) -> CoreResult<T>
-    where
-        F: FnOnce(Vec<String>) -> Fut,
-        Fut: Future<Output = CoreResult<T>>,
-    {
+        operation: MaintenanceOperation,
+    ) -> CoreResult<()> {
         if grant.actor_id != actor.id.to_string() {
             return Err(CoreError::InvalidRequest {
-                reason: "maintenance grant caller mismatch: a grant is bound to its                          authorizing caller"
-                    .into(),
+                reason:
+                    "maintenance grant caller mismatch: a grant is bound to its authorizing caller"
+                        .into(),
             });
         }
         let anchor = self.authorize_caller(actor, &grant.scope).await?;
@@ -414,45 +442,33 @@ impl AuthorizedKnowledgeQuery {
         let targets = grant.targets.clone();
         let coordinator = Arc::clone(&self.coordinator);
         let view_coordinator = Arc::clone(&coordinator);
-        coordinator
-            .consistent_read(
-                actor,
-                &grant.scope,
-                &anchor,
-                AUTHORIZED_QUERY_WINDOW,
-                |eligibility| {
-                    let coordinator = Arc::clone(&view_coordinator);
-                    let targets = targets.clone();
-                    let scope = grant.scope.clone();
-                    async move {
-                        if eligibility.epoch != epoch {
-                            return Err(CoreError::Conflict {
-                                reason: "GenerationChanged: maintenance grant is stale —                                          re-authorize against the current view"
-                                    .into(),
-                            });
-                        }
-                        let view = coordinator.eligibility_view(&scope, None).await?;
-                        for id in &targets {
-                            if !view.is_code_record(id) || !view.allows(id, true) {
-                                return Err(foreign_target(&[id.clone()]));
-                            }
-                        }
-                        Ok(())
+        coordinator.consistent_read(actor, &grant.scope, &anchor, AUTHORIZED_QUERY_WINDOW, |eligibility| {
+            let coordinator = Arc::clone(&view_coordinator);
+            let targets = targets.clone();
+            let scope = grant.scope.clone();
+            async move {
+                if eligibility.epoch != epoch {
+                    return Err(CoreError::Conflict { reason: "GenerationChanged: maintenance grant is stale — re-authorize against the current view".into() });
+                }
+                let view = coordinator.eligibility_view(&scope, None).await?;
+                let lineage = coordinator.store().target_lineage(&scope).await?;
+                for target in &targets {
+                    if target.scope != scope || !view.allows(&target.record_id, true)
+                        || !lineage.iter().any(|entry| !entry.retired && entry.record_id == target.record_id && entry.repo_id == target.repo_id.0 && entry.generation_id == target.generation_id) {
+                        return Err(foreign_target(&[target.record_id.clone()]));
                     }
-                },
-            )
-            .await?;
-        // The OWNED first side effect runs behind the epoch-CAS fence: the
-        // retirement and the authority comparison commit in ONE store
-        // transaction (canonical 3a), so a publication between validation
-        // and this point denies with GenerationChanged and NOTHING is
-        // retired. The caller's continuation (if any) observes the fenced
-        // result; it makes no cross-store ACID claim of its own.
-        let fence_epochs = grant.binding_epochs.clone();
-        coordinator
-            .retire_maintenance_targets(actor, &grant.scope, &fence_epochs, &grant.targets)
-            .await?;
-        mutation(grant.targets.clone()).await
+                }
+                Ok(())
+            }
+        }).await?;
+        match operation {
+            MaintenanceOperation::RetireLineageTargets => {
+                let ids = grant.targets();
+                coordinator
+                    .retire_maintenance_targets(actor, &grant.scope, &grant.binding_epochs, &ids)
+                    .await
+            }
+        }
     }
 
     /// Entities visible to `scope`, with code-derived entities constrained to

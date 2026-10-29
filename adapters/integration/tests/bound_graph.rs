@@ -1731,7 +1731,6 @@ mod task_016 {
     /// the pinned targets, and refuses a different caller.
     #[test]
     fn maintenance_use_barriers() {
-        use engram_integration::knowledge_query::AuthorizedKnowledgeQuery as _Seam;
         let dir = tempfile::tempdir().expect("tempdir");
         let (authorized, bindings) = gate_fixture(dir.path());
         let knowledge = {
@@ -1755,24 +1754,13 @@ mod task_016 {
             &["b-util".to_string()],
         ))
         .expect("grant authorizes");
-        assert_eq!(grant.targets(), &["b-util".to_string()]);
-        let executed = std::sync::Arc::new(std::sync::Mutex::new(Vec::<String>::new()));
-        let seen = executed.clone();
-        let used = block_on(
-            authorized.use_maintenance(&actor(), &grant, move |targets| {
-                let seen = seen.clone();
-                async move {
-                    seen.lock().expect("lock").push(format!("ran:{targets:?}"));
-                    Ok::<(), CoreError>(())
-                }
-            }),
-        );
+        assert_eq!(grant.targets(), vec!["b-util".to_string()]);
+        let used = block_on(authorized.use_maintenance(
+            &actor(),
+            &grant,
+            engram_integration::knowledge_query::MaintenanceOperation::RetireLineageTargets,
+        ));
         used.expect("valid grant use executes");
-        assert_eq!(
-            executed.lock().expect("lock").len(),
-            1,
-            "the owned mutation ran exactly once"
-        );
 
         // (2) Caller isolation: a DIFFERENT caller cannot use the grant.
         let other = Actor {
@@ -1781,12 +1769,11 @@ mod task_016 {
             display_name: None,
             metadata: None,
         };
-        let denied = block_on(
-            authorized.use_maintenance(&other, &grant, |targets| async move {
-                let _ = targets;
-                Ok::<(), CoreError>(())
-            }),
-        );
+        let denied = block_on(authorized.use_maintenance(
+            &other,
+            &grant,
+            engram_integration::knowledge_query::MaintenanceOperation::RetireLineageTargets,
+        ));
         assert!(
             matches!(&denied, Err(CoreError::InvalidRequest { reason }) if reason.contains("caller mismatch")),
             "a grant is bound to its authorizing caller: {denied:?}"
@@ -1812,25 +1799,14 @@ mod task_016 {
             Some("gen-b"),
             &["b-util-next"],
         );
-        let ran = std::sync::Arc::new(std::sync::Mutex::new(false));
-        let ran_flag = ran.clone();
-        let stale_use = block_on(
-            authorized.use_maintenance(&actor(), &stale, move |targets| {
-                let ran_flag = ran_flag.clone();
-                async move {
-                    *ran_flag.lock().expect("lock") = true;
-                    let _ = targets;
-                    Ok::<(), CoreError>(())
-                }
-            }),
-        );
+        let stale_use = block_on(authorized.use_maintenance(
+            &actor(),
+            &stale,
+            engram_integration::knowledge_query::MaintenanceOperation::RetireLineageTargets,
+        ));
         assert!(
             matches!(&stale_use, Err(CoreError::Conflict { reason }) if reason.contains("GenerationChanged")),
             "a publication after the grant denies the use: {stale_use:?}"
-        );
-        assert!(
-            !*ran.lock().expect("lock"),
-            "the owned mutation must NOT run for a stale grant"
         );
 
         // (4) The knowledge store target is untouched by the denied use.
@@ -1876,17 +1852,11 @@ mod task_016 {
         .expect("repo-a bound")
         .epoch;
 
-        let retired = std::sync::Arc::new(std::sync::Mutex::new(Vec::<String>::new()));
-        let seen = retired.clone();
-        block_on(
-            authorized.use_maintenance(&actor(), &grant, move |targets| {
-                let seen = seen.clone();
-                async move {
-                    seen.lock().expect("lock").push(format!("ran:{targets:?}"));
-                    Ok::<(), CoreError>(())
-                }
-            }),
-        )
+        block_on(authorized.use_maintenance(
+            &actor(),
+            &grant,
+            engram_integration::knowledge_query::MaintenanceOperation::RetireLineageTargets,
+        ))
         .expect("fenced use executes");
 
         // The owned side effect preserves immutable historical lineage and
@@ -1899,9 +1869,7 @@ mod task_016 {
         .expect("lineage after");
         assert!(
             after.iter().any(|entry| {
-                entry.record_id == "a-render"
-                    && entry.generation_id == "gen-a"
-                    && entry.retired
+                entry.record_id == "a-render" && entry.generation_id == "gen-a" && entry.retired
             }),
             "retirement is an additive ownership fact with historical generation intact: {after:?}"
         );
@@ -1917,11 +1885,6 @@ mod task_016 {
             binding_epoch_after,
             binding_epoch_before + 1,
             "the fence advanced the binding epoch exactly once"
-        );
-        assert_eq!(
-            retired.lock().expect("lock").len(),
-            1,
-            "the continuation ran exactly once, after the fence"
         );
     }
 
@@ -1953,25 +1916,14 @@ mod task_016 {
             &["a-render-next"],
         );
 
-        let ran = std::sync::Arc::new(std::sync::Mutex::new(false));
-        let ran_flag = ran.clone();
-        let denied = block_on(
-            authorized.use_maintenance(&actor(), &grant, move |targets| {
-                let ran_flag = ran_flag.clone();
-                async move {
-                    *ran_flag.lock().expect("lock") = true;
-                    let _ = targets;
-                    Ok::<(), CoreError>(())
-                }
-            }),
-        );
+        let denied = block_on(authorized.use_maintenance(
+            &actor(),
+            &grant,
+            engram_integration::knowledge_query::MaintenanceOperation::RetireLineageTargets,
+        ));
         assert!(
             matches!(&denied, Err(CoreError::Conflict { reason }) if reason.contains("GenerationChanged")),
             "stale authority denies before any side effect: {denied:?}"
-        );
-        assert!(
-            !*ran.lock().expect("lock"),
-            "the continuation must not run for stale authority"
         );
         // The OWNED target is untouched: the real lineage row still exists.
         let lineage = block_on(engram_knowledge::CodeBindingRepository::target_lineage(
@@ -2001,11 +1953,11 @@ mod task_016 {
         ))
         .expect("grant authorizes");
         let epoch_before = grant.binding_epochs()[0].1;
-        block_on(
-            authorized.use_maintenance(&actor(), &grant, |_targets| async {
-                Ok::<(), CoreError>(())
-            }),
-        )
+        block_on(authorized.use_maintenance(
+            &actor(),
+            &grant,
+            engram_integration::knowledge_query::MaintenanceOperation::RetireLineageTargets,
+        ))
         .expect("fenced retirement executes");
 
         // A publication attempt begun with the PRE-maintenance binding epoch

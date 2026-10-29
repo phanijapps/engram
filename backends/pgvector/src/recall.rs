@@ -110,6 +110,11 @@ pub(crate) struct PgUnifiedRecall {
     /// memories, beliefs) survive through canonical repository evidence —
     /// no target-kind proxy denies every chunk/entity wholesale.
     pub(crate) candidate_evidence: Option<Arc<dyn engram_retrieval::CandidateEvidenceResolver>>,
+    /// Graph entity+chunk lane over the engine-neutral `KnowledgeQuery` port
+    /// (corrective r4: the recipe carries ENTITY candidates too, so positive
+    /// ordinary entities are provable through the composed recall — the
+    /// SQLite recipe's graph lane mirrored at the same port boundary).
+    pub(crate) graph_lane: Option<Arc<dyn engram_retrieval::RetrievalIndex>>,
 }
 
 impl PgUnifiedRecall {
@@ -292,6 +297,14 @@ impl UnifiedRecall for PgUnifiedRecall {
             Err(e) => source_failures.push(lane("vector", e)),
         }
 
+        // Graph lane: entity + chunk candidates over the knowledge port.
+        if let Some(graph_lane) = &self.graph_lane {
+            match graph_lane.retrieve_candidates(&request).await {
+                Ok(graph_results) => candidates.extend(graph_results),
+                Err(e) => source_failures.push(lane("graph", e)),
+            }
+        }
+
         // Post-lane guard (task_013): authority resolution is itself a
         // degradable source.  A failed authority read must not abort ordinary
         // memory/belief recall, but it must deny code-capable chunk/entity
@@ -393,6 +406,153 @@ impl UnifiedRecall for PgUnifiedRecall {
             source_failures,
             created_at: now,
         })
+    }
+}
+
+/// Graph entity+chunk lane over the engine-neutral `KnowledgeQuery` port:
+/// token-rank entities by name and chunks by text (the SQLite recipe's graph
+/// lane mirrored; entities carry the graph-lane default policy shape).
+pub(crate) struct PgGraphLane {
+    query: Arc<dyn KnowledgeQuery>,
+    default_limit: u32,
+}
+
+impl PgGraphLane {
+    pub(crate) fn new(query: Arc<dyn KnowledgeQuery>) -> Self {
+        Self {
+            query,
+            default_limit: 20,
+        }
+    }
+}
+
+#[async_trait::async_trait]
+impl engram_retrieval::RetrievalIndex for PgGraphLane {
+    async fn retrieve_candidates(
+        &self,
+        request: &RetrievalRequest,
+    ) -> CoreResult<Vec<RetrievalResult>> {
+        let limit = request
+            .limit
+            .or_else(|| request.budget.as_ref().and_then(|budget| budget.max_items))
+            .unwrap_or(self.default_limit) as usize;
+        let entities = self.query.list_entities(&request.scope).await?;
+        let chunks = self.query.list_chunks(&request.scope).await?;
+        let tokens: Vec<String> = request
+            .query
+            .to_lowercase()
+            .split(|c: char| !c.is_alphanumeric())
+            .filter(|token| token.len() > 2)
+            .map(str::to_owned)
+            .collect();
+        let mut scored: Vec<(f32, RetrievalResult)> = Vec::new();
+        for entity in entities {
+            let hay = entity.name.to_lowercase();
+            let score: f32 = tokens
+                .iter()
+                .map(|token| {
+                    if hay == *token {
+                        3.0
+                    } else if hay.starts_with(token.as_str()) || hay.ends_with(token.as_str()) {
+                        2.0
+                    } else if hay.contains(token.as_str()) {
+                        1.0
+                    } else {
+                        0.0
+                    }
+                })
+                .sum();
+            if score <= 0.0 {
+                continue;
+            }
+            scored.push((
+                score,
+                RetrievalResult {
+                    id: format!("graph-entity-{}", entity.id),
+                    target_type: RetrievalTargetType::Entity,
+                    target_id: entity.id.to_string(),
+                    content: entity.name.clone(),
+                    score: RetrievalScore {
+                        total: score,
+                        relevance: Some(score),
+                        recency: None,
+                        confidence: None,
+                        cue_match: None,
+                        hierarchical_fit: None,
+                        policy_fit: Some(1.0),
+                    },
+                    provenance: entity.provenance.clone(),
+                    policy: graph_default_policy(),
+                    explanation: None,
+                    fusion_trace: None,
+                    metadata: entity.metadata.clone(),
+                },
+            ));
+        }
+        for chunk in chunks {
+            let hay = chunk.text.to_lowercase();
+            let score: f32 = tokens
+                .iter()
+                .map(|token| {
+                    if hay.contains(token.as_str()) {
+                        1.0
+                    } else {
+                        0.0
+                    }
+                })
+                .sum();
+            if score <= 0.0 {
+                continue;
+            }
+            let text: String = chunk.text.chars().take(2000).collect();
+            scored.push((
+                score,
+                RetrievalResult {
+                    id: format!("graph-chunk-{}", chunk.id),
+                    target_type: RetrievalTargetType::Chunk,
+                    target_id: chunk.id.to_string(),
+                    content: text,
+                    score: RetrievalScore {
+                        total: score,
+                        relevance: Some(score),
+                        recency: None,
+                        confidence: None,
+                        cue_match: None,
+                        hierarchical_fit: None,
+                        policy_fit: Some(1.0),
+                    },
+                    provenance: chunk.provenance.clone(),
+                    policy: chunk.policy.clone(),
+                    explanation: None,
+                    fusion_trace: None,
+                    metadata: chunk.metadata.clone(),
+                },
+            ));
+        }
+        scored.sort_by(|a, b| {
+            b.0.partial_cmp(&a.0)
+                .unwrap_or(std::cmp::Ordering::Equal)
+                .then_with(|| a.1.target_id.cmp(&b.1.target_id))
+        });
+        Ok(scored
+            .into_iter()
+            .take(limit)
+            .map(|(_, result)| result)
+            .collect())
+    }
+}
+
+/// Entities carry no canonical policy field; the graph-lane default policy
+/// shape (mirrors the SQLite lane stamp).
+fn graph_default_policy() -> engram_domain::Policy {
+    use engram_domain::{AllowedUse, DeleteMode, Retention, Sensitivity, Visibility};
+    engram_domain::Policy {
+        visibility: Visibility::Workspace,
+        retention: Retention::Durable,
+        sensitivity: Some(Sensitivity::Low),
+        allowed_uses: vec![AllowedUse::Retrieval],
+        expires_at: None,
+        delete_mode: Some(DeleteMode::Tombstone),
     }
 }
 
@@ -609,6 +769,184 @@ mod authority_tests {
         )
     }
 
+    /// Corrective r4 (canonical 2, direct cell proof): the Pg
+    /// `validate_historical_read_lease` contract — presented-live lease
+    /// validates; released, expired, foreign-scope, wrong-generation,
+    /// wrong-repo and record-mismatched leases all deny. Generation
+    /// ownership alone is not this proof. NOT_RUN until parent helper
+    /// clearance (compile-only in this preparation phase).
+    #[test]
+    #[ignore = "requires ENGRAM_TEST_PG_URL against the approved marked disposable fixture"]
+    fn pg_historical_lease_validator_direct_cases() {
+        use engram_knowledge::CodeEligibility;
+        let run = scope_run();
+        let conn = PgConnection::connect(&url()).expect("connect disposable fixture");
+        marker_assert(&conn);
+        conn.block_on(async {
+            conn.client
+                .batch_execute(&engram_store_pgvector::schema::schema_sql(2))
+                .await
+                .expect("apply schema")
+        });
+        let test_scope = scope(&run);
+        let repo = engram_domain::RepoId("repo-lease".to_string());
+        let bindings = PgCodeBindingRepository::new(PgConnection::connect(&url()).expect("b"))
+            .expect("binding repository");
+        block_on(bindings.bind(engram_domain::CodeBinding {
+            scope: test_scope.clone(),
+            repo_id: repo.clone(),
+            branch_ref: "refs/heads/main".to_string(),
+            version: 1,
+            active_generation: None,
+            epoch: 0,
+        }))
+        .expect("bind");
+        let eligibility = CodeEligibility {
+            scope: test_scope.clone(),
+            epoch: 1,
+            generations: vec!["gen-old".to_string(), "gen-cur".to_string()],
+            repository_ids: vec![repo.0.clone()],
+        };
+        let lease = |eligibility: CodeEligibility,
+                     expires: engram_domain::Timestamp|
+         -> engram_knowledge::CodeReadLease {
+            engram_knowledge::CodeReadLease {
+                id: format!("lease-{run}-{}", eligibility.epoch),
+                eligibility,
+                fencing_token: 1,
+                expires_at: expires,
+            }
+        };
+        let now = chrono::Utc::now();
+        let live = block_on(engram_knowledge::CodeReadLeases::acquire_read_lease(
+            &bindings,
+            lease(eligibility.clone(), now + chrono::Duration::minutes(10)),
+            now,
+        ))
+        .expect("acquire live lease");
+
+        // (1) Presented LIVE lease: validates for the pinned generation.
+        assert!(
+            block_on(
+                engram_knowledge::CodeReadLeases::validate_historical_read_lease(
+                    &bindings,
+                    &live,
+                    &test_scope,
+                    &repo.0,
+                    "gen-old",
+                    chrono::Utc::now(),
+                )
+            )
+            .expect("validate")
+        );
+
+        // (2) RELEASED lease denies.
+        block_on(engram_knowledge::CodeReadLeases::release_read_lease(
+            &bindings, &live,
+        ))
+        .expect("release");
+        assert!(
+            !block_on(
+                engram_knowledge::CodeReadLeases::validate_historical_read_lease(
+                    &bindings,
+                    &live,
+                    &test_scope,
+                    &repo.0,
+                    "gen-old",
+                    chrono::Utc::now(),
+                )
+            )
+            .expect("validate released")
+        );
+
+        // (3) EXPIRED lease denies.
+        let short = block_on(engram_knowledge::CodeReadLeases::acquire_read_lease(
+            &bindings,
+            lease(eligibility.clone(), now + chrono::Duration::milliseconds(1)),
+            now,
+        ))
+        .expect("acquire short lease");
+        std::thread::sleep(std::time::Duration::from_millis(50));
+        assert!(
+            !block_on(
+                engram_knowledge::CodeReadLeases::validate_historical_read_lease(
+                    &bindings,
+                    &short,
+                    &test_scope,
+                    &repo.0,
+                    "gen-old",
+                    chrono::Utc::now(),
+                )
+            )
+            .expect("validate expired")
+        );
+
+        // (4) Canonical-equality: a MODIFIED copy of a live durable lease
+        // (record mismatch) denies.
+        let again = block_on(engram_knowledge::CodeReadLeases::acquire_read_lease(
+            &bindings,
+            lease(eligibility.clone(), now + chrono::Duration::minutes(10)),
+            now,
+        ))
+        .expect("acquire again");
+        let mut tampered = again.clone();
+        tampered.expires_at += chrono::Duration::minutes(5);
+        assert!(
+            !block_on(
+                engram_knowledge::CodeReadLeases::validate_historical_read_lease(
+                    &bindings,
+                    &tampered,
+                    &test_scope,
+                    &repo.0,
+                    "gen-old",
+                    chrono::Utc::now(),
+                )
+            )
+            .expect("validate tampered")
+        );
+
+        // (5) Foreign scope / wrong generation / wrong repo deny.
+        assert!(
+            !block_on(
+                engram_knowledge::CodeReadLeases::validate_historical_read_lease(
+                    &bindings,
+                    &again,
+                    &scope(&format!("{run}-foreign")),
+                    &repo.0,
+                    "gen-old",
+                    chrono::Utc::now(),
+                )
+            )
+            .expect("validate foreign scope")
+        );
+        assert!(
+            !block_on(
+                engram_knowledge::CodeReadLeases::validate_historical_read_lease(
+                    &bindings,
+                    &again,
+                    &test_scope,
+                    &repo.0,
+                    "gen-never",
+                    chrono::Utc::now(),
+                )
+            )
+            .expect("validate wrong generation")
+        );
+        assert!(
+            !block_on(
+                engram_knowledge::CodeReadLeases::validate_historical_read_lease(
+                    &bindings,
+                    &again,
+                    &test_scope,
+                    "repo-other",
+                    "gen-old",
+                    chrono::Utc::now(),
+                )
+            )
+            .expect("validate wrong repo")
+        );
+    }
+
     /// The authority-error degradation proof over the real Pg recipe.
     #[test]
     #[ignore = "requires ENGRAM_TEST_PG_URL against the approved marked disposable fixture"]
@@ -733,6 +1071,18 @@ mod authority_tests {
             ),
         )
         .expect("put symbol entity");
+        block_on(
+            <PgKnowledgeStore as engram_knowledge::KnowledgeRepository>::put_entity(
+                &knowledge,
+                entity(
+                    &run,
+                    &format!("{run}-entity-plain"),
+                    "parsePlain",
+                    EntityKind::Concept,
+                ),
+            ),
+        )
+        .expect("put positive ordinary entity");
         // Real durable lineage: the CONCEPT entity is code-owned by lineage.
         block_on(engram_knowledge::CodeBindingRepository::put_lineage(
             &*ownership,
@@ -862,6 +1212,11 @@ mod authority_tests {
             embedder: Some(Arc::new(FixedEmbedder)),
             code_eligibility: Some(erroring),
             knowledge_query: None,
+            graph_lane: Some(Arc::new(super::PgGraphLane::new(Arc::new(
+                crate::query::PgKnowledgeQuery::new(
+                    PgConnection::connect(&url()).expect("graph lane"),
+                ),
+            )))),
             candidate_evidence: Some(Arc::new(
                 engram_integration::candidate_evidence::RepositoryCandidateEvidence::new(
                     memory.clone() as Arc<dyn engram_memory::MemoryRepository>,
@@ -884,8 +1239,11 @@ mod authority_tests {
             budget: None,
             include_explanations: None,
         };
-        let payload = block_on(engram_integration::UnifiedRecall::recall(&recall, request))
-            .expect("degraded recall composes");
+        let payload = block_on(engram_integration::UnifiedRecall::recall(
+            &recall,
+            request.clone(),
+        ))
+        .expect("degraded recall composes");
         let ids: Vec<String> = payload.items.iter().map(|i| i.target_id.clone()).collect();
         assert!(
             ids.contains(&format!("{run}-memory-ordinary")),
@@ -899,6 +1257,22 @@ mod authority_tests {
             !ids.contains(&format!("{run}-memory-code")),
             "the code-derived memory is denied through canonical evidence: {ids:?}"
         );
+        // Corrective r4 (four kinds through the REAL composed recipe,
+        // authority-error path): positive ordinary Chunk AND Entity survive
+        // alongside Memory/Belief; the code counterparts deny.
+        assert!(
+            ids.contains(&format!("{run}-chunk-doc")),
+            "positive ordinary CHUNK survives through the composed recipe: {ids:?}"
+        );
+        assert!(
+            ids.contains(&format!("{run}-entity-plain")),
+            "positive ordinary ENTITY survives through the composed recipe: {ids:?}"
+        );
+        assert!(
+            !ids.contains(&format!("{run}-chunk-code"))
+                && !ids.contains(&format!("{run}-entity-symbol")),
+            "code chunk/entity deny through the composed recipe: {ids:?}"
+        );
         let failures: Vec<String> = payload
             .source_failures
             .iter()
@@ -911,6 +1285,57 @@ mod authority_tests {
         assert!(
             failures.contains(&"vector".to_string()),
             "the failing vector lane degrades: {failures:?}"
+        );
+
+        // Corrective r4 (canonical 6c): a SUCCESSFUL view with evidence
+        // validates code DEPENDENCIES — the stale-derived memory denies
+        // while ALL FOUR ordinary kinds keep flowing through the recipe.
+        let working: Arc<dyn CodeEligibilityResolver> = Arc::new(
+            engram_integration::code_binding::RepositoryEligibilitySource::new(ownership.clone()),
+        );
+        let working_recall = PgUnifiedRecall {
+            memory: memory.clone(),
+            beliefs: beliefs.clone(),
+            knowledge: knowledge.clone(),
+            vectors: None,
+            embedder: None,
+            code_eligibility: Some(working),
+            knowledge_query: None,
+            graph_lane: Some(Arc::new(super::PgGraphLane::new(Arc::new(
+                crate::query::PgKnowledgeQuery::new(
+                    PgConnection::connect(&url()).expect("working graph lane"),
+                ),
+            )))),
+            candidate_evidence: Some(Arc::new(
+                engram_integration::candidate_evidence::RepositoryCandidateEvidence::new(
+                    memory.clone() as Arc<dyn engram_memory::MemoryRepository>,
+                    beliefs.clone() as Arc<dyn engram_belief::BeliefRepository>,
+                    knowledge.clone() as Arc<dyn engram_knowledge::KnowledgeRepository>,
+                    memory.retrieval_authorizer(),
+                    Some(ownership.clone() as Arc<dyn engram_knowledge::CodeBindingRepository>),
+                ),
+            )),
+        };
+        let working_payload = block_on(engram_integration::UnifiedRecall::recall(
+            &working_recall,
+            request,
+        ))
+        .expect("successful-view recall composes");
+        let working_ids: Vec<String> = working_payload
+            .items
+            .iter()
+            .map(|i| i.target_id.clone())
+            .collect();
+        assert!(
+            working_ids.contains(&format!("{run}-chunk-doc"))
+                && working_ids.contains(&format!("{run}-entity-plain"))
+                && working_ids.contains(&format!("{run}-memory-ordinary"))
+                && working_ids.contains(&format!("{run}-belief-ordinary")),
+            "ALL FOUR ordinary kinds flow on the successful path: {working_ids:?}"
+        );
+        assert!(
+            !working_ids.contains(&format!("{run}-memory-code")),
+            "the stale-code-derived memory denies on the successful path: {working_ids:?}"
         );
 
         // The same owned seam classifies every category over the REAL Pg

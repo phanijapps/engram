@@ -839,6 +839,111 @@ mod task_013 {
         let mut concept = symbol_entity("entity-concept", "parseConcept");
         concept.kind = EntityKind::Concept;
         block_on(fixture.knowledge.put_entity(concept)).expect("put concept entity");
+        // Corrective r4 (four kinds through the composed recall): an
+        // ORDINARY belief (the belief lane is live-subject 0-or-1 per query),
+        // a code-DERIVED memory and an UNKNOWN-evidence memory as the
+        // counterparts.
+        {
+            let subject = engram_domain::BeliefSubject {
+                key: "parse".to_string(),
+                entity_ref: None,
+                concept_ref: None,
+                aliases: Vec::new(),
+            };
+            let ordinary_belief = engram_domain::Belief {
+                id: engram_domain::BeliefId::from("belief-ordinary-recall"),
+                scope: scope(),
+                subject,
+                content: "parse ordinary belief".to_string(),
+                status: engram_domain::BeliefStatus::Active,
+                confidence: 0.9,
+                sources: Vec::new(),
+                valid_from: None,
+                valid_until: None,
+                superseded_by: None,
+                stale: None,
+                synthesizer: None,
+                reasoning: None,
+                embedding_refs: Vec::new(),
+                policy: policy(),
+                provenance: provenance(),
+                created_at: chrono::Utc::now(),
+                updated_at: None,
+                metadata: None,
+            };
+            use engram_belief::BeliefRepository as _;
+            block_on(fixture.beliefs.put_belief(ordinary_belief)).expect("put ordinary belief");
+        }
+        let stale_derived = {
+            let mut deps = provenance();
+            deps.evidence = vec![engram_domain::EvidenceRef {
+                target_type: engram_domain::EvidenceTargetType::Chunk,
+                target_id: Some("chunk-stale".to_string()),
+                uri: None,
+                quote: None,
+                location: None,
+            }];
+            block_on(
+                fixture
+                    .memory
+                    .write_memory(engram_domain::WriteMemoryRequest {
+                        kind: MemoryKind::Observation,
+                        content: engram_domain::MemoryContent {
+                            text: "parse derived from stale code".to_string(),
+                            summary: None,
+                            entities: Vec::new(),
+                            language: None,
+                            format: None,
+                            structured: None,
+                            hash: None,
+                        },
+                        scope: scope(),
+                        requester: requester(),
+                        provenance: deps,
+                        policy: policy(),
+                        links: Vec::new(),
+                        verdict: None,
+                        idempotency_key: None,
+                    }),
+            )
+            .expect("write stale-derived memory")
+            .record
+        };
+        let unknown_evidence = {
+            let mut deps = provenance();
+            deps.evidence = vec![engram_domain::EvidenceRef {
+                target_type: engram_domain::EvidenceTargetType::Memory,
+                target_id: Some("memory-never-written".to_string()),
+                uri: None,
+                quote: None,
+                location: None,
+            }];
+            block_on(
+                fixture
+                    .memory
+                    .write_memory(engram_domain::WriteMemoryRequest {
+                        kind: MemoryKind::Observation,
+                        content: engram_domain::MemoryContent {
+                            text: "parse unknown evidence".to_string(),
+                            summary: None,
+                            entities: Vec::new(),
+                            language: None,
+                            format: None,
+                            structured: None,
+                            hash: None,
+                        },
+                        scope: scope(),
+                        requester: requester(),
+                        provenance: deps,
+                        policy: policy(),
+                        links: Vec::new(),
+                        verdict: None,
+                        idempotency_key: None,
+                    }),
+            )
+            .expect("write unknown-evidence memory")
+            .record
+        };
 
         // REAL bound vector lane whose authority read fails: the lane itself
         // degrades as a source failure (it never widens to an unconstrained
@@ -871,6 +976,10 @@ mod task_013 {
             "the positively authorized ORDINARY document chunk must survive the authority failure: {ids:?}"
         );
         assert!(
+            ids.iter().any(|id| id == "belief-ordinary-recall"),
+            "the positively authorized ORDINARY belief must survive through the belief lane: {ids:?}"
+        );
+        assert!(
             ids.iter().any(|id| id == "entity-concept"),
             "the positively authorized ORDINARY concept entity must survive: {ids:?}"
         );
@@ -886,6 +995,14 @@ mod task_013 {
                 || id == "chunk-eligible"
                 || id == "entity-published"),
             "code candidates are denied while the authority is unavailable (fail closed): {ids:?}"
+        );
+        assert!(
+            !ids.iter().any(|id| id == stale_derived.id.as_str()),
+            "the stale-code-DERIVED memory denies through canonical evidence: {ids:?}"
+        );
+        assert!(
+            !ids.iter().any(|id| id == unknown_evidence.id.as_str()),
+            "an UNKNOWN-evidence memory denies (never ordinary): {ids:?}"
         );
         assert!(
             payload

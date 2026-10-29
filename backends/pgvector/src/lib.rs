@@ -8,8 +8,8 @@
 //! `integration → backends` dependency would be a cycle, so the recipe — not
 //! `EngramProvider::open` — is the entry point).
 
-mod query;
-mod recall;
+pub(crate) mod query;
+pub(crate) mod recall;
 
 use std::sync::Arc;
 
@@ -103,6 +103,7 @@ pub fn open(config: &EngramConfig) -> CoreResult<EngramProvider> {
         embedder: embedding_provider.clone(),
         code_eligibility: None,
         knowledge_query: Some(knowledge_query.clone()),
+        graph_lane: Some(Arc::new(recall::PgGraphLane::new(knowledge_query.clone()))),
         // Canonical repository evidence for degraded code-authority handling:
         // shares the memory service's OWNING authorizer. The durable code
         // ownership reader stays unconfigured here — full default code-catalog

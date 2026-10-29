@@ -46,6 +46,7 @@ impl Collector for DistinctTargetCollector {
         Ok(DistinctTargetSegmentCollector {
             store,
             target_field: self.target_field,
+            limit: self.limit,
             best: HashMap::new(),
         })
     }
@@ -65,6 +66,7 @@ impl Collector for DistinctTargetCollector {
                 if score > *entry {
                     *entry = score;
                 }
+                trim_to_limit(&mut merged, self.limit);
             }
         }
         Ok(merged)
@@ -89,6 +91,7 @@ impl tantivy::collector::SegmentCollector for DistinctTargetSegmentCollector {
         if score > *entry {
             *entry = score;
         }
+        trim_to_limit(&mut self.best, self.limit);
     }
 
     fn harvest(self) -> Self::Fruit {
@@ -98,7 +101,29 @@ impl tantivy::collector::SegmentCollector for DistinctTargetSegmentCollector {
 
 pub(crate) struct DistinctTargetSegmentCollector {
     store: tantivy::store::StoreReader,
-    #[allow(dead_code)]
     target_field: tantivy::schema::Field,
+    limit: usize,
     best: TargetBestScores,
+}
+
+/// Retain only the best distinct targets as documents arrive. Tie-breaking is
+/// deterministic, so every collector stage has a bounded target map rather
+/// than collecting every matching contributor before truncation.
+fn trim_to_limit(scores: &mut TargetBestScores, limit: usize) {
+    while scores.len() > limit {
+        let worst = scores
+            .iter()
+            .min_by(|(left_id, left_score), (right_id, right_score)| {
+                left_score
+                    .partial_cmp(right_score)
+                    .unwrap_or(std::cmp::Ordering::Equal)
+                    .then_with(|| right_id.cmp(left_id))
+            })
+            .map(|(id, _)| id.clone());
+        if let Some(worst) = worst {
+            scores.remove(&worst);
+        } else {
+            break;
+        }
+    }
 }

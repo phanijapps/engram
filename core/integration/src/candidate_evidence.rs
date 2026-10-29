@@ -65,13 +65,17 @@ const MAX_DEPENDENCY_REFERENCES: usize = 1024;
 /// BEFORE every clone, insertion or enqueue (work package A3).
 const MAX_DEPENDENCY_BYTES: usize = 128 * 1024;
 
-/// Instrumented walk counters (work package A3): reference examinations,
+/// Instrumented walk counters (work package A3 + review r5 finding 5):
+/// reference examinations, ADMISSION-scan work (frame construction scans
+/// — bounded by the remaining budgets, never a full hostile-array preflight),
 /// keyed ownership lookups, frame enqueues, queue/visited maxima, byte
-/// accounting, terminal exhaustions and cycle back-edges. Bounds are proven
-/// against these counters, never against elapsed time.
+/// accounting (ALL charges: yielded references, visited keys and code-
+/// dependency ids), terminal exhaustions and cycle back-edges. Bounds are
+/// proven against these counters, never against elapsed time.
 #[derive(Default, Debug)]
 pub struct WalkCounters {
     references_examined: AtomicUsize,
+    admission_examined: AtomicUsize,
     ownership_lookups: AtomicUsize,
     frames_enqueued: AtomicUsize,
     max_queue_depth: AtomicUsize,
@@ -85,6 +89,11 @@ pub struct WalkCounters {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub struct WalkStats {
     pub references_examined: usize,
+    /// References/derivation entries examined during ADMISSION scanning
+    /// (frame construction). This is bounded work performed BEFORE enqueue
+    /// — the walk no longer pre-scans a whole provenance/refs array before
+    /// the budget can reject it (finding 5).
+    pub admission_examined: usize,
     pub ownership_lookups: usize,
     pub frames_enqueued: usize,
     pub max_queue_depth: usize,
@@ -100,6 +109,7 @@ impl WalkCounters {
     pub fn snapshot(&self) -> WalkStats {
         WalkStats {
             references_examined: self.references_examined.load(Ordering::Relaxed),
+            admission_examined: self.admission_examined.load(Ordering::Relaxed),
             ownership_lookups: self.ownership_lookups.load(Ordering::Relaxed),
             frames_enqueued: self.frames_enqueued.load(Ordering::Relaxed),
             max_queue_depth: self.max_queue_depth.load(Ordering::Relaxed),
@@ -114,6 +124,7 @@ impl WalkCounters {
     pub fn reset(&self) {
         for counter in [
             &self.references_examined,
+            &self.admission_examined,
             &self.ownership_lookups,
             &self.frames_enqueued,
             &self.max_queue_depth,
@@ -281,59 +292,115 @@ fn belief_source_frame_ref(source: &BeliefSource) -> FrameRef<'_> {
     }
 }
 impl Frame {
-    /// Builds a provenance frame from MOVED provenance, precomputing the
-    /// work/byte footprint for the enqueue-time budget check.
-    fn provenance(provenance: engram_domain::Provenance, depth: usize) -> Self {
-        let remaining = provenance.evidence.len()
-            + provenance
-                .derivations
-                .iter()
-                .map(|derivation| derivation.input_refs.len())
-                .sum::<usize>();
-        let remaining_bytes = provenance
-            .evidence
-            .iter()
-            .chain(
-                provenance
-                    .derivations
-                    .iter()
-                    .flat_map(|derivation| derivation.input_refs.iter()),
-            )
-            .map(ref_bytes)
-            .sum();
-        Self::Provenance {
+    /// Budget-aware admission fit (review r5, finding 5): a frame is
+    /// admissible only while its precomputed work/byte footprint fits the
+    /// REMAINING budgets. Constructors scan EARLY-TERMINATING — the first
+    /// item that cannot fit ends the scan, so a hostile wide or long-id
+    /// array is rejected after bounded admission work instead of a full
+    /// preflight traversal.
+    fn fits(state: &WalkState, work: usize, bytes: usize) -> bool {
+        state.work + work <= MAX_DEPENDENCY_REFERENCES
+            && state.bytes + bytes <= MAX_DEPENDENCY_BYTES
+    }
+
+    /// Builds a provenance frame from MOVED provenance with an
+    /// EARLY-TERMINATING admission scan (finding 5): evidence references,
+    /// then each derivation — whose STRUCTURAL entry is itself admission
+    /// work (an array of empty derivations cannot force an unbounded
+    /// preflight) — then its input refs. `None` means the frame cannot fit
+    /// the remaining budgets (terminal exhaustion for the caller).
+    fn provenance(
+        provenance: engram_domain::Provenance,
+        depth: usize,
+        state: &WalkState,
+        counters: &WalkCounters,
+    ) -> Option<Self> {
+        let mut remaining = 0usize;
+        let mut remaining_bytes = 0usize;
+        for reference in &provenance.evidence {
+            counters.admission_examined.fetch_add(1, Ordering::Relaxed);
+            remaining += 1;
+            remaining_bytes += ref_bytes(reference);
+            if !Self::fits(state, remaining, remaining_bytes) {
+                return None;
+            }
+        }
+        for derivation in &provenance.derivations {
+            counters.admission_examined.fetch_add(1, Ordering::Relaxed);
+            remaining += 1;
+            if !Self::fits(state, remaining, remaining_bytes) {
+                return None;
+            }
+            for reference in &derivation.input_refs {
+                counters.admission_examined.fetch_add(1, Ordering::Relaxed);
+                remaining += 1;
+                remaining_bytes += ref_bytes(reference);
+                if !Self::fits(state, remaining, remaining_bytes) {
+                    return None;
+                }
+            }
+        }
+        Some(Self::Provenance {
             provenance,
             index: 0,
             depth,
             remaining,
             remaining_bytes,
-        }
+        })
     }
 
-    /// Builds a typed-refs frame from MOVED refs.
-    fn refs(refs: Vec<EvidenceRef>, depth: usize) -> Self {
-        let remaining = refs.len();
-        let remaining_bytes = refs.iter().map(ref_bytes).sum();
-        Self::Refs {
+    /// Builds a typed-refs frame from MOVED refs with the same
+    /// early-terminating admission scan.
+    fn refs(
+        refs: Vec<EvidenceRef>,
+        depth: usize,
+        state: &WalkState,
+        counters: &WalkCounters,
+    ) -> Option<Self> {
+        let mut remaining = 0usize;
+        let mut remaining_bytes = 0usize;
+        for reference in &refs {
+            counters.admission_examined.fetch_add(1, Ordering::Relaxed);
+            remaining += 1;
+            remaining_bytes += ref_bytes(reference);
+            if !Self::fits(state, remaining, remaining_bytes) {
+                return None;
+            }
+        }
+        Some(Self::Refs {
             refs,
             index: 0,
             depth,
             remaining,
             remaining_bytes,
-        }
+        })
     }
 
-    /// Builds a typed belief-sources frame from MOVED sources.
-    fn belief_sources(sources: Vec<BeliefSource>, depth: usize) -> Self {
-        let remaining = sources.len();
-        let remaining_bytes = sources.iter().map(belief_source_bytes).sum();
-        Self::BeliefSources {
+    /// Builds a typed belief-sources frame from MOVED sources with the
+    /// same early-terminating admission scan.
+    fn belief_sources(
+        sources: Vec<BeliefSource>,
+        depth: usize,
+        state: &WalkState,
+        counters: &WalkCounters,
+    ) -> Option<Self> {
+        let mut remaining = 0usize;
+        let mut remaining_bytes = 0usize;
+        for source in &sources {
+            counters.admission_examined.fetch_add(1, Ordering::Relaxed);
+            remaining += 1;
+            remaining_bytes += belief_source_bytes(source);
+            if !Self::fits(state, remaining, remaining_bytes) {
+                return None;
+            }
+        }
+        Some(Self::BeliefSources {
             sources,
             index: 0,
             depth,
             remaining,
             remaining_bytes,
-        }
+        })
     }
 
     fn depth(&self) -> usize {
@@ -702,6 +769,25 @@ impl RepositoryCandidateEvidence {
         }
     }
 
+    /// Terminal ADMISSION exhaustion (finding 5 instrumentation): a frame
+    /// that cannot fit the remaining budgets ends the classification before
+    /// the walk starts; the exhaustion counter still attests it.
+    fn admission_exhausted(&self) -> EvidenceClassification {
+        self.counters
+            .budget_exhaustions
+            .fetch_add(1, Ordering::Relaxed);
+        EvidenceClassification::incomplete(CandidateEvidence::Unknown)
+    }
+
+    /// Records the walk's TOTAL byte charges (finding 5: ALL allocation
+    /// charges are instrumented — yielded references, visited keys and
+    /// code-dependency ids — not only yielded-reference copies).
+    fn account_bytes(&self, state: &WalkState) {
+        self.counters
+            .bytes_accounted
+            .fetch_add(state.bytes, Ordering::Relaxed);
+    }
+
     /// Enqueues one continuation frame against the DEPTH, REFERENCE and
     /// BYTE budgets BEFORE it enters the queue; `false` means terminal
     /// exhaustion.
@@ -749,6 +835,7 @@ impl RepositoryCandidateEvidence {
                 self.counters
                     .budget_exhaustions
                     .fetch_add(1, Ordering::Relaxed);
+                self.account_bytes(&state);
                 return Ok(state.exhausted());
             }
         }
@@ -761,6 +848,7 @@ impl RepositoryCandidateEvidence {
                     self.counters
                         .budget_exhaustions
                         .fetch_add(1, Ordering::Relaxed);
+                    self.account_bytes(&state);
                     return Ok(state.exhausted());
                 }
                 state.work += 1;
@@ -773,6 +861,7 @@ impl RepositoryCandidateEvidence {
                         self.counters
                             .budget_exhaustions
                             .fetch_add(1, Ordering::Relaxed);
+                        self.account_bytes(&state);
                         return Ok(state.exhausted());
                     }
                     // ID-less or canonically unresolvable references are
@@ -782,9 +871,6 @@ impl RepositoryCandidateEvidence {
                         state.aggregate = state.aggregate.fold(Aggregate::Unknown);
                     }
                     Advance::Reference(target_type, id) => {
-                        self.counters
-                            .bytes_accounted
-                            .fetch_add(id.len() + 1, Ordering::Relaxed);
                         let (member, continuations) = self
                             .reference_evidence(
                                 target_type,
@@ -813,6 +899,7 @@ impl RepositoryCandidateEvidence {
                                 self.counters
                                     .budget_exhaustions
                                     .fetch_add(1, Ordering::Relaxed);
+                                self.account_bytes(&state);
                                 return Ok(state.exhausted());
                             }
                         }
@@ -821,6 +908,7 @@ impl RepositoryCandidateEvidence {
                                 self.counters
                                     .budget_exhaustions
                                     .fetch_add(1, Ordering::Relaxed);
+                                self.account_bytes(&state);
                                 return Ok(state.exhausted());
                             }
                         }
@@ -834,6 +922,7 @@ impl RepositoryCandidateEvidence {
                 .visited_records
                 .fetch_max(visited, Ordering::Relaxed);
         }
+        self.account_bytes(&state);
         Ok(state.finish())
     }
 
@@ -851,6 +940,11 @@ impl RepositoryCandidateEvidence {
         request: &RetrievalRequest,
         state: &mut WalkState,
     ) -> CoreResult<(MemberEvidence, Vec<Frame>)> {
+        // Byte budget BEFORE the visited-key allocation (finding 5): the
+        // key's id bytes are charged before the String is ever cloned.
+        if state.bytes + id.len() + 1 > MAX_DEPENDENCY_BYTES {
+            return Ok((MemberEvidence::Exhausted, Vec::new()));
+        }
         let key = (target_discriminant(&target_type), id.to_owned());
         if state.resolved.contains(&key) {
             // Cycle back-edge: the record's classification is already being
@@ -907,15 +1001,27 @@ impl RepositoryCandidateEvidence {
                     OwnIdentity::Ordinary => MemberEvidence::Ordinary,
                     OwnIdentity::Unsettled => MemberEvidence::Unsettled,
                 };
-                // Source + chunk dependencies (work package A3): both
-                // provenances walk, moved without cloning.
-                Ok((
-                    member,
-                    vec![
-                        Frame::provenance(record.provenance, depth),
-                        Frame::provenance(source.provenance, depth),
-                    ],
-                ))
+                // Source + chunk dependencies (work package A3 + review r5
+                // finding 7): the canonical SOURCE is processed as a bounded
+                // TYPED SOURCE dependency — its own identity/lineage settles
+                // through the keyed lineage read (a repository-bound source
+                // without settled ownership fails closed) and its provenance
+                // walks the canonical path — not a provenance copy that
+                // skipped the source's own ownership classification.
+                let chunk_frame =
+                    Frame::provenance(record.provenance, depth, state, &self.counters);
+                let source_frame = Frame::refs(
+                    vec![source_dependency_ref(&record.source_id)],
+                    depth,
+                    state,
+                    &self.counters,
+                );
+                match (chunk_frame, source_frame) {
+                    (Some(chunk_frame), Some(source_frame)) => {
+                        Ok((member, vec![chunk_frame, source_frame]))
+                    }
+                    _ => Ok((MemberEvidence::Exhausted, Vec::new())),
+                }
             }
             EvidenceTargetType::Entity => {
                 let Some(record) = self
@@ -944,14 +1050,17 @@ impl RepositoryCandidateEvidence {
                     OwnIdentity::Ordinary => MemberEvidence::Ordinary,
                     OwnIdentity::Unsettled => MemberEvidence::Unsettled,
                 };
-                // Provenance AND typed `source_refs` (work package A3).
-                Ok((
-                    member,
-                    vec![
-                        Frame::provenance(record.provenance, depth),
-                        Frame::refs(record.source_refs, depth),
-                    ],
-                ))
+                // Provenance AND typed `source_refs` (work package A3), with
+                // budget-aware admission scans (finding 5).
+                let provenance_frame =
+                    Frame::provenance(record.provenance, depth, state, &self.counters);
+                let refs_frame = Frame::refs(record.source_refs, depth, state, &self.counters);
+                match (provenance_frame, refs_frame) {
+                    (Some(provenance_frame), Some(refs_frame)) => {
+                        Ok((member, vec![provenance_frame, refs_frame]))
+                    }
+                    _ => Ok((MemberEvidence::Exhausted, Vec::new())),
+                }
             }
             // Sources: after source-policy authorization the record's own
             // identity settles through the keyed lineage read, and its
@@ -975,10 +1084,14 @@ impl RepositoryCandidateEvidence {
                             if !state.admit_code_dependency(id) {
                                 return Ok((MemberEvidence::Exhausted, Vec::new()));
                             }
-                            Ok((
-                                MemberEvidence::Code,
-                                vec![Frame::provenance(record.provenance, depth)],
-                            ))
+                            let provenance_frame =
+                                Frame::provenance(record.provenance, depth, state, &self.counters);
+                            match provenance_frame {
+                                Some(provenance_frame) => {
+                                    Ok((MemberEvidence::Code, vec![provenance_frame]))
+                                }
+                                None => Ok((MemberEvidence::Exhausted, Vec::new())),
+                            }
                         }
                         // Repository-bound but outside the durable lineage
                         // catalog, or the reader is unconfigured: unsettled
@@ -996,11 +1109,22 @@ impl RepositoryCandidateEvidence {
                     OwnIdentity::Ordinary => MemberEvidence::Ordinary,
                     OwnIdentity::Unsettled => MemberEvidence::Unsettled,
                 };
-                Ok((member, vec![Frame::provenance(record.provenance, depth)]))
+                let provenance_frame =
+                    Frame::provenance(record.provenance, depth, state, &self.counters);
+                match provenance_frame {
+                    Some(provenance_frame) => Ok((member, vec![provenance_frame])),
+                    None => Ok((MemberEvidence::Exhausted, Vec::new())),
+                }
             }
             // Relationship references resolve canonically through the graph
             // port; classification continues through the relationship's own
             // provenance AND evidence refs after its own-identity check.
+            // Review r5 (finding 4, adjudicated REQUIRED): the subject and
+            // object EntityRef endpoints are TYPED IDENTITY — they resolve
+            // through the bounded canonical Entity path (their actual owners
+            // authorize, their own lineage classifies), and an ID-bearing
+            // endpoint that cannot resolve fails closed; an ID-less
+            // endpoint is unresolvable identity, never ordinary.
             EvidenceTargetType::Relationship => {
                 let Some(record) = self
                     .knowledge
@@ -1025,13 +1149,22 @@ impl RepositoryCandidateEvidence {
                     OwnIdentity::Ordinary => MemberEvidence::Ordinary,
                     OwnIdentity::Unsettled => MemberEvidence::Unsettled,
                 };
-                Ok((
-                    member,
-                    vec![
-                        Frame::provenance(record.provenance, depth),
-                        Frame::refs(record.evidence, depth),
-                    ],
-                ))
+                let provenance_frame =
+                    Frame::provenance(record.provenance, depth, state, &self.counters);
+                let evidence_frame = Frame::refs(record.evidence, depth, state, &self.counters);
+                let endpoints_frame = Frame::refs(
+                    vec![endpoint_ref(&record.subject), endpoint_ref(&record.object)],
+                    depth,
+                    state,
+                    &self.counters,
+                );
+                match (provenance_frame, evidence_frame, endpoints_frame) {
+                    (Some(provenance_frame), Some(evidence_frame), Some(endpoints_frame)) => Ok((
+                        member,
+                        vec![provenance_frame, evidence_frame, endpoints_frame],
+                    )),
+                    _ => Ok((MemberEvidence::Exhausted, Vec::new())),
+                }
             }
             // Derived-record categories: resolve the canonical record,
             // classify its OWN lineage (work package A3 — Memory and Belief
@@ -1061,7 +1194,12 @@ impl RepositoryCandidateEvidence {
                         OwnIdentity::Ordinary => MemberEvidence::Ordinary,
                         OwnIdentity::Unsettled => MemberEvidence::Unsettled,
                     };
-                    Ok((member, vec![Frame::provenance(record.provenance, depth)]))
+                    let provenance_frame =
+                        Frame::provenance(record.provenance, depth, state, &self.counters);
+                    match provenance_frame {
+                        Some(provenance_frame) => Ok((member, vec![provenance_frame])),
+                        None => Ok((MemberEvidence::Exhausted, Vec::new())),
+                    }
                 }
                 _ => {
                     let Some(record) = self
@@ -1088,14 +1226,28 @@ impl RepositoryCandidateEvidence {
                     // belief's own provenance, its `sources` and the
                     // synthesizer derivation's `input_refs` all walk —
                     // moved, never synthetically cloned.
-                    let mut continuations = vec![
-                        Frame::provenance(record.provenance, depth),
-                        Frame::belief_sources(record.sources, depth),
-                    ];
-                    if let Some(synthesizer) = record.synthesizer {
-                        continuations.push(Frame::refs(synthesizer.input_refs, depth));
+                    let provenance_frame =
+                        Frame::provenance(record.provenance, depth, state, &self.counters);
+                    let sources_frame =
+                        Frame::belief_sources(record.sources, depth, state, &self.counters);
+                    let synthesizer_frame = record.synthesizer.map(|synthesizer| {
+                        Frame::refs(synthesizer.input_refs, depth, state, &self.counters)
+                    });
+                    match (provenance_frame, sources_frame, synthesizer_frame) {
+                        (Some(provenance_frame), Some(sources_frame), synthesizer_frame) => {
+                            let mut continuations = vec![provenance_frame, sources_frame];
+                            match synthesizer_frame {
+                                // The synthesizer refs could not be admitted.
+                                Some(None) => return Ok((MemberEvidence::Exhausted, Vec::new())),
+                                Some(Some(synthesizer_frame)) => {
+                                    continuations.push(synthesizer_frame)
+                                }
+                                None => {}
+                            }
+                            Ok((member, continuations))
+                        }
+                        _ => Ok((MemberEvidence::Exhausted, Vec::new())),
                     }
-                    Ok((member, continuations))
                 }
             },
             // Canonically unresolvable categories: documents have no scoped
@@ -1126,17 +1278,19 @@ fn entity_content_matches(record: &engram_domain::KnowledgeEntity, content: &str
     format!("{} {:?}", record.name, record.kind) == content
 }
 
-/// Chunk projection binding: the full text (SQLite lanes and the graph
-/// lane), the pgvector graph-lane 2000-char clip, and the pgvector
-/// vector-lane 2048-char cap.
+/// Chunk projection binding (review r5, finding 9): each deterministic
+/// lane projection is evaluated INDEPENDENTLY — the full text (SQLite
+/// lanes), the pgvector graph lane's 2000-char clip and the pgvector vector
+/// lane's 2048-char cap. No length pre-check may skip a projection: a
+/// 2,001-character canonical chunk whose graph lane legitimately returns
+/// its first 2,000 characters still binds. All projections take CHARACTERS
+/// (`.chars().take(n)`), matching the lanes.
 fn chunk_content_matches(record: &engram_domain::KnowledgeChunk, content: &str) -> bool {
     if record.text == content {
         return true;
     }
-    // Clipping only differs from the full text beyond the cap.
-    if record.text.len() <= 2048 {
-        return false;
-    }
+    // Clipping only differs from the full text beyond the clip point; each
+    // projection is tested regardless of the canonical text's byte length.
     let clipped: String = record.text.chars().take(2000).collect();
     if clipped == content {
         return true;
@@ -1152,6 +1306,37 @@ fn code_chunk(kind: KnowledgeChunkKind) -> bool {
             | KnowledgeChunkKind::CodeBlock
             | KnowledgeChunkKind::DiffHunk
     )
+}
+
+/// One canonical SOURCE dependency reference (review r5, finding 7): the
+/// chunk's source id as a typed reference so the source's OWN identity,
+/// lineage and provenance are processed through the bounded canonical
+/// Source path — a provenance copy alone never settles the source's
+/// ownership.
+fn source_dependency_ref(source_id: &engram_domain::SourceId) -> EvidenceRef {
+    EvidenceRef {
+        target_type: EvidenceTargetType::Source,
+        target_id: Some(source_id.to_string()),
+        uri: None,
+        quote: None,
+        location: None,
+    }
+}
+
+/// One relationship endpoint as a canonical Entity dependency (review r5,
+/// finding 4): ID-bearing endpoints resolve through the bounded canonical
+/// Entity path — their actual owners authorize and their own durable
+/// lineage classifies. An ID-less endpoint yields an ID-less typed
+/// reference, which the frame layer treats as UNRESOLVABLE identity: it can
+/// never finish Ordinary.
+fn endpoint_ref(endpoint: &engram_domain::EntityRef) -> EvidenceRef {
+    EvidenceRef {
+        target_type: EvidenceTargetType::Entity,
+        target_id: endpoint.id.as_ref().map(|id| id.to_string()),
+        uri: None,
+        quote: None,
+        location: None,
+    }
 }
 
 /// Symbol/structural entity kinds. An entity of a code kind is code even
@@ -1171,9 +1356,12 @@ fn entity_is_code_kind(entity: &engram_domain::KnowledgeEntity) -> bool {
     )
 }
 
-/// Merges the candidate's OWN-IDENTITY classification into the walk result:
-/// own code joins the code-dependency set, and an unsettled own lineage
-/// leaves the classification incomplete no matter what the walk found.
+/// Merges the candidate's OWN-IDENTITY classification into the walk result
+/// (review r5, finding 1): own code joins the code-dependency set, an
+/// unsettled own lineage leaves the classification incomplete no matter
+/// what the walk found, and an UNRESOLVED walk stays Unknown regardless of
+/// own-code identity — own identity APPENDS to a resolved Ordinary or
+/// CodeDependent result, it never weakens the aggregate.
 fn merge_own(
     classification: EvidenceClassification,
     own: OwnIdentity,
@@ -1188,9 +1376,20 @@ fn merge_own(
                 // incompletely; own code cannot restore completeness.
                 return classification;
             }
-            let mut code_dependencies = classification.code_dependencies;
-            code_dependencies.push(own_id.to_owned());
-            EvidenceClassification::complete(CandidateEvidence::CodeDependent, code_dependencies)
+            match classification.evidence {
+                // An unresolved (or aggregate-Unknown) walk stays dominant:
+                // the walk's denial — a missing, denied or foreign
+                // dependency — must not be discarded by own-code identity.
+                CandidateEvidence::Unknown => classification,
+                CandidateEvidence::Ordinary | CandidateEvidence::CodeDependent => {
+                    let mut code_dependencies = classification.code_dependencies;
+                    code_dependencies.push(own_id.to_owned());
+                    EvidenceClassification::complete(
+                        CandidateEvidence::CodeDependent,
+                        code_dependencies,
+                    )
+                }
+            }
         }
     }
 }
@@ -1219,6 +1418,11 @@ impl CandidateEvidenceResolver for RepositoryCandidateEvidence {
         request: &RetrievalRequest,
     ) -> CoreResult<EvidenceClassification> {
         let unbound = || EvidenceClassification::incomplete(CandidateEvidence::Unknown);
+        // Initial frames are admitted against the full budgets (the walk
+        // state is empty at candidate start); a frame that cannot fit is
+        // terminal ADMISSION exhaustion (finding 5) — distinct from an
+        // unbound candidate only in cause, identical in shape, and counted.
+        let empty_state = WalkState::default();
         match candidate.target_type {
             RetrievalTargetType::Memory => match self
                 .memory
@@ -1234,9 +1438,12 @@ impl CandidateEvidenceResolver for RepositoryCandidateEvidence {
                     let own = self
                         .own_identity(candidate.target_id.as_str(), request, false)
                         .await?;
-                    let walked = self
-                        .walk(vec![Frame::provenance(record.provenance, 0)], request)
-                        .await?;
+                    let walked =
+                        match Frame::provenance(record.provenance, 0, &empty_state, &self.counters)
+                        {
+                            Some(frame) => self.walk(vec![frame], request).await?,
+                            None => return Ok(self.admission_exhausted()),
+                        };
                     Ok(merge_own(walked, own, candidate.target_id.as_str()))
                 }
                 Some(_) | None => Ok(unbound()),
@@ -1258,12 +1465,26 @@ impl CandidateEvidenceResolver for RepositoryCandidateEvidence {
                     // Typed belief dependencies (canonical 6b): provenance,
                     // sources and synthesizer inputs all walk — moved, never
                     // synthetically cloned.
-                    let mut initial = vec![
-                        Frame::provenance(record.provenance, 0),
-                        Frame::belief_sources(record.sources, 0),
-                    ];
-                    if let Some(synthesizer) = record.synthesizer {
-                        initial.push(Frame::refs(synthesizer.input_refs, 0));
+                    let provenance_frame =
+                        Frame::provenance(record.provenance, 0, &empty_state, &self.counters);
+                    let sources_frame =
+                        Frame::belief_sources(record.sources, 0, &empty_state, &self.counters);
+                    let synthesizer_frame = record.synthesizer.map(|synthesizer| {
+                        Frame::refs(synthesizer.input_refs, 0, &empty_state, &self.counters)
+                    });
+                    let mut initial = Vec::with_capacity(3);
+                    match (provenance_frame, sources_frame, synthesizer_frame) {
+                        (Some(provenance_frame), Some(sources_frame), synthesizer_frame) => {
+                            initial.push(provenance_frame);
+                            initial.push(sources_frame);
+                            match synthesizer_frame {
+                                Some(Some(frame)) => initial.push(frame),
+                                // The synthesizer refs could not be admitted.
+                                Some(None) => return Ok(self.admission_exhausted()),
+                                None => {}
+                            }
+                        }
+                        _ => return Ok(self.admission_exhausted()),
                     }
                     let walked = self.walk(initial, request).await?;
                     Ok(merge_own(walked, own, candidate.target_id.as_str()))
@@ -1294,18 +1515,25 @@ impl CandidateEvidenceResolver for RepositoryCandidateEvidence {
                                 code_chunk(record.kind),
                             )
                             .await?;
-                        // Source + chunk dependencies (work package A3):
-                        // the source's canonical provenance walks alongside
-                        // the chunk's own.
-                        let walked = self
-                            .walk(
-                                vec![
-                                    Frame::provenance(record.provenance, 0),
-                                    Frame::provenance(source.provenance, 0),
-                                ],
-                                request,
-                            )
-                            .await?;
+                        // Chunk + SOURCE dependencies (work package A3 +
+                        // review r5 finding 7): the canonical source is a
+                        // bounded TYPED SOURCE dependency — its own
+                        // identity/lineage and provenance process through
+                        // the canonical path, not a provenance copy.
+                        let chunk_frame =
+                            Frame::provenance(record.provenance, 0, &empty_state, &self.counters);
+                        let source_frame = Frame::refs(
+                            vec![source_dependency_ref(&record.source_id)],
+                            0,
+                            &empty_state,
+                            &self.counters,
+                        );
+                        let walked = match (chunk_frame, source_frame) {
+                            (Some(chunk_frame), Some(source_frame)) => {
+                                self.walk(vec![chunk_frame, source_frame], request).await?
+                            }
+                            _ => return Ok(self.admission_exhausted()),
+                        };
                         Ok(merge_own(walked, own, candidate.target_id.as_str()))
                     }
                     Some(_) | None => Ok(unbound()),
@@ -1335,15 +1563,17 @@ impl CandidateEvidenceResolver for RepositoryCandidateEvidence {
                         )
                         .await?;
                     // Provenance AND typed `source_refs` (work package A3).
-                    let walked = self
-                        .walk(
-                            vec![
-                                Frame::provenance(record.provenance, 0),
-                                Frame::refs(record.source_refs, 0),
-                            ],
-                            request,
-                        )
-                        .await?;
+                    let provenance_frame =
+                        Frame::provenance(record.provenance, 0, &empty_state, &self.counters);
+                    let refs_frame =
+                        Frame::refs(record.source_refs, 0, &empty_state, &self.counters);
+                    let walked = match (provenance_frame, refs_frame) {
+                        (Some(provenance_frame), Some(refs_frame)) => {
+                            self.walk(vec![provenance_frame, refs_frame], request)
+                                .await?
+                        }
+                        _ => return Ok(self.admission_exhausted()),
+                    };
                     Ok(merge_own(walked, own, candidate.target_id.as_str()))
                 }
                 Some(_) | None => Ok(unbound()),

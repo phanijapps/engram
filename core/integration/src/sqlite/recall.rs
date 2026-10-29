@@ -371,11 +371,25 @@ impl UnifiedRecall for SqlUnifiedRecall {
                     created_at: now,
                 });
             };
+            // Review r5 (finding 6): the degraded path uses the SAME
+            // completeness contract as the successful-view path —
+            // `classify_with_dependencies`, accepting ONLY complete,
+            // positively ordinary evidence. An aggregate-only resolver
+            // cannot pass here (its classification is explicitly
+            // incomplete), and an incomplete Ordinary never flows.
             let mut allowed = Vec::with_capacity(candidates.len());
             for candidate in candidates {
-                match evidence.evidence(&candidate, &request).await {
-                    Ok(CandidateEvidence::Ordinary) => allowed.push(candidate),
-                    Ok(CandidateEvidence::CodeDependent | CandidateEvidence::Unknown) => {}
+                match evidence
+                    .classify_with_dependencies(&candidate, &request)
+                    .await
+                {
+                    Ok(classification) => {
+                        if classification.complete
+                            && classification.evidence == CandidateEvidence::Ordinary
+                        {
+                            allowed.push(candidate);
+                        }
+                    }
                     Err(error) => source_failures.push(lane_failure("candidate_evidence", &error)),
                 }
             }

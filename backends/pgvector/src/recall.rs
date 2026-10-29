@@ -390,23 +390,29 @@ impl UnifiedRecall for PgUnifiedRecall {
                 candidates.clear();
             }
         } else if authority_failed {
-            // Corrective r3 (finding 6): degrade through CANONICAL EVIDENCE,
-            // not a target-kind proxy. Positively authorized ordinary
-            // records survive; code-dependent and unknown records deny;
-            // evidence errors surface as source failures. Without an
-            // evidence resolver the recipe fails closed on chunk/entity
-            // targets while memory/belief (which need no code authority)
-            // keep flowing.
+            // Corrective r3 (finding 6) + review r5 (finding 6): degrade
+            // through CANONICAL EVIDENCE with the SAME completeness contract
+            // as the successful-view path — `classify_with_dependencies`,
+            // accepting ONLY complete, positively ordinary evidence. An
+            // aggregate-only resolver cannot pass (its classification is
+            // explicitly incomplete). Without an evidence resolver the
+            // recipe fails closed entirely (corrective r4, canonical 6c).
             match &self.candidate_evidence {
                 Some(evidence) => {
                     let mut allowed = Vec::with_capacity(candidates.len());
                     for candidate in candidates {
-                        match evidence.evidence(&candidate, &request).await {
-                            Ok(engram_retrieval::CandidateEvidence::Ordinary) => {
-                                allowed.push(candidate)
+                        match evidence
+                            .classify_with_dependencies(&candidate, &request)
+                            .await
+                        {
+                            Ok(classification) => {
+                                if classification.complete
+                                    && classification.evidence
+                                        == engram_retrieval::CandidateEvidence::Ordinary
+                                {
+                                    allowed.push(candidate)
+                                }
                             }
-                            Ok(engram_retrieval::CandidateEvidence::CodeDependent)
-                            | Ok(engram_retrieval::CandidateEvidence::Unknown) => {}
                             Err(error) => source_failures.push(lane("candidate_evidence", error)),
                         }
                     }

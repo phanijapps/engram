@@ -126,7 +126,10 @@ fn chunk(id: &str, text: &str, kind: KnowledgeChunkKind) -> KnowledgeChunk {
     KnowledgeChunk {
         id: Id::from(id),
         document_id: Id::from("document-task-013"),
-        source_id: Id::from("source-task-013"),
+        // Review r5 (finding 7): the ordinary-chunk fixtures live on an
+        // UNBOUND source; the repository-bound `source-task-013` (no settled
+        // lineage) is deliberately the fail-closed negative.
+        source_id: Id::from("source-ordinary-task-013"),
         kind,
         text: text.to_string(),
         summary: None,
@@ -348,6 +351,26 @@ fn fixture(dir: &std::path::Path) -> Fixture {
         metadata: None,
     }))
     .expect("put source");
+    // Review r5 (finding 7): the ordinary document source — unbound, so a
+    // paragraph chunk of it settles positively ordinary through the source's
+    // own classification (repository-bound origins fail closed without
+    // settled ownership and have their own decisive cases).
+    block_on(knowledge.put_source(KnowledgeSource {
+        id: Id::from("source-ordinary-task-013"),
+        kind: SourceKind::Upload,
+        scope: scope(),
+        name: "task-013-ordinary-source".to_string(),
+        uri: None,
+        version: None,
+        repository_key: None,
+        git_ref: None,
+        policy: policy(),
+        provenance: provenance(),
+        created_at: chrono::Utc::now(),
+        updated_at: None,
+        metadata: None,
+    }))
+    .expect("put ordinary source");
     block_on(knowledge.put_document(SourceDocument {
         id: Id::from("document-task-013"),
         source_id: Id::from("source-task-013"),
@@ -1811,79 +1834,142 @@ mod task_013 {
             );
         }
 
-        /// Corrective r4 (canonical 6a): relationship references resolve
-        /// canonically through the graph port and classify through the
-        /// relationship's own provenance.
+        /// Corrective r4 (canonical 6a) + review r5 (finding 4, REQUIRED):
+        /// relationship references resolve canonically through the graph
+        /// port and classify through the relationship's own provenance AND
+        /// its subject/object ENDPOINTS — ID-bearing endpoints resolve
+        /// through the bounded canonical Entity path; a MISSING endpoint is
+        /// unresolvable identity (Unknown, never ordinary); an eligible-code
+        /// endpoint contributes a code dependency; an ID-less endpoint is
+        /// unresolvable. Ordinary endpoints keep an ordinary chain ordinary.
         #[test]
         fn relationship_references_resolve_canonically() {
             use engram_knowledge::KnowledgeRepository as _;
             let dir = tempfile::tempdir().expect("tempdir");
             let fixture = fixture(dir.path());
+            // Ordinary endpoint entities (Concept kind, canonical graph).
+            for id in ["entity-concept-a", "entity-concept-b"] {
+                let mut concept = symbol_entity(id, id);
+                concept.kind = EntityKind::Concept;
+                block_on(fixture.knowledge.put_entity(concept)).expect("put endpoint");
+            }
             let relationship_of =
-                |id: &str, refs: Vec<EvidenceRef>| engram_domain::KnowledgeRelationship {
-                    id: engram_domain::RelationshipId::from(id),
-                    graph_id: Some(Id::from("graph-task-013")),
-                    predicate: "mentions".to_string(),
-                    subject: engram_domain::EntityRef {
-                        id: Some(Id::from("entity-published")),
-                        kind: None,
-                        name: Some("parsePublished".to_string()),
-                        aliases: Vec::new(),
-                    },
-                    object: engram_domain::EntityRef {
-                        id: Some(Id::from("entity-concept")),
-                        kind: None,
-                        name: Some("parseConcept".to_string()),
-                        aliases: Vec::new(),
-                    },
-                    scope: scope(),
-                    evidence: Vec::new(),
-                    confidence: None,
-                    provenance: provenance_with(refs),
-                    created_at: chrono::Utc::now(),
-                    updated_at: None,
-                    code_resolution: None,
-                    archived_at: None,
+                |id: &str, subject: (&str, &str), object: (&str, &str), refs: Vec<EvidenceRef>| {
+                    engram_domain::KnowledgeRelationship {
+                        id: engram_domain::RelationshipId::from(id),
+                        graph_id: Some(Id::from("graph-task-013")),
+                        predicate: "mentions".to_string(),
+                        subject: engram_domain::EntityRef {
+                            id: Some(Id::from(subject.0)),
+                            kind: None,
+                            name: Some(subject.1.to_string()),
+                            aliases: Vec::new(),
+                        },
+                        object: engram_domain::EntityRef {
+                            id: Some(Id::from(object.0)),
+                            kind: None,
+                            name: Some(object.1.to_string()),
+                            aliases: Vec::new(),
+                        },
+                        scope: scope(),
+                        evidence: Vec::new(),
+                        confidence: None,
+                        provenance: provenance_with(refs),
+                        created_at: chrono::Utc::now(),
+                        updated_at: None,
+                        code_resolution: None,
+                        archived_at: None,
+                    }
                 };
+            // Ordinary endpoints: the chain stays ordinary.
             block_on(fixture.knowledge.put_relationship(relationship_of(
                 "rel-ordinary",
+                ("entity-concept-a", "conceptA"),
+                ("entity-concept-b", "conceptB"),
                 vec![evidence_ref(
                     EvidenceTargetType::Memory,
                     &format!("{}", fixture.memory_id),
                 )],
             )))
             .expect("put ordinary relationship");
+            // The code result is attributable to PROVENANCE (stale chunk),
+            // with ordinary endpoints.
             block_on(fixture.knowledge.put_relationship(relationship_of(
                 "rel-code",
+                ("entity-concept-a", "conceptA"),
+                ("entity-concept-b", "conceptB"),
                 vec![evidence_ref(EvidenceTargetType::Chunk, "chunk-stale")],
             )))
             .expect("put code-derived relationship");
+            // MISSING endpoint: unresolvable identity.
+            block_on(fixture.knowledge.put_relationship(relationship_of(
+                "rel-endpoint-missing",
+                ("entity-concept-a", "conceptA"),
+                ("entity-never-written", "ghost"),
+                Vec::new(),
+            )))
+            .expect("put missing-endpoint relationship");
+            // ELIGIBLE-CODE endpoint: a code dependency.
+            block_on(fixture.knowledge.put_relationship(relationship_of(
+                "rel-endpoint-eligible",
+                ("entity-concept-a", "conceptA"),
+                ("entity-published", "parsePublished"),
+                Vec::new(),
+            )))
+            .expect("put eligible-endpoint relationship");
+            // ID-LESS endpoint: unresolvable identity.
+            let mut idless = relationship_of(
+                "rel-endpoint-idless",
+                ("entity-concept-a", "conceptA"),
+                ("entity-concept-b", "conceptB"),
+                Vec::new(),
+            );
+            idless.object.id = None;
+            block_on(fixture.knowledge.put_relationship(idless)).expect("put idless-endpoint rel");
 
-            let ordinary = write_memory(
-                &fixture.memory,
-                "relationship derived",
-                provenance_with(vec![evidence_ref(
-                    EvidenceTargetType::Relationship,
-                    "rel-ordinary",
-                )]),
-            );
+            let chain = |fixture: &Fixture, rel: &str| {
+                write_memory(
+                    &fixture.memory,
+                    &format!("relationship chain {rel}"),
+                    provenance_with(vec![evidence_ref(EvidenceTargetType::Relationship, rel)]),
+                )
+            };
             assert_eq!(
-                evidence(&fixture, &memory_candidate(&ordinary)),
+                evidence(
+                    &fixture,
+                    &memory_candidate(&chain(&fixture, "rel-ordinary"))
+                ),
                 CandidateEvidence::Ordinary,
-                "a canonically resolved ordinary relationship chain stays ordinary"
-            );
-            let code_derived = write_memory(
-                &fixture.memory,
-                "code relationship derived",
-                provenance_with(vec![evidence_ref(
-                    EvidenceTargetType::Relationship,
-                    "rel-code",
-                )]),
+                "ordinary endpoints + ordinary provenance stay ordinary"
             );
             assert_eq!(
-                evidence(&fixture, &memory_candidate(&code_derived)),
+                evidence(&fixture, &memory_candidate(&chain(&fixture, "rel-code"))),
                 CandidateEvidence::CodeDependent,
                 "a relationship whose provenance derives from code is code-dependent"
+            );
+            assert_eq!(
+                evidence(
+                    &fixture,
+                    &memory_candidate(&chain(&fixture, "rel-endpoint-missing"))
+                ),
+                CandidateEvidence::Unknown,
+                "an ID-bearing endpoint that cannot resolve fails closed (finding 4)"
+            );
+            assert_eq!(
+                evidence(
+                    &fixture,
+                    &memory_candidate(&chain(&fixture, "rel-endpoint-eligible"))
+                ),
+                CandidateEvidence::CodeDependent,
+                "an eligible-code endpoint contributes a code dependency (finding 4)"
+            );
+            assert_eq!(
+                evidence(
+                    &fixture,
+                    &memory_candidate(&chain(&fixture, "rel-endpoint-idless"))
+                ),
+                CandidateEvidence::Unknown,
+                "an ID-less endpoint is unresolvable identity, never ordinary (finding 4)"
             );
         }
 
@@ -1895,11 +1981,23 @@ mod task_013 {
         fn repository_source_without_reader_is_unknown_on_reference_path() {
             let dir = tempfile::tempdir().expect("tempdir");
             let fixture = fixture(dir.path());
-            // chunk-doc's source (source-task-013) is repository-bound.
+            // A paragraph chunk of the REPOSITORY-BOUND source
+            // (source-task-013, no settled lineage).
+            use engram_knowledge::KnowledgeRepository as _;
+            let mut repo_bound = chunk(
+                "chunk-repo-bound-origin",
+                "repositorybound originchunk",
+                KnowledgeChunkKind::Paragraph,
+            );
+            repo_bound.source_id = Id::from("source-task-013");
+            block_on(fixture.knowledge.put_chunk(repo_bound)).expect("put repo-bound chunk");
             let referencing = write_memory(
                 &fixture.memory,
                 "references ordinary repo chunk",
-                provenance_with(vec![evidence_ref(EvidenceTargetType::Chunk, "chunk-doc")]),
+                provenance_with(vec![evidence_ref(
+                    EvidenceTargetType::Chunk,
+                    "chunk-repo-bound-origin",
+                )]),
             );
             let resolver = engram_integration::candidate_evidence::RepositoryCandidateEvidence::new(
                 fixture.memory.clone() as Arc<dyn engram_memory::MemoryRepository>,
@@ -3306,7 +3404,7 @@ mod task_013 {
             // Long chunk positive through the graph lane (full text).
             let long_text = format!("parse longchunk {}", "x".repeat(3000));
             let mut long_chunk = chunk("chunk-long", &long_text, KnowledgeChunkKind::Paragraph);
-            long_chunk.source_id = Id::from("source-task-013");
+            long_chunk.source_id = Id::from("source-ordinary-task-013");
             block_on(fixture.knowledge.put_chunk(long_chunk)).expect("put long chunk");
             let payload = block_on(composed_recall(&fixture).recall(request("longchunk", 20)))
                 .expect("recall");
@@ -3443,7 +3541,14 @@ mod task_013 {
         /// Wide inputs are bounded by INSTRUMENTED counters, not elapsed
         /// time: a beyond-budget reference array exhausts terminally with
         /// counters inside the documented bounds, and a hostile long-id
-        /// array is rejected BEFORE any frame is enqueued.
+        /// array is rejected by the ADMISSION scan before any frame is
+        /// enqueued.
+        ///
+        /// LABELING (review r5, finding 11): this test is RESOLVER-ONLY —
+        /// it drives `classify_with_dependencies`/`evidence` directly, not
+        /// composed recall. The composed-recall equivalents live in
+        /// `r5_walk::wide_input_counters_bounded_composed` and
+        /// `r5_walk::cyclic_input_counters_bounded_composed`.
         #[test]
         fn wide_input_counters_bounded() {
             use engram_retrieval::CandidateEvidenceResolver;
@@ -3573,6 +3678,10 @@ mod task_013 {
         /// Cyclic inputs are bounded and instrumented: back-edges are
         /// counted, the visited set and queue stay bounded, and repeated
         /// references reuse the keyed lookup instead of re-materializing.
+        ///
+        /// LABELING (review r5, finding 11): RESOLVER-ONLY — the
+        /// composed-recall equivalent is
+        /// `r5_walk::cyclic_input_counters_bounded_composed`.
         #[test]
         fn cyclic_input_counters_bounded() {
             use engram_retrieval::CandidateEvidenceResolver;
@@ -3652,6 +3761,710 @@ mod task_013 {
                 stats.budget_exhaustions, 0,
                 "a within-budget cycle does not exhaust: {stats:?}"
             );
+        }
+        /// Review r5 walk corrections (findings 1/4/5/6/7/9/11-walk) — decisive
+        /// cases through REAL composed recall unless a case is explicitly
+        /// resolver-level and labeled as such.
+        mod r5_walk {
+            use super::*;
+
+            /// F1 decisive (the combination the A8 matrix missed): an OWN-CODE
+            /// candidate (eligible published lineage) with an UNRESOLVED
+            /// dependency denies — own identity never converts an Unknown walk
+            /// into accepted code evidence. The resolved twin with an ordinary
+            /// dependency stays accepted.
+            #[test]
+            fn own_code_with_unresolved_dependency_denies_composed() {
+                use engram_retrieval::CandidateEvidenceResolver;
+                let dir = tempfile::tempdir().expect("tempdir");
+                let fixture = fixture(dir.path());
+                let unresolved = write_memory_with_refs(
+                    &fixture,
+                    "owncode unresolved dep",
+                    vec![evidence_ref(
+                        EvidenceTargetType::Memory,
+                        "memory-never-written",
+                    )],
+                );
+                let resolved = write_memory_with_refs(
+                    &fixture,
+                    "owncode resolved dep",
+                    vec![evidence_ref(
+                        EvidenceTargetType::Memory,
+                        fixture.memory_id.as_str(),
+                    )],
+                );
+                publish_with_lineage(
+                    &fixture.bindings,
+                    "repo-a",
+                    "gen-a-3",
+                    2,
+                    Some("gen-a-2"),
+                    &[unresolved.id.as_str(), resolved.id.as_str()],
+                );
+
+                // Resolver-level: the unresolved member keeps the classification
+                // Unknown (finding 1 — merge_own preserves Unknown).
+                let resolver = fixture.candidate_evidence();
+                let candidate_of = |record: &engram_domain::MemoryRecord| RetrievalResult {
+                    id: "owncode".to_string(),
+                    target_type: RetrievalTargetType::Memory,
+                    target_id: record.id.to_string(),
+                    content: record.content.text.clone(),
+                    score: engram_domain::RetrievalScore {
+                        total: 1.0,
+                        relevance: Some(1.0),
+                        recency: None,
+                        confidence: None,
+                        cue_match: None,
+                        hierarchical_fit: None,
+                        policy_fit: Some(1.0),
+                    },
+                    provenance: record.provenance.clone(),
+                    policy: record.policy.clone(),
+                    explanation: None,
+                    fusion_trace: None,
+                    metadata: None,
+                };
+                assert_eq!(
+                    block_on(resolver.evidence(&candidate_of(&unresolved), &request("parse", 10)))
+                        .expect("classification"),
+                    CandidateEvidence::Unknown,
+                    "own code identity cannot convert an unresolved walk into code evidence"
+                );
+
+                // Composed: the unresolved twin denies, the resolved twin stays.
+                let payload = block_on(composed_recall(&fixture).recall(request("owncode", 20)))
+                    .expect("recall");
+                let ids = target_ids(&payload);
+                assert!(
+                    !ids.iter().any(|id| id == unresolved.id.as_str()),
+                    "own-code + unresolved dependency denies through composed recall: {ids:?}"
+                );
+                assert!(
+                    ids.iter().any(|id| id == resolved.id.as_str()),
+                    "the resolved twin stays accepted (CodeDependent with eligible deps): {ids:?}"
+                );
+            }
+
+            /// F6 decisive: an AGGREGATE-ONLY evidence resolver (trait default
+            /// `classify_with_dependencies` = explicitly incomplete) can never
+            /// pass the DEGRADED path — its Ordinary aggregate is not complete,
+            /// positively ordinary evidence, so nothing flows while the code
+            /// authority is unavailable.
+            #[test]
+            fn degraded_recall_rejects_aggregate_only_ordinary() {
+                struct AggregateOnlyOrdinary;
+                #[async_trait::async_trait]
+                impl engram_retrieval::CandidateEvidenceResolver for AggregateOnlyOrdinary {
+                    async fn evidence(
+                        &self,
+                        _candidate: &RetrievalResult,
+                        _request: &RetrievalRequest,
+                    ) -> CoreResult<CandidateEvidence> {
+                        // Aggregate-only stub: claims Ordinary for everything.
+                        Ok(CandidateEvidence::Ordinary)
+                    }
+                }
+                let dir = tempfile::tempdir().expect("tempdir");
+                let fixture = fixture(dir.path());
+                let graph_lane: Arc<dyn RetrievalIndex> =
+                    Arc::new(engram_store_sqlite::knowledge::GraphRetrievalIndex::new(
+                        fixture.knowledge.clone(),
+                    ));
+                let recall = SqlUnifiedRecall::new(
+                    fixture.memory.clone(),
+                    vec![graph_lane],
+                    fixture.beliefs.clone(),
+                )
+                .with_code_eligibility(Arc::new(ErroringAuthority))
+                .with_candidate_evidence(Arc::new(AggregateOnlyOrdinary));
+                let payload = block_on(recall.recall(request("parse", 20))).expect("recall");
+                assert!(
+                    payload.items.is_empty(),
+                    "an aggregate-only resolver cannot pass the degraded completeness contract: {:?}",
+                    target_ids(&payload)
+                );
+                assert!(
+                    payload
+                        .source_failures
+                        .iter()
+                        .any(|failure| failure.source == "code_eligibility"),
+                    "the authority error stays surfaced: {:?}",
+                    payload.source_failures
+                );
+            }
+
+            /// F4 decisive matrix through REAL composed recall: relationship
+            /// subject/object endpoints resolve through the bounded canonical
+            /// Entity path — permitted ordinary and eligible-code endpoints
+            /// accept, stale-code / denied-policy / missing / foreign-scope /
+            /// ID-less endpoints deny, and a cycle through an endpoint settles.
+            #[test]
+            fn relationship_endpoint_matrix_composed() {
+                use engram_knowledge::KnowledgeRepository as _;
+                let dir = tempfile::tempdir().expect("tempdir");
+                let fixture = fixture(dir.path());
+
+                // Ordinary endpoint entities (canonical graph).
+                for id in ["entity-ep-a", "entity-ep-b", "entity-ep-cyc"] {
+                    let mut concept = symbol_entity(id, id);
+                    concept.kind = EntityKind::Concept;
+                    block_on(fixture.knowledge.put_entity(concept)).expect("put endpoint");
+                }
+                // A stale-code endpoint entity (durable lineage of gen-a-1).
+                block_on(
+                    fixture
+                        .knowledge
+                        .put_entity(symbol_entity("entity-ep-stale", "epStale")),
+                )
+                .expect("put stale endpoint");
+                block_on(fixture.bindings.put_lineage(
+                    &scope(),
+                    "entity-ep-stale",
+                    CodeLineage {
+                        repo_id: RepoId("repo-a".to_string()),
+                        generation_id: "gen-a-1".to_string(),
+                        source_path: "src/ep-stale.rs".to_string(),
+                        contributors: vec!["entity-ep-stale".to_string()],
+                    },
+                ))
+                .expect("stale endpoint lineage");
+                // A denied-policy endpoint entity (High-sensitivity graph).
+                let mut high_policy = policy();
+                high_policy.sensitivity = Some(engram_domain::Sensitivity::High);
+                block_on(fixture.knowledge.put_graph(KnowledgeGraph {
+                    id: Id::from("graph-ep-high"),
+                    scope: scope(),
+                    name: "high endpoint graph".to_string(),
+                    uri: None,
+                    version: None,
+                    ontology_refs: Vec::new(),
+                    policy: high_policy,
+                    provenance: provenance(),
+                    created_at: chrono::Utc::now(),
+                    updated_at: None,
+                    metadata: None,
+                }))
+                .expect("put high graph");
+                let mut high_endpoint = symbol_entity("entity-ep-high", "epHigh");
+                high_endpoint.kind = EntityKind::Concept;
+                high_endpoint.graph_id = Some(Id::from("graph-ep-high"));
+                block_on(fixture.knowledge.put_entity(high_endpoint)).expect("put high endpoint");
+                // A foreign-scope endpoint entity (same id, different scope →
+                // the canonical request-scope read must not resolve it).
+                let mut foreign_scope = scope();
+                foreign_scope.workspace = Some("endpoint-foreign".to_string());
+                let mut foreign_endpoint = symbol_entity("entity-ep-foreign", "epForeign");
+                foreign_endpoint.kind = EntityKind::Concept;
+                foreign_endpoint.scope = foreign_scope;
+                block_on(fixture.knowledge.put_entity(foreign_endpoint))
+                    .expect("put foreign endpoint");
+
+                let rel =
+                    |id: &str, subject: Option<&str>, object: Option<&str>, object_idless: bool| {
+                        let endpoint = |entity_id: Option<&str>| engram_domain::EntityRef {
+                            id: entity_id.map(Id::from),
+                            kind: None,
+                            name: entity_id.map(|id| id.to_string()),
+                            aliases: Vec::new(),
+                        };
+                        let mut object = endpoint(object);
+                        if object_idless {
+                            object.id = None;
+                        }
+                        engram_domain::KnowledgeRelationship {
+                            id: engram_domain::RelationshipId::from(id),
+                            graph_id: Some(Id::from("graph-task-013")),
+                            predicate: "mentions".to_string(),
+                            subject: endpoint(subject),
+                            object,
+                            scope: scope(),
+                            evidence: Vec::new(),
+                            confidence: None,
+                            provenance: provenance(),
+                            created_at: chrono::Utc::now(),
+                            updated_at: None,
+                            code_resolution: None,
+                            archived_at: None,
+                        }
+                    };
+                let ordinary = rel(
+                    "rel-ep-ordinary",
+                    Some("entity-ep-a"),
+                    Some("entity-ep-b"),
+                    false,
+                );
+                let eligible = rel(
+                    "rel-ep-eligible",
+                    Some("entity-ep-a"),
+                    Some("entity-published"),
+                    false,
+                );
+                let stale = rel(
+                    "rel-ep-stale",
+                    Some("entity-ep-a"),
+                    Some("entity-ep-stale"),
+                    false,
+                );
+                let missing = rel(
+                    "rel-ep-missing",
+                    Some("entity-ep-a"),
+                    Some("entity-ep-never-written"),
+                    false,
+                );
+                let foreign = rel(
+                    "rel-ep-foreign",
+                    Some("entity-ep-a"),
+                    Some("entity-ep-foreign"),
+                    false,
+                );
+                let idless = rel("rel-ep-idless", Some("entity-ep-a"), None, true);
+                for relationship in [ordinary, eligible, stale, missing, foreign, idless] {
+                    block_on(fixture.knowledge.put_relationship(relationship))
+                        .expect("put relationship");
+                }
+                // CYCLIC endpoints: the endpoint entity's own provenance
+                // references the very memory that references the relationship —
+                // the walk must settle through the visited-set back-edge.
+                let cycle_memory =
+                    write_memory_with_refs(&fixture, "endpoint cycle memory", Vec::new());
+                let mut cyc_endpoint = symbol_entity("entity-ep-cyc", "entity-ep-cyc");
+                cyc_endpoint.kind = EntityKind::Concept;
+                cyc_endpoint.provenance = provenance_with(vec![evidence_ref(
+                    EvidenceTargetType::Memory,
+                    cycle_memory.id.as_str(),
+                )]);
+                block_on(fixture.knowledge.put_entity(cyc_endpoint)).expect("put cyclic endpoint");
+                let cyclic = rel(
+                    "rel-ep-cyclic",
+                    Some("entity-ep-a"),
+                    Some("entity-ep-cyc"),
+                    false,
+                );
+                block_on(fixture.knowledge.put_relationship(cyclic)).expect("put cyclic rel");
+
+                let chained = |rel_id: &str| {
+                    write_memory_with_refs(
+                        &fixture,
+                        &format!("endpoint chain {rel_id}"),
+                        vec![evidence_ref(EvidenceTargetType::Relationship, rel_id)],
+                    )
+                };
+                let ordinary_mem = chained("rel-ep-ordinary");
+                let eligible_mem = chained("rel-ep-eligible");
+                let stale_mem = chained("rel-ep-stale");
+                let missing_mem = chained("rel-ep-missing");
+                let foreign_mem = chained("rel-ep-foreign");
+                let idless_mem = chained("rel-ep-idless");
+                let cyclic_mem = write_memory_with_refs(
+                    &fixture,
+                    "endpoint chain cyclic",
+                    vec![evidence_ref(
+                        EvidenceTargetType::Relationship,
+                        "rel-ep-cyclic",
+                    )],
+                );
+                let _ = cycle_memory;
+
+                // Permitted view (real authorizer): ordinary/eligible/cyclic
+                // chains accept; stale/missing/foreign/idless deny.
+                let payload = block_on(composed_recall(&fixture).recall(request("endpoint", 20)))
+                    .expect("recall");
+                let ids = target_ids(&payload);
+                for (label, case_id, expected_present) in [
+                    ("ordinary endpoints accept", ordinary_mem.id.as_str(), true),
+                    (
+                        "eligible-code endpoint accepts as code-dependent",
+                        eligible_mem.id.as_str(),
+                        true,
+                    ),
+                    ("cyclic endpoint settles", cyclic_mem.id.as_str(), true),
+                    ("stale-code endpoint denies", stale_mem.id.as_str(), false),
+                    ("missing endpoint denies", missing_mem.id.as_str(), false),
+                    (
+                        "foreign-scope endpoint denies",
+                        foreign_mem.id.as_str(),
+                        false,
+                    ),
+                    ("ID-less endpoint denies", idless_mem.id.as_str(), false),
+                ] {
+                    assert_eq!(
+                        ids.iter().any(|id| id == case_id),
+                        expected_present,
+                        "{label}: {ids:?}"
+                    );
+                }
+
+                // DENIED-policy endpoint through a denying owning authorizer:
+                // the high-graph endpoint chain denies while the ordinary chain
+                // survives the same page.
+                let high_mem = write_memory_with_refs(
+                    &fixture,
+                    "endpoint chain high",
+                    vec![evidence_ref(
+                        EvidenceTargetType::Relationship,
+                        "rel-ep-high",
+                    )],
+                );
+                let _ = high_mem;
+                let mut high_rel = rel(
+                    "rel-ep-high",
+                    Some("entity-ep-a"),
+                    Some("entity-ep-high"),
+                    false,
+                );
+                high_rel.predicate = "mentions".to_string();
+                block_on(fixture.knowledge.put_relationship(high_rel)).expect("put high rel");
+                let high_chain = write_memory_with_refs(
+                    &fixture,
+                    "endpoint chain high",
+                    vec![evidence_ref(
+                        EvidenceTargetType::Relationship,
+                        "rel-ep-high",
+                    )],
+                );
+                let denying = block_on(
+                    composed_recall_with_evidence(&fixture, denying_evidence(&fixture))
+                        .recall(request("endpoint", 20)),
+                )
+                .expect("denying recall");
+                let denied_ids = target_ids(&denying);
+                assert!(
+                    !denied_ids.iter().any(|id| id == high_chain.id.as_str()),
+                    "a denied-policy endpoint denies the chain: {denied_ids:?}"
+                );
+                assert!(
+                    denied_ids.iter().any(|id| id == ordinary_mem.id.as_str()),
+                    "the ordinary-endpoint chain survives the same denying page: {denied_ids:?}"
+                );
+            }
+
+            /// F7 decisive matrix through REAL composed recall: a chunk's
+            /// canonical SOURCE is processed as a bounded typed SOURCE
+            /// dependency — an unbound ordinary source accepts, a
+            /// durably-code-owned CURRENT source accepts as code-dependent, a
+            /// durably-code-owned STALE source denies, and a repository-bound
+            /// source without settled ownership fails closed.
+            #[test]
+            fn chunk_source_matrix_composed() {
+                use engram_knowledge::KnowledgeRepository as _;
+                let dir = tempfile::tempdir().expect("tempdir");
+                let fixture = fixture(dir.path());
+                let owned_source = |id: &str, repository_key: Option<&str>| KnowledgeSource {
+                    id: Id::from(id),
+                    kind: SourceKind::GitRepository,
+                    scope: scope(),
+                    name: id.to_string(),
+                    uri: None,
+                    version: None,
+                    repository_key: repository_key.map(str::to_string),
+                    git_ref: repository_key.map(|_| "refs/heads/main".to_string()),
+                    policy: policy(),
+                    provenance: provenance(),
+                    created_at: chrono::Utc::now(),
+                    updated_at: None,
+                    metadata: None,
+                };
+                // DURABLY CODE-OWNED sources: current generation (gen-a-2) and
+                // stale generation (gen-a-1).
+                block_on(
+                    fixture
+                        .knowledge
+                        .put_source(owned_source("source-current-owned", Some("repo-a"))),
+                )
+                .expect("put current-owned source");
+                block_on(
+                    fixture
+                        .knowledge
+                        .put_source(owned_source("source-stale-owned", Some("repo-a"))),
+                )
+                .expect("put stale-owned source");
+                for (source, generation) in [
+                    ("source-current-owned", "gen-a-2"),
+                    ("source-stale-owned", "gen-a-1"),
+                ] {
+                    block_on(fixture.bindings.put_lineage(
+                        &scope(),
+                        source,
+                        CodeLineage {
+                            repo_id: RepoId("repo-a".to_string()),
+                            generation_id: generation.to_string(),
+                            source_path: format!("src/{source}.rs"),
+                            contributors: vec![source.to_string()],
+                        },
+                    ))
+                    .expect("source lineage");
+                }
+                let src_chunk = |id: &str, text: &str, source: &str| {
+                    let mut record = chunk(id, text, KnowledgeChunkKind::Paragraph);
+                    record.source_id = Id::from(source);
+                    record
+                };
+                // repository-bound WITHOUT settled ownership (source-task-013
+                // is fixture-seeded with repository_key repo-a and no lineage).
+                block_on(fixture.knowledge.put_chunk(src_chunk(
+                    "chunk-src-unsettled",
+                    "srcmatrix unsettl",
+                    "source-task-013",
+                )))
+                .expect("put unsettled-source chunk");
+                block_on(fixture.knowledge.put_chunk(src_chunk(
+                    "chunk-src-stale",
+                    "srcmatrix stale",
+                    "source-stale-owned",
+                )))
+                .expect("put stale-source chunk");
+                block_on(fixture.knowledge.put_chunk(src_chunk(
+                    "chunk-src-current",
+                    "srcmatrix current",
+                    "source-current-owned",
+                )))
+                .expect("put current-source chunk");
+                block_on(fixture.knowledge.put_chunk(src_chunk(
+                    "chunk-src-unbound",
+                    "srcmatrix unbound",
+                    "source-ordinary-task-013",
+                )))
+                .expect("put unbound-source chunk");
+
+                let payload = block_on(composed_recall(&fixture).recall(request("srcmatrix", 20)))
+                    .expect("recall");
+                let ids = target_ids(&payload);
+                assert!(
+                    ids.contains(&"chunk-src-unbound".to_string()),
+                    "an unbound ordinary source accepts: {ids:?}"
+                );
+                assert!(
+                    ids.contains(&"chunk-src-current".to_string()),
+                    "a durably-code-owned CURRENT source accepts as code-dependent: {ids:?}"
+                );
+                assert!(
+                    !ids.contains(&"chunk-src-stale".to_string()),
+                    "an ordinary chunk of a durably-code-owned STALE source denies (finding 7): {ids:?}"
+                );
+                assert!(
+                    !ids.contains(&"chunk-src-unsettled".to_string()),
+                    "a repository-bound source without settled ownership fails closed (finding 7): {ids:?}"
+                );
+            }
+
+            /// F9 decisive boundaries (RESOLVER-LEVEL, labeled): every
+            /// deterministic projection is evaluated independently at the exact
+            /// 2000/2001/2048/2049-character boundaries, including multibyte
+            /// text, for BOTH lane shapes (graph-lane 2000-char clip and
+            /// vector-lane 2048-char cap). The 2001-case is the interval the old
+            /// helper rejected.
+            #[test]
+            fn chunk_projection_boundaries_bind_independently() {
+                use engram_knowledge::KnowledgeRepository as _;
+                let dir = tempfile::tempdir().expect("tempdir");
+                let fixture = fixture(dir.path());
+                let resolver = fixture.candidate_evidence();
+                use engram_retrieval::CandidateEvidenceResolver;
+                let case = |label: &str, chars: usize, multibyte: bool| {
+                    let text: String = if multibyte {
+                        std::iter::repeat_n('é', chars).collect()
+                    } else {
+                        std::iter::repeat_n('a', chars).collect()
+                    };
+                    let id = format!("chunk-proj-{label}");
+                    let mut record = chunk(&id, &text, KnowledgeChunkKind::Paragraph);
+                    record.source_id = Id::from("source-ordinary-task-013");
+                    let record_provenance = record.provenance.clone();
+                    let record_policy = record.policy.clone();
+                    block_on(fixture.knowledge.put_chunk(record)).expect("put projection chunk");
+                    let candidate = |content: String| RetrievalResult {
+                        id: id.clone(),
+                        target_type: RetrievalTargetType::Chunk,
+                        target_id: id.clone(),
+                        content,
+                        score: engram_domain::RetrievalScore {
+                            total: 1.0,
+                            relevance: Some(1.0),
+                            recency: None,
+                            confidence: None,
+                            cue_match: None,
+                            hierarchical_fit: None,
+                            policy_fit: Some(1.0),
+                        },
+                        provenance: record_provenance.clone(),
+                        policy: record_policy.clone(),
+                        explanation: None,
+                        fusion_trace: None,
+                        metadata: None,
+                    };
+                    let full = block_on(
+                        resolver.evidence(&candidate(text.clone()), &request("parse", 10)),
+                    )
+                    .expect("full-text projection");
+                    assert_eq!(
+                        full,
+                        CandidateEvidence::Ordinary,
+                        "{label}: full text binds"
+                    );
+                    // Graph-lane projection: first 2000 characters — evaluated
+                    // INDEPENDENTLY. For >2000-char texts this is the decisive
+                    // interval the old helper rejected (2001..=2048); for ≤2000
+                    // it equals the full text and binds trivially.
+                    let clipped: String = text.chars().take(2000).collect();
+                    let graph_lane =
+                        block_on(resolver.evidence(&candidate(clipped), &request("parse", 10)))
+                            .expect("graph projection");
+                    assert_eq!(
+                        graph_lane,
+                        CandidateEvidence::Ordinary,
+                        "{label}: the graph-lane 2000-char projection binds independently"
+                    );
+                    // Vector-lane projection: first 2048 characters — also
+                    // independent (binds for every boundary length).
+                    let capped: String = text.chars().take(2048).collect();
+                    let vector_lane =
+                        block_on(resolver.evidence(&candidate(capped), &request("parse", 10)))
+                            .expect("vector projection");
+                    assert_eq!(
+                        vector_lane,
+                        CandidateEvidence::Ordinary,
+                        "{label}: the vector-lane 2048-char projection binds independently"
+                    );
+                    // An altered projection still denies (anti-forgery intact).
+                    let forged = format!("{}x", text.chars().take(2000).collect::<String>());
+                    if forged != text {
+                        let denied =
+                            block_on(resolver.evidence(&candidate(forged), &request("parse", 10)))
+                                .expect("forged projection");
+                        assert_ne!(
+                            denied,
+                            CandidateEvidence::Ordinary,
+                            "{label}: altered denies"
+                        );
+                    }
+                };
+                case("2000", 2000, false);
+                case("2001", 2001, false);
+                case("2048", 2048, false);
+                case("2049", 2049, false);
+                case("2001-multibyte", 2001, true);
+                case("2049-multibyte", 2049, true);
+            }
+
+            /// F5 composed-recall counter equivalent (labeled COMPOSED, unlike
+            /// the resolver-only `wide_input_counters_bounded`): a wide
+            /// dependency array on a REAL facts-lane candidate exhausts by
+            /// INSTRUMENTED counters — admission scan included — through the
+            /// full composed recall, and the candidate denies.
+            #[test]
+            fn wide_input_counters_bounded_composed() {
+                let dir = tempfile::tempdir().expect("tempdir");
+                let fixture = fixture(dir.path());
+                let resolver = fixture.candidate_evidence();
+                let counters = resolver.walk_counters();
+                counters.reset();
+                let ordinary_target =
+                    write_memory_with_refs(&fixture, "wide composed dep target", Vec::new());
+                let wide = write_memory_with_refs(
+                    &fixture,
+                    "widecomposed beyond budget",
+                    std::iter::repeat_n(
+                        evidence_ref(EvidenceTargetType::Memory, ordinary_target.id.as_str()),
+                        2000,
+                    )
+                    .collect(),
+                );
+                let recall = SqlUnifiedRecall::new(
+                    fixture.memory.clone(),
+                    Vec::new(),
+                    fixture.beliefs.clone(),
+                )
+                .with_code_eligibility(
+                    fixture.eligibility() as Arc<dyn engram_retrieval::CodeEligibilityResolver>
+                )
+                .with_candidate_evidence(resolver.clone());
+                let payload = block_on(recall.recall(request("widecomposed", 20))).expect("recall");
+                let ids = target_ids(&payload);
+                assert!(
+                    !ids.iter().any(|id| id == wide.id.as_str()),
+                    "the beyond-budget wide candidate denies through composed recall: {ids:?}"
+                );
+                let stats = counters.snapshot();
+                assert!(
+                    stats.references_examined <= 1024,
+                    "composed reference examinations stay inside the work budget: {stats:?}"
+                );
+                assert!(
+                    stats.admission_examined <= 1024 + 16,
+                    "admission-scan work is bounded by the remaining budgets (early-terminating): {stats:?}"
+                );
+                assert!(
+                    stats.budget_exhaustions >= 1,
+                    "terminal exhaustion attested through composed recall: {stats:?}"
+                );
+                assert!(
+                    stats.bytes_accounted <= 128 * 1024,
+                    "ALL byte charges (references, visited keys, code deps) bounded: {stats:?}"
+                );
+            }
+
+            /// F5 composed-recall counter equivalent (labeled COMPOSED): an
+            /// ordinary cycle through REAL composed recall settles with
+            /// bounded, instrumented counters.
+            #[test]
+            fn cyclic_input_counters_bounded_composed() {
+                let dir = tempfile::tempdir().expect("tempdir");
+                let fixture = fixture(dir.path());
+                let resolver = fixture.candidate_evidence();
+                let counters = resolver.walk_counters();
+                counters.reset();
+                put_memory_with_id(
+                    &fixture,
+                    "memory-composed-cycle-b",
+                    "composedcycle beta",
+                    std::iter::repeat_n(
+                        evidence_ref(EvidenceTargetType::Memory, "memory-composed-cycle-a"),
+                        300,
+                    )
+                    .collect(),
+                );
+                let a = put_memory_with_id(
+                    &fixture,
+                    "memory-composed-cycle-a",
+                    "composedcycle alpha",
+                    std::iter::repeat_n(
+                        evidence_ref(EvidenceTargetType::Memory, "memory-composed-cycle-b"),
+                        300,
+                    )
+                    .collect(),
+                );
+                let recall = SqlUnifiedRecall::new(
+                    fixture.memory.clone(),
+                    Vec::new(),
+                    fixture.beliefs.clone(),
+                )
+                .with_code_eligibility(
+                    fixture.eligibility() as Arc<dyn engram_retrieval::CodeEligibilityResolver>
+                )
+                .with_candidate_evidence(resolver.clone());
+                let payload =
+                    block_on(recall.recall(request("composedcycle", 20))).expect("recall");
+                let ids = target_ids(&payload);
+                assert!(
+                    ids.iter().any(|id| id == a.id.as_str()),
+                    "the ordinary cyclic candidate flows through composed recall: {ids:?}"
+                );
+                let stats = counters.snapshot();
+                assert!(
+                    stats.cycle_backedges >= 1,
+                    "back-edges instrumented: {stats:?}"
+                );
+                assert!(
+                    stats.visited_records <= 256 && stats.max_queue_depth <= 16,
+                    "set and queue bounded through composed recall: {stats:?}"
+                );
+                assert_eq!(
+                    stats.budget_exhaustions, 0,
+                    "a within-budget composed cycle does not exhaust: {stats:?}"
+                );
+            }
         }
     }
 

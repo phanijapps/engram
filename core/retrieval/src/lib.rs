@@ -35,8 +35,8 @@ pub use config::{
 pub use graph_cache::{GraphCache, GraphSnapshot, InMemoryGraphCache, scope_key};
 pub use outcomes::OutcomeLedger;
 pub use ports::{
-    CandidateEvidence, CandidateEvidenceResolver, ContextComposer, RetrievalFusion, RetrievalIndex,
-    RetrievalReranker,
+    CandidateEvidence, CandidateEvidenceResolver, ContextComposer, EvidenceClassification,
+    RetrievalFusion, RetrievalIndex, RetrievalReranker,
 };
 pub use predict::{AgentState, PredictiveRetriever, RecentActivityPredictor, RetrievalHints};
 pub use reciprocal::{DEFAULT_RRF_K, ReciprocalRankFusion};

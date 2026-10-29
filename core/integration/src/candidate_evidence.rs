@@ -6,14 +6,15 @@
 //! (`request.requester` + the record's canonical scope/policy — policy
 //! equality alone is never authorization), binds the candidate payload to the
 //! canonical bytes/revision, and then walks the record's canonical dependency
-//! chain (provenance evidence + derivation inputs) with CYCLE and DEPTH
-//! bounds. A record is `CodeDependent` when its own kind or durable target
-//! lineage is code, or when any reachable dependency is. A record is
-//! positively `Ordinary` only when its canonical origin and every reachable
-//! dependency resolve through authorized ordinary records. Mismatched
-//! payloads, foreign/missing records, unauthorized reads, cycles on the
-//! resolution path that cannot be settled, and depth/work overruns all
-//! degrade to `Unknown` — ambiguity never becomes ordinary evidence.
+//! chain with CYCLE and total WORK bounds. A record is `CodeDependent` when
+//! its own kind or durable target lineage is code, or when any reachable
+//! dependency is. A record is positively `Ordinary` only when its canonical
+//! origin and every reachable dependency resolve through authorized ordinary
+//! records. Mismatched payloads, foreign/missing records, unauthorized reads,
+//! ID-less derived references, canonically unresolvable reference categories,
+//! ambiguous typed origins, cycles that cannot be settled and work/depth
+//! overruns all degrade to `Unknown` — ambiguity never becomes ordinary
+//! evidence (corrective r4, canonical 6a/6b/6d).
 
 use std::collections::BTreeSet;
 use std::sync::Arc;
@@ -26,14 +27,18 @@ use engram_domain::{
 };
 use engram_knowledge::{CodeBindingRepository, KnowledgeRepository};
 use engram_memory::MemoryRepository;
-use engram_retrieval::{CandidateEvidence, CandidateEvidenceResolver};
+use engram_retrieval::{CandidateEvidence, CandidateEvidenceResolver, EvidenceClassification};
 use engram_runtime::{CoreResult, PolicyAuthorizer};
 
 /// Maximum dependency-chain depth evaluated per candidate. Deeper ambiguity
 /// degrades to `Unknown` rather than an unbounded walk.
 const MAX_DEPENDENCY_DEPTH: usize = 8;
-/// Maximum canonical records resolved per candidate evaluation (work bound).
+/// Maximum canonical records resolved per candidate evaluation.
 const MAX_DEPENDENCY_RECORDS: usize = 256;
+/// TOTAL reference examinations (work) per candidate evaluation — enforced
+/// BEFORE any per-reference cloning or enqueueing so neither processing nor
+/// allocation grows with a hostile dependency array (canonical 6d).
+const MAX_DEPENDENCY_REFERENCES: usize = 1024;
 
 /// Reads each capability's canonical scoped record before permitting degraded recall.
 pub struct RepositoryCandidateEvidence {
@@ -76,7 +81,7 @@ impl RepositoryCandidateEvidence {
 
     /// True when `record_id` carries durable code lineage in the request
     /// scope. An unconfigured ownership reader cannot establish the negative
-    /// and callers treat that as `Unknown`.
+    /// and callers treat that as `Unknown` (never as a negative lookup).
     async fn in_code_lineage(
         &self,
         record_id: &str,
@@ -95,27 +100,33 @@ impl RepositoryCandidateEvidence {
     ///
     /// Aggregate semantics: any reachable code-dependent record makes the
     /// candidate `CodeDependent`; otherwise any unresolved (missing, foreign,
-    /// unauthorized, over-bound) dependency makes it `Unknown`; only a fully
-    /// resolved ordinary chain yields `Ordinary`. The walk is ITERATIVE (an
-    /// explicit provenance stack — async recursion would require boxing and
-    /// an unbounded future). The `resolved` set both bounds work and breaks
-    /// cycles: a record visited earlier in the same walk has already
-    /// contributed its classification, so a back-edge adds nothing new (a
-    /// pure ordinary cycle stays ordinary; code anywhere in the cycle still
-    /// surfaces through the other edge's fold).
+    /// unauthorized, over-bound, ID-less, unresolvable-category) dependency
+    /// makes it `Unknown`; only a fully resolved ordinary chain yields
+    /// `Ordinary`. The walk is ITERATIVE (an explicit provenance stack —
+    /// async recursion would require boxing and an unbounded future). The
+    /// `resolved` set breaks cycles: a record visited earlier in the same
+    /// walk has already contributed its classification, so a back-edge adds
+    /// nothing new (a pure ordinary cycle stays ordinary; code anywhere in
+    /// the cycle still surfaces through the other edge's fold). The `work`
+    /// counter is the TOTAL reference budget: exhaustion stops the whole
+    /// walk immediately with `Unknown` — no further references are examined,
+    /// cloned or enqueued (canonical 6d). When `code_dependencies` is
+    /// supplied, every resolved code record's id is appended for the recipe
+    /// normal-path eligibility check.
     async fn dependencies(
         &self,
         provenance: &engram_domain::Provenance,
         request: &RetrievalRequest,
         resolved: &mut BTreeSet<(u8, String)>,
-        depth: usize,
+        work: &mut usize,
+        code_dependencies: Option<&mut Vec<String>>,
     ) -> CoreResult<CandidateEvidence> {
         let mut aggregate = CandidateEvidence::Ordinary;
-        let mut stack: Vec<(engram_domain::Provenance, usize)> = vec![(provenance.clone(), depth)];
+        let mut collected = code_dependencies;
+        let mut stack: Vec<(engram_domain::Provenance, usize)> = vec![(provenance.clone(), 0)];
         while let Some((frame, frame_depth)) = stack.pop() {
             if frame_depth >= MAX_DEPENDENCY_DEPTH {
-                aggregate = upgrade(aggregate, CandidateEvidence::Unknown);
-                continue;
+                return Ok(CandidateEvidence::Unknown);
             }
             let references = frame.evidence.iter().chain(
                 frame
@@ -124,11 +135,22 @@ impl RepositoryCandidateEvidence {
                     .flat_map(|derivation| derivation.input_refs.iter()),
             );
             for reference in references {
+                // Total work budget BEFORE any per-reference processing
+                // (canonical 6d): exhaustion ends the evaluation.
+                if *work >= MAX_DEPENDENCY_REFERENCES {
+                    return Ok(CandidateEvidence::Unknown);
+                }
+                *work += 1;
                 let (classification, continuation) = self
-                    .reference_evidence(reference, request, resolved)
+                    .reference_evidence(reference, request, resolved, work, &mut collected)
                     .await?;
                 aggregate = upgrade(aggregate, classification);
                 if let Some(next) = continuation {
+                    if *work >= MAX_DEPENDENCY_REFERENCES
+                        || resolved.len() >= MAX_DEPENDENCY_RECORDS
+                    {
+                        return Ok(CandidateEvidence::Unknown);
+                    }
                     stack.push((next, frame_depth + 1));
                 }
                 if aggregate == CandidateEvidence::CodeDependent {
@@ -148,21 +170,23 @@ impl RepositoryCandidateEvidence {
         reference: &engram_domain::EvidenceRef,
         request: &RetrievalRequest,
         resolved: &mut BTreeSet<(u8, String)>,
+        work: &mut usize,
+        code_dependencies: &mut Option<&mut Vec<String>>,
     ) -> CoreResult<(CandidateEvidence, Option<engram_domain::Provenance>)> {
         match reference.target_type {
             // Code-capable record categories: the reference must resolve to
             // an authorized canonical record, which is then classified by
             // its own kind, durable lineage and dependencies.
             EvidenceTargetType::Chunk => {
+                // An ID-less code-capable reference cannot be settled while
+                // the binding authority is unavailable (canonical 6a).
                 let Some(id) = reference.target_id.as_deref() else {
-                    // A chunk reference that names no canonical record cannot
-                    // be settled while the binding authority is unavailable.
                     return Ok((CandidateEvidence::Unknown, None));
                 };
                 if !resolved.insert(target_key(&EvidenceTargetType::Chunk, id)) {
                     return Ok((CandidateEvidence::Ordinary, None));
                 }
-                if resolved.len() > MAX_DEPENDENCY_RECORDS {
+                if resolved.len() > MAX_DEPENDENCY_RECORDS || *work >= MAX_DEPENDENCY_REFERENCES {
                     return Ok((CandidateEvidence::Unknown, None));
                 }
                 let Some(record) = self
@@ -172,8 +196,8 @@ impl RepositoryCandidateEvidence {
                 else {
                     return Ok((CandidateEvidence::Unknown, None));
                 };
-                // Chunks authorize through their canonical source's scope
-                // (the owning scoped read pair the direct path uses).
+                // Chunks authorize through BOTH their canonical source's
+                // scope/policy AND their own policy (canonical 6a).
                 let Some(source) = self
                     .knowledge
                     .get_source(&record.source_id, &request.scope)
@@ -181,19 +205,38 @@ impl RepositoryCandidateEvidence {
                 else {
                     return Ok((CandidateEvidence::Unknown, None));
                 };
-                if !self.authorize(request, &source.scope, &record.policy) {
+                if !self.authorize(request, &source.scope, &source.policy)
+                    || !self.authorize(request, &source.scope, &record.policy)
+                {
                     return Ok((CandidateEvidence::Unknown, None));
                 }
-                if code_chunk(record.kind)
-                    || matches!(self.in_code_lineage(id, request).await?, Some(true))
-                {
+                if code_chunk(record.kind) {
+                    if let Some(collected) = code_dependencies.as_deref_mut() {
+                        collected.push(id.to_owned());
+                    }
                     return Ok((CandidateEvidence::CodeDependent, None));
                 }
-                resolved.insert(target_key(
-                    &EvidenceTargetType::Source,
-                    &record.source_id.to_string(),
-                ));
-                Ok((CandidateEvidence::Ordinary, Some(record.provenance.clone())))
+                match self.in_code_lineage(id, request).await? {
+                    Some(true) => {
+                        if let Some(collected) = code_dependencies.as_deref_mut() {
+                            collected.push(id.to_owned());
+                        }
+                        Ok((CandidateEvidence::CodeDependent, None))
+                    }
+                    // A repository-bound source is an ambiguous typed origin
+                    // while the ownership reader is unconfigured: Unknown,
+                    // never a negative lineage lookup (canonical 6a).
+                    None if source.repository_key.is_some() => {
+                        Ok((CandidateEvidence::Unknown, None))
+                    }
+                    Some(false) => Ok((CandidateEvidence::Ordinary, Some(record.provenance))),
+                    None => {
+                        // Ordinary source, ownership reader unconfigured: the
+                        // chunk's own kind is ordinary, so the origin is not
+                        // code-owned; continue through its dependencies.
+                        Ok((CandidateEvidence::Ordinary, Some(record.provenance)))
+                    }
+                }
             }
             EvidenceTargetType::Entity => {
                 let Some(id) = reference.target_id.as_deref() else {
@@ -202,7 +245,7 @@ impl RepositoryCandidateEvidence {
                 if !resolved.insert(target_key(&EvidenceTargetType::Entity, id)) {
                     return Ok((CandidateEvidence::Ordinary, None));
                 }
-                if resolved.len() > MAX_DEPENDENCY_RECORDS {
+                if resolved.len() > MAX_DEPENDENCY_RECORDS || *work >= MAX_DEPENDENCY_REFERENCES {
                     return Ok((CandidateEvidence::Unknown, None));
                 }
                 let Some(record) = self
@@ -216,15 +259,19 @@ impl RepositoryCandidateEvidence {
                     return Ok((CandidateEvidence::Unknown, None));
                 }
                 if entity_is_code_kind(&record) {
+                    if let Some(collected) = code_dependencies.as_deref_mut() {
+                        collected.push(id.to_owned());
+                    }
                     return Ok((CandidateEvidence::CodeDependent, None));
                 }
                 match self.in_code_lineage(id, request).await? {
-                    Some(true) => Ok((CandidateEvidence::CodeDependent, None)),
-                    // Positively established ordinary entity origin: continue
-                    // through the entity's own provenance.
-                    Some(false) => {
-                        Ok((CandidateEvidence::Ordinary, Some(record.provenance.clone())))
+                    Some(true) => {
+                        if let Some(collected) = code_dependencies.as_deref_mut() {
+                            collected.push(id.to_owned());
+                        }
+                        Ok((CandidateEvidence::CodeDependent, None))
                     }
+                    Some(false) => Ok((CandidateEvidence::Ordinary, Some(record.provenance))),
                     None => Ok((CandidateEvidence::Unknown, None)),
                 }
             }
@@ -235,7 +282,7 @@ impl RepositoryCandidateEvidence {
                 if !resolved.insert(target_key(&EvidenceTargetType::Source, id)) {
                     return Ok((CandidateEvidence::Ordinary, None));
                 }
-                if resolved.len() > MAX_DEPENDENCY_RECORDS {
+                if resolved.len() > MAX_DEPENDENCY_RECORDS || *work >= MAX_DEPENDENCY_REFERENCES {
                     return Ok((CandidateEvidence::Unknown, None));
                 }
                 let Some(record) = self
@@ -256,16 +303,45 @@ impl RepositoryCandidateEvidence {
                 }
                 Ok((CandidateEvidence::Ordinary, None))
             }
+            // Relationship references resolve canonically through the graph
+            // port; the relationship itself is not a code-binding record, so
+            // classification continues through its own provenance/evidence.
+            EvidenceTargetType::Relationship => {
+                let Some(id) = reference.target_id.as_deref() else {
+                    return Ok((CandidateEvidence::Unknown, None));
+                };
+                if !resolved.insert(target_key(&EvidenceTargetType::Relationship, id)) {
+                    return Ok((CandidateEvidence::Ordinary, None));
+                }
+                if resolved.len() > MAX_DEPENDENCY_RECORDS || *work >= MAX_DEPENDENCY_REFERENCES {
+                    return Ok((CandidateEvidence::Unknown, None));
+                }
+                let Some(record) = self
+                    .knowledge
+                    .get_relationship(&(id.to_owned().into()), &request.scope)
+                    .await?
+                else {
+                    return Ok((CandidateEvidence::Unknown, None));
+                };
+                if !self.authorize(request, &record.scope, &graph_default_policy()) {
+                    return Ok((CandidateEvidence::Unknown, None));
+                }
+                let mut provenance = record.provenance.clone();
+                provenance.evidence.extend(record.evidence.iter().cloned());
+                Ok((CandidateEvidence::Ordinary, Some(provenance)))
+            }
             // Derived-record categories: resolve the canonical record and
-            // continue the walk through its own provenance.
+            // continue the walk through its own provenance. An ID-less
+            // derived reference is unresolved evidence, never ordinary
+            // (canonical 6a).
             EvidenceTargetType::Memory | EvidenceTargetType::Belief => {
                 let Some(id) = reference.target_id.clone() else {
-                    return Ok((CandidateEvidence::Ordinary, None));
+                    return Ok((CandidateEvidence::Unknown, None));
                 };
                 if !resolved.insert(target_key(&reference.target_type, &id)) {
                     return Ok((CandidateEvidence::Ordinary, None));
                 }
-                if resolved.len() > MAX_DEPENDENCY_RECORDS {
+                if resolved.len() > MAX_DEPENDENCY_RECORDS || *work >= MAX_DEPENDENCY_REFERENCES {
                     return Ok((CandidateEvidence::Unknown, None));
                 }
                 match reference.target_type {
@@ -280,7 +356,7 @@ impl RepositoryCandidateEvidence {
                         if !self.authorize(request, &record.scope, &record.policy) {
                             return Ok((CandidateEvidence::Unknown, None));
                         }
-                        Ok((CandidateEvidence::Ordinary, Some(record.provenance.clone())))
+                        Ok((CandidateEvidence::Ordinary, Some(record.provenance)))
                     }
                     _ => {
                         let Some(record) = self
@@ -293,31 +369,64 @@ impl RepositoryCandidateEvidence {
                         if !self.authorize(request, &record.scope, &record.policy) {
                             return Ok((CandidateEvidence::Unknown, None));
                         }
-                        Ok((CandidateEvidence::Ordinary, Some(record.provenance.clone())))
+                        // Typed belief dependencies (canonical 6b): sources
+                        // and synthesizer inputs join the walk.
+                        let provenance = belief_dependency_provenance(&record);
+                        Ok((CandidateEvidence::Ordinary, Some(provenance)))
                     }
                 }
             }
-            // Categories outside the code-binding universe: an event,
-            // concept, URL, document or relationship reference cannot carry
-            // durable code lineage (code capability is established only on
-            // chunk/entity records through the binding store).
-            _ => Ok((CandidateEvidence::Ordinary, None)),
+            // Canonically unresolvable categories: documents have no scoped
+            // canonical read on the knowledge port and concepts/events/urls
+            // carry no canonical code association — unresolved evidence
+            // degrades to Unknown, never Ordinary (canonical 6a).
+            EvidenceTargetType::Document
+            | EvidenceTargetType::Concept
+            | EvidenceTargetType::Event
+            | EvidenceTargetType::Url => Ok((CandidateEvidence::Unknown, None)),
         }
     }
 }
 
-/// Upgrade the aggregate classification monoid: code dependence dominates,
-/// unresolved evidence degrades ordinary (never the other way round).
-fn upgrade(current: CandidateEvidence, next: CandidateEvidence) -> CandidateEvidence {
-    match (current, next) {
-        (CandidateEvidence::CodeDependent, _) | (_, CandidateEvidence::CodeDependent) => {
-            CandidateEvidence::CodeDependent
-        }
-        (CandidateEvidence::Unknown, _) | (_, CandidateEvidence::Unknown) => {
-            CandidateEvidence::Unknown
-        }
-        (CandidateEvidence::Ordinary, CandidateEvidence::Ordinary) => CandidateEvidence::Ordinary,
+/// Folds a canonical belief's TYPED dependency fields into one synthetic
+/// provenance frame: `sources` (typed `BeliefSource` targets) and the
+/// synthesizer derivation's `input_refs`, alongside the record's own
+/// provenance evidence/derivations (canonical 6b).
+fn belief_dependency_provenance(belief: &engram_domain::Belief) -> engram_domain::Provenance {
+    let mut provenance = belief.provenance.clone();
+    for source in &belief.sources {
+        let target_type = match source.target_type {
+            engram_domain::BeliefSourceTargetType::Memory => EvidenceTargetType::Memory,
+            engram_domain::BeliefSourceTargetType::Chunk => EvidenceTargetType::Chunk,
+            engram_domain::BeliefSourceTargetType::Entity => EvidenceTargetType::Entity,
+            engram_domain::BeliefSourceTargetType::Relationship => EvidenceTargetType::Relationship,
+            engram_domain::BeliefSourceTargetType::Belief => EvidenceTargetType::Belief,
+            engram_domain::BeliefSourceTargetType::Assertion
+            | engram_domain::BeliefSourceTargetType::Event
+            | engram_domain::BeliefSourceTargetType::Concept => {
+                // No canonical EvidenceRef equivalent: unresolvable.
+                provenance.evidence.push(engram_domain::EvidenceRef {
+                    target_type: EvidenceTargetType::Event,
+                    target_id: None,
+                    uri: None,
+                    quote: None,
+                    location: None,
+                });
+                continue;
+            }
+        };
+        provenance.evidence.push(engram_domain::EvidenceRef {
+            target_type,
+            target_id: Some(source.target_id.clone()),
+            uri: None,
+            quote: None,
+            location: None,
+        });
     }
+    if let Some(synthesizer) = &belief.synthesizer {
+        provenance.derivations.push(synthesizer.clone());
+    }
+    provenance
 }
 
 /// Compact resolution key for cycle/work bounding. `EvidenceTargetType` is a
@@ -365,9 +474,10 @@ fn entity_is_code_kind(entity: &engram_domain::KnowledgeEntity) -> bool {
     )
 }
 
-/// Entities carry no canonical policy field; the owning graph lane stamps
-/// this default on entity candidates, so the evidence path authorizes the
-/// same shape (the owning decision, not a resolver-invented bypass).
+/// Entities and relationships carry no canonical policy field; the owning
+/// graph lane stamps this default on such candidates, so the evidence path
+/// authorizes the same shape (the owning decision, not a resolver-invented
+/// bypass).
 fn graph_default_policy() -> Policy {
     Policy {
         visibility: Visibility::Workspace,
@@ -379,6 +489,20 @@ fn graph_default_policy() -> Policy {
     }
 }
 
+/// Upgrade the aggregate classification monoid: code dependence dominates,
+/// unresolved evidence degrades ordinary (never the other way round).
+fn upgrade(current: CandidateEvidence, next: CandidateEvidence) -> CandidateEvidence {
+    match (current, next) {
+        (CandidateEvidence::CodeDependent, _) | (_, CandidateEvidence::CodeDependent) => {
+            CandidateEvidence::CodeDependent
+        }
+        (CandidateEvidence::Unknown, _) | (_, CandidateEvidence::Unknown) => {
+            CandidateEvidence::Unknown
+        }
+        (CandidateEvidence::Ordinary, CandidateEvidence::Ordinary) => CandidateEvidence::Ordinary,
+    }
+}
+
 #[async_trait]
 impl CandidateEvidenceResolver for RepositoryCandidateEvidence {
     async fn evidence(
@@ -386,7 +510,22 @@ impl CandidateEvidenceResolver for RepositoryCandidateEvidence {
         candidate: &RetrievalResult,
         request: &RetrievalRequest,
     ) -> CoreResult<CandidateEvidence> {
+        Ok(self
+            .classify_with_dependencies(candidate, request)
+            .await?
+            .evidence)
+    }
+
+    /// Full classification with code dependency ids (canonical 6c): recipes
+    /// with a SUCCESSFUL view must still validate derived records' code
+    /// dependencies against that view.
+    async fn classify_with_dependencies(
+        &self,
+        candidate: &RetrievalResult,
+        request: &RetrievalRequest,
+    ) -> CoreResult<EvidenceClassification> {
         let mut resolved = BTreeSet::new();
+        let mut work = 0usize;
         match candidate.target_type {
             RetrievalTargetType::Memory => match self
                 .memory
@@ -399,10 +538,25 @@ impl CandidateEvidenceResolver for RepositoryCandidateEvidence {
                         && record.provenance == candidate.provenance
                         && record.policy == candidate.policy =>
                 {
-                    self.dependencies(&record.provenance, request, &mut resolved, 0)
-                        .await
+                    let mut code_dependencies = Vec::new();
+                    let evidence = self
+                        .dependencies(
+                            &record.provenance,
+                            request,
+                            &mut resolved,
+                            &mut work,
+                            Some(&mut code_dependencies),
+                        )
+                        .await?;
+                    Ok(EvidenceClassification {
+                        evidence,
+                        code_dependencies,
+                    })
                 }
-                Some(_) | None => Ok(CandidateEvidence::Unknown),
+                Some(_) | None => Ok(EvidenceClassification {
+                    evidence: CandidateEvidence::Unknown,
+                    code_dependencies: Vec::new(),
+                }),
             },
             RetrievalTargetType::Belief => match self
                 .beliefs
@@ -415,10 +569,27 @@ impl CandidateEvidenceResolver for RepositoryCandidateEvidence {
                         && record.provenance == candidate.provenance
                         && record.policy == candidate.policy =>
                 {
-                    self.dependencies(&record.provenance, request, &mut resolved, 0)
-                        .await
+                    // Typed belief dependencies join the walk (canonical 6b).
+                    let provenance = belief_dependency_provenance(&record);
+                    let mut code_dependencies = Vec::new();
+                    let evidence = self
+                        .dependencies(
+                            &provenance,
+                            request,
+                            &mut resolved,
+                            &mut work,
+                            Some(&mut code_dependencies),
+                        )
+                        .await?;
+                    Ok(EvidenceClassification {
+                        evidence,
+                        code_dependencies,
+                    })
                 }
-                Some(_) | None => Ok(CandidateEvidence::Unknown),
+                Some(_) | None => Ok(EvidenceClassification {
+                    evidence: CandidateEvidence::Unknown,
+                    code_dependencies: Vec::new(),
+                }),
             },
             RetrievalTargetType::Chunk => match self
                 .knowledge
@@ -437,25 +608,55 @@ impl CandidateEvidenceResolver for RepositoryCandidateEvidence {
                             && record.provenance == candidate.provenance
                             && record.policy == candidate.policy =>
                     {
-                        resolved.insert(target_key(
-                            &EvidenceTargetType::Source,
-                            &record.source_id.to_string(),
-                        ));
-                        if code_chunk(record.kind)
-                            || matches!(
-                                self.in_code_lineage(candidate.target_id.as_str(), request)
-                                    .await?,
-                                Some(true)
-                            )
-                        {
-                            return Ok(CandidateEvidence::CodeDependent);
+                        if code_chunk(record.kind) {
+                            return Ok(EvidenceClassification {
+                                evidence: CandidateEvidence::CodeDependent,
+                                code_dependencies: vec![candidate.target_id.clone()],
+                            });
                         }
-                        self.dependencies(&record.provenance, request, &mut resolved, 0)
-                            .await
+                        match self
+                            .in_code_lineage(candidate.target_id.as_str(), request)
+                            .await?
+                        {
+                            Some(true) => {
+                                return Ok(EvidenceClassification {
+                                    evidence: CandidateEvidence::CodeDependent,
+                                    code_dependencies: vec![candidate.target_id.clone()],
+                                });
+                            }
+                            None if source.repository_key.is_some() => {
+                                return Ok(EvidenceClassification {
+                                    evidence: CandidateEvidence::Unknown,
+                                    code_dependencies: Vec::new(),
+                                });
+                            }
+                            Some(false) | None => {
+                                let mut code_dependencies = Vec::new();
+                                let evidence = self
+                                    .dependencies(
+                                        &record.provenance,
+                                        request,
+                                        &mut resolved,
+                                        &mut work,
+                                        Some(&mut code_dependencies),
+                                    )
+                                    .await?;
+                                Ok(EvidenceClassification {
+                                    evidence,
+                                    code_dependencies,
+                                })
+                            }
+                        }
                     }
-                    Some(_) | None => Ok(CandidateEvidence::Unknown),
+                    Some(_) | None => Ok(EvidenceClassification {
+                        evidence: CandidateEvidence::Unknown,
+                        code_dependencies: Vec::new(),
+                    }),
                 },
-                None => Ok(CandidateEvidence::Unknown),
+                None => Ok(EvidenceClassification {
+                    evidence: CandidateEvidence::Unknown,
+                    code_dependencies: Vec::new(),
+                }),
             },
             RetrievalTargetType::Entity => match self
                 .knowledge
@@ -467,29 +668,56 @@ impl CandidateEvidenceResolver for RepositoryCandidateEvidence {
                         && record.provenance == candidate.provenance =>
                 {
                     if !self.authorize(request, &record.scope, &graph_default_policy()) {
-                        return Ok(CandidateEvidence::Unknown);
+                        return Ok(EvidenceClassification {
+                            evidence: CandidateEvidence::Unknown,
+                            code_dependencies: Vec::new(),
+                        });
                     }
                     if entity_is_code_kind(&record) {
-                        return Ok(CandidateEvidence::CodeDependent);
+                        return Ok(EvidenceClassification {
+                            evidence: CandidateEvidence::CodeDependent,
+                            code_dependencies: vec![candidate.target_id.clone()],
+                        });
                     }
-                    // Without the canonical ownership reader the absence of
-                    // lineage cannot be established positively — Unknown, not
-                    // ordinary (the default unconfigured boundary).
                     match self
                         .in_code_lineage(candidate.target_id.as_str(), request)
                         .await?
                     {
-                        Some(true) => Ok(CandidateEvidence::CodeDependent),
+                        Some(true) => Ok(EvidenceClassification {
+                            evidence: CandidateEvidence::CodeDependent,
+                            code_dependencies: vec![candidate.target_id.clone()],
+                        }),
                         Some(false) => {
-                            self.dependencies(&record.provenance, request, &mut resolved, 0)
-                                .await
+                            let mut code_dependencies = Vec::new();
+                            let evidence = self
+                                .dependencies(
+                                    &record.provenance,
+                                    request,
+                                    &mut resolved,
+                                    &mut work,
+                                    Some(&mut code_dependencies),
+                                )
+                                .await?;
+                            Ok(EvidenceClassification {
+                                evidence,
+                                code_dependencies,
+                            })
                         }
-                        None => Ok(CandidateEvidence::Unknown),
+                        None => Ok(EvidenceClassification {
+                            evidence: CandidateEvidence::Unknown,
+                            code_dependencies: Vec::new(),
+                        }),
                     }
                 }
-                Some(_) | None => Ok(CandidateEvidence::Unknown),
+                Some(_) | None => Ok(EvidenceClassification {
+                    evidence: CandidateEvidence::Unknown,
+                    code_dependencies: Vec::new(),
+                }),
             },
-            _ => Ok(CandidateEvidence::Unknown),
+            _ => Ok(EvidenceClassification {
+                evidence: CandidateEvidence::Unknown,
+                code_dependencies: Vec::new(),
+            }),
         }
     }
 }

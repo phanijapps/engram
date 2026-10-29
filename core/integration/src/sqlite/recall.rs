@@ -314,9 +314,41 @@ impl UnifiedRecall for SqlUnifiedRecall {
         // compose_context: an ineligible code target that survived a lane —
         // e.g. via a stale warm index or a lane constructed without its own
         // constraint — is dropped here rather than entering the composed
-        // context budget. On AUTHORITY FAILURE the same closed rule denies
-        // code-capable targets (finding 6).
-        if code_view.is_some() {
+        // context budget. With canonical evidence configured, a SUCCESSFUL
+        // view additionally validates every candidate's canonical CODE
+        // DEPENDENCIES against that view (corrective r4, canonical 6c): a
+        // memory/belief whose provenance derives from stale code denies even
+        // though its own id carries no lineage; positively authorized
+        // independent ordinary records keep flowing, and genuinely Unknown
+        // evidence fails closed. On AUTHORITY FAILURE the same evidence
+        // decides (finding 6): only positively authorized ordinary records
+        // survive.
+        if code_view.is_some() && self.candidate_evidence.is_some() {
+            let evidence = self.candidate_evidence.as_ref().expect("checked");
+            let view = code_view.as_ref().expect("checked");
+            let mut allowed = Vec::with_capacity(candidates.len());
+            for candidate in candidates {
+                match evidence
+                    .classify_with_dependencies(&candidate, &request)
+                    .await
+                {
+                    Ok(classification) => {
+                        let dependency_eligible = classification
+                            .code_dependencies
+                            .iter()
+                            .all(|dependency| view.allows(dependency.as_str(), true));
+                        if classification.evidence == CandidateEvidence::Ordinary
+                            || (classification.evidence == CandidateEvidence::CodeDependent
+                                && dependency_eligible)
+                        {
+                            allowed.push(candidate);
+                        }
+                    }
+                    Err(error) => source_failures.push(lane_failure("candidate_evidence", &error)),
+                }
+            }
+            candidates = allowed;
+        } else if code_view.is_some() {
             candidates.retain(|candidate| eligible_candidate(candidate));
         } else if authority_failed {
             let Some(evidence) = &self.candidate_evidence else {

@@ -1108,6 +1108,69 @@ mod task_013 {
             )
         }
 
+        /// Seeds a belief with TYPED sources and an optional synthesizer-bearing
+        /// provenance (canonical 6b fixtures). The stored record's provenance
+        /// stays EMPTY so only the typed fields carry the dependency.
+        fn put_belief_with_sources(
+            beliefs: &Arc<SqlBeliefStore>,
+            id: &str,
+            content: &str,
+            sources: Vec<engram_domain::BeliefSource>,
+            provenance: Option<Provenance>,
+        ) {
+            let mut provenance = provenance.unwrap_or_else(super::provenance);
+            let synthesizer = provenance.derivations.first().cloned();
+            provenance.derivations.clear();
+            provenance.evidence.clear();
+            block_on(beliefs.put_belief(Belief {
+                id: BeliefId::from(id),
+                scope: scope(),
+                subject: BeliefSubject {
+                    key: "parse".to_string(),
+                    entity_ref: None,
+                    concept_ref: None,
+                    aliases: Vec::new(),
+                },
+                content: content.to_string(),
+                status: BeliefStatus::Active,
+                confidence: 0.9,
+                sources,
+                valid_from: None,
+                valid_until: None,
+                superseded_by: None,
+                stale: None,
+                synthesizer,
+                reasoning: None,
+                embedding_refs: Vec::new(),
+                policy: policy(),
+                provenance,
+                created_at: chrono::Utc::now(),
+                updated_at: None,
+                metadata: None,
+            }))
+            .expect("put typed belief");
+        }
+
+        /// A belief candidate whose payload/provenance/policy bind the STORED
+        /// record (typed-dependency fixtures carry empty provenance).
+        fn bound_belief_candidate(fixture: &Fixture, id: &str, content: &str) -> RetrievalResult {
+            let record = block_on(engram_belief::BeliefRepository::get_belief_by_id(
+                &*fixture.beliefs,
+                &BeliefId::from(id),
+                &scope(),
+            ))
+            .expect("get belief")
+            .expect("belief exists");
+            assert_eq!(record.content, content, "fixture content sanity");
+            candidate(
+                RetrievalTargetType::Belief,
+                id,
+                content,
+                record.provenance.clone(),
+                record.policy.clone(),
+            )
+        }
+
         use engram_retrieval::CandidateEvidence;
 
         fn evidence(fixture: &Fixture, candidate: &RetrievalResult) -> CandidateEvidence {
@@ -1442,6 +1505,469 @@ mod task_013 {
             assert_eq!(
                 evidence(&fixture, &memory_candidate(&record)),
                 CandidateEvidence::Unknown
+            );
+        }
+
+        /// Corrective r4 (canonical 6a): a chunk reference whose SOURCE policy
+        /// is denied is Unknown even when the chunk's own policy is allowed —
+        /// both canonical authorizations are required on dependency paths.
+        struct DeniesHighSensitivity;
+        impl engram_runtime::PolicyAuthorizer for DeniesHighSensitivity {
+            fn can_write(
+                &self,
+                _requester: &engram_domain::Requester,
+                _scope: &engram_domain::Scope,
+                _policy: &Policy,
+            ) -> CoreResult<()> {
+                Ok(())
+            }
+            fn can_retrieve(
+                &self,
+                _requester: &engram_domain::Requester,
+                _scope: &engram_domain::Scope,
+                policy: &Policy,
+            ) -> CoreResult<()> {
+                if policy.sensitivity == Some(engram_domain::Sensitivity::High) {
+                    Err(CoreError::PolicyDenied {
+                        reason: "high sensitivity denied".to_string(),
+                    })
+                } else {
+                    Ok(())
+                }
+            }
+            fn can_forget(
+                &self,
+                _requester: &engram_domain::Requester,
+                _scope: &engram_domain::Scope,
+                _policy: &Policy,
+            ) -> CoreResult<()> {
+                Ok(())
+            }
+        }
+
+        #[test]
+        fn denied_source_policy_with_allowed_chunk_is_unknown() {
+            let dir = tempfile::tempdir().expect("tempdir");
+            let fixture = fixture(dir.path());
+            // A denied-SOURCE variant: same chunk bytes, source carrying a
+            // High-sensitivity policy the owning authorizer denies.
+            let mut denied_source: engram_domain::KnowledgeSource = {
+                let mut source = engram_domain::KnowledgeSource {
+                    id: Id::from("source-denied"),
+                    kind: engram_domain::SourceKind::Upload,
+                    scope: scope(),
+                    name: "denied source".to_string(),
+                    uri: None,
+                    version: None,
+                    repository_key: None,
+                    git_ref: None,
+                    policy: policy(),
+                    provenance: provenance(),
+                    created_at: chrono::Utc::now(),
+                    updated_at: None,
+                    metadata: None,
+                };
+                source.policy.sensitivity = Some(engram_domain::Sensitivity::High);
+                source
+            };
+            let mut denied_chunk = chunk(
+                "chunk-denied-source",
+                "parse denied source",
+                KnowledgeChunkKind::Paragraph,
+            );
+            denied_chunk.source_id = denied_source.id.clone();
+            use engram_knowledge::KnowledgeRepository as _;
+            block_on(fixture.knowledge.put_source(denied_source.clone()))
+                .expect("put denied source");
+            block_on(fixture.knowledge.put_chunk(denied_chunk.clone())).expect("put chunk");
+            let record = block_on(
+                fixture
+                    .knowledge
+                    .get_chunk(&Id::from("chunk-denied-source"), &scope()),
+            )
+            .expect("get chunk")
+            .expect("chunk exists");
+
+            let resolver = engram_integration::candidate_evidence::RepositoryCandidateEvidence::new(
+                fixture.memory.clone() as Arc<dyn engram_memory::MemoryRepository>,
+                fixture.beliefs.clone() as Arc<dyn engram_belief::BeliefRepository>,
+                fixture.knowledge.clone() as Arc<dyn engram_knowledge::KnowledgeRepository>,
+                Arc::new(DeniesHighSensitivity),
+                Some(fixture.bindings.clone() as Arc<dyn engram_knowledge::CodeBindingRepository>),
+            );
+            let result = candidate(
+                RetrievalTargetType::Chunk,
+                "chunk-denied-source",
+                &record.text.clone(),
+                record.provenance.clone(),
+                record.policy.clone(),
+            );
+            let classification = block_on(resolver.evidence(&result, &request("parse", 10)))
+                .expect("evidence resolution");
+            assert_eq!(
+                classification,
+                CandidateEvidence::Unknown,
+                "a denied source policy must degrade the chunk to Unknown even with an allowed chunk policy"
+            );
+        }
+
+        /// Corrective r4 (canonical 6a): ID-less derived references and
+        /// canonically unresolvable categories (Document/Concept) are
+        /// Unknown, never Ordinary.
+        #[test]
+        fn idless_and_unresolvable_references_are_unknown() {
+            let dir = tempfile::tempdir().expect("tempdir");
+            let fixture = fixture(dir.path());
+            let idless = write_memory(
+                &fixture.memory,
+                "idless derived",
+                provenance_with(vec![EvidenceRef {
+                    target_type: EvidenceTargetType::Memory,
+                    target_id: None,
+                    uri: Some("urn:engram:memory:somewhere".to_string()),
+                    quote: None,
+                    location: None,
+                }]),
+            );
+            assert_eq!(
+                evidence(&fixture, &memory_candidate(&idless)),
+                CandidateEvidence::Unknown,
+                "an ID-less derived reference is unresolved evidence"
+            );
+            let document_ref = write_memory(
+                &fixture.memory,
+                "document derived",
+                provenance_with(vec![evidence_ref(
+                    EvidenceTargetType::Document,
+                    "document-task-013",
+                )]),
+            );
+            assert_eq!(
+                evidence(&fixture, &memory_candidate(&document_ref)),
+                CandidateEvidence::Unknown,
+                "documents have no scoped canonical read: Unknown"
+            );
+            let concept_ref = write_memory(
+                &fixture.memory,
+                "concept derived",
+                provenance_with(vec![evidence_ref(
+                    EvidenceTargetType::Concept,
+                    "any-concept",
+                )]),
+            );
+            assert_eq!(
+                evidence(&fixture, &memory_candidate(&concept_ref)),
+                CandidateEvidence::Unknown,
+                "concept references carry no canonical code association: Unknown"
+            );
+        }
+
+        /// Corrective r4 (canonical 6a): relationship references resolve
+        /// canonically through the graph port and classify through the
+        /// relationship's own provenance.
+        #[test]
+        fn relationship_references_resolve_canonically() {
+            use engram_knowledge::KnowledgeRepository as _;
+            let dir = tempfile::tempdir().expect("tempdir");
+            let fixture = fixture(dir.path());
+            let relationship_of =
+                |id: &str, refs: Vec<EvidenceRef>| engram_domain::KnowledgeRelationship {
+                    id: engram_domain::RelationshipId::from(id),
+                    graph_id: None,
+                    predicate: "mentions".to_string(),
+                    subject: engram_domain::EntityRef {
+                        id: Some(Id::from("entity-published")),
+                        kind: None,
+                        name: Some("parsePublished".to_string()),
+                        aliases: Vec::new(),
+                    },
+                    object: engram_domain::EntityRef {
+                        id: Some(Id::from("entity-concept")),
+                        kind: None,
+                        name: Some("parseConcept".to_string()),
+                        aliases: Vec::new(),
+                    },
+                    scope: scope(),
+                    evidence: Vec::new(),
+                    confidence: None,
+                    provenance: provenance_with(refs),
+                    created_at: chrono::Utc::now(),
+                    updated_at: None,
+                    code_resolution: None,
+                    archived_at: None,
+                };
+            block_on(fixture.knowledge.put_relationship(relationship_of(
+                "rel-ordinary",
+                vec![evidence_ref(
+                    EvidenceTargetType::Memory,
+                    &format!("{}", fixture.memory_id),
+                )],
+            )))
+            .expect("put ordinary relationship");
+            block_on(fixture.knowledge.put_relationship(relationship_of(
+                "rel-code",
+                vec![evidence_ref(EvidenceTargetType::Chunk, "chunk-stale")],
+            )))
+            .expect("put code-derived relationship");
+
+            let ordinary = write_memory(
+                &fixture.memory,
+                "relationship derived",
+                provenance_with(vec![evidence_ref(
+                    EvidenceTargetType::Relationship,
+                    "rel-ordinary",
+                )]),
+            );
+            assert_eq!(
+                evidence(&fixture, &memory_candidate(&ordinary)),
+                CandidateEvidence::Ordinary,
+                "a canonically resolved ordinary relationship chain stays ordinary"
+            );
+            let code_derived = write_memory(
+                &fixture.memory,
+                "code relationship derived",
+                provenance_with(vec![evidence_ref(
+                    EvidenceTargetType::Relationship,
+                    "rel-code",
+                )]),
+            );
+            assert_eq!(
+                evidence(&fixture, &memory_candidate(&code_derived)),
+                CandidateEvidence::CodeDependent,
+                "a relationship whose provenance derives from code is code-dependent"
+            );
+        }
+
+        /// Corrective r4 (canonical 6a): an ordinary chunk from a
+        /// REPOSITORY-BOUND source with no ownership reader is Unknown on the
+        /// dependency path — missing ownership evidence is not a negative
+        /// lineage lookup.
+        #[test]
+        fn repository_source_without_reader_is_unknown_on_reference_path() {
+            let dir = tempfile::tempdir().expect("tempdir");
+            let fixture = fixture(dir.path());
+            // chunk-doc's source (source-task-013) is repository-bound.
+            let referencing = write_memory(
+                &fixture.memory,
+                "references ordinary repo chunk",
+                provenance_with(vec![evidence_ref(EvidenceTargetType::Chunk, "chunk-doc")]),
+            );
+            let resolver = engram_integration::candidate_evidence::RepositoryCandidateEvidence::new(
+                fixture.memory.clone() as Arc<dyn engram_memory::MemoryRepository>,
+                fixture.beliefs.clone() as Arc<dyn engram_belief::BeliefRepository>,
+                fixture.knowledge.clone() as Arc<dyn engram_knowledge::KnowledgeRepository>,
+                fixture.memory.retrieval_authorizer(),
+                None,
+            );
+            let classification =
+                block_on(resolver.evidence(&memory_candidate(&referencing), &request("parse", 10)))
+                    .expect("evidence resolution");
+            assert_eq!(
+                classification,
+                CandidateEvidence::Unknown,
+                "repository-bound origin without an ownership reader is ambiguous, not ordinary"
+            );
+        }
+
+        /// Corrective r4 (canonical 6b): a belief's TYPED sources and
+        /// synthesizer inputs are canonical dependencies: stale-code sources
+        /// or code synthesizer inputs deny even with EMPTY provenance, while
+        /// ordinary typed sources stay positively ordinary.
+        #[test]
+        fn typed_belief_sources_and_synthesizer_are_dependencies() {
+            let dir = tempfile::tempdir().expect("tempdir");
+            let fixture = fixture(dir.path());
+            let source_of = |target_type: engram_domain::BeliefSourceTargetType, id: &str| {
+                engram_domain::BeliefSource {
+                    target_type,
+                    target_id: id.to_string(),
+                    authority_level: None,
+                    weight: None,
+                    confidence: None,
+                    valid_from: None,
+                    valid_until: None,
+                }
+            };
+            // Stale-code typed source, EMPTY provenance.
+            put_belief_with_sources(
+                &fixture.beliefs,
+                "belief-typed-code",
+                "parse typed code belief",
+                vec![source_of(
+                    engram_domain::BeliefSourceTargetType::Chunk,
+                    "chunk-stale",
+                )],
+                None,
+            );
+            // Ordinary typed memory source.
+            put_belief_with_sources(
+                &fixture.beliefs,
+                "belief-typed-ordinary",
+                "parse typed ordinary belief",
+                vec![source_of(
+                    engram_domain::BeliefSourceTargetType::Memory,
+                    &format!("{}", fixture.memory_id),
+                )],
+                None,
+            );
+            // Synthesizer derivation referencing code.
+            let mut synthesizer_provenance = provenance();
+            synthesizer_provenance.derivations = vec![DerivationRef {
+                kind: DerivationKind::Summarization,
+                model: None,
+                prompt_hash: None,
+                input_refs: vec![evidence_ref(EvidenceTargetType::Chunk, "chunk-eligible")],
+                created_at: chrono::Utc::now(),
+            }];
+            put_belief_with_sources(
+                &fixture.beliefs,
+                "belief-synthesized-code",
+                "parse synthesized belief",
+                Vec::new(),
+                Some(synthesizer_provenance),
+            );
+
+            assert_eq!(
+                evidence(
+                    &fixture,
+                    &bound_belief_candidate(
+                        &fixture,
+                        "belief-typed-code",
+                        "parse typed code belief"
+                    )
+                ),
+                CandidateEvidence::CodeDependent,
+                "typed stale-code belief sources deny regardless of provenance"
+            );
+            assert_eq!(
+                evidence(
+                    &fixture,
+                    &bound_belief_candidate(
+                        &fixture,
+                        "belief-typed-ordinary",
+                        "parse typed ordinary belief"
+                    )
+                ),
+                CandidateEvidence::Ordinary,
+                "ordinary typed belief sources stay positively ordinary"
+            );
+            assert_eq!(
+                evidence(
+                    &fixture,
+                    &bound_belief_candidate(
+                        &fixture,
+                        "belief-synthesized-code",
+                        "parse synthesized belief"
+                    )
+                ),
+                CandidateEvidence::CodeDependent,
+                "a synthesizer referencing code denies"
+            );
+        }
+
+        /// Corrective r4 (canonical 6d): the TOTAL reference budget stops the
+        /// walk — a wide dependency array beyond the bound is Unknown, and a
+        /// within-bound array of the same shape stays ordinary. Processing
+        /// stays prompt (bounded work, not input-proportional).
+        #[test]
+        fn wide_dependency_array_hits_total_work_bound() {
+            let dir = tempfile::tempdir().expect("tempdir");
+            let fixture = fixture(dir.path());
+            let ordinary_target = write_memory(&fixture.memory, "wide target", provenance());
+            let target_id = ordinary_target.id.to_string();
+
+            let wide = write_memory(
+                &fixture.memory,
+                "wide dependency array",
+                provenance_with(
+                    std::iter::repeat_n(evidence_ref(EvidenceTargetType::Memory, &target_id), 2000)
+                        .collect(),
+                ),
+            );
+            let started = std::time::Instant::now();
+            assert_eq!(
+                evidence(&fixture, &memory_candidate(&wide)),
+                CandidateEvidence::Unknown,
+                "a dependency array beyond the total work budget is Unknown, never ordinary"
+            );
+            let wide_elapsed = started.elapsed();
+
+            let narrow = write_memory(
+                &fixture.memory,
+                "narrow dependency array",
+                provenance_with(
+                    std::iter::repeat_n(evidence_ref(EvidenceTargetType::Memory, &target_id), 1000)
+                        .collect(),
+                ),
+            );
+            assert_eq!(
+                evidence(&fixture, &memory_candidate(&narrow)),
+                CandidateEvidence::Ordinary,
+                "a within-budget array of the same shape stays ordinary"
+            );
+            assert!(
+                wide_elapsed < std::time::Duration::from_secs(10),
+                "the bounded walk must stay prompt: {wide_elapsed:?}"
+            );
+        }
+
+        /// Corrective r4 (canonical 6c): with a SUCCESSFUL view, a derived
+        /// memory whose code dependency is INELIGIBLE denies on the normal
+        /// path, while positively authorized ordinary records and
+        /// eligible-code-derived records keep flowing.
+        #[test]
+        fn successful_view_denies_stale_derived_memory_and_preserves_ordinary() {
+            let dir = tempfile::tempdir().expect("tempdir");
+            let fixture = fixture(dir.path());
+            let stale_derived = write_memory(
+                &fixture.memory,
+                "parse stale derived",
+                provenance_with(vec![evidence_ref(EvidenceTargetType::Chunk, "chunk-stale")]),
+            );
+            let eligible_derived = write_memory(
+                &fixture.memory,
+                "parse eligible derived",
+                provenance_with(vec![evidence_ref(
+                    EvidenceTargetType::Chunk,
+                    "chunk-eligible",
+                )]),
+            );
+            // The historical graph lane contributes the ordinary doc chunk;
+            // the facts lane contributes the three memories.
+            let graph_lane: Arc<dyn RetrievalIndex> = Arc::new(
+                engram_store_sqlite::knowledge::GraphRetrievalIndex::new(fixture.knowledge.clone()),
+            );
+            let recall = SqlUnifiedRecall::new(
+                fixture.memory.clone(),
+                vec![graph_lane],
+                fixture.beliefs.clone(),
+            )
+            .with_code_eligibility(
+                fixture.eligibility() as Arc<dyn engram_retrieval::CodeEligibilityResolver>
+            )
+            .with_candidate_evidence(fixture.candidate_evidence());
+
+            let payload = block_on(recall.recall(request("parse", 10))).expect("recall");
+            let ids = target_ids(&payload);
+            assert!(
+                ids.iter().any(|id| id == &format!("{}", fixture.memory_id)),
+                "the independent ordinary memory survives: {ids:?}"
+            );
+            assert!(
+                ids.contains(&"chunk-doc".to_string()),
+                "the positively authorized ordinary chunk survives: {ids:?}"
+            );
+            assert!(
+                ids.iter().any(|id| id == eligible_derived.id.as_str()),
+                "a memory derived from ELIGIBLE code keeps flowing: {ids:?}"
+            );
+            assert!(
+                !ids.iter().any(|id| id == stale_derived.id.as_str()),
+                "a memory derived from stale code denies on the successful path: {ids:?}"
+            );
+            assert!(
+                !ids.contains(&"chunk-stale".to_string()),
+                "the stale chunk itself denies: {ids:?}"
             );
         }
 

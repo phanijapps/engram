@@ -315,7 +315,41 @@ impl UnifiedRecall for PgUnifiedRecall {
             None => None,
         };
         if let Some(view) = &code_view {
-            candidates.retain(|candidate| view.allows(candidate.target_id.as_str(), false));
+            // Corrective r4 (canonical 6c): with canonical evidence
+            // configured, a SUCCESSFUL view validates every candidate's
+            // canonical CODE DEPENDENCIES against that view — derived
+            // memories/beliefs built from stale code deny, positively
+            // authorized independent ordinary records keep flowing, Unknown
+            // fails closed. Without evidence the kind-blind own-id check
+            // remains the guard.
+            if let Some(evidence) = &self.candidate_evidence {
+                let mut allowed = Vec::with_capacity(candidates.len());
+                for candidate in candidates {
+                    match evidence
+                        .classify_with_dependencies(&candidate, &request)
+                        .await
+                    {
+                        Ok(classification) => {
+                            let dependency_eligible = classification
+                                .code_dependencies
+                                .iter()
+                                .all(|dependency| view.allows(dependency.as_str(), true));
+                            if classification.evidence
+                                == engram_retrieval::CandidateEvidence::Ordinary
+                                || (classification.evidence
+                                    == engram_retrieval::CandidateEvidence::CodeDependent
+                                    && dependency_eligible)
+                            {
+                                allowed.push(candidate);
+                            }
+                        }
+                        Err(error) => source_failures.push(lane("candidate_evidence", error)),
+                    }
+                }
+                candidates = allowed;
+            } else {
+                candidates.retain(|candidate| view.allows(candidate.target_id.as_str(), false));
+            }
         } else if authority_failed {
             // Corrective r3 (finding 6): degrade through CANONICAL EVIDENCE,
             // not a target-kind proxy. Positively authorized ordinary
@@ -339,12 +373,14 @@ impl UnifiedRecall for PgUnifiedRecall {
                     }
                     candidates = allowed;
                 }
-                None => candidates.retain(|candidate| {
-                    !matches!(
-                        candidate.target_type,
-                        RetrievalTargetType::Chunk | RetrievalTargetType::Entity
-                    )
-                }),
+                // Corrective r4 (canonical 6c): without canonical evidence
+                // NO category is exempt — Memory/Belief included. Positive
+                // ordinary evidence cannot be established while the code
+                // authority is unavailable, so every code-capable candidate
+                // denies (the composed payload then carries only facts-lane
+                // degradation already filtered above and the surfaced
+                // failures explain the emptiness).
+                None => candidates.clear(),
             }
         }
 

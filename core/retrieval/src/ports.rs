@@ -41,6 +41,17 @@ pub enum CandidateEvidence {
     Unknown,
 }
 
+/// Classification plus the canonical dependency record ids that are CODE
+/// (kind or durable lineage) — the recipe-side normal-path eligibility input
+/// (corrective r4, canonical 6c): a recipe holding a SUCCESSFUL eligibility
+/// view must still validate a derived record's code dependencies against
+/// that view.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct EvidenceClassification {
+    pub evidence: CandidateEvidence,
+    pub code_dependencies: Vec<String>,
+}
+
 /// Resolves candidate evidence from the owning canonical stores under the
 /// request scope and policy boundary.
 #[async_trait]
@@ -50,6 +61,20 @@ pub trait CandidateEvidenceResolver: Send + Sync {
         candidate: &RetrievalResult,
         request: &RetrievalRequest,
     ) -> CoreResult<CandidateEvidence>;
+
+    /// Full classification with code dependency ids. The default resolves
+    /// only the aggregate evidence (implementors backed by the owning
+    /// canonical stores provide the dependency detail).
+    async fn classify_with_dependencies(
+        &self,
+        candidate: &RetrievalResult,
+        request: &RetrievalRequest,
+    ) -> CoreResult<EvidenceClassification> {
+        Ok(EvidenceClassification {
+            evidence: self.evidence(candidate, request).await?,
+            code_dependencies: Vec::new(),
+        })
+    }
 }
 
 /// Merges and reranks candidates from multiple retrieval sources.

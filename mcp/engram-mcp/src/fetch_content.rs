@@ -2609,7 +2609,7 @@ mod tests {
     /// to the NEW byte stream (retained terminal newlines + stitch
     /// separators) — `total_bytes` is the full reconstructed length and the
     /// truncation boundary cuts inside it, which stored-text stitching
-    /// could never produce (25 stored bytes vs 53 reconstructed here).
+    /// could never produce (24 stored bytes vs 52 reconstructed here).
     #[test]
     fn bound_chunks_cap_applies_to_reconstructed_bytes() {
         let dir = tempfile::tempdir().unwrap();
@@ -2650,7 +2650,7 @@ mod tests {
             "def alpha():\n    return 1\n".to_owned() + "\n" + "def beta():\n    return 2\n";
 
         // BELOW the boundary: the cap cuts inside the reconstructed stream
-        // (30 bytes is already past the 25-byte stored-text stitch — only
+        // (30 bytes is already past the 24-byte stored-text stitch — only
         // the retained-terminal-newline stream can supply it).
         let cut = content_of(
             &fetch_content(

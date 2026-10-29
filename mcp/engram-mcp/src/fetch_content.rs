@@ -2372,6 +2372,317 @@ mod tests {
         }
     }
 
+    /// Fixture provenance with an EXPLICIT source label (r5 C5
+    /// label-provenance and reconstruction-byte regressions).
+    fn label_provenance(source: &str) -> engram_domain::Provenance {
+        let mut provenance = fixture_provenance();
+        provenance.source = source.to_owned();
+        provenance
+    }
+
+    fn labeled_row(
+        id: &str,
+        name: &str,
+        start: u32,
+        end: u32,
+        text: &str,
+        source: &str,
+    ) -> engram_domain::KnowledgeChunk {
+        engram_domain::KnowledgeChunk {
+            id: engram_domain::Id::from(id),
+            document_id: engram_domain::Id::from("doc-c5"),
+            source_id: engram_domain::Id::from("src-c5"),
+            kind: KnowledgeChunkKind::CodeSymbol,
+            text: text.to_owned(),
+            summary: None,
+            location: Some(engram_domain::SourceLocation {
+                path: Some("src/bound.py".to_owned()),
+                start_line: Some(start),
+                end_line: Some(end),
+                start_offset: None,
+                end_offset: None,
+                anchor: None,
+            }),
+            entities: vec![engram_domain::EntityRef {
+                id: Some(engram_domain::Id::from(id)),
+                kind: None,
+                name: Some(name.to_owned()),
+                aliases: Vec::new(),
+            }],
+            concepts: Vec::new(),
+            embedding_refs: Vec::new(),
+            content_hash: format!("sha256:{id}"),
+            provenance: label_provenance(source),
+            policy: fixture_policy(),
+            created_at: chrono::Utc::now(),
+            updated_at: None,
+            metadata: None,
+        }
+    }
+
+    /// r5 C5 (verification defect 1a): a retained participant span that is
+    /// NOT valid UTF-8 makes chunks mode DENY with an explicit pointer to
+    /// the labeled exact read — the old stored-text stitching could serve
+    /// text that cannot have been the revision's bytes. On the SAME fixture
+    /// the default exact read keeps its established behavior (labeled hex
+    /// of the exact bytes).
+    #[test]
+    fn invalid_utf8_span_denies_chunks_mode_with_labeled_exact_read_pointer() {
+        let dir = tempfile::tempdir().unwrap();
+        let source_bytes: Vec<u8> = b"def alpha():\r\n    x = '"
+            .to_vec()
+            .into_iter()
+            .chain([0x80, 0x81, 0x82])
+            .chain(b"'\r\n".to_vec())
+            .collect();
+        let (app, _retained) = bound_app_with_symbols_bytes(dir.path(), &source_bytes, 1, 2);
+
+        // chunks mode DENIES on the invalid-UTF-8 retained span, with the
+        // participant identified and the labeled exact read named as the
+        // alternative.
+        let err =
+            fetch_content(&app, &json!({ "path": "src/bound.py", "mode": "chunks" })).unwrap_err();
+        assert!(
+            err.message
+                .contains("bound chunks reconstruction unavailable")
+                && err.message.contains("'chunk-bound-1'")
+                && err
+                    .message
+                    .contains("not valid UTF-8 in the retained revision")
+                && err.message.contains("use the default exact read"),
+            "chunks mode must deny with the explicit exact-read pointer: {}",
+            err.message
+        );
+
+        // The established labeled exact read continues on the SAME fixture.
+        let exact = content_of(&fetch_content(&app, &json!({ "path": "src/bound.py" })).unwrap());
+        assert_eq!(exact["source"], "exact");
+        assert_eq!(exact["encoding"], "hex");
+        assert_eq!(
+            exact["content"].as_str().unwrap().len(),
+            source_bytes.len() * 2,
+            "the exact read still hex-encodes every exact byte"
+        );
+    }
+
+    /// r5 C5 (verification defect 1b): the chunks-mode repository label
+    /// comes from a PARTICIPANT row — a differently labeled NONPARTICIPANT
+    /// row that merely matched the path and sorts FIRST can never supply
+    /// the label for content it did not produce.
+    #[test]
+    fn repository_label_comes_from_a_participant_not_the_first_matched_row() {
+        let dir = tempfile::tempdir().unwrap();
+        let source = b"def alpha():\n    return 1\n\ndef beta():\n    return 2\n".to_vec();
+        // The decoy claims the EARLIEST span (sorts first in `ordered`) and
+        // carries a DIFFERENT provenance label; it has no durable lineage, so
+        // it is a nonparticipant. Both participants carry their own labels.
+        let rows = vec![
+            labeled_row(
+                "chunk-label-decoy",
+                "decoy",
+                1,
+                1,
+                "def alpha():",
+                "impostor-repository-label",
+            ),
+            labeled_row(
+                "chunk-label-alpha",
+                "alpha",
+                1,
+                2,
+                "def alpha():",
+                "participant-alpha-source",
+            ),
+            labeled_row(
+                "chunk-label-beta",
+                "beta",
+                4,
+                5,
+                "def beta():",
+                "participant-beta-source",
+            ),
+        ];
+        let (app, _root, _bindings) = bound_app_with_rows(
+            dir.path(),
+            vec![CommittedFile {
+                path: "src/bound.py".into(),
+                oid: "b".repeat(40),
+                mode: "100644".to_owned(),
+                bytes: source,
+            }],
+            rows,
+            &[
+                ("chunk-label-alpha".to_owned(), "gen-1".to_owned(), 1, 2),
+                ("chunk-label-beta".to_owned(), "gen-1".to_owned(), 4, 5),
+            ],
+        );
+        let out = content_of(
+            &fetch_content(&app, &json!({ "path": "src/bound.py", "mode": "chunks" })).unwrap(),
+        );
+        assert_eq!(
+            out["repository"], "participant-alpha-source",
+            "the label comes from the FIRST PARTICIPANT row, never the earlier nonparticipant"
+        );
+        assert_ne!(
+            out["repository"], "impostor-repository-label",
+            "a nonparticipant row can never label content it did not produce"
+        );
+        assert_eq!(
+            out["chunk_count"], 2,
+            "only the two participants count; the decoy is not a participant"
+        );
+    }
+
+    /// r5 C5 (verification defect 1c): the bound chunks reconstruction is
+    /// byte-faithful to the RETAINED SPAN BYTES, not to stored text — each
+    /// participant's terminal newline is PRESERVED and the stitch
+    /// separator lands AFTER the newline-terminated part (LF fixture), and
+    /// CRLF spans pass through VERBATIM (CRLF fixture). `total_bytes` counts
+    /// the reconstructed byte stream (terminal newlines + separators), not
+    /// stored-text length.
+    #[test]
+    fn bound_chunks_reconstruction_preserves_terminal_newlines_and_crlf() {
+        let cases = [
+            (
+                "LF: terminal newlines preserved, separator after the newline-terminated part",
+                b"def alpha():\n    return 1\n\ndef beta():\n    return 2\n".to_vec(),
+                "def alpha():\n    return 1\n".to_owned() + "\n" + "def beta():\n    return 2\n",
+            ),
+            (
+                "CRLF: span bytes preserved verbatim",
+                b"def alpha():\r\n    return 1\r\n\r\ndef beta():\r\n    return 2\r\n".to_vec(),
+                "def alpha():\r\n    return 1\r\n".to_owned()
+                    + "\n"
+                    + "def beta():\r\n    return 2\r\n",
+            ),
+        ];
+        for (label, source, expected) in cases {
+            let dir = tempfile::tempdir().unwrap();
+            let rows = vec![
+                labeled_row(
+                    "chunk-bytes-alpha",
+                    "alpha",
+                    1,
+                    2,
+                    "def alpha():",
+                    "participant-alpha-source",
+                ),
+                labeled_row(
+                    "chunk-bytes-beta",
+                    "beta",
+                    4,
+                    5,
+                    "def beta():",
+                    "participant-beta-source",
+                ),
+            ];
+            let (app, _root, _bindings) = bound_app_with_rows(
+                dir.path(),
+                vec![CommittedFile {
+                    path: "src/bound.py".into(),
+                    oid: "b".repeat(40),
+                    mode: "100644".to_owned(),
+                    bytes: source,
+                }],
+                rows,
+                &[
+                    ("chunk-bytes-alpha".to_owned(), "gen-1".to_owned(), 1, 2),
+                    ("chunk-bytes-beta".to_owned(), "gen-1".to_owned(), 4, 5),
+                ],
+            );
+            let out = content_of(
+                &fetch_content(&app, &json!({ "path": "src/bound.py", "mode": "chunks" })).unwrap(),
+            );
+            let content = out["content"].as_str().unwrap();
+            assert_eq!(content, expected, "reconstructed bytes ({label})");
+            assert_eq!(
+                out["total_bytes"],
+                json!(expected.len()),
+                "total_bytes counts the reconstructed byte stream ({label})"
+            );
+            assert_eq!(out["truncated"], false, "no cap requested ({label})");
+            assert_eq!(out["chunk_count"], 2);
+        }
+    }
+
+    /// r5 C5 (verification defect 1c): the `max_bytes` cap boundary applies
+    /// to the NEW byte stream (retained terminal newlines + stitch
+    /// separators) — `total_bytes` is the full reconstructed length and the
+    /// truncation boundary cuts inside it, which stored-text stitching
+    /// could never produce (25 stored bytes vs 53 reconstructed here).
+    #[test]
+    fn bound_chunks_cap_applies_to_reconstructed_bytes() {
+        let dir = tempfile::tempdir().unwrap();
+        let source = b"def alpha():\n    return 1\n\ndef beta():\n    return 2\n".to_vec();
+        let rows = vec![
+            labeled_row(
+                "chunk-cap-alpha",
+                "alpha",
+                1,
+                2,
+                "def alpha():",
+                "participant-alpha-source",
+            ),
+            labeled_row(
+                "chunk-cap-beta",
+                "beta",
+                4,
+                5,
+                "def beta():",
+                "participant-beta-source",
+            ),
+        ];
+        let (app, _root, _bindings) = bound_app_with_rows(
+            dir.path(),
+            vec![CommittedFile {
+                path: "src/bound.py".into(),
+                oid: "b".repeat(40),
+                mode: "100644".to_owned(),
+                bytes: source,
+            }],
+            rows,
+            &[
+                ("chunk-cap-alpha".to_owned(), "gen-1".to_owned(), 1, 2),
+                ("chunk-cap-beta".to_owned(), "gen-1".to_owned(), 4, 5),
+            ],
+        );
+        let expected =
+            "def alpha():\n    return 1\n".to_owned() + "\n" + "def beta():\n    return 2\n";
+
+        // BELOW the boundary: the cap cuts inside the reconstructed stream
+        // (30 bytes is already past the 25-byte stored-text stitch — only
+        // the retained-terminal-newline stream can supply it).
+        let cut = content_of(
+            &fetch_content(
+                &app,
+                &json!({ "path": "src/bound.py", "mode": "chunks", "max_bytes": 30 }),
+            )
+            .unwrap(),
+        );
+        assert_eq!(cut["total_bytes"], json!(expected.len()));
+        assert_eq!(cut["truncated"], true);
+        assert_eq!(cut["returned_bytes"], 30);
+        assert_eq!(cut["max_bytes"], 30);
+        assert_eq!(
+            cut["content"].as_str().unwrap(),
+            &expected[..30],
+            "the cap cuts the RECONSTRUCTED byte stream at 30 bytes"
+        );
+
+        // AT the boundary: exactly the reconstructed length serves whole.
+        let whole = content_of(
+            &fetch_content(
+                &app,
+                &json!({ "path": "src/bound.py", "mode": "chunks", "max_bytes": expected.len() }),
+            )
+            .unwrap(),
+        );
+        assert_eq!(whole["total_bytes"], json!(expected.len()));
+        assert_eq!(whole["truncated"], false);
+        assert_eq!(whole["returned_bytes"], json!(expected.len()));
+        assert_eq!(whole["content"].as_str().unwrap(), expected);
+    }
+
     /// Final r5 C3 (finding 2, the decisive widened-span regression): a
     /// WIDENED legitimate span — alpha's true lines 1–2 claimed as 1–5 so
     /// the span would encompass beta — can never smuggle the adjacent

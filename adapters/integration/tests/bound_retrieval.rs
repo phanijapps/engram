@@ -2165,6 +2165,1420 @@ mod task_013 {
         }
     }
 
+    /// Work package A3 (corrective r5) decisive matrix: every case drives
+    /// the REAL composed recall — real facts/belief/graph/lexical lanes, the
+    /// real eligibility view, the real repository evidence resolver — never
+    /// resolver-only candidates.
+    mod a3_matrix {
+        use super::*;
+        use engram_belief::BeliefRepository;
+        use engram_domain::{
+            Belief, BeliefId, BeliefSource, BeliefSourceTargetType, BeliefStatus, BeliefSubject,
+            DerivationKind, DerivationRef, EntityKind, EvidenceRef, EvidenceTargetType,
+            MemoryContent, MemoryKind, WriteMemoryRequest,
+        };
+        use engram_retrieval::CandidateEvidence;
+        use engram_retrieval::CandidateEvidenceResolver;
+        use engram_runtime::PolicyAuthorizer;
+
+        fn evidence_ref(target_type: EvidenceTargetType, id: &str) -> EvidenceRef {
+            EvidenceRef {
+                target_type,
+                target_id: Some(id.to_string()),
+                uri: None,
+                quote: None,
+                location: None,
+            }
+        }
+
+        fn provenance_with(refs: Vec<EvidenceRef>) -> Provenance {
+            let mut provenance = provenance();
+            provenance.evidence = refs;
+            provenance
+        }
+
+        fn write_memory_with_refs(
+            fixture: &Fixture,
+            text: &str,
+            refs: Vec<EvidenceRef>,
+        ) -> engram_domain::MemoryRecord {
+            block_on(fixture.memory.write_memory(WriteMemoryRequest {
+                kind: MemoryKind::Observation,
+                content: MemoryContent {
+                    text: text.to_string(),
+                    summary: None,
+                    entities: Vec::new(),
+                    language: None,
+                    format: None,
+                    structured: None,
+                    hash: None,
+                },
+                scope: scope(),
+                requester: requester(),
+                provenance: provenance_with(refs),
+                policy: policy(),
+                links: Vec::new(),
+                verdict: None,
+                idempotency_key: None,
+            }))
+            .expect("write memory")
+            .record
+        }
+
+        /// Writes a belief with a custom SUBJECT key (the composed belief lane
+        /// is live-subject 0-or-1 per query, so each case needs its own
+        /// subject) plus optional typed sources and synthesizer inputs.
+        fn put_belief_matrix(
+            fixture: &Fixture,
+            id: &str,
+            subject: &str,
+            content: &str,
+            sources: Vec<BeliefSource>,
+            synthesizer_inputs: Vec<EvidenceRef>,
+            provenance_refs: Vec<EvidenceRef>,
+        ) {
+            let mut provenance = provenance();
+            provenance.evidence = provenance_refs;
+            let synthesizer = (!synthesizer_inputs.is_empty()).then(|| DerivationRef {
+                kind: DerivationKind::Summarization,
+                model: None,
+                prompt_hash: None,
+                input_refs: synthesizer_inputs,
+                created_at: chrono::Utc::now(),
+            });
+            block_on(fixture.beliefs.put_belief(Belief {
+                id: BeliefId::from(id),
+                scope: scope(),
+                subject: BeliefSubject {
+                    key: subject.to_string(),
+                    entity_ref: None,
+                    concept_ref: None,
+                    aliases: Vec::new(),
+                },
+                content: content.to_string(),
+                status: BeliefStatus::Active,
+                confidence: 0.9,
+                sources,
+                valid_from: None,
+                valid_until: None,
+                superseded_by: None,
+                stale: None,
+                synthesizer,
+                reasoning: None,
+                embedding_refs: Vec::new(),
+                policy: policy(),
+                provenance,
+                created_at: chrono::Utc::now(),
+                updated_at: None,
+                metadata: None,
+            }))
+            .expect("put matrix belief");
+        }
+
+        fn belief_source_of(target_type: BeliefSourceTargetType, id: &str) -> BeliefSource {
+            BeliefSource {
+                target_type,
+                target_id: id.to_string(),
+                authority_level: None,
+                weight: None,
+                confidence: None,
+                valid_from: None,
+                valid_until: None,
+            }
+        }
+
+        /// Composed recall over the REAL graph lane with the eligibility
+        /// view AND the repository evidence resolver wired (the successful
+        /// authority + configured resolver configuration).
+        fn composed_recall(fixture: &Fixture) -> SqlUnifiedRecall {
+            composed_recall_with_evidence(fixture, fixture.candidate_evidence())
+        }
+
+        fn composed_recall_with_evidence(
+            fixture: &Fixture,
+            evidence: Arc<engram_integration::candidate_evidence::RepositoryCandidateEvidence>,
+        ) -> SqlUnifiedRecall {
+            let graph_lane: Arc<dyn RetrievalIndex> = Arc::new(
+                engram_store_sqlite::knowledge::GraphRetrievalIndex::new(fixture.knowledge.clone()),
+            );
+            SqlUnifiedRecall::new(
+                fixture.memory.clone(),
+                vec![graph_lane],
+                fixture.beliefs.clone(),
+            )
+            .with_code_eligibility(
+                fixture.eligibility() as Arc<dyn engram_retrieval::CodeEligibilityResolver>
+            )
+            .with_candidate_evidence(evidence)
+        }
+
+        /// An eligibility resolver whose authority read always errors.
+        struct ErroringAuthority;
+        #[async_trait::async_trait]
+        impl engram_retrieval::CodeEligibilityResolver for ErroringAuthority {
+            async fn resolve(
+                &self,
+                _scope: &Scope,
+            ) -> CoreResult<engram_retrieval::BoundCodeEligibility> {
+                Err(CoreError::Adapter {
+                    adapter: "test-authority".to_string(),
+                    message: "authority unavailable".to_string(),
+                })
+            }
+        }
+
+        fn erroring_recall(fixture: &Fixture) -> SqlUnifiedRecall {
+            let graph_lane: Arc<dyn RetrievalIndex> = Arc::new(
+                engram_store_sqlite::knowledge::GraphRetrievalIndex::new(fixture.knowledge.clone()),
+            );
+            SqlUnifiedRecall::new(
+                fixture.memory.clone(),
+                vec![graph_lane],
+                fixture.beliefs.clone(),
+            )
+            .with_code_eligibility(Arc::new(ErroringAuthority))
+            .with_candidate_evidence(fixture.candidate_evidence())
+        }
+
+        /// An owning authorizer that denies High-sensitivity policies (the
+        /// composed denial row: authorization failure inside evidence).
+        struct DeniesHighSensitivity;
+        impl PolicyAuthorizer for DeniesHighSensitivity {
+            fn can_write(
+                &self,
+                _requester: &engram_domain::Requester,
+                _scope: &Scope,
+                _policy: &Policy,
+            ) -> CoreResult<()> {
+                Ok(())
+            }
+            fn can_retrieve(
+                &self,
+                _requester: &engram_domain::Requester,
+                _scope: &Scope,
+                policy: &Policy,
+            ) -> CoreResult<()> {
+                if policy.sensitivity == Some(engram_domain::Sensitivity::High) {
+                    Err(CoreError::PolicyDenied {
+                        reason: "high sensitivity denied".to_string(),
+                    })
+                } else {
+                    Ok(())
+                }
+            }
+            fn can_forget(
+                &self,
+                _requester: &engram_domain::Requester,
+                _scope: &Scope,
+                _policy: &Policy,
+            ) -> CoreResult<()> {
+                Ok(())
+            }
+        }
+
+        fn denying_evidence(
+            fixture: &Fixture,
+        ) -> Arc<engram_integration::candidate_evidence::RepositoryCandidateEvidence> {
+            Arc::new(
+                engram_integration::candidate_evidence::RepositoryCandidateEvidence::new(
+                    fixture.memory.clone() as Arc<dyn engram_memory::MemoryRepository>,
+                    fixture.beliefs.clone() as Arc<dyn engram_belief::BeliefRepository>,
+                    fixture.knowledge.clone() as Arc<dyn engram_knowledge::KnowledgeRepository>,
+                    Arc::new(DeniesHighSensitivity),
+                    Some(fixture.bindings.clone()
+                        as Arc<dyn engram_knowledge::CodeBindingRepository>),
+                    Some(fixture.knowledge.clone()
+                        as Arc<dyn engram_knowledge::KnowledgeGraphRepository>),
+                ),
+            )
+        }
+
+        /// Seeds a denied-policy source + a paragraph chunk of it.
+        fn put_denied_source_chunk(fixture: &Fixture, chunk_id: &str, text: &str) {
+            use engram_knowledge::KnowledgeRepository as _;
+            let mut denied_policy = policy();
+            denied_policy.sensitivity = Some(engram_domain::Sensitivity::High);
+            let mut source = engram_domain::KnowledgeSource {
+                id: Id::from("source-denied-matrix"),
+                kind: engram_domain::SourceKind::Upload,
+                scope: scope(),
+                name: "denied matrix source".to_string(),
+                uri: None,
+                version: None,
+                repository_key: None,
+                git_ref: None,
+                policy: denied_policy,
+                provenance: provenance(),
+                created_at: chrono::Utc::now(),
+                updated_at: None,
+                metadata: None,
+            };
+            source.policy.sensitivity = Some(engram_domain::Sensitivity::High);
+            block_on(fixture.knowledge.put_source(source)).expect("put denied source");
+            let mut denied_chunk = chunk(chunk_id, text, KnowledgeChunkKind::Paragraph);
+            denied_chunk.source_id = Id::from("source-denied-matrix");
+            block_on(fixture.knowledge.put_chunk(denied_chunk)).expect("put denied chunk");
+        }
+
+        /// Puts a memory with an EXPLICIT id (cycle/counter fixtures need
+        /// stable ids); returns the stored record.
+        fn put_memory_with_id(
+            fixture: &Fixture,
+            id: &str,
+            text: &str,
+            refs: Vec<EvidenceRef>,
+        ) -> engram_domain::MemoryRecord {
+            use engram_memory::MemoryRepository;
+            let record = engram_domain::MemoryRecord {
+                id: Id::from(id),
+                kind: MemoryKind::Observation,
+                content: MemoryContent {
+                    text: text.to_string(),
+                    summary: None,
+                    entities: Vec::new(),
+                    language: None,
+                    format: None,
+                    structured: None,
+                    hash: None,
+                },
+                scope: scope(),
+                provenance: provenance_with(refs),
+                policy: policy(),
+                status: engram_domain::MemoryStatus::Active,
+                links: Vec::new(),
+                assertions: Vec::new(),
+                verdict: None,
+                created_at: chrono::Utc::now(),
+                updated_at: None,
+                metadata: None,
+            };
+            block_on(fixture.memory.put_memory(record)).expect("put memory with id")
+        }
+
+        /// CHUNK row of the decisive matrix through composed recall: ordinary
+        /// positive, own-code eligible, own-code stale, own-code unbound
+        /// (legacy), forged stamp — each accepted or denied exactly as the
+        /// view decides.
+        #[test]
+        fn chunk_matrix_composed() {
+            let dir = tempfile::tempdir().expect("tempdir");
+            let fixture = fixture(dir.path());
+            let payload =
+                block_on(composed_recall(&fixture).recall(request("parse", 20))).expect("recall");
+            let ids = target_ids(&payload);
+            assert!(
+                ids.contains(&"chunk-doc".to_string()),
+                "ordinary chunk: {ids:?}"
+            );
+            assert!(
+                ids.contains(&"chunk-eligible".to_string()),
+                "own-code eligible chunk: {ids:?}"
+            );
+            assert!(
+                !ids.contains(&"chunk-stale".to_string()),
+                "own-code stale chunk denies: {ids:?}"
+            );
+            assert!(
+                !ids.contains(&"chunk-legacy-code".to_string()),
+                "own-code unbound (legacy) chunk denies: {ids:?}"
+            );
+            assert!(
+                !ids.contains(&"chunk-forged-no-lineage".to_string()),
+                "forged-stamp chunk denies: {ids:?}"
+            );
+            assert!(
+                !ids.contains(&"chunk-repo-b".to_string()),
+                "staged (unpublished) own-code chunk denies: {ids:?}"
+            );
+        }
+
+        /// ENTITY row: ordinary positive, own-code eligible, own-code
+        /// unbound — through composed recall.
+        #[test]
+        fn entity_matrix_composed() {
+            let dir = tempfile::tempdir().expect("tempdir");
+            let fixture = fixture(dir.path());
+            let mut concept = symbol_entity("entity-concept-matrix", "parseConceptMatrix");
+            concept.kind = EntityKind::Concept;
+            block_on(fixture.knowledge.put_entity(concept)).expect("put concept entity");
+            let payload =
+                block_on(composed_recall(&fixture).recall(request("parse", 20))).expect("recall");
+            let ids = target_ids(&payload);
+            assert!(
+                ids.contains(&"entity-concept-matrix".to_string()),
+                "ordinary entity: {ids:?}"
+            );
+            assert!(
+                ids.contains(&"entity-published".to_string()),
+                "own-code eligible entity: {ids:?}"
+            );
+            assert!(
+                !ids.contains(&"entity-legacy".to_string()),
+                "own-code unbound (legacy) entity denies: {ids:?}"
+            );
+        }
+
+        /// MEMORY row: ordinary, code-derived eligible, code-derived stale,
+        /// unknown/missing-derived, foreign-derived — through the facts lane.
+        #[test]
+        fn memory_matrix_composed() {
+            let dir = tempfile::tempdir().expect("tempdir");
+            let fixture = fixture(dir.path());
+            // A foreign-scope chunk: chunks inherit the source's scope, so
+            // the canonical read under the request scope misses.
+            {
+                use engram_knowledge::KnowledgeRepository as _;
+                let mut foreign_scope = scope();
+                foreign_scope.workspace = Some("foreign-workspace".to_string());
+                let foreign_source = engram_domain::KnowledgeSource {
+                    id: Id::from("source-foreign"),
+                    kind: engram_domain::SourceKind::Upload,
+                    scope: foreign_scope,
+                    name: "foreign source".to_string(),
+                    uri: None,
+                    version: None,
+                    repository_key: None,
+                    git_ref: None,
+                    policy: policy(),
+                    provenance: provenance(),
+                    created_at: chrono::Utc::now(),
+                    updated_at: None,
+                    metadata: None,
+                };
+                block_on(fixture.knowledge.put_source(foreign_source)).expect("put foreign source");
+                let mut foreign = chunk(
+                    "chunk-foreign",
+                    "parse foreign",
+                    KnowledgeChunkKind::Paragraph,
+                );
+                foreign.source_id = Id::from("source-foreign");
+                block_on(fixture.knowledge.put_chunk(foreign)).expect("put foreign chunk");
+            }
+
+            let eligible = write_memory_with_refs(
+                &fixture,
+                "parse eligible derived",
+                vec![evidence_ref(EvidenceTargetType::Chunk, "chunk-eligible")],
+            );
+            let stale = write_memory_with_refs(
+                &fixture,
+                "parse stale derived",
+                vec![evidence_ref(EvidenceTargetType::Chunk, "chunk-stale")],
+            );
+            let missing = write_memory_with_refs(
+                &fixture,
+                "parse missing derived",
+                vec![evidence_ref(
+                    EvidenceTargetType::Chunk,
+                    "chunk-never-written",
+                )],
+            );
+            let foreign_derived = write_memory_with_refs(
+                &fixture,
+                "parse foreign derived",
+                vec![evidence_ref(EvidenceTargetType::Chunk, "chunk-foreign")],
+            );
+
+            let payload =
+                block_on(composed_recall(&fixture).recall(request("parse", 20))).expect("recall");
+            let ids = target_ids(&payload);
+            assert!(
+                ids.iter().any(|id| id == fixture.memory_id.as_str()),
+                "ordinary memory: {ids:?}"
+            );
+            assert!(
+                ids.iter().any(|id| id == eligible.id.as_str()),
+                "eligible-code-derived memory: {ids:?}"
+            );
+            assert!(
+                !ids.iter().any(|id| id == stale.id.as_str()),
+                "stale-code-derived memory denies: {ids:?}"
+            );
+            assert!(
+                !ids.iter().any(|id| id == missing.id.as_str()),
+                "missing-derived memory denies: {ids:?}"
+            );
+            assert!(
+                !ids.iter().any(|id| id == foreign_derived.id.as_str()),
+                "foreign-derived memory denies: {ids:?}"
+            );
+        }
+
+        /// BELIEF row (one live subject per recall): ordinary, typed
+        /// code-source, typed ordinary-source, synthesizer code input,
+        /// provenance code ref.
+        #[test]
+        fn belief_matrix_composed() {
+            let dir = tempfile::tempdir().expect("tempdir");
+            let fixture = fixture(dir.path());
+            put_belief_matrix(
+                &fixture,
+                "belief-m-ordinary",
+                "subject-ordinary",
+                "parse ordinary matrix belief",
+                Vec::new(),
+                Vec::new(),
+                Vec::new(),
+            );
+            put_belief_matrix(
+                &fixture,
+                "belief-m-code-source",
+                "subject-code-source",
+                "parse code source belief",
+                vec![belief_source_of(
+                    BeliefSourceTargetType::Chunk,
+                    "chunk-stale",
+                )],
+                Vec::new(),
+                Vec::new(),
+            );
+            put_belief_matrix(
+                &fixture,
+                "belief-m-ordinary-source",
+                "subject-ordinary-source",
+                "parse ordinary source belief",
+                vec![belief_source_of(
+                    BeliefSourceTargetType::Memory,
+                    fixture.memory_id.as_str(),
+                )],
+                Vec::new(),
+                Vec::new(),
+            );
+            put_belief_matrix(
+                &fixture,
+                "belief-m-synth-code",
+                "subject-synth-code",
+                "parse synth code belief",
+                Vec::new(),
+                vec![evidence_ref(EvidenceTargetType::Chunk, "chunk-eligible")],
+                Vec::new(),
+            );
+            put_belief_matrix(
+                &fixture,
+                "belief-m-provenance-code",
+                "subject-provenance-code",
+                "parse provenance code belief",
+                Vec::new(),
+                Vec::new(),
+                vec![evidence_ref(EvidenceTargetType::Chunk, "chunk-stale")],
+            );
+
+            let recall = composed_recall(&fixture);
+            let present = |subject: &str| {
+                target_ids(&block_on(recall.recall(request(subject, 20))).expect("recall"))
+                    .contains(&format!("belief-m-{subject}").replace("subject-", ""))
+            };
+            assert!(
+                present("subject-ordinary"),
+                "ordinary belief survives through the belief lane"
+            );
+            assert!(
+                !present("subject-code-source"),
+                "typed stale-code-source belief denies"
+            );
+            assert!(
+                present("subject-ordinary-source"),
+                "typed ordinary-source belief survives"
+            );
+            assert!(
+                present("subject-synth-code"),
+                "eligible-code synthesizer input belief survives"
+            );
+            assert!(
+                !present("subject-provenance-code"),
+                "stale-code provenance belief denies"
+            );
+        }
+
+        /// Missing evidence resolver ≠ derived-record independence: with a
+        /// SUCCESSFUL view and no evidence resolver every candidate fails
+        /// closed and the denial is surfaced — no own-id exemption.
+        #[test]
+        fn missing_evidence_resolver_fails_closed_with_successful_view() {
+            let dir = tempfile::tempdir().expect("tempdir");
+            let fixture = fixture(dir.path());
+            let recall = fixture.bound_recall(); // eligibility, NO evidence
+            let payload = block_on(recall.recall(request("parse", 20))).expect("recall");
+            assert!(
+                payload.items.is_empty(),
+                "no own-id exemption: even ordinary candidates deny while the evidence resolver is missing: {:?}",
+                target_ids(&payload)
+            );
+            assert!(
+                payload
+                    .source_failures
+                    .iter()
+                    .any(|failure| failure.source == "candidate_evidence"),
+                "the fail-closed denial is surfaced: {:?}",
+                payload.source_failures
+            );
+        }
+
+        /// Erroring authority row: positively authorized ordinary records of
+        /// every kind survive; own-code (lineage-owned) and derived records
+        /// deny; the failure is surfaced.
+        #[test]
+        fn authority_error_matrix_composed() {
+            let dir = tempfile::tempdir().expect("tempdir");
+            let fixture = fixture(dir.path());
+            // A lineage-owned (own-code) memory under a PUBLISHED generation:
+            // ordinary kind, empty provenance — own lineage alone is code.
+            let own_code_memory =
+                write_memory_with_refs(&fixture, "parse own code memory", Vec::new());
+            publish_with_lineage(
+                &fixture.bindings,
+                "repo-a",
+                "gen-a-3",
+                2,
+                Some("gen-a-2"),
+                &[own_code_memory.id.as_str()],
+            );
+            let derived = write_memory_with_refs(
+                &fixture,
+                "parse derived from stale",
+                vec![evidence_ref(EvidenceTargetType::Chunk, "chunk-stale")],
+            );
+            put_belief_matrix(
+                &fixture,
+                "belief-m-authority-ordinary",
+                "parse",
+                "parse authority ordinary belief",
+                Vec::new(),
+                Vec::new(),
+                Vec::new(),
+            );
+
+            let payload =
+                block_on(erroring_recall(&fixture).recall(request("parse", 20))).expect("recall");
+            let ids = target_ids(&payload);
+            assert!(
+                ids.iter().any(|id| id == fixture.memory_id.as_str()),
+                "ordinary memory survives the authority error: {ids:?}"
+            );
+            assert!(
+                ids.contains(&"chunk-doc".to_string()),
+                "ordinary chunk survives: {ids:?}"
+            );
+            assert!(
+                ids.contains(&"belief-m-authority-ordinary".to_string()),
+                "ordinary belief survives: {ids:?}"
+            );
+            assert!(
+                !ids.iter().any(|id| id == own_code_memory.id.as_str()),
+                "own-code (lineage-owned) memory denies: {ids:?}"
+            );
+            assert!(
+                !ids.contains(&"chunk-eligible".to_string()),
+                "eligible own-code chunk denies while the authority is unavailable: {ids:?}"
+            );
+            assert!(
+                !ids.iter().any(|id| id == derived.id.as_str()),
+                "code-derived memory denies: {ids:?}"
+            );
+            assert!(
+                payload
+                    .source_failures
+                    .iter()
+                    .any(|failure| failure.source == "code_eligibility"),
+                "the authority error is surfaced: {:?}",
+                payload.source_failures
+            );
+        }
+
+        /// Sibling orders are order-independent: [current, stale] /
+        /// [stale, current], [current, unknown] / [unknown, current], and
+        /// denied siblings in both orders all deny; the all-eligible pair
+        /// survives in both orders.
+        #[test]
+        fn sibling_orders_composed() {
+            let dir = tempfile::tempdir().expect("tempdir");
+            let fixture = fixture(dir.path());
+            let eligible = evidence_ref(EvidenceTargetType::Chunk, "chunk-eligible");
+            let stale = evidence_ref(EvidenceTargetType::Chunk, "chunk-stale");
+            let unknown = evidence_ref(EvidenceTargetType::Chunk, "chunk-never-written");
+            let doc = evidence_ref(EvidenceTargetType::Chunk, "chunk-doc");
+            let current_stale = write_memory_with_refs(
+                &fixture,
+                "parse current stale",
+                vec![eligible.clone(), stale.clone()],
+            );
+            let stale_current = write_memory_with_refs(
+                &fixture,
+                "parse stale current",
+                vec![stale, eligible.clone()],
+            );
+            let current_unknown = write_memory_with_refs(
+                &fixture,
+                "parse current unknown",
+                vec![eligible.clone(), unknown.clone()],
+            );
+            let unknown_current = write_memory_with_refs(
+                &fixture,
+                "parse unknown current",
+                vec![unknown, eligible.clone()],
+            );
+            let all_eligible = write_memory_with_refs(
+                &fixture,
+                "parse all eligible",
+                vec![eligible.clone(), doc.clone()],
+            );
+            let all_eligible_reversed = write_memory_with_refs(
+                &fixture,
+                "parse all eligible reversed",
+                vec![doc, eligible],
+            );
+
+            let payload =
+                block_on(composed_recall(&fixture).recall(request("parse", 20))).expect("recall");
+            let ids = target_ids(&payload);
+            for denied in [
+                current_stale.id.as_str(),
+                stale_current.id.as_str(),
+                current_unknown.id.as_str(),
+                unknown_current.id.as_str(),
+            ] {
+                assert!(
+                    !ids.iter().any(|id| id == denied),
+                    "mixed sibling order must deny regardless of order: {ids:?}"
+                );
+            }
+            assert!(
+                ids.iter().any(|id| id == all_eligible.id.as_str())
+                    && ids.iter().any(|id| id == all_eligible_reversed.id.as_str()),
+                "all-eligible siblings survive in both orders: {ids:?}"
+            );
+        }
+
+        /// Denied siblings in both orders through a DENYING owning
+        /// authorizer (authorization failure inside evidence, not missing
+        /// records).
+        #[test]
+        fn denied_siblings_both_orders_composed() {
+            let dir = tempfile::tempdir().expect("tempdir");
+            let fixture = fixture(dir.path());
+            put_denied_source_chunk(&fixture, "chunk-denied-matrix", "parse denied sibling");
+            let denied = evidence_ref(EvidenceTargetType::Chunk, "chunk-denied-matrix");
+            let eligible = evidence_ref(EvidenceTargetType::Chunk, "chunk-eligible");
+            let first = write_memory_with_refs(
+                &fixture,
+                "parse eligible denied",
+                vec![eligible.clone(), denied.clone()],
+            );
+            let second =
+                write_memory_with_refs(&fixture, "parse denied eligible", vec![denied, eligible]);
+            let recall = composed_recall_with_evidence(&fixture, denying_evidence(&fixture));
+            let payload = block_on(recall.recall(request("parse", 20))).expect("recall");
+            let ids = target_ids(&payload);
+            assert!(
+                !ids.iter()
+                    .any(|id| id == first.id.as_str() || id == second.id.as_str()),
+                "a denied sibling denies in both orders: {ids:?}"
+            );
+            assert!(
+                ids.contains(&"chunk-doc".to_string()),
+                "positively authorized ordinary chunk survives under the denying authorizer: {ids:?}"
+            );
+        }
+
+        /// Nested chains and cycles: a chain into eligible code survives, a
+        /// chain into stale code denies; an ordinary cycle survives; cycles
+        /// containing code or invalid dependencies deny.
+        #[test]
+        fn nested_chains_and_cycles_composed() {
+            let dir = tempfile::tempdir().expect("tempdir");
+            let fixture = fixture(dir.path());
+            // Nested chain into eligible code.
+            let mid_eligible = write_memory_with_refs(
+                &fixture,
+                "parse mid eligible",
+                vec![evidence_ref(EvidenceTargetType::Chunk, "chunk-eligible")],
+            );
+            let chain_eligible = write_memory_with_refs(
+                &fixture,
+                "parse chain eligible",
+                vec![evidence_ref(
+                    EvidenceTargetType::Memory,
+                    mid_eligible.id.as_str(),
+                )],
+            );
+            // Nested chain into stale code.
+            let mid_stale = write_memory_with_refs(
+                &fixture,
+                "parse mid stale",
+                vec![evidence_ref(EvidenceTargetType::Chunk, "chunk-stale")],
+            );
+            let chain_stale = write_memory_with_refs(
+                &fixture,
+                "parse chain stale",
+                vec![evidence_ref(
+                    EvidenceTargetType::Memory,
+                    mid_stale.id.as_str(),
+                )],
+            );
+            // Ordinary cycle: A ↔ B.
+            put_memory_with_id(
+                &fixture,
+                "memory-cycle-a",
+                "parse cycle alpha",
+                vec![evidence_ref(EvidenceTargetType::Memory, "memory-cycle-b")],
+            );
+            put_memory_with_id(
+                &fixture,
+                "memory-cycle-b",
+                "parse cycle beta",
+                vec![evidence_ref(EvidenceTargetType::Memory, "memory-cycle-a")],
+            );
+            // Cycle containing code.
+            put_memory_with_id(
+                &fixture,
+                "memory-code-cycle-a",
+                "parse code cycle alpha",
+                vec![evidence_ref(
+                    EvidenceTargetType::Memory,
+                    "memory-code-cycle-b",
+                )],
+            );
+            put_memory_with_id(
+                &fixture,
+                "memory-code-cycle-b",
+                "parse code cycle beta",
+                vec![
+                    evidence_ref(EvidenceTargetType::Memory, "memory-code-cycle-a"),
+                    evidence_ref(EvidenceTargetType::Chunk, "chunk-stale"),
+                ],
+            );
+            // Cycle containing an invalid dependency.
+            put_memory_with_id(
+                &fixture,
+                "memory-invalid-cycle-a",
+                "parse invalid cycle alpha",
+                vec![evidence_ref(
+                    EvidenceTargetType::Memory,
+                    "memory-invalid-cycle-b",
+                )],
+            );
+            put_memory_with_id(
+                &fixture,
+                "memory-invalid-cycle-b",
+                "parse invalid cycle beta",
+                vec![
+                    evidence_ref(EvidenceTargetType::Memory, "memory-invalid-cycle-a"),
+                    evidence_ref(EvidenceTargetType::Chunk, "chunk-never-written"),
+                ],
+            );
+
+            let payload =
+                block_on(composed_recall(&fixture).recall(request("parse", 30))).expect("recall");
+            let ids = target_ids(&payload);
+            assert!(
+                ids.iter().any(|id| id == chain_eligible.id.as_str()),
+                "nested chain into eligible code survives: {ids:?}"
+            );
+            assert!(
+                !ids.iter().any(|id| id == chain_stale.id.as_str()),
+                "nested chain into stale code denies: {ids:?}"
+            );
+            assert!(
+                ids.contains(&"memory-cycle-a".to_string())
+                    && ids.contains(&"memory-cycle-b".to_string()),
+                "ordinary cycle survives: {ids:?}"
+            );
+            assert!(
+                !ids.contains(&"memory-code-cycle-a".to_string())
+                    && !ids.contains(&"memory-code-cycle-b".to_string()),
+                "cycle containing stale code denies: {ids:?}"
+            );
+            assert!(
+                !ids.contains(&"memory-invalid-cycle-b".to_string()),
+                "cycle containing an invalid dependency denies: {ids:?}"
+            );
+        }
+
+        /// Allowed chunk + denied source: the chunk's own policy is fine but
+        /// its SOURCE policy denies — the chunk denies through composed
+        /// recall.
+        #[test]
+        fn allowed_chunk_denied_source_composed() {
+            let dir = tempfile::tempdir().expect("tempdir");
+            let fixture = fixture(dir.path());
+            put_denied_source_chunk(
+                &fixture,
+                "chunk-denied-source-matrix",
+                "parse deniedsource token",
+            );
+            let recall = composed_recall_with_evidence(&fixture, denying_evidence(&fixture));
+            let payload = block_on(recall.recall(request("deniedsource", 20))).expect("recall");
+            let ids = target_ids(&payload);
+            assert!(
+                !ids.contains(&"chunk-denied-source-matrix".to_string()),
+                "allowed chunk with denied source denies: {ids:?}"
+            );
+        }
+
+        /// SOURCE-PROVENANCE-ONLY code dependency: an ordinary (non-repo)
+        /// source whose provenance references code; the chunk itself has no
+        /// dependency refs — only the walked source provenance surfaces the
+        /// code dependency.
+        #[test]
+        fn source_provenance_only_code_dependency_composed() {
+            use engram_knowledge::KnowledgeRepository as _;
+            let dir = tempfile::tempdir().expect("tempdir");
+            let fixture = fixture(dir.path());
+            let put_source_with_provenance = |id: &str, refs: Vec<EvidenceRef>| {
+                let source = engram_domain::KnowledgeSource {
+                    id: Id::from(id),
+                    kind: engram_domain::SourceKind::Upload,
+                    scope: scope(),
+                    name: format!("{id} name"),
+                    uri: None,
+                    version: None,
+                    repository_key: None,
+                    git_ref: None,
+                    policy: policy(),
+                    provenance: provenance_with(refs),
+                    created_at: chrono::Utc::now(),
+                    updated_at: None,
+                    metadata: None,
+                };
+                block_on(fixture.knowledge.put_source(source)).expect("put source");
+            };
+            put_source_with_provenance(
+                "source-prov-stale",
+                vec![evidence_ref(EvidenceTargetType::Chunk, "chunk-stale")],
+            );
+            put_source_with_provenance(
+                "source-prov-eligible",
+                vec![evidence_ref(EvidenceTargetType::Chunk, "chunk-eligible")],
+            );
+            let mut stale_chunk = chunk(
+                "chunk-source-prov-stale",
+                "parse srcprovstale body",
+                KnowledgeChunkKind::Paragraph,
+            );
+            stale_chunk.source_id = Id::from("source-prov-stale");
+            let mut eligible_chunk = chunk(
+                "chunk-source-prov-eligible",
+                "parse srcproveligible body",
+                KnowledgeChunkKind::Paragraph,
+            );
+            eligible_chunk.source_id = Id::from("source-prov-eligible");
+            block_on(fixture.knowledge.put_chunk(stale_chunk)).expect("put chunk");
+            block_on(fixture.knowledge.put_chunk(eligible_chunk)).expect("put chunk");
+
+            let payload =
+                block_on(composed_recall(&fixture).recall(request("srcprov", 20))).expect("recall");
+            let ids = target_ids(&payload);
+            assert!(
+                !ids.contains(&"chunk-source-prov-stale".to_string()),
+                "source-provenance-only stale code dependency denies: {ids:?}"
+            );
+            assert!(
+                ids.contains(&"chunk-source-prov-eligible".to_string()),
+                "source-provenance-only eligible code dependency survives: {ids:?}"
+            );
+        }
+
+        /// ENTITY `source_refs`-ONLY code dependency: an ordinary entity
+        /// whose typed `source_refs` (not provenance) reference code.
+        #[test]
+        fn entity_source_refs_only_code_dependency_composed() {
+            let dir = tempfile::tempdir().expect("tempdir");
+            let fixture = fixture(dir.path());
+            let mut stale_entity = symbol_entity("entity-sr-stale", "parseSrStale");
+            stale_entity.kind = EntityKind::Concept;
+            stale_entity.source_refs = vec![evidence_ref(EvidenceTargetType::Chunk, "chunk-stale")];
+            let mut eligible_entity = symbol_entity("entity-sr-eligible", "parseSrEligible");
+            eligible_entity.kind = EntityKind::Concept;
+            eligible_entity.source_refs =
+                vec![evidence_ref(EvidenceTargetType::Chunk, "chunk-eligible")];
+            block_on(fixture.knowledge.put_entity(stale_entity)).expect("put entity");
+            block_on(fixture.knowledge.put_entity(eligible_entity)).expect("put entity");
+
+            let payload =
+                block_on(composed_recall(&fixture).recall(request("parseSr", 20))).expect("recall");
+            let ids = target_ids(&payload);
+            assert!(
+                !ids.contains(&"entity-sr-stale".to_string()),
+                "entity source_refs-only stale code dependency denies: {ids:?}"
+            );
+            assert!(
+                ids.contains(&"entity-sr-eligible".to_string()),
+                "entity source_refs-only eligible code dependency survives: {ids:?}"
+            );
+        }
+
+        /// OWN-LINEAGE row for Memory and Belief (empty provenance), plus
+        /// REFERENCES to own-code records: published lineage is eligible
+        /// through the view; staged-only lineage denies; a reference to an
+        /// own-code record carries its dependency.
+        #[test]
+        fn own_lineage_memory_belief_composed() {
+            let dir = tempfile::tempdir().expect("tempdir");
+            let fixture = fixture(dir.path());
+            let own_memory =
+                write_memory_with_refs(&fixture, "parse own lineage memory", Vec::new());
+            let referencing = write_memory_with_refs(
+                &fixture,
+                "parse references own lineage",
+                vec![evidence_ref(
+                    EvidenceTargetType::Memory,
+                    own_memory.id.as_str(),
+                )],
+            );
+            put_belief_matrix(
+                &fixture,
+                "belief-own-lineage",
+                "parse",
+                "parse own lineage belief",
+                Vec::new(),
+                Vec::new(),
+                Vec::new(),
+            );
+            // Published generation owning the memory, the referencing
+            // chain root and the belief.
+            publish_with_lineage(
+                &fixture.bindings,
+                "repo-a",
+                "gen-a-3",
+                2,
+                Some("gen-a-2"),
+                &[
+                    own_memory.id.as_str(),
+                    referencing.id.as_str(),
+                    "belief-own-lineage",
+                ],
+            );
+            // Staged-only (unpublished) lineage for a second memory.
+            let staged_memory =
+                write_memory_with_refs(&fixture, "parse staged lineage memory", Vec::new());
+            {
+                let repo_id = engram_domain::RepoId("repo-b".to_string());
+                block_on(fixture.bindings.begin_attempt(
+                    &scope(),
+                    &repo_id,
+                    generation("gen-b-2"),
+                    attempt("attempt-repo-b-gen-b-2", 0, None),
+                ))
+                .expect("begin staged attempt");
+                block_on(fixture.bindings.put_lineage(
+                    &scope(),
+                    staged_memory.id.as_str(),
+                    engram_domain::CodeLineage {
+                        repo_id,
+                        generation_id: "gen-b-2".to_string(),
+                        source_path: "src/staged.rs".to_string(),
+                        contributors: vec![staged_memory.id.as_str().to_string()],
+                    },
+                ))
+                .expect("staged lineage");
+            }
+
+            let payload =
+                block_on(composed_recall(&fixture).recall(request("parse", 30))).expect("recall");
+            let ids = target_ids(&payload);
+            assert!(
+                ids.iter().any(|id| id == own_memory.id.as_str()),
+                "own-lineage memory with EMPTY provenance under a published generation is view-eligible: {ids:?}"
+            );
+            assert!(
+                ids.contains(&"belief-own-lineage".to_string()),
+                "own-lineage belief with EMPTY provenance under a published generation is view-eligible: {ids:?}"
+            );
+            assert!(
+                ids.iter().any(|id| id == referencing.id.as_str()),
+                "a reference to an own-code record carries its dependency (eligible here): {ids:?}"
+            );
+            assert!(
+                !ids.iter().any(|id| id == staged_memory.id.as_str()),
+                "staged-only lineage denies: {ids:?}"
+            );
+        }
+
+        /// Lane projection binding: the lexical entity `"{name} {kind:?}"`
+        /// projection and a long chunk bind; ALTERED payloads deny.
+        #[test]
+        fn lane_projection_binding_composed() {
+            use engram_knowledge::KnowledgeRepository as _;
+            let dir = tempfile::tempdir().expect("tempdir");
+            let fixture = fixture(dir.path());
+            // Lexical entity projection positive (the bound lexical lane
+            // publishes "{name} {kind:?}"). The lane's rehydration gate
+            // requires a generation stamp on symbol entities (stamps are NOT
+            // authority — durable lineage decides below); stamp the fixture
+            // entity consistently with its lineage.
+            {
+                use engram_knowledge::KnowledgeRepository as _;
+                let mut stamped = symbol_entity("entity-published", "parsePublished");
+                let mut metadata = Metadata::new();
+                metadata.insert(
+                    engram_retrieval::bound_filter::CODE_GENERATION_KEY.to_string(),
+                    serde_json::Value::String("gen-a-2".to_string()),
+                );
+                stamped.metadata = Some(metadata);
+                block_on(fixture.knowledge.put_entity(stamped)).expect("put stamped entity");
+            }
+            let recall = fixture
+                .bound_recall()
+                .with_candidate_evidence(fixture.candidate_evidence());
+            let payload = block_on(recall.recall(request("parsePublished", 20))).expect("recall");
+            let ids = target_ids(&payload);
+            assert!(
+                ids.contains(&"entity-published".to_string()),
+                "the lexical entity projection binds (legitimate lexical Entity positive): {ids:?}"
+            );
+
+            // Long chunk positive through the graph lane (full text).
+            let long_text = format!("parse longchunk {}", "x".repeat(3000));
+            let mut long_chunk = chunk("chunk-long", &long_text, KnowledgeChunkKind::Paragraph);
+            long_chunk.source_id = Id::from("source-task-013");
+            block_on(fixture.knowledge.put_chunk(long_chunk)).expect("put long chunk");
+            let payload = block_on(composed_recall(&fixture).recall(request("longchunk", 20)))
+                .expect("recall");
+            let ids = target_ids(&payload);
+            assert!(
+                ids.contains(&"chunk-long".to_string()),
+                "a long graph chunk binds through the full-text projection: {ids:?}"
+            );
+
+            // Resolver-level projection asserts for the pgvector clipping
+            // shapes (SQLite lanes do not clip; the binding helper is
+            // shared): clipped-at-2000 and capped-at-2048 bind, altered
+            // content denies.
+            let record = block_on(
+                fixture
+                    .knowledge
+                    .get_chunk(&Id::from("chunk-long"), &scope()),
+            )
+            .expect("get long chunk")
+            .expect("chunk exists");
+            let resolver = fixture.candidate_evidence();
+            let clipped_2000: String = record.text.chars().take(2000).collect();
+            let capped_2048: String = record.text.chars().take(2048).collect();
+            for (label, content, expected) in [
+                (
+                    "clipped-2000 projection binds",
+                    clipped_2000.clone(),
+                    CandidateEvidence::Ordinary,
+                ),
+                (
+                    "capped-2048 projection binds",
+                    capped_2048.clone(),
+                    CandidateEvidence::Ordinary,
+                ),
+                (
+                    "altered projection denies",
+                    format!("{}!", clipped_2000),
+                    CandidateEvidence::Unknown,
+                ),
+                (
+                    "altered cap denies",
+                    format!("{}?", capped_2048),
+                    CandidateEvidence::Unknown,
+                ),
+            ] {
+                let candidate = RetrievalResult {
+                    id: "projection-candidate".to_string(),
+                    target_type: RetrievalTargetType::Chunk,
+                    target_id: "chunk-long".to_string(),
+                    content,
+                    score: engram_domain::RetrievalScore {
+                        total: 1.0,
+                        relevance: Some(1.0),
+                        recency: None,
+                        confidence: None,
+                        cue_match: None,
+                        hierarchical_fit: None,
+                        policy_fit: Some(1.0),
+                    },
+                    provenance: record.provenance.clone(),
+                    policy: record.policy.clone(),
+                    explanation: None,
+                    fusion_trace: None,
+                    metadata: None,
+                };
+                let classification = block_on(resolver.evidence(&candidate, &request("parse", 10)))
+                    .expect("evidence resolution");
+                assert_eq!(classification, expected, "{label}");
+            }
+        }
+
+        /// Altered-payload NEGATIVE through composed recall: a lane that
+        /// injects a candidate whose payload does not match the canonical
+        /// record (or its deterministic projections) is denied by the
+        /// post-lane guard.
+        #[test]
+        fn altered_payload_candidate_denied_composed() {
+            let dir = tempfile::tempdir().expect("tempdir");
+            let fixture = fixture(dir.path());
+            let record = block_on(engram_knowledge::KnowledgeRepository::get_entity(
+                fixture.knowledge.as_ref(),
+                &Id::from("entity-published"),
+                &scope(),
+            ))
+            .expect("get entity")
+            .expect("entity exists");
+            let forged = RetrievalResult {
+                id: "forged-entity".to_string(),
+                target_type: RetrievalTargetType::Entity,
+                target_id: "entity-published".to_string(),
+                content: format!("{} {:?} FORGED", record.name, record.kind),
+                score: engram_domain::RetrievalScore {
+                    total: 1.0,
+                    relevance: Some(1.0),
+                    recency: None,
+                    confidence: None,
+                    cue_match: None,
+                    hierarchical_fit: None,
+                    policy_fit: Some(1.0),
+                },
+                provenance: record.provenance.clone(),
+                policy: policy(),
+                explanation: None,
+                fusion_trace: None,
+                metadata: None,
+            };
+            struct ForgedLane(RetrievalResult);
+            #[async_trait::async_trait]
+            impl RetrievalIndex for ForgedLane {
+                async fn retrieve_candidates(
+                    &self,
+                    _request: &RetrievalRequest,
+                ) -> CoreResult<Vec<RetrievalResult>> {
+                    Ok(vec![self.0.clone()])
+                }
+            }
+            let recall = SqlUnifiedRecall::new(
+                fixture.memory.clone(),
+                vec![Arc::new(ForgedLane(forged)) as Arc<dyn RetrievalIndex>],
+                fixture.beliefs.clone(),
+            )
+            .with_code_eligibility(
+                fixture.eligibility() as Arc<dyn engram_retrieval::CodeEligibilityResolver>
+            )
+            .with_candidate_evidence(fixture.candidate_evidence());
+            let payload = block_on(recall.recall(request("parse", 20))).expect("recall");
+            let ids = target_ids(&payload);
+            assert!(
+                !ids.iter().any(|id| id == "entity-published"),
+                "an altered-payload candidate denies through the composed guard: {ids:?}"
+            );
+        }
+
+        /// Wide inputs are bounded by INSTRUMENTED counters, not elapsed
+        /// time: a beyond-budget reference array exhausts terminally with
+        /// counters inside the documented bounds, and a hostile long-id
+        /// array is rejected BEFORE any frame is enqueued.
+        #[test]
+        fn wide_input_counters_bounded() {
+            use engram_retrieval::CandidateEvidenceResolver;
+            let dir = tempfile::tempdir().expect("tempdir");
+            let fixture = fixture(dir.path());
+            let resolver = fixture.candidate_evidence();
+            let counters = resolver.walk_counters();
+            counters.reset();
+
+            // Beyond-budget wide array of ordinary refs (all the same id —
+            // one keyed lookup after dedupe).
+            let ordinary_target = write_memory_with_refs(&fixture, "wide dep target", Vec::new());
+            let wide = write_memory_with_refs(
+                &fixture,
+                "wide beyond budget",
+                std::iter::repeat_n(
+                    evidence_ref(EvidenceTargetType::Memory, ordinary_target.id.as_str()),
+                    2000,
+                )
+                .collect(),
+            );
+            let classification = block_on(resolver.classify_with_dependencies(
+                &RetrievalResult {
+                    id: "wide".to_string(),
+                    target_type: RetrievalTargetType::Memory,
+                    target_id: wide.id.to_string(),
+                    content: wide.content.text.clone(),
+                    score: engram_domain::RetrievalScore {
+                        total: 1.0,
+                        relevance: Some(1.0),
+                        recency: None,
+                        confidence: None,
+                        cue_match: None,
+                        hierarchical_fit: None,
+                        policy_fit: Some(1.0),
+                    },
+                    provenance: wide.provenance.clone(),
+                    policy: wide.policy.clone(),
+                    explanation: None,
+                    fusion_trace: None,
+                    metadata: None,
+                },
+                &request("parse", 10),
+            ))
+            .expect("classification");
+            assert_eq!(
+                classification.evidence,
+                CandidateEvidence::Unknown,
+                "a beyond-budget array is terminally Unknown"
+            );
+            assert!(
+                !classification.complete,
+                "exhaustion is distinct from a fully evaluated result (incomplete)"
+            );
+            let stats = counters.snapshot();
+            assert!(
+                stats.references_examined <= 1024,
+                "reference examinations bounded by the work budget: {stats:?}"
+            );
+            assert!(stats.budget_exhaustions >= 1, "{stats:?}");
+            assert!(
+                stats.ownership_lookups <= stats.references_examined + 2,
+                "keyed lookups never exceed references (dedupe + own identity): {stats:?}"
+            );
+            assert!(
+                stats.max_queue_depth <= 16,
+                "queue depth stays bounded: {stats:?}"
+            );
+            assert!(
+                stats.visited_records <= 256,
+                "visited set bounded by the record budget: {stats:?}"
+            );
+            assert!(
+                stats.bytes_accounted <= 128 * 1024,
+                "byte accounting bounded: {stats:?}"
+            );
+
+            // Hostile long ids: rejected BEFORE enqueueing (no frame, no
+            // examination).
+            counters.reset();
+            let long_ids: Vec<EvidenceRef> = (0..300)
+                .map(|index| {
+                    evidence_ref(
+                        EvidenceTargetType::Memory,
+                        &format!("hostile-{index}-{}", "i".repeat(600)),
+                    )
+                })
+                .collect();
+            let hostile = write_memory_with_refs(&fixture, "hostile long ids", long_ids);
+            let classification = block_on(resolver.evidence(
+                &RetrievalResult {
+                    id: "hostile".to_string(),
+                    target_type: RetrievalTargetType::Memory,
+                    target_id: hostile.id.to_string(),
+                    content: hostile.content.text.clone(),
+                    score: engram_domain::RetrievalScore {
+                        total: 1.0,
+                        relevance: Some(1.0),
+                        recency: None,
+                        confidence: None,
+                        cue_match: None,
+                        hierarchical_fit: None,
+                        policy_fit: Some(1.0),
+                    },
+                    provenance: hostile.provenance.clone(),
+                    policy: hostile.policy.clone(),
+                    explanation: None,
+                    fusion_trace: None,
+                    metadata: None,
+                },
+                &request("parse", 10),
+            ))
+            .expect("classification");
+            assert_eq!(classification, CandidateEvidence::Unknown);
+            let stats = counters.snapshot();
+            assert_eq!(
+                stats.frames_enqueued, 0,
+                "the hostile frame is rejected BEFORE enqueueing: {stats:?}"
+            );
+            assert_eq!(
+                stats.references_examined, 0,
+                "no reference is examined for a rejected frame: {stats:?}"
+            );
+            assert!(stats.budget_exhaustions >= 1, "{stats:?}");
+        }
+
+        /// Cyclic inputs are bounded and instrumented: back-edges are
+        /// counted, the visited set and queue stay bounded, and repeated
+        /// references reuse the keyed lookup instead of re-materializing.
+        #[test]
+        fn cyclic_input_counters_bounded() {
+            use engram_retrieval::CandidateEvidenceResolver;
+            let dir = tempfile::tempdir().expect("tempdir");
+            let fixture = fixture(dir.path());
+            let resolver = fixture.candidate_evidence();
+            let counters = resolver.walk_counters();
+            counters.reset();
+
+            // A ⇄ B cycle, each side repeating the sibling reference many
+            // times (within the total work budget: 3 × 300 ≤ 1024): the
+            // FIRST visit resolves; the rest are back-edges.
+            put_memory_with_id(
+                &fixture,
+                "memory-counter-b",
+                "counter cycle beta",
+                std::iter::repeat_n(
+                    evidence_ref(EvidenceTargetType::Memory, "memory-counter-a"),
+                    300,
+                )
+                .collect(),
+            );
+            let a = put_memory_with_id(
+                &fixture,
+                "memory-counter-a",
+                "counter cycle alpha",
+                std::iter::repeat_n(
+                    evidence_ref(EvidenceTargetType::Memory, "memory-counter-b"),
+                    300,
+                )
+                .collect(),
+            );
+
+            let classification = block_on(resolver.evidence(
+                &RetrievalResult {
+                    id: "cycle".to_string(),
+                    target_type: RetrievalTargetType::Memory,
+                    target_id: a.id.to_string(),
+                    content: a.content.text.clone(),
+                    score: engram_domain::RetrievalScore {
+                        total: 1.0,
+                        relevance: Some(1.0),
+                        recency: None,
+                        confidence: None,
+                        cue_match: None,
+                        hierarchical_fit: None,
+                        policy_fit: Some(1.0),
+                    },
+                    provenance: a.provenance.clone(),
+                    policy: a.policy.clone(),
+                    explanation: None,
+                    fusion_trace: None,
+                    metadata: None,
+                },
+                &request("parse", 10),
+            ))
+            .expect("classification");
+            assert_eq!(
+                classification,
+                CandidateEvidence::Ordinary,
+                "an ordinary cycle stays ordinary within budget"
+            );
+            let stats = counters.snapshot();
+            assert!(
+                stats.cycle_backedges >= 1,
+                "cycle back-edges are instrumented: {stats:?}"
+            );
+            assert!(
+                stats.ownership_lookups <= 3,
+                "repeated references reuse the keyed lookup (own + two records): {stats:?}"
+            );
+            assert!(
+                stats.visited_records <= 256 && stats.max_queue_depth <= 16,
+                "set and queue bounded: {stats:?}"
+            );
+            assert_eq!(
+                stats.budget_exhaustions, 0,
+                "a within-budget cycle does not exhaust: {stats:?}"
+            );
+        }
+    }
+
     /// rerank_context_inputs: eligibility carries through the reranker seam
     /// and the composed context (recording double at the rerank port
     /// boundary; the rerank scorer is deployer-provided).

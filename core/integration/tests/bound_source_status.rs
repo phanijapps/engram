@@ -454,11 +454,13 @@ mod task_017 {
         // rejects duplicate commits in one storage root.
         let lease_dir = tempfile::tempdir().expect("lease tempdir");
         let leased_fixture = fixture_with_historical_lease(lease_dir.path());
-        let leased = block_on(leased_fixture.provider.code_fetch_exact_at(
+        let presented_lease = leased_fixture.historical_lease.clone().expect("lease");
+        let leased = block_on(leased_fixture.provider.code_fetch_exact_at_with_lease(
             &actor(),
             &scope(),
             "repo-a",
             "gen-old",
+            Some(&presented_lease),
             "src/exact.py",
             None,
         ))
@@ -469,14 +471,15 @@ mod task_017 {
             .provider
             .code_bindings()
             .expect("coordinator");
-        let lease = leased_fixture.historical_lease.clone().expect("lease");
+        let lease = presented_lease;
         block_on(coordinator.release_read(&actor(), &RepoId("repo-a".to_string()), &lease))
             .expect("release lease");
-        let released = block_on(leased_fixture.provider.code_fetch_exact_at(
+        let released = block_on(leased_fixture.provider.code_fetch_exact_at_with_lease(
             &actor(),
             &scope(),
             "repo-a",
             "gen-old",
+            Some(&lease),
             "src/exact.py",
             None,
         ));

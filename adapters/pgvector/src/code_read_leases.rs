@@ -1,5 +1,5 @@
 //! Transactional PostgreSQL read leases for durable generation retention.
-use super::code_binding_port::{storage_error, PgCodeBindingRepository};
+use super::code_binding_port::{PgCodeBindingRepository, storage_error};
 use async_trait::async_trait;
 use engram_domain::{Scope, Timestamp};
 use engram_knowledge::{CodeEligibility, CodeReadLease, CodeReadLeases, CoreError, CoreResult};
@@ -192,6 +192,43 @@ impl CodeReadLeases for PgCodeBindingRepository {
             }
             tx.commit().await.map_err(|_| storage_error())?;
             Ok(retained.into_iter().collect())
+        })).await
+    }
+
+    async fn validate_historical_read_lease(
+        &self,
+        lease: &CodeReadLease,
+        scope: &Scope,
+        repo_id: &str,
+        generation_id: &str,
+        now: Timestamp,
+    ) -> CoreResult<bool> {
+        if &lease.eligibility.scope != scope
+            || lease.expires_at <= now
+            || !lease
+                .eligibility
+                .repository_ids
+                .iter()
+                .any(|id| id == repo_id)
+            || !lease
+                .eligibility
+                .generations
+                .iter()
+                .any(|id| id == generation_id)
+        {
+            return Ok(false);
+        }
+        let lease = lease.clone();
+        let scope_key = serde_json::to_string(scope).map_err(|_| storage_error())?;
+        let record = value(&lease)?;
+        let fence = fence(lease.fencing_token)?;
+        let now_ms = now.timestamp_millis();
+        self.blocking(move |store| crate::connection::runtime().block_on(async {
+            let durable = store.connection.client.query_opt(
+                "SELECT record_json FROM code_read_leases WHERE lease_id=$1 AND scope_key=$2 AND fence=$3 AND expires_ms>$4",
+                &[&lease.id, &scope_key, &fence, &now_ms],
+            ).await.map_err(|_| storage_error())?;
+            Ok(durable.is_some_and(|row| row.get::<_, serde_json::Value>(0) == record))
         })).await
     }
 

@@ -194,6 +194,42 @@ impl CodeReadLeases for SqlCodeBindingRepository {
         Ok(retained.into_iter().collect())
     }
 
+    async fn validate_historical_read_lease(
+        &self,
+        lease: &CodeReadLease,
+        scope: &Scope,
+        repo_id: &str,
+        generation_id: &str,
+        now: Timestamp,
+    ) -> CoreResult<bool> {
+        if &lease.eligibility.scope != scope
+            || lease.expires_at <= now
+            || !lease
+                .eligibility
+                .repository_ids
+                .iter()
+                .any(|id| id == repo_id)
+            || !lease
+                .eligibility
+                .generations
+                .iter()
+                .any(|id| id == generation_id)
+        {
+            return Ok(false);
+        }
+        let store = self.lock()?;
+        let durable: Option<String> = store
+            .connection
+            .query_row(
+                "SELECT record_json FROM code_read_leases WHERE lease_id=?1 AND scope_key=?2 AND fence=?3 AND expires_ms>?4",
+                params![lease.id, value(scope)?, lease.fencing_token, now.timestamp_millis()],
+                |row| row.get(0),
+            )
+            .optional()
+            .map_err(|_| storage_error())?;
+        Ok(durable.as_deref() == Some(&value(lease)?))
+    }
+
     async fn leased_generations(&self, scope: &Scope, now: Timestamp) -> CoreResult<Vec<String>> {
         let cutoff = now.timestamp_millis();
         let store = self.lock()?;

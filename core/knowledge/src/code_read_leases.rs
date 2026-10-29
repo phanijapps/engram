@@ -41,4 +41,19 @@ pub trait CodeReadLeases: Send + Sync {
     /// sets — it answers exactly "which historical generations does an
     /// explicitly authorized pinned lease currently cover?".
     async fn leased_generations(&self, scope: &Scope, now: Timestamp) -> CoreResult<Vec<String>>;
+
+    /// Validates a caller-presented historical read lease against its durable
+    /// record.  This is intentionally not a generation union: the exact lease
+    /// object must still be live, byte-equal to the durable record, and cover
+    /// this scope, repository, and generation.
+    async fn validate_historical_read_lease(
+        &self,
+        _lease: &CodeReadLease,
+        _scope: &Scope,
+        _repo_id: &str,
+        _generation_id: &str,
+        _now: Timestamp,
+    ) -> CoreResult<bool> {
+        Ok(false)
+    }
 }

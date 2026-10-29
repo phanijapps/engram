@@ -13,7 +13,7 @@
 
 use engram_domain::{Actor, RepoId, Scope};
 use engram_knowledge::{
-    CodeBindingRepository, CoreError, CoreResult, ExactSourceView, RetainedSourceReader,
+    CodeReadLease, CoreError, CoreResult, ExactSourceView, RetainedSourceReader,
 };
 use std::sync::Arc;
 use std::time::Duration;
@@ -62,6 +62,7 @@ impl CodeBindingCoordinator {
         scope: &Scope,
         repo_id: &str,
         generation_id: Option<&str>,
+        historical_lease: Option<&CodeReadLease>,
         path: &str,
         span: Option<std::ops::Range<usize>>,
         retained: &Arc<dyn RetainedSourceReader>,
@@ -75,8 +76,10 @@ impl CodeBindingCoordinator {
         // GenerationChanged rather than returning an unchecked view.
         let store = self.store();
         let repo_read = repo.clone();
+        let historical_lease = historical_lease.cloned();
         self.consistent_read(actor, scope, &repo, EXACT_READ_WINDOW, move |eligibility| {
             let requested = generation_id.map(str::to_owned);
+            let historical_lease = historical_lease.clone();
             let span = span.clone();
             let store = Arc::clone(&store);
             let repo = repo_read.clone();
@@ -96,13 +99,23 @@ impl CodeBindingCoordinator {
                     })?,
                 };
                 if Some(&resolved) != active.as_ref() {
-                    // Historical read: ONLY a LIVE LEASE covering this
-                    // generation authorizes it (finding 2). Lease-only
-                    // coverage — the deletion-protection set
-                    // (`retained_generations`) is NOT read authority.
-                    let leased_generations =
-                        store.leased_generations(scope, chrono::Utc::now()).await?;
-                    if !leased_generations.iter().any(|id| id == &resolved) {
+                    // Historical authority is caller-presented and durable.
+                    // Never authorize from the union of unrelated live leases:
+                    // another caller's lease cannot turn a generation id into
+                    // read authority.
+                    let lease = historical_lease
+                        .as_ref()
+                        .ok_or_else(|| generation_denied(&resolved))?;
+                    if !store
+                        .validate_historical_read_lease(
+                            lease,
+                            scope,
+                            repo_id,
+                            &resolved,
+                            chrono::Utc::now(),
+                        )
+                        .await?
+                    {
                         return Err(generation_denied(&resolved));
                     }
                 } else if !eligibility.generations.iter().any(|id| id == &resolved) {
@@ -164,7 +177,7 @@ impl crate::EngramProvider {
         let coordinator = self.code_bindings()?;
         let retained = self.retained_code_source()?;
         coordinator
-            .exact_source(actor, scope, repo_id, None, path, span, &retained)
+            .exact_source(actor, scope, repo_id, None, None, path, span, &retained)
             .await
     }
 
@@ -182,6 +195,24 @@ impl crate::EngramProvider {
         path: &str,
         span: Option<std::ops::Range<usize>>,
     ) -> CoreResult<ExactSourceView> {
+        self.code_fetch_exact_at_with_lease(actor, scope, repo_id, generation_id, None, path, span)
+            .await
+    }
+
+    /// Fetches a historical generation only when this caller presents the
+    /// durable canonical lease that pins it.  The active generation needs no
+    /// historical token, while a generation id alone is deliberately denied.
+    #[allow(clippy::double_must_use)]
+    pub async fn code_fetch_exact_at_with_lease(
+        &self,
+        actor: &Actor,
+        scope: &Scope,
+        repo_id: &str,
+        generation_id: &str,
+        historical_lease: Option<&CodeReadLease>,
+        path: &str,
+        span: Option<std::ops::Range<usize>>,
+    ) -> CoreResult<ExactSourceView> {
         let coordinator = self.code_bindings()?;
         let retained = self.retained_code_source()?;
         coordinator
@@ -190,6 +221,7 @@ impl crate::EngramProvider {
                 scope,
                 repo_id,
                 Some(generation_id),
+                historical_lease,
                 path,
                 span,
                 &retained,

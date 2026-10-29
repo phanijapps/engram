@@ -1394,6 +1394,43 @@ mod task_015 {
 
 /// Full durable publication state machine returning a Result (no panics) so
 /// CAS-failure semantics stay observable (canonical 3a serialization proof).
+/// Prepares a REAL Ready attempt (bind-state validation, both receipts,
+/// the ready transition) WITHOUT publishing — the pre-fence publication
+/// preparation for the publish-boundary race (review r5 verification
+/// finding 5): everything before `publish` completes BEFORE the fence
+/// holds the write lock, so the race exercises the publish operation
+/// itself. Returns the attempt id.
+fn prepare_ready_attempt(
+    store: &SqlCodeBindingRepository,
+    repo: &str,
+    generation_id: &str,
+    expected_epoch: u64,
+    expected_active: Option<&str>,
+) -> Result<String, CoreError> {
+    let repo_id = RepoId(repo.to_string());
+    let attempt_id = format!("attempt-{repo}-{generation_id}");
+    block_on(store.begin_attempt(
+        &scope(),
+        &repo_id,
+        generation(generation_id),
+        attempt(&attempt_id, expected_epoch, expected_active),
+    ))?;
+    block_on(store.record_receipt(receipt(&attempt_id, generation_id, CodeReceiptKind::Source)))?;
+    block_on(store.record_receipt(receipt(
+        &attempt_id,
+        generation_id,
+        CodeReceiptKind::Knowledge,
+    )))?;
+    let (_, stored) =
+        block_on(store.get_attempt(&scope(), &repo_id, &attempt_id))?.ok_or_else(|| {
+            CoreError::InvalidRequest {
+                reason: "attempt vanished".into(),
+            }
+        })?;
+    block_on(store.mark_ready(&scope(), &repo_id, &attempt_id, stored.fencing_token))?;
+    Ok(attempt_id)
+}
+
 fn publish_attempt(
     store: &SqlCodeBindingRepository,
     repo: &str,
@@ -1864,17 +1901,6 @@ mod task_016 {
     fn maintenance_use_barriers() {
         let dir = tempfile::tempdir().expect("tempdir");
         let (authorized, bindings) = gate_fixture(dir.path());
-        let knowledge = {
-            // The owned mutation target store: reach the provider's knowledge
-            // surface through the seam's wrapped query.
-            let provider_knowledge = authorized.query().clone();
-            let _ = provider_knowledge;
-            Arc::new(SqlKnowledgeStore::open_in_memory().expect("mutation store"))
-        };
-        // Seed an owned mutation target: an eligible chunk the mutation will
-        // delete. Lineage for "a-render" is already published in the fixture.
-        block_on(knowledge.put_entity(entity("a-render", "render", EntityKind::Function)))
-            .expect("put mutation target");
 
         // (1) Valid grant: the fenced retirement executes once with exactly
         // the pinned targets (the owned lineage retirement itself is proven
@@ -1940,11 +1966,23 @@ mod task_016 {
             "a publication after the grant denies the use: {stale_use:?}"
         );
 
-        // (4) The knowledge store target is untouched by the denied use.
-        let target = block_on(knowledge.get_entity(&Id::from("a-render"), &scope()))
-            .expect("get target")
-            .expect("target survives the denied use");
-        assert_eq!(target.id.as_str(), "a-render");
+        // (4) The DURABLE lineage target is untouched by the denied use.
+        // (Review r5 verification finding 7: the pre-C1 assertion read an
+        // unrelated in-memory knowledge store's untouched row as evidence
+        // about the denied owning mutation — a separate-store fiction the
+        // authoritative review rejected; the owned mutation's ACTUAL target
+        // is the durable lineage row, asserted here instead.)
+        let lineage = block_on(engram_knowledge::CodeBindingRepository::target_lineage(
+            &*bindings,
+            &scope(),
+        ))
+        .expect("lineage read");
+        assert!(
+            lineage
+                .iter()
+                .any(|entry| entry.record_id == "a-render" && !entry.retired),
+            "the denied use retired nothing — the durable target stays unretired: {lineage:?}"
+        );
     }
 
     /// Corrective r4 (canonical 3a): the owned maintenance mutation is a
@@ -2565,11 +2603,20 @@ mod task_016 {
         );
     }
 
-    /// Review r5 (finding 11), order 2: a publication attempted DURING the
-    /// fence — after the transaction's FIRST side effect, while the write
-    /// fence is held — cannot interleave: the attempt fails against the
-    /// held write lock, the retirement commits, and a publication retried
-    /// against the ADVANCED epoch succeeds (a retryable CAS, not a deadlock).
+    /// Review r5 (finding 11, verification finding 5), order 2: a REAL
+    /// Ready publication attempt is prepared BEFORE the retirement fence
+    /// takes the write lock; the ACTUAL `publish` operation is invoked from
+    /// the second durable handle DURING the fence's boundary pause (after
+    /// the first side effect, while the write fence is held) and cannot
+    /// interleave — it blocks against the held write lock and fails with
+    /// the SPECIFIC durable-authority storage failure at the publish
+    /// transaction boundary. (The pre-C1 test called `publish_attempt`,
+    /// whose `begin_attempt` IMMEDIATE transaction failed against the held
+    /// fence so `publish` never ran, and accepted any `is_err`.) The
+    /// retirement commits; the persisted binding/generation and retirement
+    /// state prove the blocked publication mutated nothing; a publication
+    /// retried against the ADVANCED epoch succeeds (a retryable CAS, not a
+    /// deadlock).
     #[test]
     fn maintenance_boundary_publication_during_fence_cannot_interleave() {
         let dir = tempfile::tempdir().expect("tempdir");
@@ -2600,18 +2647,20 @@ mod task_016 {
         .expect("grant authorizes");
         let publisher = SqlCodeBindingRepository::open(dir.path().join("boundary-bindings.sqlite"))
             .expect("second durable handle");
+        // Everything before `publish` completes BEFORE the fence: a REAL
+        // Ready attempt against the CURRENT binding epoch (1 after the
+        // fixture's gen-a publication) on the second durable handle.
+        let attempt_id =
+            prepare_ready_attempt(&publisher, "repo-a", "gen-publish-race", 1, Some("gen-a"))
+                .expect("prepare the real ready attempt before the fence");
         let publisher_thread = std::thread::spawn(move || {
             reached_rx.recv().expect("boundary reached");
-            // Publication attempt with the PRE-fence binding epoch: it
-            // cannot commit while the fence holds the write lock.
-            let outcome = publish_attempt(
-                &publisher,
-                "repo-a",
-                "gen-during-fence",
-                1,
-                Some("gen-a"),
-                &[],
-            );
+            // The ACTUAL publish operation with the PRE-fence binding
+            // epoch: its IMMEDIATE transaction blocks against the held
+            // write fence until the busy timeout expires — publish itself,
+            // not attempt creation, races the fence.
+            let repo_id = RepoId("repo-a".to_string());
+            let outcome = block_on(publisher.publish(&scope(), &repo_id, &attempt_id, 1));
             resume_tx.send(()).expect("resume signal");
             outcome
         });
@@ -2621,10 +2670,13 @@ mod task_016 {
             engram_integration::knowledge_query::MaintenanceOperation::RetireLineageTargets,
         ))
         .expect("the fenced retirement commits");
-        let blocked = publisher_thread.join().expect("publisher thread");
+        let blocked = publisher_thread
+            .join()
+            .expect("publisher thread")
+            .expect_err("the publish operation cannot interleave with the held fence");
         assert!(
-            blocked.is_err(),
-            "a publication attempted while the fence holds the write lock cannot interleave: {blocked:?}"
+            matches!(&blocked, CoreError::Adapter { adapter, .. } if adapter == "engram-code-binding"),
+            "the publish operation itself fails against the HELD write fence with the durable-authority storage failure at the publish transaction boundary — not a generic error, and not an attempt-creation failure: {blocked:?}"
         );
         let lineage = block_on(engram_knowledge::CodeBindingRepository::target_lineage(
             &*bindings,
@@ -2637,19 +2689,60 @@ mod task_016 {
                 .any(|entry| entry.record_id == "a-render" && entry.retired),
             "the retirement held: {lineage:?}"
         );
-        // The same publication retried against the ADVANCED epoch commits —
-        // the fence serializes by CAS, it does not deadlock.
-        let retried = publish_attempt(
+        // Persisted binding/generation state BEFORE the retry: the fence
+        // advanced the epoch exactly once and the blocked publication
+        // mutated NOTHING (the active generation is still the fence's
+        // pre-race generation).
+        let binding = block_on(engram_knowledge::CodeBindingRepository::get_binding(
+            &*bindings,
+            &scope(),
+            &RepoId("repo-a".to_string()),
+        ))
+        .expect("get binding")
+        .expect("bound");
+        assert_eq!(
+            binding.epoch, 2,
+            "the retirement advanced the binding epoch exactly once: {binding:?}"
+        );
+        assert_eq!(
+            binding.active_generation.as_deref(),
+            Some("gen-a"),
+            "the blocked publication did not mutate the active generation: {binding:?}"
+        );
+        // The publication retried against the ADVANCED epoch commits — the
+        // fence serializes by CAS, it does not deadlock. (An attempt is
+        // epoch-bound, so the retry re-prepares against the advanced
+        // epoch — the pre-fence Ready attempt cannot be reused.)
+        publish_attempt(
             &bindings,
             "repo-a",
             "gen-after-fence",
             2,
             Some("gen-a"),
             &[],
+        )
+        .expect("retry against the advanced epoch succeeds");
+        let advanced = block_on(engram_knowledge::CodeBindingRepository::get_binding(
+            &*bindings,
+            &scope(),
+            &RepoId("repo-a".to_string()),
+        ))
+        .expect("get binding")
+        .expect("bound");
+        assert_eq!(
+            advanced.epoch, 3,
+            "the retried publication advanced the epoch: {advanced:?}"
+        );
+        assert_eq!(
+            advanced.active_generation.as_deref(),
+            Some("gen-after-fence"),
+            "the retried publication is the active generation: {advanced:?}"
         );
         assert!(
-            retried.is_ok(),
-            "retry against the advanced epoch succeeds: {retried:?}"
+            lineage
+                .iter()
+                .any(|entry| entry.record_id == "a-render" && entry.retired),
+            "the retirement persists through the successful retry: {lineage:?}"
         );
     }
 }

@@ -514,6 +514,24 @@ impl Fixture {
             self.eligibility() as Arc<dyn engram_retrieval::CodeEligibilityResolver>
         )
     }
+
+    /// The REAL canonical evidence resolver over the owning repositories,
+    /// sharing the memory service's configured OWNING authorizer and the
+    /// REAL durable ownership catalog (the fixture's binding store) — no
+    /// resolver-invented permissive bypass, no ad-hoc second catalog.
+    fn candidate_evidence(
+        &self,
+    ) -> Arc<engram_integration::candidate_evidence::RepositoryCandidateEvidence> {
+        Arc::new(
+            engram_integration::candidate_evidence::RepositoryCandidateEvidence::new(
+                self.memory.clone() as Arc<dyn engram_memory::MemoryRepository>,
+                self.beliefs.clone() as Arc<dyn engram_belief::BeliefRepository>,
+                self.knowledge.clone() as Arc<dyn engram_knowledge::KnowledgeRepository>,
+                self.memory.retrieval_authorizer(),
+                Some(self.bindings.clone() as Arc<dyn engram_knowledge::CodeBindingRepository>),
+            ),
+        )
+    }
 }
 
 fn target_ids(payload: &ContextPayload) -> Vec<String> {
@@ -785,11 +803,16 @@ mod task_013 {
         );
     }
 
-    /// Corrective r2 (finding 6): an eligibility AUTHORITY FAILURE fails
-    /// closed — with eligible, stale and ordinary records in the lanes, an
-    /// erroring resolver yields ONLY the authorized non-code results (the
-    /// facts-lane memory), never stale code, and the failure is surfaced as
-    /// a source failure instead of silently disabling the guard.
+    /// Corrective r2 (finding 6) + r3: an eligibility AUTHORITY FAILURE fails
+    /// closed through REAL composition — a bound vector lane whose authority
+    /// read errors degrades as a lane failure, the historical graph lane
+    /// still contributes chunk/entity candidates, and the post-lane evidence
+    /// guard (canonical repository evidence + owning authorizer + real
+    /// ownership catalog) preserves POSITIVELY AUTHORIZED ordinary records
+    /// (document chunk, concept entity, facts-lane memory) while denying
+    /// code-dependent/unknown counterparts (stale/staged/forged/legacy code
+    /// chunks, symbol entities), with the failures surfaced as source
+    /// failures instead of aborting the recall or emptying the page.
     #[test]
     fn authority_failure_fails_closed_preserving_non_code() {
         struct ErroringResolver;
@@ -810,20 +833,47 @@ mod task_013 {
         let fixture = fixture(dir.path());
         let erroring: Arc<dyn engram_retrieval::CodeEligibilityResolver> =
             Arc::new(ErroringResolver);
-        let lane = engram_integration::sqlite::lexical_recall_lane_bound(
+        // A positively authorized ORDINARY concept entity: no code kind, no
+        // durable lineage, ordinary provenance — the ordinary counterpart
+        // that must survive the authority failure.
+        let mut concept = symbol_entity("entity-concept", "parseConcept");
+        concept.kind = EntityKind::Concept;
+        block_on(fixture.knowledge.put_entity(concept)).expect("put concept entity");
+
+        // REAL bound vector lane whose authority read fails: the lane itself
+        // degrades as a source failure (it never widens to an unconstrained
+        // KNN page).
+        let vector_index =
+            engram_store_sqlite::SqliteVectorIndex::open_in_memory(2).expect("vector index");
+        let vector_lane = engram_integration::sqlite::vector_recall_lane_bound(
             fixture.knowledge.clone(),
-            fixture.lexical.clone(),
+            vector_index,
+            Arc::new(FixedEmbedder),
             erroring.clone(),
+        );
+        // The historical graph lane (deployments without per-lane bindings):
+        // contributes chunk + entity candidates the evidence guard classifies.
+        let graph_lane: Arc<dyn RetrievalIndex> = Arc::new(
+            engram_store_sqlite::knowledge::GraphRetrievalIndex::new(fixture.knowledge.clone()),
         );
         let recall = SqlUnifiedRecall::new(
             fixture.memory.clone(),
-            vec![lane as Arc<dyn RetrievalIndex>],
+            vec![graph_lane, vector_lane as Arc<dyn RetrievalIndex>],
             fixture.beliefs.clone(),
         )
-        .with_code_eligibility(erroring);
+        .with_code_eligibility(erroring)
+        .with_candidate_evidence(fixture.candidate_evidence());
 
         let payload = block_on(recall.recall(request("parse", 10))).expect("recall");
         let ids = target_ids(&payload);
+        assert!(
+            ids.iter().any(|id| id == "chunk-doc"),
+            "the positively authorized ORDINARY document chunk must survive the authority failure: {ids:?}"
+        );
+        assert!(
+            ids.iter().any(|id| id == "entity-concept"),
+            "the positively authorized ORDINARY concept entity must survive: {ids:?}"
+        );
         assert!(
             ids.iter().any(|id| id == &fixture.memory_id.to_string()),
             "the independently authorized non-code memory must survive the authority failure: {ids:?}"
@@ -832,10 +882,10 @@ mod task_013 {
             !ids.iter().any(|id| id.contains("stale")
                 || id.contains("repo-b")
                 || id.contains("forged")
-                || id.contains("eligible")
-                || id == "chunk-doc"
-                || id == "chunk-legacy-code"),
-            "code-capable candidates are denied while the authority is unavailable (fail closed): {ids:?}"
+                || id.contains("legacy")
+                || id == "chunk-eligible"
+                || id == "entity-published"),
+            "code candidates are denied while the authority is unavailable (fail closed): {ids:?}"
         );
         assert!(
             payload
@@ -845,6 +895,597 @@ mod task_013 {
             "the authority failure must be surfaced as a source failure: {:?}",
             payload.source_failures
         );
+        assert!(
+            payload
+                .source_failures
+                .iter()
+                .any(|failure| failure.source.starts_with("retrieval_lane_")),
+            "the erroring bound vector lane must degrade as a lane failure: {:?}",
+            payload.source_failures
+        );
+    }
+
+    /// Canonical candidate-evidence classification (r3): decisive NEW cases
+    /// over the REAL owning repositories + owning authorizer + real durable
+    /// ownership catalog — bounded cycle-safe dependency evaluation, positive
+    /// ordinary origin, payload/revision binding, mismatch/foreign/missing
+    /// degradation, and the shared owning authorization decision.
+    mod evidence {
+        use super::*;
+        use engram_belief::BeliefRepository;
+        use engram_domain::{
+            Belief, BeliefId, BeliefStatus, BeliefSubject, DerivationKind, DerivationRef,
+            EntityKind, EvidenceRef, EvidenceTargetType, MemoryContent, MemoryKind,
+            WriteMemoryRequest,
+        };
+        use engram_retrieval::CandidateEvidenceResolver;
+        use engram_runtime::PolicyAuthorizer;
+
+        fn evidence_ref(target_type: EvidenceTargetType, id: &str) -> EvidenceRef {
+            EvidenceRef {
+                target_type,
+                target_id: Some(id.to_string()),
+                uri: None,
+                quote: None,
+                location: None,
+            }
+        }
+
+        fn provenance_with(refs: Vec<EvidenceRef>) -> Provenance {
+            let mut provenance = provenance();
+            provenance.evidence = refs;
+            provenance
+        }
+
+        fn derivation_with(inputs: Vec<EvidenceRef>) -> Provenance {
+            let mut provenance = provenance();
+            provenance.derivations = vec![DerivationRef {
+                kind: DerivationKind::Summarization,
+                model: None,
+                prompt_hash: None,
+                input_refs: inputs,
+                created_at: chrono::Utc::now(),
+            }];
+            provenance
+        }
+
+        /// Writes an ordinary memory whose provenance is exactly `provenance`
+        /// and returns the STORED record (the candidate is then built from the
+        /// canonical record, guaranteeing payload binding).
+        fn write_memory(
+            memory: &Arc<SqlMemoryService>,
+            text: &str,
+            provenance: Provenance,
+        ) -> engram_domain::MemoryRecord {
+            block_on(memory.write_memory(WriteMemoryRequest {
+                kind: MemoryKind::Observation,
+                content: MemoryContent {
+                    text: text.to_string(),
+                    summary: None,
+                    entities: Vec::new(),
+                    language: None,
+                    format: None,
+                    structured: None,
+                    hash: None,
+                },
+                scope: scope(),
+                requester: requester(),
+                provenance,
+                policy: policy(),
+                links: Vec::new(),
+                verdict: None,
+                idempotency_key: None,
+            }))
+            .expect("write memory")
+            .record
+        }
+
+        fn put_belief(
+            beliefs: &Arc<SqlBeliefStore>,
+            id: &str,
+            content: &str,
+            provenance: Provenance,
+        ) {
+            block_on(beliefs.put_belief(Belief {
+                id: BeliefId::from(id),
+                scope: scope(),
+                subject: BeliefSubject {
+                    key: "parse".to_string(),
+                    entity_ref: None,
+                    concept_ref: None,
+                    aliases: Vec::new(),
+                },
+                content: content.to_string(),
+                status: BeliefStatus::Active,
+                confidence: 0.9,
+                sources: Vec::new(),
+                valid_from: None,
+                valid_until: None,
+                superseded_by: None,
+                stale: None,
+                synthesizer: None,
+                reasoning: None,
+                embedding_refs: Vec::new(),
+                policy: policy(),
+                provenance,
+                created_at: chrono::Utc::now(),
+                updated_at: None,
+                metadata: None,
+            }))
+            .expect("put belief");
+        }
+
+        fn candidate(
+            target_type: RetrievalTargetType,
+            id: &str,
+            content: &str,
+            provenance: Provenance,
+            policy: Policy,
+        ) -> RetrievalResult {
+            RetrievalResult {
+                id: format!("candidate-{id}"),
+                target_type,
+                target_id: id.to_string(),
+                content: content.to_string(),
+                score: engram_domain::RetrievalScore {
+                    total: 1.0,
+                    relevance: Some(1.0),
+                    recency: None,
+                    confidence: None,
+                    cue_match: None,
+                    hierarchical_fit: None,
+                    policy_fit: Some(1.0),
+                },
+                provenance,
+                policy,
+                explanation: None,
+                fusion_trace: None,
+                metadata: None,
+            }
+        }
+
+        fn memory_candidate(record: &engram_domain::MemoryRecord) -> RetrievalResult {
+            candidate(
+                RetrievalTargetType::Memory,
+                record.id.as_str(),
+                &record.content.text.clone(),
+                record.provenance.clone(),
+                record.policy.clone(),
+            )
+        }
+
+        fn chunk_candidate(id: &str, text: &str) -> RetrievalResult {
+            candidate(RetrievalTargetType::Chunk, id, text, provenance(), policy())
+        }
+
+        /// A chunk candidate whose payload/provenance/policy bind the STORED
+        /// canonical record (the honest positively-authorized candidate).
+        fn bound_chunk_candidate(fixture: &Fixture, id: &str) -> RetrievalResult {
+            let record = block_on(fixture.knowledge.get_chunk(&Id::from(id), &scope()))
+                .expect("get chunk")
+                .expect("chunk exists");
+            candidate(
+                RetrievalTargetType::Chunk,
+                id,
+                &record.text.clone(),
+                record.provenance.clone(),
+                record.policy.clone(),
+            )
+        }
+
+        fn entity_candidate(id: &str, name: &str) -> RetrievalResult {
+            candidate(
+                RetrievalTargetType::Entity,
+                id,
+                name,
+                provenance(),
+                policy(),
+            )
+        }
+
+        /// An entity candidate whose provenance binds the STORED record
+        /// (cycle/chain fixtures carry reference-bearing provenance).
+        fn bound_entity_candidate(fixture: &Fixture, id: &str) -> RetrievalResult {
+            let record = block_on(fixture.knowledge.get_entity(&Id::from(id), &scope()))
+                .expect("get entity")
+                .expect("entity exists");
+            candidate(
+                RetrievalTargetType::Entity,
+                id,
+                &record.name.clone(),
+                record.provenance.clone(),
+                policy(),
+            )
+        }
+
+        fn belief_candidate(id: &str, content: &str, provenance: Provenance) -> RetrievalResult {
+            candidate(
+                RetrievalTargetType::Belief,
+                id,
+                content,
+                provenance,
+                policy(),
+            )
+        }
+
+        use engram_retrieval::CandidateEvidence;
+
+        fn evidence(fixture: &Fixture, candidate: &RetrievalResult) -> CandidateEvidence {
+            block_on(
+                fixture
+                    .candidate_evidence()
+                    .evidence(candidate, &request("parse", 10)),
+            )
+            .expect("evidence resolution")
+        }
+
+        /// An ordinary memory with no dependency references is POSITIVELY
+        /// ordinary (positive ordinary origin, not merely not-code).
+        #[test]
+        fn ordinary_memory_is_positive_ordinary() {
+            let dir = tempfile::tempdir().expect("tempdir");
+            let fixture = fixture(dir.path());
+            let record = write_memory(&fixture.memory, "ordinary standalone", provenance());
+            assert_eq!(
+                evidence(&fixture, &memory_candidate(&record)),
+                CandidateEvidence::Ordinary
+            );
+        }
+
+        /// A memory whose DERIVATION INPUT references a code chunk is
+        /// code-dependent — discovered through the recursive walk (finding 6:
+        /// code-derived memories cannot pass while the authority is down).
+        #[test]
+        fn code_derived_memory_denied_recursively() {
+            let dir = tempfile::tempdir().expect("tempdir");
+            let fixture = fixture(dir.path());
+            let inner = write_memory(
+                &fixture.memory,
+                "intermediate derivation",
+                derivation_with(vec![evidence_ref(
+                    EvidenceTargetType::Chunk,
+                    "chunk-eligible",
+                )]),
+            );
+            let outer = write_memory(
+                &fixture.memory,
+                "outer derivation",
+                derivation_with(vec![evidence_ref(
+                    EvidenceTargetType::Memory,
+                    inner.id.as_str(),
+                )]),
+            );
+            assert_eq!(
+                evidence(&fixture, &memory_candidate(&outer)),
+                CandidateEvidence::CodeDependent
+            );
+        }
+
+        /// Cycles in the dependency graph terminate: a pure ordinary cycle
+        /// stays ordinary, and code anywhere in a cycle still surfaces.
+        /// Entities carry explicit ids (put_entity), so the cycle is real.
+        #[test]
+        fn dependency_cycles_are_cycle_safe() {
+            let dir = tempfile::tempdir().expect("tempdir");
+            let fixture = fixture(dir.path());
+            let put_cycle_entity = |id: &str, name: &str, refs: Vec<EvidenceRef>| {
+                let mut entity = symbol_entity(id, name);
+                entity.kind = EntityKind::Concept;
+                entity.provenance = provenance_with(refs);
+                block_on(fixture.knowledge.put_entity(entity)).expect("put cycle entity");
+            };
+            // Ordinary cycle: a <-> b, nothing else.
+            put_cycle_entity(
+                "cycle-a",
+                "cycleA",
+                vec![evidence_ref(EvidenceTargetType::Entity, "cycle-b")],
+            );
+            put_cycle_entity(
+                "cycle-b",
+                "cycleB",
+                vec![evidence_ref(EvidenceTargetType::Entity, "cycle-a")],
+            );
+            assert_eq!(
+                evidence(&fixture, &bound_entity_candidate(&fixture, "cycle-a")),
+                CandidateEvidence::Ordinary,
+                "an ordinary cycle must terminate and stay ordinary"
+            );
+
+            // Code cycle: c <-> d, d also references stale code.
+            put_cycle_entity(
+                "cycle-c",
+                "cycleC",
+                vec![evidence_ref(EvidenceTargetType::Entity, "cycle-d")],
+            );
+            put_cycle_entity(
+                "cycle-d",
+                "cycleD",
+                vec![
+                    evidence_ref(EvidenceTargetType::Entity, "cycle-c"),
+                    evidence_ref(EvidenceTargetType::Chunk, "chunk-stale"),
+                ],
+            );
+            assert_eq!(
+                evidence(&fixture, &bound_entity_candidate(&fixture, "cycle-c")),
+                CandidateEvidence::CodeDependent,
+                "code anywhere in the cycle must surface"
+            );
+        }
+
+        /// A dependency chain deeper than the evaluation bound degrades to
+        /// Unknown — never Ordinary (bounded evaluation is not a bypass).
+        /// Entities carry explicit ids, so the chain is real and terminal
+        /// code sits beyond the depth bound.
+        #[test]
+        fn depth_bounded_chain_is_unknown_not_ordinary() {
+            let dir = tempfile::tempdir().expect("tempdir");
+            let fixture = fixture(dir.path());
+            const CHAIN: usize = 12;
+            let put_chain_entity = |id: &str, next: Option<&str>| {
+                let mut entity = symbol_entity(id, &format!("chain{id}"));
+                entity.kind = EntityKind::Concept;
+                let refs = match next {
+                    Some(next) => vec![evidence_ref(EvidenceTargetType::Entity, next)],
+                    None => vec![evidence_ref(EvidenceTargetType::Chunk, "chunk-stale")],
+                };
+                entity.provenance = provenance_with(refs);
+                block_on(fixture.knowledge.put_entity(entity)).expect("put chain entity");
+            };
+            for index in 0..CHAIN {
+                let next_id = format!("chain-{}", index + 1);
+                let next = if index + 1 < CHAIN {
+                    Some(next_id.as_str())
+                } else {
+                    None
+                };
+                let id = format!("chain-{index}");
+                put_chain_entity(&id, next);
+            }
+            assert_eq!(
+                evidence(&fixture, &bound_entity_candidate(&fixture, "chain-0")),
+                CandidateEvidence::Unknown,
+                "a chain deeper than the evaluation bound is Unknown, never ordinary"
+            );
+        }
+
+        /// Payload/revision binding: a candidate whose payload does not match
+        /// the canonical record is Unknown, never ordinary.
+        #[test]
+        fn payload_mismatch_is_unknown() {
+            let dir = tempfile::tempdir().expect("tempdir");
+            let fixture = fixture(dir.path());
+            let mut mismatched = chunk_candidate("chunk-doc", "tampered replacement text");
+            mismatched.provenance = provenance();
+            assert_eq!(
+                evidence(&fixture, &mismatched),
+                CandidateEvidence::Unknown,
+                "a tampered payload must never classify as ordinary"
+            );
+            // The genuine payload is ordinary.
+            assert_eq!(
+                evidence(&fixture, &bound_chunk_candidate(&fixture, "chunk-doc")),
+                CandidateEvidence::Ordinary
+            );
+        }
+
+        /// Foreign/missing canonical records are Unknown.
+        #[test]
+        fn foreign_or_missing_records_are_unknown() {
+            let dir = tempfile::tempdir().expect("tempdir");
+            let fixture = fixture(dir.path());
+            assert_eq!(
+                evidence(
+                    &fixture,
+                    &chunk_candidate("chunk-never-written", "any text")
+                ),
+                CandidateEvidence::Unknown
+            );
+            assert_eq!(
+                evidence(
+                    &fixture,
+                    &entity_candidate("entity-never-written", "any name")
+                ),
+                CandidateEvidence::Unknown
+            );
+        }
+
+        /// A DENYING owning authorizer degrades evidence to Unknown: the
+        /// resolver shares the memory service's configured authorizer, and
+        /// policy equality alone is never authorization.
+        struct DenyingAuthorizer;
+        impl PolicyAuthorizer for DenyingAuthorizer {
+            fn can_write(
+                &self,
+                _requester: &engram_domain::Requester,
+                _scope: &engram_domain::Scope,
+                _policy: &Policy,
+            ) -> CoreResult<()> {
+                Ok(())
+            }
+            fn can_retrieve(
+                &self,
+                _requester: &engram_domain::Requester,
+                _scope: &engram_domain::Scope,
+                _policy: &Policy,
+            ) -> CoreResult<()> {
+                Err(CoreError::PolicyDenied {
+                    reason: "denied by owning authorizer".to_string(),
+                })
+            }
+            fn can_forget(
+                &self,
+                _requester: &engram_domain::Requester,
+                _scope: &engram_domain::Scope,
+                _policy: &Policy,
+            ) -> CoreResult<()> {
+                Err(CoreError::PolicyDenied {
+                    reason: "denied by owning authorizer".to_string(),
+                })
+            }
+        }
+
+        #[test]
+        fn denying_owning_authorizer_degrades_to_unknown() {
+            let dir = tempfile::tempdir().expect("tempdir");
+            // The REAL owning construction path: with_dependencies carries a
+            // record-sensitive denying authorizer; the evidence path must
+            // receive the SAME decisions through the accessor.
+            let memory = Arc::new(
+                SqlMemoryService::with_dependencies(
+                    engram_store_sqlite::memory::SqlMemoryStore::open_in_memory()
+                        .expect("memory store"),
+                    Arc::new(DenyingAuthorizer),
+                    Arc::new(engram_store_sqlite::memory::SystemClock),
+                    Arc::new(engram_store_sqlite::memory::SequentialIdGenerator::new()),
+                )
+                .expect("owning service"),
+            );
+            let record = write_memory(&memory, "ordinary but denied", provenance());
+            let knowledge = Arc::new(SqlKnowledgeStore::open_in_memory().expect("knowledge"));
+            let beliefs = Arc::new(SqlBeliefStore::open_in_memory().expect("beliefs"));
+            let resolver = engram_integration::candidate_evidence::RepositoryCandidateEvidence::new(
+                memory.clone() as Arc<dyn engram_memory::MemoryRepository>,
+                beliefs.clone() as Arc<dyn engram_belief::BeliefRepository>,
+                knowledge.clone() as Arc<dyn engram_knowledge::KnowledgeRepository>,
+                memory.retrieval_authorizer(),
+                None,
+            );
+            let classification =
+                block_on(resolver.evidence(&memory_candidate(&record), &request("parse", 10)))
+                    .expect("evidence resolution");
+            assert_eq!(
+                classification,
+                CandidateEvidence::Unknown,
+                "an unauthorized canonical read is Unknown, never ordinary"
+            );
+        }
+
+        /// Positive ordinary entity classification needs the REAL ownership
+        /// catalog: with the reader present a non-code entity outside the
+        /// lineage is positively Ordinary; without the reader the same
+        /// entity stays Unknown (missing evidence is not ordinary proof).
+        #[test]
+        fn positive_ordinary_entity_requires_real_ownership_reader() {
+            let dir = tempfile::tempdir().expect("tempdir");
+            let fixture = fixture(dir.path());
+            let mut concept = symbol_entity("entity-concept-e", "parseConcept");
+            concept.kind = EntityKind::Concept;
+            block_on(fixture.knowledge.put_entity(concept)).expect("put concept");
+
+            // Real ownership catalog wired: positively ordinary.
+            assert_eq!(
+                evidence(
+                    &fixture,
+                    &bound_entity_candidate(&fixture, "entity-concept-e")
+                ),
+                CandidateEvidence::Ordinary
+            );
+
+            // Same canonical records, NO ownership reader: Unknown.
+            let resolver = engram_integration::candidate_evidence::RepositoryCandidateEvidence::new(
+                fixture.memory.clone() as Arc<dyn engram_memory::MemoryRepository>,
+                fixture.beliefs.clone() as Arc<dyn engram_belief::BeliefRepository>,
+                fixture.knowledge.clone() as Arc<dyn engram_knowledge::KnowledgeRepository>,
+                fixture.memory.retrieval_authorizer(),
+                None,
+            );
+            let classification = block_on(resolver.evidence(
+                &bound_entity_candidate(&fixture, "entity-concept-e"),
+                &request("parse", 10),
+            ))
+            .expect("evidence resolution");
+            assert_eq!(
+                classification,
+                CandidateEvidence::Unknown,
+                "without the ownership reader absence of lineage is not positive proof"
+            );
+        }
+
+        /// Durable lineage dominates entity kind: a CONCEPT entity that
+        /// carries durable code lineage is code-dependent, and a code-KIND
+        /// entity without lineage (legacy unbound code) is denied too.
+        #[test]
+        fn lineage_and_kind_dominate_entity_classification() {
+            let dir = tempfile::tempdir().expect("tempdir");
+            let fixture = fixture(dir.path());
+            // "entity-published" is a Function in gen-a-2 lineage; "entity-legacy"
+            // is a Function with no lineage.
+            assert_eq!(
+                evidence(
+                    &fixture,
+                    &bound_entity_candidate(&fixture, "entity-published")
+                ),
+                CandidateEvidence::CodeDependent,
+                "lineage-bound symbol entities are code-dependent"
+            );
+            assert_eq!(
+                evidence(&fixture, &bound_entity_candidate(&fixture, "entity-legacy")),
+                CandidateEvidence::CodeDependent,
+                "code-kind entities without lineage are legacy unbound code"
+            );
+        }
+
+        /// A repository-bound source reference is ambiguous typed origin
+        /// while the binding authority is unavailable: Unknown, not ordinary.
+        #[test]
+        fn repository_source_reference_is_unknown() {
+            let dir = tempfile::tempdir().expect("tempdir");
+            let fixture = fixture(dir.path());
+            let record = write_memory(
+                &fixture.memory,
+                "derived from repository source",
+                provenance_with(vec![evidence_ref(
+                    EvidenceTargetType::Source,
+                    "source-task-013",
+                )]),
+            );
+            assert_eq!(
+                evidence(&fixture, &memory_candidate(&record)),
+                CandidateEvidence::Unknown
+            );
+        }
+
+        /// Beliefs classify through the same canonical evidence path.
+        #[test]
+        fn code_derived_belief_denied_and_ordinary_belief_preserved() {
+            let dir = tempfile::tempdir().expect("tempdir");
+            let fixture = fixture(dir.path());
+            let ordinary_provenance = provenance();
+            put_belief(
+                &fixture.beliefs,
+                "belief-ordinary",
+                "ordinary belief content",
+                ordinary_provenance.clone(),
+            );
+            let code_provenance = provenance_with(vec![evidence_ref(
+                EvidenceTargetType::Chunk,
+                "chunk-eligible",
+            )]);
+            put_belief(
+                &fixture.beliefs,
+                "belief-code",
+                "code derived belief",
+                code_provenance.clone(),
+            );
+            assert_eq!(
+                evidence(
+                    &fixture,
+                    &belief_candidate(
+                        "belief-ordinary",
+                        "ordinary belief content",
+                        ordinary_provenance
+                    )
+                ),
+                CandidateEvidence::Ordinary
+            );
+            assert_eq!(
+                evidence(
+                    &fixture,
+                    &belief_candidate("belief-code", "code derived belief", code_provenance)
+                ),
+                CandidateEvidence::CodeDependent
+            );
+        }
     }
 
     /// rerank_context_inputs: eligibility carries through the reranker seam

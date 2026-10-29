@@ -103,6 +103,20 @@ pub fn open(config: &EngramConfig) -> CoreResult<EngramProvider> {
         embedder: embedding_provider.clone(),
         code_eligibility: None,
         knowledge_query: Some(knowledge_query.clone()),
+        // Canonical repository evidence for degraded code-authority handling:
+        // shares the memory service's OWNING authorizer. The durable code
+        // ownership reader stays unconfigured here — full default code-catalog
+        // activation is Task018+, so entity evidence honestly returns
+        // Unknown rather than inventing a catalog.
+        candidate_evidence: Some(Arc::new(
+            engram_integration::candidate_evidence::RepositoryCandidateEvidence::new(
+                memory.clone() as Arc<dyn engram_memory::MemoryRepository>,
+                beliefs.clone() as Arc<dyn engram_belief::BeliefRepository>,
+                knowledge.clone() as Arc<dyn engram_knowledge::KnowledgeRepository>,
+                memory.retrieval_authorizer(),
+                None,
+            ),
+        )),
     });
 
     // Knowledge query: the read surface behind the MCP code-intel tools

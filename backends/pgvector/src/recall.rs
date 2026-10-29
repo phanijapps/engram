@@ -104,6 +104,12 @@ pub(crate) struct PgUnifiedRecall {
     /// Scoped chunk listing (engine-neutral `KnowledgeQuery` port) backing the
     /// eligible-target set for [`Self::code_eligibility`].
     pub(crate) knowledge_query: Option<Arc<dyn KnowledgeQuery>>,
+    /// Canonical candidate evidence for degraded code-authority handling
+    /// (corrective r3, finding 6): when the eligibility authority ERRORS,
+    /// positively authorized ordinary records (documents, concept entities,
+    /// memories, beliefs) survive through canonical repository evidence —
+    /// no target-kind proxy denies every chunk/entity wholesale.
+    pub(crate) candidate_evidence: Option<Arc<dyn engram_retrieval::CandidateEvidenceResolver>>,
 }
 
 impl PgUnifiedRecall {
@@ -311,12 +317,35 @@ impl UnifiedRecall for PgUnifiedRecall {
         if let Some(view) = &code_view {
             candidates.retain(|candidate| view.allows(candidate.target_id.as_str(), false));
         } else if authority_failed {
-            candidates.retain(|candidate| {
-                !matches!(
-                    candidate.target_type,
-                    RetrievalTargetType::Chunk | RetrievalTargetType::Entity
-                )
-            });
+            // Corrective r3 (finding 6): degrade through CANONICAL EVIDENCE,
+            // not a target-kind proxy. Positively authorized ordinary
+            // records survive; code-dependent and unknown records deny;
+            // evidence errors surface as source failures. Without an
+            // evidence resolver the recipe fails closed on chunk/entity
+            // targets while memory/belief (which need no code authority)
+            // keep flowing.
+            match &self.candidate_evidence {
+                Some(evidence) => {
+                    let mut allowed = Vec::with_capacity(candidates.len());
+                    for candidate in candidates {
+                        match evidence.evidence(&candidate, &request).await {
+                            Ok(engram_retrieval::CandidateEvidence::Ordinary) => {
+                                allowed.push(candidate)
+                            }
+                            Ok(engram_retrieval::CandidateEvidence::CodeDependent)
+                            | Ok(engram_retrieval::CandidateEvidence::Unknown) => {}
+                            Err(error) => source_failures.push(lane("candidate_evidence", error)),
+                        }
+                    }
+                    candidates = allowed;
+                }
+                None => candidates.retain(|candidate| {
+                    !matches!(
+                        candidate.target_type,
+                        RetrievalTargetType::Chunk | RetrievalTargetType::Entity
+                    )
+                }),
+            }
         }
 
         compose_context(RetrievalCompositionInput {
@@ -328,5 +357,663 @@ impl UnifiedRecall for PgUnifiedRecall {
             source_failures,
             created_at: now,
         })
+    }
+}
+
+#[cfg(test)]
+mod authority_tests {
+    //! Corrective r3 (finding 6) Pg-recipe proof: an eligibility authority
+    //! ERROR degrades the recall through CANONICAL EVIDENCE — positively
+    //! authorized ordinary records survive, code-dependent/unknown records
+    //! deny, and the failures surface as source failures. Runs ONLY against
+    //! the approved marked disposable fixture (marker asserted inside), gated
+    //! behind `--ignored` + `ENGRAM_TEST_PG_URL` like the accepted PG suites.
+
+    use super::*;
+    use async_trait::async_trait;
+    use engram_domain::{
+        Actor, ActorKind, AllowedUse, Belief, BeliefId, BeliefStatus, BeliefSubject, DeleteMode,
+        EntityKind, EvidenceRef, EvidenceTargetType, Id, KnowledgeChunk, KnowledgeChunkKind,
+        KnowledgeEntity, KnowledgeSource, MemoryContent, MemoryKind, MemoryRecord, MemoryStatus,
+        Policy, Provenance, Requester, Retention, Sensitivity, SourceKind, Visibility,
+    };
+    use engram_retrieval::{CandidateEvidence, CandidateEvidenceResolver, VectorIndex};
+    use engram_store_pgvector::{
+        PgBeliefStore, PgCodeBindingRepository, PgConnection, PgKnowledgeStore,
+    };
+    use futures::executor::block_on;
+
+    fn url() -> String {
+        std::env::var("ENGRAM_TEST_PG_URL").expect("marked disposable PostgreSQL URL required")
+    }
+
+    /// The approved disposable-fixture marker: refuse any other database.
+    fn marker_assert(conn: &PgConnection) {
+        let marker = conn
+            .block_on(async {
+                conn.client
+                    .query_one(
+                        "SELECT shobj_description(oid,'pg_database') FROM pg_database \
+                         WHERE datname=current_database()",
+                        &[],
+                    )
+                    .await
+            })
+            .expect("marker query");
+        assert_eq!(
+            marker.get::<_, Option<String>>(0).as_deref(),
+            Some("engram.factory.job=010-project-bound-branch-indexing; disposable=true"),
+            "disposable fixture marker mismatch — refusing to touch any other database"
+        );
+    }
+
+    fn scope(run: &str) -> engram_domain::Scope {
+        engram_domain::Scope {
+            tenant: "factory-test".into(),
+            subject: None,
+            workspace: Some(format!("r3-pg-recall-{run}")),
+            session: None,
+            environment: None,
+        }
+    }
+
+    fn actor() -> Actor {
+        Actor {
+            id: Id::from("r3-pg-recall"),
+            kind: ActorKind::Agent,
+            display_name: None,
+            metadata: None,
+        }
+    }
+
+    fn requester() -> Requester {
+        Requester {
+            actor: actor(),
+            roles: Vec::new(),
+            permissions: Vec::new(),
+            on_behalf_of: None,
+        }
+    }
+
+    fn policy() -> Policy {
+        Policy {
+            visibility: Visibility::Workspace,
+            retention: Retention::Durable,
+            sensitivity: Some(Sensitivity::Low),
+            allowed_uses: vec![AllowedUse::Retrieval],
+            expires_at: None,
+            delete_mode: Some(DeleteMode::Tombstone),
+        }
+    }
+
+    fn provenance() -> Provenance {
+        Provenance {
+            source: "r3-pg-recall".to_string(),
+            actor: actor(),
+            observed_at: chrono::Utc::now(),
+            evidence: Vec::new(),
+            derivations: Vec::new(),
+            confidence: Some(1.0),
+            method: Some("test".to_string()),
+        }
+    }
+
+    fn provenance_with(refs: Vec<EvidenceRef>) -> Provenance {
+        let mut provenance = provenance();
+        provenance.evidence = refs;
+        provenance
+    }
+
+    fn evidence_ref(target_type: EvidenceTargetType, id: &str) -> EvidenceRef {
+        EvidenceRef {
+            target_type,
+            target_id: Some(id.to_string()),
+            uri: None,
+            quote: None,
+            location: None,
+        }
+    }
+
+    /// Deterministic embedder at the model boundary (the Pg vector CELL and
+    /// the lane are real; only the embedding model is a port double).
+    struct FixedEmbedder;
+
+    impl EmbeddingProvider for FixedEmbedder {
+        fn provider_id(&self) -> &str {
+            "test"
+        }
+        fn model_id(&self) -> &str {
+            "fixed"
+        }
+        fn dimensions(&self) -> u32 {
+            2
+        }
+        fn embedding_space(&self) -> engram_domain::EmbeddingSpace {
+            engram_domain::EmbeddingSpace::new("test", "fixed", 2, "query", None::<String>)
+        }
+        fn embed_query(&self, _query: &str) -> CoreResult<Vec<f32>> {
+            Ok(vec![0.0, 1.0])
+        }
+        fn embed_passage(&self, _text: &str) -> CoreResult<Vec<f32>> {
+            Ok(vec![0.0, 1.0])
+        }
+    }
+
+    struct ErroringResolver;
+    #[async_trait::async_trait]
+    impl CodeEligibilityResolver for ErroringResolver {
+        async fn resolve(
+            &self,
+            _scope: &engram_domain::Scope,
+        ) -> CoreResult<engram_retrieval::BoundCodeEligibility> {
+            Err(CoreError::Adapter {
+                adapter: "test-authority".to_string(),
+                message: "authority unavailable".to_string(),
+            })
+        }
+    }
+
+    fn chunk(run: &str, id: &str, text: &str, kind: KnowledgeChunkKind) -> KnowledgeChunk {
+        KnowledgeChunk {
+            id: Id::from(id),
+            document_id: Id::from(format!("{run}-doc")),
+            source_id: Id::from(run_source_id(run)),
+            kind,
+            text: text.to_string(),
+            summary: None,
+            location: None,
+            entities: Vec::new(),
+            concepts: Vec::new(),
+            embedding_refs: Vec::new(),
+            content_hash: format!("sha256:{id}"),
+            provenance: provenance(),
+            policy: policy(),
+            created_at: chrono::Utc::now(),
+            updated_at: None,
+            metadata: None,
+        }
+    }
+
+    fn entity(run: &str, id: &str, name: &str, kind: EntityKind) -> KnowledgeEntity {
+        KnowledgeEntity {
+            id: Id::from(id),
+            graph_id: None,
+            kind,
+            name: name.to_string(),
+            aliases: Vec::new(),
+            scope: scope(run),
+            source_refs: Vec::new(),
+            concept_refs: Vec::new(),
+            ontology_class_refs: Vec::new(),
+            provenance: provenance(),
+            created_at: chrono::Utc::now(),
+            updated_at: None,
+            valid_from: None,
+            valid_until: None,
+            archived_at: None,
+            metadata: None,
+        }
+    }
+
+    fn run_source_id(run: &str) -> Id {
+        Id::from(format!("{run}-source"))
+    }
+
+    fn scope_current() -> engram_domain::Scope {
+        scope(&scope_run())
+    }
+
+    fn scope_run() -> String {
+        format!(
+            "{}",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        )
+    }
+
+    /// The authority-error degradation proof over the real Pg recipe.
+    #[test]
+    #[ignore = "requires ENGRAM_TEST_PG_URL against the approved marked disposable fixture"]
+    fn pg_authority_failure_preserves_ordinary_and_denies_code_dependent() {
+        let run = scope_run();
+        let conn = PgConnection::connect(&url()).expect("connect disposable fixture");
+        marker_assert(&conn);
+        conn.block_on(async {
+            conn.client
+                .batch_execute(&engram_store_pgvector::schema::schema_sql(2))
+                .await
+                .expect("apply schema")
+        });
+        let test_scope = scope(&run);
+
+        let memory = Arc::new(PgMemoryService::new(
+            PgConnection::connect(&url()).expect("m"),
+        ));
+        let beliefs = Arc::new(PgBeliefStore::new(
+            PgConnection::connect(&url()).expect("b"),
+        ));
+        let knowledge = Arc::new(PgKnowledgeStore::new(
+            PgConnection::connect(&url()).expect("k"),
+        ));
+        let ownership = Arc::new(
+            PgCodeBindingRepository::new(PgConnection::connect(&url()).expect("o"))
+                .expect("binding repository"),
+        );
+
+        // Canonical seed: an ordinary source + document chunk + code chunk,
+        // ordinary/code entities (with real durable lineage on the code one),
+        // an ordinary memory, a code-DERIVED memory and an ordinary belief.
+        let source = KnowledgeSource {
+            id: Id::from(run_source_id(&run)),
+            kind: SourceKind::Upload,
+            scope: test_scope.clone(),
+            name: "r3 pg source".to_string(),
+            uri: None,
+            version: None,
+            repository_key: None,
+            git_ref: None,
+            policy: policy(),
+            provenance: provenance(),
+            created_at: chrono::Utc::now(),
+            updated_at: None,
+            metadata: None,
+        };
+        block_on(
+            <PgKnowledgeStore as engram_knowledge::KnowledgeRepository>::put_source(
+                &knowledge, source,
+            ),
+        )
+        .expect("put source");
+        block_on(
+            <PgKnowledgeStore as engram_knowledge::KnowledgeRepository>::put_document(
+                &knowledge,
+                engram_domain::SourceDocument {
+                    id: Id::from(format!("{run}-doc")),
+                    source_id: Id::from(run_source_id(&run)),
+                    kind: engram_domain::SourceDocumentKind::Text,
+                    uri: None,
+                    path: Some("fixture.rs".to_string()),
+                    title: None,
+                    mime_type: None,
+                    language: Some("rust".to_string()),
+                    version: None,
+                    content_hash: "sha256:r3-pg-doc".to_string(),
+                    provenance: provenance(),
+                    policy: policy(),
+                    created_at: chrono::Utc::now(),
+                    updated_at: None,
+                    metadata: None,
+                },
+            ),
+        )
+        .expect("put document");
+        block_on(
+            <PgKnowledgeStore as engram_knowledge::KnowledgeRepository>::put_chunk(
+                &knowledge,
+                chunk(
+                    &run,
+                    &format!("{run}-chunk-doc"),
+                    "parse ordinary note",
+                    KnowledgeChunkKind::Paragraph,
+                ),
+            ),
+        )
+        .expect("put doc chunk");
+        block_on(
+            <PgKnowledgeStore as engram_knowledge::KnowledgeRepository>::put_chunk(
+                &knowledge,
+                chunk(
+                    &run,
+                    &format!("{run}-chunk-code"),
+                    "parse code symbol",
+                    KnowledgeChunkKind::CodeSymbol,
+                ),
+            ),
+        )
+        .expect("put code chunk");
+        block_on(
+            <PgKnowledgeStore as engram_knowledge::KnowledgeRepository>::put_entity(
+                &knowledge,
+                entity(
+                    &run,
+                    &format!("{run}-entity-concept"),
+                    "parseConcept",
+                    EntityKind::Concept,
+                ),
+            ),
+        )
+        .expect("put concept entity");
+        block_on(
+            <PgKnowledgeStore as engram_knowledge::KnowledgeRepository>::put_entity(
+                &knowledge,
+                entity(
+                    &run,
+                    &format!("{run}-entity-symbol"),
+                    "parseSymbol",
+                    EntityKind::Function,
+                ),
+            ),
+        )
+        .expect("put symbol entity");
+        // Real durable lineage: the CONCEPT entity is code-owned by lineage.
+        block_on(engram_knowledge::CodeBindingRepository::put_lineage(
+            &*ownership,
+            &test_scope,
+            &format!("{run}-entity-concept"),
+            engram_domain::CodeLineage {
+                repo_id: engram_domain::RepoId("repo-a".to_string()),
+                generation_id: "gen-a".to_string(),
+                source_path: "src/x.rs".to_string(),
+                contributors: vec![format!("{run}-entity-concept")],
+            },
+        ))
+        .expect("put lineage");
+
+        let ordinary_memory = block_on(engram_memory::MemoryRepository::put_memory(
+            &*memory,
+            MemoryRecord {
+                id: Id::from(format!("{run}-memory-ordinary")),
+                kind: MemoryKind::Observation,
+                content: MemoryContent {
+                    text: "parse ordinary memory".to_string(),
+                    summary: None,
+                    entities: Vec::new(),
+                    language: None,
+                    format: None,
+                    structured: None,
+                    hash: None,
+                },
+                status: MemoryStatus::Active,
+                scope: test_scope.clone(),
+                policy: policy(),
+                provenance: provenance(),
+                links: Vec::new(),
+                verdict: None,
+                created_at: chrono::Utc::now(),
+                updated_at: None,
+                metadata: None,
+                assertions: Vec::new(),
+            },
+        ))
+        .expect("put ordinary memory");
+        let code_derived_memory = block_on(engram_memory::MemoryRepository::put_memory(
+            &*memory,
+            MemoryRecord {
+                id: Id::from(format!("{run}-memory-code")),
+                kind: MemoryKind::Observation,
+                content: MemoryContent {
+                    text: "parse derived from code".to_string(),
+                    summary: None,
+                    entities: Vec::new(),
+                    language: None,
+                    format: None,
+                    structured: None,
+                    hash: None,
+                },
+                status: MemoryStatus::Active,
+                scope: test_scope.clone(),
+                policy: policy(),
+                provenance: provenance_with(vec![evidence_ref(
+                    EvidenceTargetType::Chunk,
+                    &format!("{run}-chunk-code"),
+                )]),
+                links: Vec::new(),
+                verdict: None,
+                created_at: chrono::Utc::now(),
+                updated_at: None,
+                metadata: None,
+                assertions: Vec::new(),
+            },
+        ))
+        .expect("put code-derived memory");
+        block_on(engram_belief::BeliefRepository::put_belief(
+            &*beliefs,
+            Belief {
+                id: BeliefId::from(format!("{run}-belief-ordinary")),
+                scope: test_scope.clone(),
+                subject: BeliefSubject {
+                    key: "parse".to_string(),
+                    entity_ref: None,
+                    concept_ref: None,
+                    aliases: Vec::new(),
+                },
+                content: "parse ordinary belief".to_string(),
+                status: BeliefStatus::Active,
+                confidence: 0.9,
+                sources: Vec::new(),
+                valid_from: None,
+                valid_until: None,
+                superseded_by: None,
+                stale: None,
+                synthesizer: None,
+                reasoning: None,
+                embedding_refs: Vec::new(),
+                policy: policy(),
+                provenance: provenance(),
+                created_at: chrono::Utc::now(),
+                updated_at: None,
+                metadata: None,
+            },
+        ))
+        .expect("put ordinary belief");
+
+        // Real vector cell rows so the (failing) vector lane is genuinely
+        // wired over the real Pg recipe.
+        let vectors = Arc::new(
+            PgVectorIndex::new_checked(
+                PgConnection::connect(&url()).expect("v"),
+                FixedEmbedder.embedding_space(),
+            )
+            .expect("vector index"),
+        );
+        for id in [format!("{run}-chunk-doc"), format!("{run}-chunk-code")] {
+            block_on(vectors.insert(
+                &Id::from(id),
+                &FixedEmbedder.embedding_space(),
+                vec![0.0, 1.0],
+            ))
+            .expect("insert vector");
+        }
+
+        let erroring: Arc<dyn CodeEligibilityResolver> = Arc::new(ErroringResolver);
+        let recall = PgUnifiedRecall {
+            memory: memory.clone(),
+            beliefs: beliefs.clone(),
+            knowledge: knowledge.clone(),
+            vectors: Some(vectors),
+            embedder: Some(Arc::new(FixedEmbedder)),
+            code_eligibility: Some(erroring),
+            knowledge_query: None,
+            candidate_evidence: Some(Arc::new(
+                engram_integration::candidate_evidence::RepositoryCandidateEvidence::new(
+                    memory.clone() as Arc<dyn engram_memory::MemoryRepository>,
+                    beliefs.clone() as Arc<dyn engram_belief::BeliefRepository>,
+                    knowledge.clone() as Arc<dyn engram_knowledge::KnowledgeRepository>,
+                    memory.retrieval_authorizer(),
+                    Some(ownership.clone() as Arc<dyn engram_knowledge::CodeBindingRepository>),
+                ),
+            )),
+        };
+
+        let request = RetrievalRequest {
+            query: "parse".to_string(),
+            scope: test_scope.clone(),
+            requester: requester(),
+            modes: Vec::new(),
+            filters: None,
+            cues: Vec::new(),
+            limit: Some(10),
+            budget: None,
+            include_explanations: None,
+        };
+        let payload = block_on(engram_integration::UnifiedRecall::recall(&recall, request))
+            .expect("degraded recall composes");
+        let ids: Vec<String> = payload.items.iter().map(|i| i.target_id.clone()).collect();
+        assert!(
+            ids.contains(&format!("{run}-memory-ordinary")),
+            "the positively authorized ordinary memory survives the authority error: {ids:?}"
+        );
+        assert!(
+            ids.contains(&format!("{run}-belief-ordinary")),
+            "the positively authorized ordinary belief survives: {ids:?}"
+        );
+        assert!(
+            !ids.contains(&format!("{run}-memory-code")),
+            "the code-derived memory is denied through canonical evidence: {ids:?}"
+        );
+        let failures: Vec<String> = payload
+            .source_failures
+            .iter()
+            .map(|f| f.source.clone())
+            .collect();
+        assert!(
+            failures.contains(&"code_eligibility".to_string()),
+            "the authority error is surfaced: {failures:?}"
+        );
+        assert!(
+            failures.contains(&"vector".to_string()),
+            "the failing vector lane degrades: {failures:?}"
+        );
+
+        // The same owned seam classifies every category over the REAL Pg
+        // stores + real durable lineage: ordinary chunk/entity positively
+        // ordinary; code chunk, code-kind entity and lineage-owned entity
+        // code-dependent.
+        let evidence = engram_integration::candidate_evidence::RepositoryCandidateEvidence::new(
+            memory.clone() as Arc<dyn engram_memory::MemoryRepository>,
+            beliefs.clone() as Arc<dyn engram_belief::BeliefRepository>,
+            knowledge.clone() as Arc<dyn engram_knowledge::KnowledgeRepository>,
+            memory.retrieval_authorizer(),
+            Some(ownership.clone() as Arc<dyn engram_knowledge::CodeBindingRepository>),
+        );
+        let request = RetrievalRequest {
+            query: "parse".to_string(),
+            scope: test_scope.clone(),
+            requester: requester(),
+            modes: Vec::new(),
+            filters: None,
+            cues: Vec::new(),
+            limit: Some(10),
+            budget: None,
+            include_explanations: None,
+        };
+        let doc_chunk = block_on(
+            <PgKnowledgeStore as engram_knowledge::KnowledgeRepository>::get_chunk(
+                &knowledge,
+                &Id::from(format!("{run}-chunk-doc")),
+                &test_scope,
+            ),
+        )
+        .expect("get doc chunk")
+        .expect("doc chunk exists");
+        let classify = |result: &RetrievalResult| {
+            block_on(evidence.evidence(result, &request)).expect("evidence resolution")
+        };
+        let chunk_result = |id: &str, text: &str, provenance: &Provenance| RetrievalResult {
+            id: format!("candidate-{id}"),
+            target_type: RetrievalTargetType::Chunk,
+            target_id: id.to_string(),
+            content: text.to_string(),
+            score: RetrievalScore {
+                total: 1.0,
+                relevance: Some(1.0),
+                recency: None,
+                confidence: None,
+                cue_match: None,
+                hierarchical_fit: None,
+                policy_fit: Some(1.0),
+            },
+            provenance: provenance.clone(),
+            policy: policy(),
+            explanation: None,
+            fusion_trace: None,
+            metadata: None,
+        };
+        assert_eq!(
+            classify(&chunk_result(
+                &format!("{run}-chunk-doc"),
+                &doc_chunk.text.clone(),
+                &doc_chunk.provenance
+            )),
+            CandidateEvidence::Ordinary,
+            "ordinary document chunk is positively ordinary over the Pg stores"
+        );
+        let code_chunk = block_on(
+            <PgKnowledgeStore as engram_knowledge::KnowledgeRepository>::get_chunk(
+                &knowledge,
+                &Id::from(format!("{run}-chunk-code")),
+                &test_scope,
+            ),
+        )
+        .expect("get code chunk")
+        .expect("code chunk exists");
+        assert_eq!(
+            classify(&chunk_result(
+                &format!("{run}-chunk-code"),
+                &code_chunk.text.clone(),
+                &code_chunk.provenance
+            )),
+            CandidateEvidence::CodeDependent
+        );
+        let entity_result = |id: &str, name: &str, provenance: &Provenance| RetrievalResult {
+            id: format!("candidate-{id}"),
+            target_type: RetrievalTargetType::Entity,
+            target_id: id.to_string(),
+            content: name.to_string(),
+            score: RetrievalScore {
+                total: 1.0,
+                relevance: Some(1.0),
+                recency: None,
+                confidence: None,
+                cue_match: None,
+                hierarchical_fit: None,
+                policy_fit: Some(1.0),
+            },
+            provenance: provenance.clone(),
+            policy: policy(),
+            explanation: None,
+            fusion_trace: None,
+            metadata: None,
+        };
+        let symbol = block_on(
+            <PgKnowledgeStore as engram_knowledge::KnowledgeRepository>::get_entity(
+                &knowledge,
+                &Id::from(format!("{run}-entity-symbol")),
+                &test_scope,
+            ),
+        )
+        .expect("get symbol entity")
+        .expect("symbol entity exists");
+        assert_eq!(
+            classify(&entity_result(
+                &format!("{run}-entity-symbol"),
+                &symbol.name.clone(),
+                &symbol.provenance
+            )),
+            CandidateEvidence::CodeDependent,
+            "code-kind entities are legacy/code dependent"
+        );
+        let lineage_owned = block_on(
+            <PgKnowledgeStore as engram_knowledge::KnowledgeRepository>::get_entity(
+                &knowledge,
+                &Id::from(format!("{run}-entity-concept")),
+                &test_scope,
+            ),
+        )
+        .expect("get concept entity")
+        .expect("concept entity exists");
+        assert_eq!(
+            classify(&entity_result(
+                &format!("{run}-entity-concept"),
+                &lineage_owned.name.clone(),
+                &lineage_owned.provenance
+            )),
+            CandidateEvidence::CodeDependent,
+            "durable code lineage dominates entity kind over the real Pg catalog"
+        );
+        let _ = ordinary_memory;
+        let _ = code_derived_memory;
     }
 }

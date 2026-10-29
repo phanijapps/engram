@@ -1,5 +1,5 @@
 //! Transactional PostgreSQL read leases for durable generation retention.
-use super::code_binding_port::{PgCodeBindingRepository, storage_error};
+use super::code_binding_port::{storage_error, PgCodeBindingRepository};
 use async_trait::async_trait;
 use engram_domain::{Scope, Timestamp};
 use engram_knowledge::{CodeEligibility, CodeReadLease, CodeReadLeases, CoreError, CoreResult};

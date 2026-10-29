@@ -15,6 +15,7 @@ mod index;
 mod retrieval;
 mod tokenizer;
 
+pub use collector::DistinctTargetCounters;
 pub use index::{
     DOC_CONTRIBUTOR_KEY as LEXICAL_DOC_CONTRIBUTOR_KEY, LexicalIndex, code_contributor_key,
 };

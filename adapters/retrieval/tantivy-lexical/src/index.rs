@@ -426,6 +426,24 @@ impl LexicalIndex {
         target_ids: &std::collections::BTreeSet<String>,
         allowed_contributors: &std::collections::BTreeSet<String>,
     ) -> tantivy::Result<Vec<(String, f32)>> {
+        self.search_targets_within_counted(query, limit, target_ids, allowed_contributors, None)
+    }
+
+    /// [`Self::search_targets_within`] with retained-state instrumentation
+    /// (A5): the counters record the per-segment retained-map maximum (the
+    /// documented transient K+1 bound) and the total fruit-merge input volume
+    /// (each segment contributes at most K entries, so merge storage is
+    /// O(segments × K) — never a global unbounded map). There is no hard scan
+    /// cap; a future cap must fail explicitly rather than return a partial
+    /// page.
+    pub fn search_targets_within_counted(
+        &self,
+        query: &str,
+        limit: usize,
+        target_ids: &std::collections::BTreeSet<String>,
+        allowed_contributors: &std::collections::BTreeSet<String>,
+        counters: Option<&std::sync::Arc<crate::collector::DistinctTargetCounters>>,
+    ) -> tantivy::Result<Vec<(String, f32)>> {
         use std::collections::BTreeSet;
         use tantivy::query::{BooleanQuery, TermSetQuery};
         if target_ids.is_empty() || allowed_contributors.is_empty() {
@@ -458,7 +476,11 @@ impl LexicalIndex {
                 Box::new(TermSetQuery::new(contributor_terms)),
             ),
         ]);
-        let collector = crate::collector::DistinctTargetCollector::new(limit, self.target_id_field);
+        let mut collector =
+            crate::collector::DistinctTargetCollector::new(limit, self.target_id_field);
+        if let Some(counters) = counters {
+            collector = collector.with_counters(std::sync::Arc::clone(counters));
+        }
         let best = searcher.search(&query, &collector)?;
         let mut ranked: Vec<(String, f32)> = best.into_iter().collect();
         // Deterministic order: score desc, then target id asc.

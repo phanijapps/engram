@@ -16,9 +16,8 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 use engram_domain::{
-    AllowedUse, DeleteMode, EntityRef, FusionStrategy, FusionTrace, KnowledgeEntity, Metadata,
-    Policy, RerankStrategy, Retention, RetrievalRequest, RetrievalResult, RetrievalScore,
-    RetrievalTargetType, Sensitivity, Visibility,
+    EntityRef, FusionStrategy, FusionTrace, KnowledgeEntity, Metadata, Policy, RerankStrategy,
+    RetrievalRequest, RetrievalResult, RetrievalScore, RetrievalTargetType,
 };
 use engram_retrieval::{GraphCache, GraphSnapshot, RetrievalIndex};
 use engram_runtime::CoreResult;
@@ -413,16 +412,11 @@ fn seed_metadata(seeds: &[String]) -> Metadata {
 }
 
 /// Default policy for associative-graph entity candidates (entities carry no
-/// policy field), mirroring the lexical graph index.
+/// policy field): the ONE domain constructor — graphless entity/relationship
+/// policy is governed by [`Policy::graph_lane_default`] everywhere, with no
+/// per-adapter synthetic duplicate.
 fn graph_default_policy() -> Policy {
-    Policy {
-        visibility: Visibility::Workspace,
-        retention: Retention::Durable,
-        sensitivity: Some(Sensitivity::Low),
-        allowed_uses: vec![AllowedUse::Retrieval],
-        expires_at: None,
-        delete_mode: Some(DeleteMode::Tombstone),
-    }
+    Policy::graph_lane_default()
 }
 
 #[cfg(test)]

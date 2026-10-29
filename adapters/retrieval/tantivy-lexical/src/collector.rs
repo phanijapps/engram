@@ -6,8 +6,18 @@
 //! target budget is a true TARGET budget — a flood of duplicate contributor
 //! documents for one allowed target cannot crowd out another allowed target,
 //! and no fixed document overfetch is involved.
+//!
+//! Retained-state bounds (A5 instrumentation): every segment collector trims
+//! after each insert, so its retained map is at most a TRANSIENT K+1 entries
+//! (the entry being inserted) and at most K after trim; `merge_fruits`
+//! receives at most K entries per segment, so the merge input volume is
+//! O(segments × K) — never one global unbounded map. There is deliberately NO
+//! hard scan cap: every matching document is scan work. Any future cap MUST
+//! return an explicit error rather than silently returning a partial page.
 
 use std::collections::HashMap;
+use std::sync::Arc;
+use std::sync::atomic::{AtomicUsize, Ordering};
 
 use tantivy::collector::Collector;
 use tantivy::schema::Value;
@@ -16,12 +26,46 @@ use tantivy::{DocId, Score, SegmentOrdinal, SegmentReader};
 /// Per-target best score (the collector's fruit).
 pub(crate) type TargetBestScores = HashMap<String, Score>;
 
+/// Retained-state instrumentation for the distinct-target collector (A5):
+/// records what the collector actually retained so tests can document the
+/// transient K+1 per-segment bound and the O(segments × K) merge input
+/// volume. All counters are relaxed atomics — they observe bounds, they do
+/// not participate in collection decisions.
+#[derive(Default)]
+pub struct DistinctTargetCounters {
+    /// Largest per-segment retained map observed immediately AFTER a single
+    /// insert, BEFORE the per-insert trim (the documented transient K+1).
+    retained_max: AtomicUsize,
+    /// Total (target, score) entries across all segment fruits entering
+    /// `merge_fruits` (each segment contributes at most K, so this is the
+    /// O(segments × K) merge storage evidence).
+    merge_documents: AtomicUsize,
+    /// Number of segment collectors created (the "segments" factor).
+    segments: AtomicUsize,
+}
+
+impl DistinctTargetCounters {
+    /// Largest post-insert pre-trim per-segment retained size (≤ K+1).
+    pub fn retained_max(&self) -> usize {
+        self.retained_max.load(Ordering::Relaxed)
+    }
+    /// Total entries entering the fruit merge (≤ segments × K).
+    pub fn merge_documents(&self) -> usize {
+        self.merge_documents.load(Ordering::Relaxed)
+    }
+    /// Segment collectors created for the instrumented search.
+    pub fn segments(&self) -> usize {
+        self.segments.load(Ordering::Relaxed)
+    }
+}
+
 /// Collects the best score per `target_field` value over the matching
 /// documents, with no document-count limit semantics.
 pub(crate) struct DistinctTargetCollector {
     #[allow(dead_code)] // reserved for bounded-heap streaming in later wiring
     limit: usize,
     target_field: tantivy::schema::Field,
+    counters: Option<Arc<DistinctTargetCounters>>,
 }
 
 impl DistinctTargetCollector {
@@ -29,7 +73,15 @@ impl DistinctTargetCollector {
         Self {
             limit,
             target_field,
+            counters: None,
         }
+    }
+
+    /// Attaches retained-state instrumentation (A5); the counters observe the
+    /// documented bounds without changing collection behavior.
+    pub(crate) fn with_counters(mut self, counters: Arc<DistinctTargetCounters>) -> Self {
+        self.counters = Some(counters);
+        self
     }
 }
 
@@ -43,11 +95,15 @@ impl Collector for DistinctTargetCollector {
         segment: &SegmentReader,
     ) -> tantivy::Result<Self::Child> {
         let store = segment.get_store_reader(100)?;
+        if let Some(counters) = &self.counters {
+            counters.segments.fetch_add(1, Ordering::Relaxed);
+        }
         Ok(DistinctTargetSegmentCollector {
             store,
             target_field: self.target_field,
             limit: self.limit,
             best: HashMap::new(),
+            counters: self.counters.clone(),
         })
     }
 
@@ -61,6 +117,11 @@ impl Collector for DistinctTargetCollector {
     ) -> tantivy::Result<Self::Fruit> {
         let mut merged: TargetBestScores = HashMap::new();
         for fruit in segment_fruits {
+            if let Some(counters) = &self.counters {
+                counters
+                    .merge_documents
+                    .fetch_add(fruit.len(), Ordering::Relaxed);
+            }
             for (target, score) in fruit {
                 let entry = merged.entry(target).or_insert(score);
                 if score > *entry {
@@ -91,6 +152,14 @@ impl tantivy::collector::SegmentCollector for DistinctTargetSegmentCollector {
         if score > *entry {
             *entry = score;
         }
+        // A5 instrumentation: observe the retained size AFTER the insert and
+        // BEFORE the trim — this is where the documented transient K+1 bound
+        // is visible.
+        if let Some(counters) = &self.counters {
+            counters
+                .retained_max
+                .fetch_max(self.best.len(), Ordering::Relaxed);
+        }
         trim_to_limit(&mut self.best, self.limit);
     }
 
@@ -104,6 +173,7 @@ pub(crate) struct DistinctTargetSegmentCollector {
     target_field: tantivy::schema::Field,
     limit: usize,
     best: TargetBestScores,
+    counters: Option<Arc<DistinctTargetCounters>>,
 }
 
 /// Retain only the best distinct targets as documents arrive. Tie-breaking is

@@ -574,18 +574,12 @@ impl engram_retrieval::RetrievalIndex for PgGraphLane {
     }
 }
 
-/// Entities carry no canonical policy field; the graph-lane default policy
-/// shape (mirrors the SQLite lane stamp).
+/// Entities carry no canonical policy field; the graph-lane default is the
+/// ONE domain constructor — graphless entity/relationship policy is governed
+/// by [`engram_domain::Policy::graph_lane_default`] everywhere, with no
+/// per-adapter synthetic duplicate.
 fn graph_default_policy() -> engram_domain::Policy {
-    use engram_domain::{AllowedUse, DeleteMode, Retention, Sensitivity, Visibility};
-    engram_domain::Policy {
-        visibility: Visibility::Workspace,
-        retention: Retention::Durable,
-        sensitivity: Some(Sensitivity::Low),
-        allowed_uses: vec![AllowedUse::Retrieval],
-        expires_at: None,
-        delete_mode: Some(DeleteMode::Tombstone),
-    }
+    engram_domain::Policy::graph_lane_default()
 }
 
 #[cfg(test)]

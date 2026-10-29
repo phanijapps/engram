@@ -46,6 +46,17 @@ fn error(error: CodeBindingError) -> CoreError {
             reason: "GenerationChanged".into(),
         },
         CodeBindingError::PersistenceFailure => storage_error(),
+        // r5 C4 (verification finding 2): the publication boundary's
+        // busy/contention outcome is TYPED — a distinct `BackendTransient`
+        // kind carrying this condition's stable marker, never the generic
+        // `storage_error()` bucket that unrelated persistence failures
+        // (query/decode/transaction machinery) map to. Retryable.
+        CodeBindingError::PublicationContention => CoreError::BackendTransient {
+            backend: "engram-code-binding".into(),
+            message: "publication contention at the durable publish boundary (the write \
+                     fence is held by another durable writer — retryable)"
+                .into(),
+        },
         _ => CoreError::InvalidRequest {
             reason: "invalid code binding state".into(),
         },
@@ -834,5 +845,47 @@ fn foreign_target(ids: &[String]) -> CoreError {
             "BindingRequired: code target ids are foreign or unpublished in this scope: {}",
             ids.join(", ")
         ),
+    }
+}
+
+#[cfg(test)]
+mod publication_boundary_outcome_tests {
+    use super::*;
+
+    /// r5 C4 (verification finding 2): the publish boundary's contention
+    /// outcome is TYPED and distinct from the generic persistence bucket —
+    /// only `PublicationContention` maps to `BackendTransient` with the
+    /// contention marker; `PersistenceFailure` (query/decode/transaction
+    /// machinery) keeps the generic `Adapter` bucket and can never satisfy
+    /// a contention assertion. (The busy/locked → `PublicationContention`
+    /// translation itself — `publish_boundary_error` in `code_binding.rs` —
+    /// is exercised end-to-end by the conformance fence test against a REAL
+    /// held write fence.)
+    #[test]
+    fn publication_contention_maps_to_a_typed_transient_outcome_not_the_storage_bucket() {
+        let contention = error(CodeBindingError::PublicationContention);
+        assert!(
+            matches!(
+                &contention,
+                CoreError::BackendTransient { backend, message }
+                    if backend == "engram-code-binding"
+                        && message.contains("publication contention")
+            ),
+            "contention is a typed transient outcome: {contention:?}"
+        );
+        let generic = error(CodeBindingError::PersistenceFailure);
+        assert!(
+            matches!(
+                &generic,
+                CoreError::Adapter { adapter, message }
+                    if adapter == "engram-code-binding"
+                        && message.contains("durable code authority")
+            ),
+            "unrelated persistence failures keep the generic bucket: {generic:?}"
+        );
+        assert!(
+            !matches!(generic, CoreError::BackendTransient { .. }),
+            "the generic bucket can never satisfy a contention predicate"
+        );
     }
 }

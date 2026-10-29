@@ -127,6 +127,14 @@ pub enum CodeBindingError {
     InvalidResetPreview,
     InvalidAttempt,
     PersistenceFailure,
+    /// The durable PUBLISH boundary could not take its write fence —
+    /// busy/lock contention with another durable writer holding the fence
+    /// (r5 C4, verification finding 2). A DISTINCT, retryable outcome:
+    /// unrelated persistence failures (query, decode, transaction
+    /// machinery) remain `PersistenceFailure`; a lost CAS race remains
+    /// `StaleGeneration`. Engine-neutral by construction — adapters map
+    /// their engine's busy/contention condition onto it.
+    PublicationContention,
 }
 
 impl CodeBinding {

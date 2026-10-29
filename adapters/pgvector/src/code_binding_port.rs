@@ -57,6 +57,16 @@ fn error(error: CodeBindingError) -> CoreError {
             reason: "GenerationChanged".into(),
         },
         CodeBindingError::PersistenceFailure => storage_error(),
+        // r5 C4 (verification finding 2): same typed mapping as the sqlite
+        // port — the shared variant is engine-neutral; the Pg engine
+        // observes contention in its own shape (compile-verified here; Pg
+        // runtime remains withheld authority).
+        CodeBindingError::PublicationContention => CoreError::BackendTransient {
+            backend: "engram-code-binding".into(),
+            message: "publication contention at the durable publish boundary (the write \
+                     fence is held by another durable writer — retryable)"
+                .into(),
+        },
         _ => CoreError::InvalidRequest {
             reason: "invalid code binding state".into(),
         },

@@ -2909,13 +2909,17 @@ mod task_016 {
     /// the second durable handle DURING the fence's boundary pause (after
     /// the first side effect, while the write fence is held) and cannot
     /// interleave — it blocks against the held write lock and fails with
-    /// the SPECIFIC durable-authority storage failure at the publish
-    /// transaction boundary. (The pre-C1 test called `publish_attempt`,
-    /// whose `begin_attempt` IMMEDIATE transaction failed against the held
-    /// fence so `publish` never ran, and accepted any `is_err`.) The
-    /// retirement commits; the persisted binding/generation and retirement
-    /// state prove the blocked publication mutated nothing; a publication
-    /// retried against the ADVANCED epoch succeeds (a retryable CAS, not a
+    /// the TYPED publication-boundary contention outcome
+    /// (`BackendTransient`/`engram-code-binding` — the IMMEDIATE publish
+    /// transaction's busy-timeout, r5 C4 verification finding 2; an
+    /// unrelated persistence failure maps to the generic `Adapter` bucket
+    /// and a lost CAS race to typed `Conflict`, so NEITHER can satisfy the
+    /// assertion). (The pre-C1 test called `publish_attempt`, whose
+    /// `begin_attempt` IMMEDIATE transaction failed against the held fence
+    /// so `publish` never ran, and accepted any `is_err`.) The retirement
+    /// commits; the persisted binding/generation and retirement state prove
+    /// the blocked publication mutated nothing; a publication retried
+    /// against the ADVANCED epoch succeeds (a retryable CAS, not a
     /// deadlock).
     #[test]
     fn maintenance_boundary_publication_during_fence_cannot_interleave() {
@@ -2974,24 +2978,35 @@ mod task_016 {
             .join()
             .expect("publisher thread")
             .expect_err("the publish operation cannot interleave with the held fence");
-        // Final r5 C3 (finding 4): the blocked-outcome predicate matches the
-        // SPECIFIC expected failure — the durable-authority storage failure
-        // (the held IMMEDIATE transaction's busy-timeout at the publish
-        // transaction boundary) — not merely the binding adapter's
-        // identity: an unrelated error from the same adapter (or a CAS
-        // conflict, which is a typed `Conflict`, not a lock failure) does
-        // not satisfy it.
+        // Final r5 C4 (verification finding 2): the blocked-outcome
+        // predicate asserts the TYPED publication-boundary contention
+        // outcome — `CoreError::BackendTransient` from the code-binding
+        // adapter carrying the contention marker — NOT a message inside
+        // the generic storage bucket: an unrelated persistence failure
+        // (query/decode/transaction machinery) maps to `CoreError::Adapter`
+        // with "durable code authority is unavailable" and a CAS conflict
+        // maps to typed `CoreError::Conflict`, so neither can satisfy the
+        // assertion (asserted negatively below).
         assert!(
             matches!(
                 &blocked,
-                CoreError::Adapter { adapter, message }
-                    if adapter == "engram-code-binding"
-                        && message.contains("durable code authority")
+                CoreError::BackendTransient { backend, message }
+                    if backend == "engram-code-binding"
+                        && message.contains("publication contention")
             ),
             "the publish operation itself fails against the HELD write fence with \
-             the durable-authority storage failure at the publish transaction \
-             boundary — the specific lock/conflict outcome, not just the adapter \
-             identity, and not an attempt-creation failure: {blocked:?}"
+             the TYPED publication-boundary contention outcome (retryable busy \
+             write fence), not just the adapter identity: {blocked:?}"
+        );
+        assert!(
+            !matches!(&blocked, CoreError::Adapter { adapter, .. } if adapter == "engram-code-binding"),
+            "an unrelated persistence failure (the generic durable-authority \
+             storage bucket) must NOT satisfy the blocked-outcome predicate: {blocked:?}"
+        );
+        assert!(
+            !matches!(&blocked, CoreError::Conflict { .. }),
+            "a CAS conflict (typed Conflict) is not the publication-boundary \
+             contention outcome: {blocked:?}"
         );
         let lineage = block_on(engram_knowledge::CodeBindingRepository::target_lineage(
             &*bindings,

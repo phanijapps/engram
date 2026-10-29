@@ -8,6 +8,24 @@ use std::path::Path;
 pub struct SqlCodeBindingStore {
     pub(super) connection: Connection,
 }
+
+/// Maps a failure at the publish boundary's IMMEDIATE transaction open to
+/// the TYPED outcome (r5 C4, verification finding 2): busy/locked — the
+/// write fence is held by another durable writer — is
+/// `PublicationContention` (retryable); every other failure stays
+/// `PersistenceFailure`. This is the adapter's engine-specific observation
+/// translated onto the shared, engine-neutral error type.
+fn publish_boundary_error(error: rusqlite::Error) -> CodeBindingError {
+    if let rusqlite::Error::SqliteFailure(failure, _) = &error
+        && matches!(
+            failure.code,
+            rusqlite::ErrorCode::DatabaseBusy | rusqlite::ErrorCode::DatabaseLocked
+        )
+    {
+        return CodeBindingError::PublicationContention;
+    }
+    CodeBindingError::PersistenceFailure
+}
 impl SqlCodeBindingStore {
     pub fn open(path: impl AsRef<Path>) -> rusqlite::Result<Self> {
         let connection = Connection::open(path)?;
@@ -303,7 +321,7 @@ impl SqlCodeBindingStore {
         let tx = self
             .connection
             .transaction_with_behavior(TransactionBehavior::Immediate)
-            .map_err(|_| CodeBindingError::PersistenceFailure)?;
+            .map_err(publish_boundary_error)?;
         let row:Option<(i64,String,String,i64,i64,Option<String>,i64,String,String)>=tx.query_row("SELECT a.expected_epoch,a.generation_id,a.state,b.epoch,a.binding_version,a.expected_active_generation,a.fence,a.receipts_json,b.record_json FROM code_attempts a JOIN code_repo_bindings b ON b.tenant=a.tenant AND b.scope_key=a.scope_key AND b.repo_id=a.repo_id WHERE a.attempt_id=?1 AND a.tenant=?2 AND a.scope_key=?3 AND a.repo_id=?4",params![attempt_id,scope.tenant,key,repo],|r|Ok((r.get(0)?,r.get(1)?,r.get(2)?,r.get(3)?,r.get(4)?,r.get(5)?,r.get(6)?,r.get(7)?,r.get(8)?))).optional().map_err(|_|CodeBindingError::PersistenceFailure)?;
         let (
             expected,

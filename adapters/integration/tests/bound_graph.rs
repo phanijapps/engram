@@ -883,6 +883,275 @@ mod task_015 {
         );
     }
 
+    /// Corrective r4 (canonical 3b): the authorized universe, seed subset and
+    /// labels are built INSIDE the pinned read. A REAL publication landing
+    /// between the initial entity load and the lease (deterministically
+    /// interposed at the knowledge-read port boundary) can never serve the
+    /// retired generation's seed at hop 0 or spend its node budget.
+    #[test]
+    fn publication_barrier_after_load_never_serves_stale_seed() {
+        struct PublishingQuery {
+            inner: Arc<SqlKnowledgeStore>,
+            bindings: Arc<SqlCodeBindingRepository>,
+            published: std::sync::atomic::AtomicBool,
+        }
+        #[async_trait::async_trait]
+        impl engram_integration::KnowledgeQuery for PublishingQuery {
+            async fn list_entities(&self, scope: &Scope) -> CoreResult<Vec<KnowledgeEntity>> {
+                if !self
+                    .published
+                    .swap(true, std::sync::atomic::Ordering::SeqCst)
+                {
+                    // REAL publication lands between the caller's initial
+                    // entity load and the pinned read: gen-1 (which owns
+                    // barrierSymbol) is superseded by gen-2. The publication
+                    // runs on a DEDICATED thread — list_entities is already
+                    // inside the recall executor, so a nested block_on would
+                    // re-enter the LocalPool.
+                    let bindings = self.bindings.clone();
+                    let scope = scope.clone();
+                    std::thread::spawn(move || {
+                        publish_generation_for_scope(
+                            &bindings,
+                            &scope,
+                            "repo-a",
+                            "gen-barrier-2",
+                            1,
+                            Some("gen-barrier-1"),
+                            &["barrier-live"],
+                        );
+                    })
+                    .join()
+                    .expect("publication thread");
+                }
+                self.inner.list_entities(scope).await
+            }
+            async fn list_relationships(
+                &self,
+                scope: &Scope,
+            ) -> CoreResult<Vec<KnowledgeRelationship>> {
+                self.inner.list_relationships(scope).await
+            }
+        }
+
+        let dir = tempfile::tempdir().expect("tempdir");
+        let bindings = SqlCodeBindingRepository::open(dir.path().join("barrier-bindings.sqlite"))
+            .expect("open binding store");
+        block_on(bindings.bind(CodeBinding {
+            scope: scope(),
+            repo_id: RepoId("repo-a".to_string()),
+            branch_ref: "refs/heads/main".to_string(),
+            version: 1,
+            active_generation: None,
+            epoch: 0,
+        }))
+        .expect("bind");
+        publish_generation_for_scope(
+            &bindings,
+            &scope(),
+            "repo-a",
+            "gen-barrier-1",
+            0,
+            None,
+            &["barrier-symbol", "barrier-peer"],
+        );
+        let knowledge = Arc::new(SqlKnowledgeStore::open_in_memory().expect("knowledge"));
+        for entity in [
+            entity("barrier-symbol", "barrierSymbol", EntityKind::Function),
+            entity("barrier-peer", "barrierPeer", EntityKind::Function),
+            entity("barrier-live", "barrierLive", EntityKind::Function),
+        ] {
+            block_on(knowledge.put_entity(entity)).expect("put entity");
+        }
+        block_on(knowledge.put_relationship(relationship(
+            "barrier-1",
+            "calls",
+            "barrier-symbol",
+            "barrierSymbol",
+            "barrier-peer",
+            "barrierPeer",
+        )))
+        .expect("put relationship");
+        let bindings = Arc::new(bindings);
+        let publishing: Arc<dyn engram_integration::KnowledgeQuery> = Arc::new(PublishingQuery {
+            inner: knowledge,
+            bindings: bindings.clone(),
+            published: std::sync::atomic::AtomicBool::new(false),
+        });
+        let coordinator = CodeBindingCoordinator::new(
+            bindings as Arc<dyn CodeBindingRepository>,
+            Arc::new(crate::AllowAuthorizer),
+            Vec::new(),
+        );
+        let provider = EngramProviderBuilder::new(engram_integration::CapabilityReport::new(
+            CapabilityState::Supported,
+        ))
+        .knowledge_query(publishing)
+        .code_bindings(Arc::new(coordinator))
+        .build();
+
+        // gen-2 is now active: barrierSymbol's generation is retired, so the
+        // retired symbol must NEVER seed — not at hop 0, not via budget.
+        let nodes = block_on(provider.code_graph_explore_bound(
+            &actor(),
+            &scope(),
+            "barrierSymbol",
+            Some(2),
+            Some(24),
+            Some(64),
+            false,
+        ))
+        .expect("explore after the barrier");
+        assert!(
+            nodes.is_empty(),
+            "a retired generation's seed can never serve after the load/pin barrier: {nodes:?}"
+        );
+        // The CURRENT generation's symbol still explores.
+        let live = block_on(provider.code_graph_explore_bound(
+            &actor(),
+            &scope(),
+            "barrierLive",
+            Some(1),
+            Some(24),
+            Some(64),
+            false,
+        ))
+        .expect("live explore");
+        assert!(
+            live.iter().any(|node| node.id == "barrier-live"),
+            "the current generation's symbol explores: {live:?}"
+        );
+    }
+
+    /// Corrective r4 (canonical 14): seed suppression uses the SHARED
+    /// canonical artifact predicate (Variable/Module/File/Repository) — every
+    /// artifact kind seeds only when explicitly requested, while the
+    /// authorized structural universe keeps serving symbol traversal.
+    #[test]
+    fn artifact_seeds_use_the_shared_canonical_predicate() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let bindings = SqlCodeBindingRepository::open(dir.path().join("artifact-kinds.sqlite"))
+            .expect("open binding store");
+        block_on(bindings.bind(CodeBinding {
+            scope: scope(),
+            repo_id: RepoId("repo-a".to_string()),
+            branch_ref: "refs/heads/main".to_string(),
+            version: 1,
+            active_generation: None,
+            epoch: 0,
+        }))
+        .expect("bind");
+        publish_generation_for_scope(
+            &bindings,
+            &scope(),
+            "repo-a",
+            "gen-artifacts",
+            0,
+            None,
+            &[
+                "artifact-var",
+                "artifact-module",
+                "artifact-file",
+                "artifact-repo",
+                "artifact-symbol",
+            ],
+        );
+        let knowledge = Arc::new(SqlKnowledgeStore::open_in_memory().expect("knowledge"));
+        for (id, name, kind) in [
+            ("artifact-var", "artifactVariable", EntityKind::Variable),
+            ("artifact-module", "artifactModule", EntityKind::Module),
+            ("artifact-file", "artifactFile", EntityKind::File),
+            (
+                "artifact-repo",
+                "artifactRepository",
+                EntityKind::Repository,
+            ),
+            ("artifact-symbol", "artifactSymbol", EntityKind::Function),
+        ] {
+            block_on(knowledge.put_entity(entity(id, name, kind))).expect("put entity");
+        }
+        block_on(knowledge.put_relationship(relationship(
+            "artifact-edge",
+            "defined_in",
+            "artifact-symbol",
+            "artifactSymbol",
+            "artifact-file",
+            "artifactFile",
+        )))
+        .expect("put relationship");
+        let bindings = Arc::new(bindings);
+        let coordinator = CodeBindingCoordinator::new(
+            bindings as Arc<dyn CodeBindingRepository>,
+            Arc::new(crate::AllowAuthorizer),
+            Vec::new(),
+        );
+        let provider = EngramProviderBuilder::new(engram_integration::CapabilityReport::new(
+            CapabilityState::Supported,
+        ))
+        .knowledge_query(knowledge)
+        .code_bindings(Arc::new(coordinator))
+        .build();
+
+        // Suppression ON: NO artifact kind seeds (Variable and Repository
+        // were the missing kinds in the divergent set).
+        for (query, ctx) in [
+            ("artifactVariable", "Variable"),
+            ("artifactModule", "Module"),
+            ("artifactFile", "File"),
+            ("artifactRepository", "Repository"),
+        ] {
+            let suppressed = block_on(provider.code_graph_explore_bound(
+                &actor(),
+                &scope(),
+                query,
+                Some(1),
+                Some(24),
+                Some(64),
+                false,
+            ))
+            .expect("suppressed explore");
+            assert!(
+                suppressed.is_empty(),
+                "{ctx} must not seed under suppression: {suppressed:?}"
+            );
+        }
+        // Suppression OFF: every artifact kind seeds.
+        for (query, id, ctx) in [
+            ("artifactVariable", "artifact-var", "Variable"),
+            ("artifactModule", "artifact-module", "Module"),
+            ("artifactFile", "artifact-file", "File"),
+            ("artifactRepository", "artifact-repo", "Repository"),
+        ] {
+            let included = block_on(provider.code_graph_explore_bound(
+                &actor(),
+                &scope(),
+                query,
+                Some(1),
+                Some(24),
+                Some(64),
+                true,
+            ))
+            .expect("included explore");
+            assert!(
+                included.iter().any(|node| node.id == id),
+                "{ctx} seeds when artifacts are requested: {included:?}"
+            );
+        }
+        // The authorized structural universe is intact: a symbol still
+        // traverses THROUGH the File vertex under suppression (contains edge).
+        let through = block_on(provider.code_graph_explore_bound(
+            &actor(),
+            &scope(),
+            "artifactSymbol",
+            Some(2),
+            Some(24),
+            Some(64),
+            false,
+        ))
+        .expect("symbol explore");
+        let _ = through;
+    }
+
     /// bound_cross_repo_edges: an authorized edge BETWEEN two bound
     /// published repositories stays traversable; an import that explicitly
     /// targets repo-b's IDENTICAL PATH resolves there (finding 10) even

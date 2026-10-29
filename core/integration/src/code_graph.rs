@@ -175,6 +175,12 @@ impl EngramProvider {
                 continue;
             }
             universe.authorized_ids.insert(entity.id.to_string());
+            // Shared canonical artifact classification (Variable/Module/File/
+            // Repository — canonical 14), kept per-entity so seed selection
+            // uses exactly this predicate instead of a divergent kind set.
+            if engram_retrieval::is_code_artifact(entity) {
+                universe.artifact_ids.insert(entity.id.to_string());
+            }
             let repo = view.code_repo_of(entity.id.as_str()).map(str::to_owned);
             let label = display_label(entity, repo.as_deref());
             universe.nodes.push((
@@ -279,24 +285,6 @@ impl EngramProvider {
         let depth = depth.unwrap_or(2);
         let max_nodes = max_nodes.unwrap_or(24);
         let max_edges = max_edges.unwrap_or(64);
-        let universe = self.bound_graph_universe(scope, None).await?;
-        // Artifact suppression changes ONLY discovery seeds.  The full
-        // authorized universe remains available to traversal so a symbol can
-        // legitimately cross a File or Module vertex to another symbol.
-        let seed_nodes = universe
-            .nodes
-            .iter()
-            .filter(|(_, _, kind)| {
-                include_code_artifacts
-                    || !matches!(
-                        kind.as_deref(),
-                        Some("file") | Some("module") | Some("package")
-                    )
-            })
-            .cloned()
-            .collect::<Vec<_>>();
-        let universe_labels = universe.labels.clone();
-        let query_seed = query_text.clone();
         coordinator
             .consistent_read(
                 actor,
@@ -304,20 +292,39 @@ impl EngramProvider {
                 &anchor,
                 GRAPH_READ_WINDOW,
                 move |_eligibility| {
-                    let universe_labels = universe_labels.clone();
-                    let seed_nodes = seed_nodes.clone();
-                    let query_text = query_seed.clone();
+                    let query_text = query_text.clone();
                     async move {
+                        // Corrective r4 (canonical 3b): the FULL authorized
+                        // universe, the artifact-filtered seed subset AND the
+                        // display labels are built together INSIDE every
+                        // pinned attempt — no pre-captured seed, label or
+                        // node set can survive a publication between the
+                        // initial load and the lease (a retry rebuilds all
+                        // three from the current authorized view).
                         let universe = self.bound_graph_universe(scope, None).await?;
+                        // Artifact suppression changes ONLY discovery seeds,
+                        // selected with the SHARED canonical artifact
+                        // predicate (canonical 14). The full authorized
+                        // universe remains available to traversal so a
+                        // symbol can legitimately cross a File or Module
+                        // vertex to another symbol.
+                        let artifact_ids = universe.artifact_entity_ids();
+                        let seed_nodes = universe
+                            .nodes
+                            .iter()
+                            .filter(|(id, _, _)| {
+                                include_code_artifacts || !artifact_ids.contains(id.as_str())
+                            })
+                            .cloned()
+                            .collect::<Vec<_>>();
                         let edge_refs: Vec<(&str, &str, &str)> = universe
                             .edges
                             .iter()
                             .map(|(s, o, p)| (s.as_str(), o.as_str(), p.as_str()))
                             .collect();
-                        let nodes = seed_nodes.clone();
                         let out = explore_query_by_id(
                             &edge_refs,
-                            &nodes,
+                            &seed_nodes,
                             &query_text,
                             depth,
                             max_nodes,
@@ -326,7 +333,8 @@ impl EngramProvider {
                         Ok(out
                             .into_iter()
                             .map(|node| {
-                                let label = universe_labels
+                                let label = universe
+                                    .labels
                                     .get(&node.id)
                                     .cloned()
                                     .unwrap_or(node.label.clone());
@@ -420,6 +428,9 @@ impl EngramProvider {
 #[derive(Default)]
 struct BoundGraphUniverse {
     authorized_ids: std::collections::HashSet<String>,
+    /// Entities the SHARED canonical artifact predicate classifies as
+    /// artifacts (Variable/Module/File/Repository) — seed-suppression input.
+    artifact_ids: std::collections::HashSet<String>,
     /// (entity id, raw label, kind) — traversal keys are the IDS.
     nodes: Vec<(String, String, Option<String>)>,
     edges: Vec<(String, String, String)>,
@@ -427,4 +438,11 @@ struct BoundGraphUniverse {
     labels: std::collections::HashMap<String, String>,
     /// (file entity id → canonical path) for authorized FILE entities.
     file_paths: Vec<(String, String)>,
+}
+
+impl BoundGraphUniverse {
+    /// The shared-predicate artifact entity ids (seed-suppression input).
+    fn artifact_entity_ids(&self) -> &std::collections::HashSet<String> {
+        &self.artifact_ids
+    }
 }

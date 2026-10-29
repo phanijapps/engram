@@ -192,21 +192,6 @@ impl UnifiedRecall for SqlUnifiedRecall {
             }
             None => None,
         };
-        let eligible_candidate = |candidate: &RetrievalResult| -> bool {
-            if let Some(view) = code_view.as_ref() {
-                // Durable-lineage classification (finding 4): the record id
-                // drives the decision; non-lineage ids pass (the lanes own
-                // kind-based legacy denial internally).
-                return view.allows(candidate.target_id.as_str(), false);
-            }
-            if authority_failed {
-                // The asynchronous canonical-evidence pass below decides this
-                // branch.  Do not use target kind, metadata, or a producer flag.
-                return true;
-            }
-            true
-        };
-
         // ---- Facts lane: memory.retrieve (already-composed ContextPayload) ----
         // Its items feed the outer fusion; its source_failures + omitted merge
         // into the outer payload (compose_context keeps all candidates — no
@@ -248,11 +233,10 @@ impl UnifiedRecall for SqlUnifiedRecall {
                         .partial_cmp(&a.score.total)
                         .unwrap_or(std::cmp::Ordering::Equal)
                 });
-                // Facts-lane code-derived items classified against the
-                // published set BEFORE they become fusion candidates — a
-                // stale code-derived memory cannot outrank an eligible one
-                // into the fused page, and non-code items always pass.
-                payload.items.retain(|item| eligible_candidate(item));
+                // Facts-lane code-derived items were classified against the
+                // published set here before A3; the post-lane guard below is
+                // now the single eligibility decision point (it classifies
+                // every candidate, facts-lane items included).
                 candidates.extend(payload.items);
                 source_failures.extend(payload.source_failures);
                 omitted.extend(payload.omitted);
@@ -323,6 +307,14 @@ impl UnifiedRecall for SqlUnifiedRecall {
         // evidence fails closed. On AUTHORITY FAILURE the same evidence
         // decides (finding 6): only positively authorized ordinary records
         // survive.
+        //
+        // Work package A3 (r5): acceptance requires `complete` — a fully
+        // validated dependency set; the aggregate-only trait default can
+        // never pass. A code-dependent acceptance additionally requires a
+        // NONEMPTY code set (never a vacuous `.all` over a default-empty
+        // vector), and a MISSING evidence resolver is not derived-record
+        // independence: without it the guard fails closed identically to
+        // the authority-failure branch.
         if code_view.is_some() && self.candidate_evidence.is_some() {
             let evidence = self.candidate_evidence.as_ref().expect("checked");
             let view = code_view.as_ref().expect("checked");
@@ -333,13 +325,16 @@ impl UnifiedRecall for SqlUnifiedRecall {
                     .await
                 {
                     Ok(classification) => {
-                        let dependency_eligible = classification
-                            .code_dependencies
-                            .iter()
-                            .all(|dependency| view.allows(dependency.as_str(), true));
-                        if classification.evidence == CandidateEvidence::Ordinary
-                            || (classification.evidence == CandidateEvidence::CodeDependent
-                                && dependency_eligible)
+                        let dependency_eligible = classification.complete
+                            && !classification.code_dependencies.is_empty()
+                            && classification
+                                .code_dependencies
+                                .iter()
+                                .all(|dependency| view.allows(dependency.as_str(), true));
+                        if classification.complete
+                            && (classification.evidence == CandidateEvidence::Ordinary
+                                || (classification.evidence == CandidateEvidence::CodeDependent
+                                    && dependency_eligible))
                         {
                             allowed.push(candidate);
                         }
@@ -349,7 +344,20 @@ impl UnifiedRecall for SqlUnifiedRecall {
             }
             candidates = allowed;
         } else if code_view.is_some() {
-            candidates.retain(|candidate| eligible_candidate(candidate));
+            // Missing evidence resolver ≠ derived-record independence (A3):
+            // own-id lineage cannot prove a memory/belief free of stale code
+            // dependencies, so every candidate fails closed while code
+            // bindings exist and the denial is surfaced, not silent.
+            source_failures.push(lane_failure(
+                "candidate_evidence",
+                &CoreError::Adapter {
+                    adapter: "candidate-evidence".to_string(),
+                    message: "evidence resolver not configured; candidates fail \
+                             closed while code bindings exist"
+                        .to_string(),
+                },
+            ));
+            candidates.clear();
         } else if authority_failed {
             let Some(evidence) = &self.candidate_evidence else {
                 candidates.clear();

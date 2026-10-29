@@ -333,8 +333,16 @@ impl UnifiedRecall for PgUnifiedRecall {
             // canonical CODE DEPENDENCIES against that view — derived
             // memories/beliefs built from stale code deny, positively
             // authorized independent ordinary records keep flowing, Unknown
-            // fails closed. Without evidence the kind-blind own-id check
-            // remains the guard.
+            // fails closed.
+            //
+            // Work package A3 (r5): acceptance requires `complete` — a fully
+            // validated dependency set; the aggregate-only trait default can
+            // never pass. A code-dependent acceptance additionally requires
+            // a NONEMPTY code set (never a vacuous `.all` over a
+            // default-empty vector), and a MISSING evidence resolver is not
+            // derived-record independence: without it the guard fails closed
+            // identically to the authority-failure branch (identical
+            // semantics to the SQLite recipe).
             if let Some(evidence) = &self.candidate_evidence {
                 let mut allowed = Vec::with_capacity(candidates.len());
                 for candidate in candidates {
@@ -343,15 +351,18 @@ impl UnifiedRecall for PgUnifiedRecall {
                         .await
                     {
                         Ok(classification) => {
-                            let dependency_eligible = classification
-                                .code_dependencies
-                                .iter()
-                                .all(|dependency| view.allows(dependency.as_str(), true));
-                            if classification.evidence
-                                == engram_retrieval::CandidateEvidence::Ordinary
-                                || (classification.evidence
-                                    == engram_retrieval::CandidateEvidence::CodeDependent
-                                    && dependency_eligible)
+                            let dependency_eligible = classification.complete
+                                && !classification.code_dependencies.is_empty()
+                                && classification
+                                    .code_dependencies
+                                    .iter()
+                                    .all(|dependency| view.allows(dependency.as_str(), true));
+                            if classification.complete
+                                && (classification.evidence
+                                    == engram_retrieval::CandidateEvidence::Ordinary
+                                    || (classification.evidence
+                                        == engram_retrieval::CandidateEvidence::CodeDependent
+                                        && dependency_eligible))
                             {
                                 allowed.push(candidate);
                             }
@@ -361,7 +372,20 @@ impl UnifiedRecall for PgUnifiedRecall {
                 }
                 candidates = allowed;
             } else {
-                candidates.retain(|candidate| view.allows(candidate.target_id.as_str(), false));
+                // Missing evidence resolver ≠ derived-record independence
+                // (A3): own-id lineage cannot prove a memory/belief free of
+                // stale code dependencies, so every candidate fails closed
+                // while code bindings exist and the denial is surfaced.
+                source_failures.push(lane(
+                    "candidate_evidence",
+                    CoreError::Adapter {
+                        adapter: "candidate-evidence".to_string(),
+                        message: "evidence resolver not configured; candidates fail \
+                                 closed while code bindings exist"
+                            .to_string(),
+                    },
+                ));
+                candidates.clear();
             }
         } else if authority_failed {
             // Corrective r3 (finding 6): degrade through CANONICAL EVIDENCE,

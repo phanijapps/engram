@@ -601,7 +601,9 @@ mod task_013 {
                 .collect::<Vec<_>>()
         );
 
-        let recall = fixture.bound_recall();
+        let recall = fixture
+            .bound_recall()
+            .with_candidate_evidence(fixture.candidate_evidence());
         let payload = block_on(recall.recall(request("parse", 2))).expect("bound recall");
         let ids = target_ids(&payload);
         assert!(
@@ -629,7 +631,9 @@ mod task_013 {
     fn forged_metadata_stamp_is_not_authority() {
         let dir = tempfile::tempdir().expect("tempdir");
         let fixture = fixture(dir.path());
-        let recall = fixture.bound_recall();
+        let recall = fixture
+            .bound_recall()
+            .with_candidate_evidence(fixture.candidate_evidence());
         let payload = block_on(recall.recall(request("forged", 10))).expect("recall");
         let ids = target_ids(&payload);
         assert!(
@@ -801,13 +805,19 @@ mod task_013 {
     }
 
     /// non_code_preserved: ordinary documents and memories keep flowing
-    /// alongside constrained code.
+    /// alongside constrained code. Since A3 the post-lane guard requires the
+    /// canonical evidence resolver for any acceptance (a missing resolver
+    /// fails closed), so the positive variant attaches it; the missing-
+    /// resolver fail-closed behavior is proven by
+    /// `missing_evidence_resolver_fails_closed_with_successful_view`.
     #[test]
     fn non_code_preserved() {
         let dir = tempfile::tempdir().expect("tempdir");
         let fixture = fixture(dir.path());
 
-        let recall = fixture.bound_recall();
+        let recall = fixture
+            .bound_recall()
+            .with_candidate_evidence(fixture.candidate_evidence());
         let payload = block_on(recall.recall(request("ordinary", 10))).expect("recall");
         let ids = target_ids(&payload);
         assert!(
@@ -2199,7 +2209,8 @@ mod task_013 {
         )
         .with_code_eligibility(
             fixture.eligibility() as Arc<dyn engram_retrieval::CodeEligibilityResolver>
-        );
+        )
+        .with_candidate_evidence(fixture.candidate_evidence());
 
         let payload = block_on(recall.recall(request("parse", 10))).expect("recall");
         let captured = recorder.seen.lock().expect("reranker lock").clone();

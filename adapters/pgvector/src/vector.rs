@@ -56,6 +56,60 @@ impl PgVectorIndex {
             .join(",");
         format!("[{inner}]")
     }
+
+    /// Eligibility-constrained nearest-neighbor search (task_013 seam): only
+    /// rows whose `id` is in `allowed_target_ids` participate in the ranking,
+    /// and `LIMIT` applies to the constrained set. The `id = ANY($3)` predicate
+    /// is part of the same query plan as the `<=>` ordering — never a global
+    /// top-k that then drops rows — so ineligible vectors cannot consume a
+    /// slot an eligible chunk needs (REQ-005).
+    ///
+    /// An empty eligibility set selects nothing and is rejected rather than
+    /// silently widening to all rows.
+    pub async fn search_constrained(
+        &self,
+        space: &EmbeddingSpace,
+        query: Vec<f32>,
+        limit: usize,
+        allowed_target_ids: &std::collections::BTreeSet<String>,
+    ) -> CoreResult<Vec<(Id, f32)>> {
+        if space != &self.space {
+            return Err(CoreError::InvalidRequest {
+                reason: "embedding_space_mismatch".into(),
+            });
+        }
+        if allowed_target_ids.is_empty() {
+            return Err(CoreError::InvalidRequest {
+                reason: "constrained vector search requires a non-empty eligibility set".into(),
+            });
+        }
+        self.validate_vector(&query)?;
+        let limit = i64::try_from(limit).map_err(|_| CoreError::InvalidRequest {
+            reason: "vector search limit exceeds supported range".into(),
+        })?;
+        let q_text = Self::vec_to_text(&query);
+        let allowed: Vec<String> = allowed_target_ids.iter().cloned().collect();
+        self.conn.block_on(async {
+            let rows = self
+                .conn
+                .client
+                .query(
+                    "SELECT id, 1 - (embedding <=> $1::text::vector) AS score FROM vectors \
+                     WHERE id = ANY($3) ORDER BY embedding <=> $1::text::vector LIMIT $2",
+                    &[&q_text, &limit, &allowed],
+                )
+                .await
+                .map_err(|e| Self::pg_err(e.to_string()))?;
+            Ok(rows
+                .iter()
+                .map(|r| {
+                    let id: String = r.get(0);
+                    let score: f64 = r.get(1);
+                    (Id::from(id), score as f32)
+                })
+                .collect())
+        })
+    }
 }
 
 #[async_trait]

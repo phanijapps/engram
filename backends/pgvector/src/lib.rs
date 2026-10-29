@@ -85,21 +85,31 @@ pub fn open(config: &EngramConfig) -> CoreResult<EngramProvider> {
         None
     };
 
+    // Scoped chunk listing (engine-neutral KnowledgeQuery port) — constructed
+    // before the recall so the bound vector lane can resolve its eligible
+    // target set.
+    let knowledge_query = Arc::new(PgKnowledgeQuery::new(mk_conn()?));
+
     // Unified recall: composes memory.retrieve + beliefs + the vector lane
     // (PS2) via RRF. Lexical (tsvector) is a documented gap on this engine.
+    // Bound-code eligibility stays unwired here until the recipe wires the
+    // binding repository (TASK-019 owns backends/* wiring); the constrained
+    // lane itself is implemented + proven in recall.rs.
     let recall = Arc::new(PgUnifiedRecall {
         memory: memory.clone(),
         beliefs: beliefs.clone(),
         knowledge: knowledge.clone(),
         vectors: vectors.clone(),
         embedder: embedding_provider.clone(),
+        code_eligibility: None,
+        knowledge_query: Some(knowledge_query.clone()),
     });
 
     // Knowledge query: the read surface behind the MCP code-intel tools
     // (search / symbol_context / architecture / whats_changed / the scan's
     // lexical delta feed + embed listing). Without this handle those tools
     // fail on `knowledge_query not wired` even though the cells are healthy.
-    let knowledge_query = Arc::new(PgKnowledgeQuery::new(mk_conn()?));
+    // (Constructed above, before the bound recall.)
 
     let report = CapabilityReport::builder()
         .memory(CapabilityState::Supported)

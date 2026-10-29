@@ -10,6 +10,35 @@ use engram_domain::{
 use engram_knowledge::{CodeBindingRepository, CoreResult, StageReceipt};
 pub use publication::CodeRebuildRequest;
 pub use status::CodeBindingStatus;
+
+/// Engine-neutral [`CodeEligibilityResolver`] over the durable
+/// `CodeBindingRepository::eligibility` port: publishes the scope's published
+/// generation/repository set to retrieval lanes without naming an engine.
+pub struct RepositoryEligibilitySource {
+    store: Arc<dyn engram_knowledge::CodeBindingRepository>,
+}
+impl RepositoryEligibilitySource {
+    pub fn new(store: Arc<dyn engram_knowledge::CodeBindingRepository>) -> Self {
+        Self { store }
+    }
+}
+#[async_trait::async_trait]
+impl engram_retrieval::CodeEligibilityResolver for RepositoryEligibilitySource {
+    async fn resolve(
+        &self,
+        scope: &engram_domain::Scope,
+    ) -> engram_runtime::CoreResult<Option<engram_retrieval::BoundCodeEligibility>> {
+        let eligibility = self.store.eligibility(scope).await?;
+        if eligibility.generations.is_empty() {
+            return Ok(None);
+        }
+        Ok(Some(engram_retrieval::BoundCodeEligibility {
+            epoch: eligibility.epoch,
+            generations: eligibility.generations,
+            repositories: eligibility.repository_ids,
+        }))
+    }
+}
 use std::sync::Arc;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

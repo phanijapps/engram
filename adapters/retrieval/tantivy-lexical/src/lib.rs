@@ -14,6 +14,8 @@ mod index;
 mod retrieval;
 mod tokenizer;
 
-pub use index::LexicalIndex;
+pub use index::{
+    DOC_CONTRIBUTOR_KEY as LEXICAL_DOC_CONTRIBUTOR_KEY, LexicalIndex, code_contributor_key,
+};
 pub use retrieval::{LexicalResolvedTarget, LexicalRetrievalIndex, LexicalTargetResolver};
 pub use tokenizer::normalize_identifier_text;

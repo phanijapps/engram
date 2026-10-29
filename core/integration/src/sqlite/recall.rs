@@ -41,7 +41,8 @@ use engram_domain::{
 use engram_memory::MemoryService;
 use engram_retrieval::compose_context;
 use engram_retrieval::{
-    ReciprocalFusionConfig, ReciprocalRankFusion, RetrievalCompositionInput, RetrievalIndex,
+    CodeEligibilityResolver, ReciprocalFusionConfig, ReciprocalRankFusion,
+    RetrievalCompositionInput, RetrievalIndex, resolve_view,
 };
 use engram_runtime::{CoreError, CoreResult};
 use futures::future::join_all;
@@ -75,6 +76,12 @@ pub struct SqlUnifiedRecall {
     /// facts-lane candidates (e.g. operator-approved memories outrank the
     /// same text written directly by an agent).
     trust: engram_retrieval::TrustWeights,
+    /// Bound-code eligibility (task_013): when wired, the facts lane's
+    /// code-derived memory items are classified against the published
+    /// generation set BEFORE they enter fusion, and every recall resolves
+    /// the view once and reuses it for the post-lane guard. `None` keeps
+    /// the historical behavior (no binding system in scope).
+    code_eligibility: Option<Arc<dyn CodeEligibilityResolver>>,
 }
 
 impl SqlUnifiedRecall {
@@ -115,7 +122,22 @@ impl SqlUnifiedRecall {
             fusion,
             reranker,
             trust: engram_retrieval::TrustWeights::default(),
+            code_eligibility: None,
         }
+    }
+
+    /// Wires bound-code eligibility into the recall composition (task_013
+    /// seam): the facts lane filters code-derived items by the published
+    /// generation set before fusion, and a post-lane guard re-classifies every
+    /// surviving candidate (defense in depth for lanes that cannot constrain
+    /// internally) so ineligible code never reaches rerank input or
+    /// `compose_context`. Non-code candidates are never removed (AC-006).
+    pub fn with_code_eligibility(
+        mut self,
+        code_eligibility: Arc<dyn CodeEligibilityResolver>,
+    ) -> Self {
+        self.code_eligibility = Some(code_eligibility);
+        self
     }
 }
 
@@ -126,6 +148,44 @@ impl UnifiedRecall for SqlUnifiedRecall {
         let mut candidates: Vec<RetrievalResult> = Vec::new();
         let mut source_failures: Vec<RetrievalSourceFailure> = Vec::new();
         let mut omitted = Vec::new();
+
+        // ---- Bound-code eligibility (task_013) --------------------------------
+        // Resolve the published generation set ONCE per recall. The view
+        // (a) filters the facts lane's code-derived memory items below,
+        // (b) guards the fused candidate set after every lane — a lane that
+        // could not constrain internally (or a stale warm entry) cannot slip
+        // ineligible code into rerank input or compose_context. A resolver
+        // failure degrades the recall with a source failure rather than
+        // silently running unconstrained.
+        let code_view = match &self.code_eligibility {
+            Some(resolver) => {
+                let requested = request
+                    .filters
+                    .as_ref()
+                    .and_then(|filters| filters.code_index_keys.as_deref());
+                match resolve_view(resolver.as_ref(), &request.scope, requested).await {
+                    Ok(view) => Some(view),
+                    Err(error) => {
+                        source_failures.push(lane_failure("code_eligibility", &error));
+                        None
+                    }
+                }
+            }
+            None => None,
+        };
+        let eligible_candidate = |candidate: &RetrievalResult| -> bool {
+            code_view
+                .as_ref()
+                .map(|view| {
+                    view.allows(
+                        candidate.metadata.as_ref(),
+                        // Memory/belief items are never legacy code; the
+                        // stamp check owns classification.
+                        false,
+                    )
+                })
+                .unwrap_or(true)
+        };
 
         // ---- Facts lane: memory.retrieve (already-composed ContextPayload) ----
         // Its items feed the outer fusion; its source_failures + omitted merge
@@ -168,6 +228,11 @@ impl UnifiedRecall for SqlUnifiedRecall {
                         .partial_cmp(&a.score.total)
                         .unwrap_or(std::cmp::Ordering::Equal)
                 });
+                // Facts-lane code-derived items classified against the
+                // published set BEFORE they become fusion candidates — a
+                // stale code-derived memory cannot outrank an eligible one
+                // into the fused page, and non-code items always pass.
+                payload.items.retain(|item| eligible_candidate(item));
                 candidates.extend(payload.items);
                 source_failures.extend(payload.source_failures);
                 omitted.extend(payload.omitted);
@@ -222,6 +287,16 @@ impl UnifiedRecall for SqlUnifiedRecall {
             Err(e) => {
                 source_failures.push(lane_failure(BELIEF_LANE, &e));
             }
+        }
+
+        // ---- Post-lane eligibility guard (defense in depth) ------------------
+        // Every fused candidate is re-classified before rerank input and
+        // compose_context: an ineligible code target that survived a lane —
+        // e.g. via a stale warm index or a lane constructed without its own
+        // constraint — is dropped here rather than entering the composed
+        // context budget.
+        if code_view.is_some() {
+            candidates.retain(|candidate| eligible_candidate(candidate));
         }
 
         // ---- Fuse + compose via the existing RRF + compose_context -----------

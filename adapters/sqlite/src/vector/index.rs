@@ -210,42 +210,97 @@ impl SqliteVectorIndex {
     /// Ranking fusion and policy filtering happen outside this adapter; this
     /// method only exposes raw nearest-neighbor rows and distances.
     pub fn search(&self, query: &[f32], limit: u32) -> CoreResult<Vec<VectorSearchResult>> {
+        self.search_filtered(query, limit, None)
+    }
+
+    /// Constrained nearest-neighbor search: only vectors whose `target_id` is
+    /// in `allowed` participate in the ranking, and the `limit` budget applies
+    /// to the constrained set — never a global top-k that then drops rows
+    /// (REQ-005: candidate eligibility applies inside selection, before the
+    /// top-k). sqlite-vec applies the `target_id IN (...)` constraint as a
+    /// pre-filter of the KNN scan (auxiliary-column pre-filtering), so an
+    /// excluded vector cannot consume a slot an eligible target needs.
+    ///
+    /// `allowed` MUST be non-empty; an empty eligibility set has nothing to
+    /// select and is rejected rather than silently treated as "all".
+    pub fn search_constrained(
+        &self,
+        query: &[f32],
+        limit: u32,
+        allowed_target_ids: &std::collections::BTreeSet<String>,
+    ) -> CoreResult<Vec<VectorSearchResult>> {
+        if allowed_target_ids.is_empty() {
+            return Err(CoreError::InvalidRequest {
+                reason: "constrained vector search requires a non-empty eligibility set".to_owned(),
+            });
+        }
+        self.search_filtered(query, limit, Some(allowed_target_ids))
+    }
+
+    /// Shared search path: optional `target_id` pre-filter (see
+    /// [`Self::search_constrained`]).
+    fn search_filtered(
+        &self,
+        query: &[f32],
+        limit: u32,
+        allowed_target_ids: Option<&std::collections::BTreeSet<String>>,
+    ) -> CoreResult<Vec<VectorSearchResult>> {
         if limit == 0 {
             return Ok(Vec::new());
         }
         validate_dimensions(self.dimensions, self.dimensions, query.len())?;
         let query = serialize_f32_vector(query)?;
         let conn = self.connection.lock().unwrap();
-        let mut statement = conn
-            .prepare(
+        // Unconstrained: the historical KNN page. Constrained: the `target_id
+        // IN (...)` pre-filter participates in the same scan (see
+        // [`Self::search_constrained`]).
+        let (sql, allowed): (&str, Option<String>) = match allowed_target_ids {
+            Some(set) => (
+                r#"
+                SELECT id, target_type, target_id, model, dimensions, content_hash, distance
+                FROM vectors
+                WHERE embedding MATCH ?1 AND k = ?2 AND target_id IN (SELECT value FROM json_each(?3))
+                ORDER BY distance
+                "#,
+                Some(serde_json::to_string(set).map_err(|_| CoreError::Adapter {
+                    adapter: "sqlite-vec".to_owned(),
+                    message: "eligibility set serialization failed".to_owned(),
+                })?),
+            ),
+            None => (
                 r#"
                 SELECT id, target_type, target_id, model, dimensions, content_hash, distance
                 FROM vectors
                 WHERE embedding MATCH ?1 AND k = ?2
                 ORDER BY distance
                 "#,
-            )
-            .map_err(sql_error)?;
-        let rows = statement
-            .query_map(params![query, limit], |row| {
-                let target_type: String = row.get(1)?;
-                Ok(VectorSearchResult {
-                    id: row.get(0)?,
-                    target_type: parse_target_type(&target_type).ok_or_else(|| {
-                        rusqlite::Error::InvalidColumnType(
-                            1,
-                            "target_type".to_owned(),
-                            rusqlite::types::Type::Text,
-                        )
-                    })?,
-                    target_id: row.get(2)?,
-                    model: row.get(3)?,
-                    dimensions: row.get(4)?,
-                    content_hash: row.get(5)?,
-                    distance: row.get(6)?,
-                })
+                None,
+            ),
+        };
+        let mut statement = conn.prepare(sql).map_err(sql_error)?;
+        let row_mapper = |row: &rusqlite::Row<'_>| -> rusqlite::Result<VectorSearchResult> {
+            let target_type: String = row.get(1)?;
+            Ok(VectorSearchResult {
+                id: row.get(0)?,
+                target_type: parse_target_type(&target_type).ok_or_else(|| {
+                    rusqlite::Error::InvalidColumnType(
+                        1,
+                        "target_type".to_owned(),
+                        rusqlite::types::Type::Text,
+                    )
+                })?,
+                target_id: row.get(2)?,
+                model: row.get(3)?,
+                dimensions: row.get(4)?,
+                content_hash: row.get(5)?,
+                distance: row.get(6)?,
             })
-            .map_err(sql_error)?;
+        };
+        let rows = match &allowed {
+            Some(allowed) => statement.query_map(params![query, limit, allowed], row_mapper),
+            None => statement.query_map(params![query, limit], row_mapper),
+        }
+        .map_err(sql_error)?;
 
         let mut results = Vec::new();
         for row in rows {
@@ -592,6 +647,73 @@ mod tests {
     use crate::vector::entry::VectorEntry;
     use engram_domain::EmbeddingTargetType;
     use futures::executor::block_on;
+
+    #[test]
+    fn constrained_search_applies_eligibility_before_the_top_k() {
+        // task_013 seam: ineligible vectors nearer to the query than every
+        // eligible one must not crowd eligible targets out of the constrained
+        // result page. A post-filter implementation (global top-k then drop)
+        // would return nothing here; the pre-filter must rank within the
+        // eligible set only.
+        let index = SqliteVectorIndex::open_in_memory(2).expect("open");
+        let entry = |id: &str, target: &str, vector: [f32; 2]| VectorEntry {
+            id: id.to_owned(),
+            target_type: EmbeddingTargetType::Chunk,
+            target_id: target.to_owned(),
+            model: "test".to_owned(),
+            dimensions: 2,
+            content_hash: String::new(),
+            embedding: vector.to_vec(),
+        };
+        // Ineligible targets point straight at the query (distance 0);
+        // eligible ones sit further away.
+        index
+            .insert(entry("v-ineligible-1", "chunk-stale", [1.0, 0.0]))
+            .unwrap();
+        index
+            .insert(entry("v-ineligible-2", "chunk-stale-2", [0.99, 0.02]))
+            .unwrap();
+        index
+            .insert(entry("v-eligible", "chunk-eligible", [0.0, 1.0]))
+            .unwrap();
+        index
+            .insert(entry("v-doc", "chunk-doc", [0.0, 0.98]))
+            .unwrap();
+
+        let allowed: std::collections::BTreeSet<String> = ["chunk-eligible", "chunk-doc"]
+            .into_iter()
+            .map(String::from)
+            .collect();
+        let hits = index
+            .search_constrained(&[1.0, 0.0], 1, &allowed)
+            .expect("constrained search");
+        assert_eq!(
+            hits.len(),
+            1,
+            "the constrained page must fill from the eligible set"
+        );
+        assert_eq!(hits[0].target_id, "chunk-doc");
+        let full = index
+            .search_constrained(&[1.0, 0.0], 2, &allowed)
+            .expect("page");
+        let targets: Vec<&str> = full.iter().map(|h| h.target_id.as_str()).collect();
+        assert_eq!(targets.len(), 2, "both eligible targets fill the page");
+        assert!(
+            !targets.contains(&"chunk-stale") && !targets.contains(&"chunk-stale-2"),
+            "ineligible targets must never appear in a constrained result"
+        );
+    }
+
+    #[test]
+    fn constrained_search_rejects_an_empty_eligibility_set() {
+        let index = SqliteVectorIndex::open_in_memory(2).expect("open");
+        let empty: std::collections::BTreeSet<String> = Default::default();
+        let err = index.search_constrained(&[1.0, 0.0], 5, &empty);
+        assert!(
+            matches!(err, Err(CoreError::InvalidRequest { .. })),
+            "empty eligibility must fail closed, not widen to all targets"
+        );
+    }
 
     #[test]
     fn embedded_ids_empty_on_fresh_index() {

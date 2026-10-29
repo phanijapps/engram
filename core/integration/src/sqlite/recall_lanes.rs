@@ -33,7 +33,7 @@ use engram_domain::{
     Sensitivity, Visibility,
 };
 use engram_knowledge::KnowledgeRepository;
-use engram_retrieval::{GraphCache, RetrievalIndex};
+use engram_retrieval::{CodeEligibilityResolver, GraphCache, RetrievalIndex};
 use engram_runtime::CoreResult;
 use engram_store_associative_graph::{AssociativeGraphIndex, GraphRelationshipSource};
 use engram_store_community_summary::CommunitySummaryIndex;
@@ -122,6 +122,24 @@ pub fn lexical_recall_lane(
     Arc::new(LexicalRetrievalIndex::from_arc(
         lexical_index,
         Arc::new(resolver),
+    ))
+}
+
+/// [`lexical_recall_lane`] with bound-code eligibility wired end to end
+/// (task_013 seam): the lane resolves the scope's published generations once
+/// per request, constrains BM25 collection to the eligible contributor set
+/// BEFORE the limit, and the resolver denies legacy unbound code symbols at
+/// rehydration so they never enter the candidate page or a fallback path.
+pub fn lexical_recall_lane_bound(
+    store: Arc<SqlKnowledgeStore>,
+    lexical_index: Arc<LexicalIndex>,
+    eligibility: Arc<dyn CodeEligibilityResolver>,
+) -> Arc<dyn RetrievalIndex> {
+    let resolver = KnowledgeLexicalResolver::new(store).deny_unbound_symbols();
+    Arc::new(LexicalRetrievalIndex::from_arc_with_eligibility(
+        lexical_index,
+        Arc::new(resolver),
+        eligibility,
     ))
 }
 
@@ -238,12 +256,44 @@ impl engram_retrieval::RetrievalIndex for ProceduresRetrievalIndex {
 /// BM25 hit's chunk id into its canonical `KnowledgeChunk`.
 pub(crate) struct KnowledgeLexicalResolver {
     store: Arc<SqlKnowledgeStore>,
+    /// Bound mode (task_013): symbol entities with NO `codeGenerationId` stamp
+    /// are legacy unbound code and resolve to `None` — unbound code lineage
+    /// yields a denial, it never leaks through a documents fallback.
+    deny_unbound_symbols: bool,
+}
+
+/// Entity kinds that are code symbols (structural stubs are covered by the
+/// existing `is_code_artifact` suppression). Used only for the legacy-unbound
+/// denial in bound mode — entities carrying a generation stamp are classified
+/// by stamp, not by kind.
+fn is_symbol_kind(entity: &KnowledgeEntity) -> bool {
+    matches!(
+        entity.kind,
+        engram_domain::EntityKind::Class
+            | engram_domain::EntityKind::Function
+            | engram_domain::EntityKind::Method
+            | engram_domain::EntityKind::Struct
+            | engram_domain::EntityKind::Interface
+            | engram_domain::EntityKind::Trait
+            | engram_domain::EntityKind::TypeAlias
+            | engram_domain::EntityKind::Enum
+    )
 }
 
 impl KnowledgeLexicalResolver {
     /// Wraps a shared knowledge-store handle to resolve chunk hits.
     pub(crate) fn new(store: Arc<SqlKnowledgeStore>) -> Self {
-        Self { store }
+        Self {
+            store,
+            deny_unbound_symbols: false,
+        }
+    }
+
+    /// Switches the resolver into bound mode: symbol entities without a
+    /// generation stamp never rehydrate (they predate the binding system).
+    pub(crate) fn deny_unbound_symbols(mut self) -> Self {
+        self.deny_unbound_symbols = true;
+        self
     }
 }
 
@@ -279,6 +329,20 @@ impl LexicalTargetResolver for KnowledgeLexicalResolver {
         if let Some(entity) = self.store.get_entity(&entity_id, &request.scope).await? {
             if engram_retrieval::suppresses_code_artifacts(request)
                 && engram_retrieval::is_code_artifact(&entity)
+            {
+                return Ok(None);
+            }
+            // Bound mode (task_013): a symbol entity with repository
+            // provenance but no generation stamp is legacy unbound code — deny
+            // at rehydration. Entities WITH a stamp flow to the lane's
+            // view classification (stale generations drop there).
+            if self.deny_unbound_symbols
+                && is_symbol_kind(&entity)
+                && !entity
+                    .metadata
+                    .as_ref()
+                    .and_then(|meta| meta.get(engram_retrieval::bound_filter::CODE_GENERATION_KEY))
+                    .is_some()
             {
                 return Ok(None);
             }

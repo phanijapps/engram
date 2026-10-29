@@ -5,6 +5,7 @@
 //! providers, policy engines, graph databases, or model rerankers.
 
 mod artifacts;
+pub mod bound_filter;
 pub mod code_eligibility;
 mod composer;
 mod config;
@@ -19,6 +20,10 @@ mod vector_index;
 mod weighted;
 
 pub use artifacts::{CODE_ARTIFACT_KINDS, is_code_artifact, suppresses_code_artifacts};
+pub use bound_filter::{
+    BoundCodeEligibility, BoundCodeView, CodeEligibilityResolver, RecordEligibility,
+    binding_required, resolve_view,
+};
 pub use code_eligibility::{
     CodeCandidateLane, CodeEligibilityToken, CodeLaneState, authorize_before_selection,
 };

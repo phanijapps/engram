@@ -15,7 +15,7 @@
 
 use async_trait::async_trait;
 use engram_runtime::{CoreError, CoreResult};
-use engram_store_lexical::LexicalIndex;
+use engram_store_lexical::{LexicalIndex, code_contributor_key};
 use std::sync::Arc;
 
 use crate::lexical_feed::LexicalFeed;
@@ -46,6 +46,20 @@ impl LexicalFeed for SqlLexicalFeed {
     async fn upsert_batch(&self, entries: &[(String, String)]) -> CoreResult<()> {
         self.index
             .upsert_batch(entries)
+            .map_err(|e| CoreError::Adapter {
+                adapter: "lexical".to_string(),
+                message: e.to_string(),
+            })
+    }
+
+    async fn upsert_code_target(
+        &self,
+        target_id: &str,
+        text: &str,
+        generation_id: &str,
+    ) -> CoreResult<()> {
+        self.index
+            .upsert_stamped(target_id, text, &code_contributor_key(generation_id))
             .map_err(|e| CoreError::Adapter {
                 adapter: "lexical".to_string(),
                 message: e.to_string(),

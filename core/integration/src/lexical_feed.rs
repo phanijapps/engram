@@ -20,4 +20,15 @@ pub trait LexicalFeed: Send + Sync {
 
     /// Upsert many `(target_id, text)` entries at once.
     async fn upsert_batch(&self, entries: &[(String, String)]) -> CoreResult<()>;
+
+    /// Upsert one searchable document under an explicit bound-code
+    /// contributor key (`"code:<generation-id>"`): the entry is eligible only
+    /// while that generation is published, and retiring the generation
+    /// removes exactly these tokens (task_013 / task_014 seam).
+    async fn upsert_code_target(
+        &self,
+        target_id: &str,
+        text: &str,
+        generation_id: &str,
+    ) -> CoreResult<()>;
 }

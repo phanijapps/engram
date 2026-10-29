@@ -4778,6 +4778,239 @@ mod task_013 {
                     "set and queue stay bounded: {stats:?}"
                 );
             }
+
+            /// A6 decisive matrix (review r5, carried obligation +
+            /// NEXT_TRANCHHE_MUST 5): candidate artifact classification is
+            /// UNIFIED with the shared `is_code_artifact` predicate. The
+            /// lane-level artifact SUPPRESSION (seeds-only discovery) is
+            /// untouched — the classification is exercised through
+            /// REFERENCE evidence (each candidate memory references one
+            /// artifact entity) and, for discovery TRUE, through the
+            /// explicit include_code_artifacts opt-in. For EACH structural
+            /// artifact kind (Variable, Module, File, Repository):
+            /// CURRENT durable lineage (active gen-a-2) accepts as
+            /// code-dependent; STALE lineage (superseded gen-a-1) denies;
+            /// UNBOUND (kind alone, no lineage) denies as legacy unbound
+            /// code; DEGRADED recall (authority failure) denies the
+            /// current-lineage artifact. Ordinary positives survive every
+            /// page: an ordinary Concept and a Project-kind entity — the
+            /// NEGATIVE classifier (the domain has no Package EntityKind;
+            /// Project is the package-adjacent structural kind deliberately
+            /// OUTSIDE both the symbol set and the canonical
+            /// Variable/Module/File/Repository artifact set, so it must
+            /// stay ordinary).
+            #[test]
+            fn artifact_kind_matrix_composed() {
+                use engram_knowledge::KnowledgeRepository as _;
+                let dir = tempfile::tempdir().expect("tempdir");
+                let fixture = fixture(dir.path());
+                let kinds = [
+                    ("variable", EntityKind::Variable),
+                    ("module", EntityKind::Module),
+                    ("file", EntityKind::File),
+                    ("repository", EntityKind::Repository),
+                ];
+                for (label, kind) in &kinds {
+                    for state in ["current", "stale", "unbound"] {
+                        let id = format!("entity-artifact-{label}-{state}");
+                        let mut record =
+                            symbol_entity(&id, &format!("artifactkind {label} {state}"));
+                        record.kind = kind.clone();
+                        block_on(fixture.knowledge.put_entity(record)).expect("put artifact");
+                        if state != "unbound" {
+                            let generation = if state == "current" {
+                                "gen-a-2"
+                            } else {
+                                "gen-a-1"
+                            };
+                            block_on(fixture.bindings.put_lineage(
+                                &scope(),
+                                &id,
+                                CodeLineage {
+                                    repo_id: RepoId("repo-a".to_string()),
+                                    generation_id: generation.to_string(),
+                                    source_path: format!("src/{label}-{state}.rs"),
+                                    contributors: vec![id.clone()],
+                                },
+                            ))
+                            .expect("put artifact lineage");
+                        }
+                    }
+                }
+                // Ordinary positive (Concept) and the NEGATIVE classifier
+                // (Project): both stay ordinary through the unified
+                // predicate.
+                let mut ordinary = symbol_entity("entity-artifact-ordinary", "artifactkind plain");
+                ordinary.kind = EntityKind::Concept;
+                block_on(fixture.knowledge.put_entity(ordinary)).expect("put ordinary");
+                let mut package_shaped = symbol_entity(
+                    "entity-artifact-negative",
+                    "artifactkind negativeclassifier",
+                );
+                package_shaped.kind = EntityKind::Project;
+                block_on(fixture.knowledge.put_entity(package_shaped))
+                    .expect("put negative classifier");
+
+                // REFERENCE evidence: one candidate memory per artifact
+                // state (and per ordinary/negative control), each
+                // referencing exactly one entity.
+                for label in [
+                    "variable-current",
+                    "variable-stale",
+                    "variable-unbound",
+                    "module-current",
+                    "module-stale",
+                    "module-unbound",
+                    "file-current",
+                    "file-stale",
+                    "file-unbound",
+                    "repository-current",
+                    "repository-stale",
+                    "repository-unbound",
+                    "ordinary",
+                    "negative",
+                ] {
+                    write_memory_with_refs(
+                        &fixture,
+                        &format!("artifactmatrix {label}"),
+                        vec![evidence_ref(
+                            EvidenceTargetType::Entity,
+                            &format!("entity-artifact-{label}"),
+                        )],
+                    );
+                }
+
+                // BOUND view: the CURRENT-artifact chains accept as
+                // code-dependent; STALE and UNBOUND chains deny; the
+                // ordinary and negative-classifier chains survive. Chains
+                // are matched by CONTENT (write_memory generates ids).
+                let bound =
+                    block_on(composed_recall(&fixture).recall(request("artifactmatrix", 40)))
+                        .expect("bound recall");
+                let contents: Vec<String> = bound
+                    .items
+                    .iter()
+                    .map(|item| item.content.clone())
+                    .collect();
+                for (label, _) in &kinds {
+                    assert!(
+                        contents
+                            .iter()
+                            .any(|content| content
+                                .contains(&format!("artifactmatrix {label}-current"))),
+                        "the CURRENT {label} artifact chain accepts as code-dependent: {contents:?}"
+                    );
+                    assert!(
+                        !contents
+                            .iter()
+                            .any(|content| content
+                                .contains(&format!("artifactmatrix {label}-stale"))),
+                        "the STALE {label} artifact chain denies: {contents:?}"
+                    );
+                    assert!(
+                        !contents
+                            .iter()
+                            .any(|content| content
+                                .contains(&format!("artifactmatrix {label}-unbound"))),
+                        "the UNBOUND {label} artifact chain denies as legacy unbound code: {contents:?}"
+                    );
+                }
+                assert!(
+                    contents
+                        .iter()
+                        .any(|content| content.contains("artifactmatrix ordinary")),
+                    "the ordinary positive survives the bound page: {contents:?}"
+                );
+                assert!(
+                    contents
+                        .iter()
+                        .any(|content| content.contains("artifactmatrix negative")),
+                    "the Project-kind negative classifier stays ordinary (NOT swallowed by the unified artifact predicate): {contents:?}"
+                );
+
+                // DEGRADED view (authority failure): every artifact chain
+                // denies — current lineage keeps the artifact POSITIVE code
+                // ownership, which can never pass the complete-and-ordinary
+                // requirement — while the ordinary and negative-classifier
+                // chains survive the degraded page.
+                let degraded =
+                    block_on(erroring_recall(&fixture).recall(request("artifactmatrix", 40)))
+                        .expect("degraded recall");
+                let degraded_contents: Vec<String> = degraded
+                    .items
+                    .iter()
+                    .map(|item| item.content.clone())
+                    .collect();
+                for (label, _) in &kinds {
+                    for state in ["current", "stale", "unbound"] {
+                        assert!(
+                            !degraded_contents.iter().any(|content| content
+                                .contains(&format!("artifactmatrix {label}-{state}"))),
+                            "the {state} {label} artifact chain denies through the degraded page: {degraded_contents:?}"
+                        );
+                    }
+                }
+                assert!(
+                    degraded_contents
+                        .iter()
+                        .any(|content| content.contains("artifactmatrix ordinary")),
+                    "the ordinary positive survives the degraded page: {degraded_contents:?}"
+                );
+                assert!(
+                    degraded_contents
+                        .iter()
+                        .any(|content| content.contains("artifactmatrix negative")),
+                    "the Project-kind negative classifier survives the degraded page: {degraded_contents:?}"
+                );
+
+                // DISCOVERY TRUE (explicit opt-in): the graph lane returns
+                // artifact entities as candidates, and the SAME unified
+                // classification decides them — CURRENT accepts as
+                // code-dependent, STALE and UNBOUND deny, the negative
+                // classifier flows.
+                let mut opt_in = request("artifactkind", 40);
+                let mut opt_in_filter = empty_filter_with_keys(None);
+                opt_in_filter.include_code_artifacts = Some(true);
+                opt_in.filters = Some(opt_in_filter);
+                let direct =
+                    block_on(composed_recall(&fixture).recall(opt_in)).expect("opt-in recall");
+                let direct_ids = target_ids(&direct);
+                for (label, _) in &kinds {
+                    assert!(
+                        direct_ids.contains(&format!("entity-artifact-{label}-current")),
+                        "discovery TRUE: the CURRENT {label} artifact flows as code-dependent: {direct_ids:?}"
+                    );
+                    assert!(
+                        !direct_ids.contains(&format!("entity-artifact-{label}-stale")),
+                        "discovery TRUE: the STALE {label} artifact denies: {direct_ids:?}"
+                    );
+                    assert!(
+                        !direct_ids.contains(&format!("entity-artifact-{label}-unbound")),
+                        "discovery TRUE: the UNBOUND {label} artifact denies: {direct_ids:?}"
+                    );
+                }
+                assert!(
+                    direct_ids.contains(&"entity-artifact-negative".to_string()),
+                    "discovery TRUE: the Project-kind negative classifier flows: {direct_ids:?}"
+                );
+                // DISCOVERY FALSE (default): the lane suppression is
+                // intact — no artifact entity is emitted as a ranked
+                // result (seeds-only discovery was NOT undone by the
+                // unification).
+                let suppressed =
+                    block_on(composed_recall(&fixture).recall(request("artifactkind", 40)))
+                        .expect("default recall");
+                let suppressed_ids = target_ids(&suppressed);
+                for (label, _) in &kinds {
+                    for state in ["current", "stale", "unbound"] {
+                        assert!(
+                            !suppressed_ids
+                                .contains(&format!("entity-artifact-{label}-{state}").to_string()),
+                            "discovery FALSE: the {state} {label} artifact stays suppressed as a ranked result: {suppressed_ids:?}"
+                        );
+                    }
+                }
+            }
         }
     }
 

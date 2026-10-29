@@ -1457,7 +1457,12 @@ fn endpoint_ref(endpoint: &engram_domain::EntityRef) -> EvidenceRef {
 
 /// Symbol/structural entity kinds. An entity of a code kind is code even
 /// without durable lineage (legacy unbound code) and is denied while the
-/// binding authority is unavailable.
+/// binding authority is unavailable. A6 (review r5, carried obligation +
+/// NEXT_TRANCHHE_MUST 5): the STRUCTURAL artifact kinds (Variable, Module,
+/// File, Repository) are classified through the ONE shared
+/// `is_code_artifact` predicate every other seam uses (lanes, resolvers,
+/// graph universes) — a lineage-free artifact stub is never independent
+/// ordinary evidence, and no divergent local artifact kind set exists here.
 fn entity_is_code_kind(entity: &engram_domain::KnowledgeEntity) -> bool {
     matches!(
         entity.kind,
@@ -1469,7 +1474,7 @@ fn entity_is_code_kind(entity: &engram_domain::KnowledgeEntity) -> bool {
             | engram_domain::EntityKind::Trait
             | engram_domain::EntityKind::TypeAlias
             | engram_domain::EntityKind::Enum
-    )
+    ) || engram_retrieval::is_code_artifact(entity)
 }
 
 /// Merges the candidate's OWN-IDENTITY classification into the walk result

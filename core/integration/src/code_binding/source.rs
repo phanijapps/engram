@@ -116,17 +116,38 @@ fn route_against_view(
     let mut origins: Vec<(String, String)> = Vec::new();
     let mut noncurrent: Vec<String> = Vec::new();
     for candidate in candidates {
+        // POSITIVE durable ownership (review r5, final finding 1) is
+        // `is_code_record` — lineage membership INCLUDING retired records.
+        // It is deliberately distinct from CURRENT participation
+        // (`code_lineage_of`, which excludes retired records). A row with
+        // NO durable lineage (unstamped or forged-stamp) is not an
+        // admissible participant (stamps are never authority).
+        if !view.is_code_record(candidate.record_id.as_str()) {
+            continue;
+        }
+        // A retirement fact is POSITIVE ownership with denied eligibility:
+        // the path is bound code whose participant is retired — it DENIES
+        // (never `Unbound`, so no ordinary verbatim/stitching fallback can
+        // ever resurrect it). Skipping it here would misclassify a
+        // retired-only unstamped row as unbound, reopening the
+        // retired-code resurrection path.
+        if view.is_retired_record(candidate.record_id.as_str()) {
+            noncurrent.push(candidate.record_id.clone());
+            continue;
+        }
         let Some((repo, generation)) = view.code_lineage_of(candidate.record_id.as_str()) else {
-            // No durable lineage: unstamped and forged-stamp rows are not
-            // admissible participants (stamps are never authority).
+            // Unreachable for a non-retired code record, kept fail-closed:
+            // a record with durable lineage that resolves to no current
+            // association is treated as noncurrent ownership, not unbound.
+            noncurrent.push(candidate.record_id.clone());
             continue;
         };
         let origin = (repo.to_owned(), generation.to_owned());
         if !published.contains(&origin) {
             // Durable lineage on a NON-published generation (a retained old
-            // generation, or retired): not a participant — but it proves the
-            // path is bound code, so it can never fall through to an
-            // ordinary fallback later.
+            // generation): not a participant — but it proves the path is
+            // bound code, so it can never fall through to an ordinary
+            // fallback later.
             noncurrent.push(candidate.record_id.clone());
             continue;
         }
@@ -276,6 +297,15 @@ fn binding_required() -> CoreError {
     }
 }
 
+/// Denial reason for a bound path whose matched rows carry ONLY noncurrent
+/// durable ownership: retired facts and non-published-generation lineage.
+fn without_current_reason(lineage_record_ids: &[String]) -> String {
+    format!(
+        "bound source has no current canonical participants (retired or \
+         non-published-generation durable lineage: {lineage_record_ids:?})"
+    )
+}
+
 fn generation_denied(generation_id: &str) -> CoreError {
     CoreError::InvalidRequest {
         reason: format!(
@@ -299,7 +329,7 @@ impl CodeBindingCoordinator {
     /// caller is authorized for the resolved origin repository inside the
     /// window; the retained descriptor's digest authenticates the bytes; and
     /// every participant's claimed span is validated against those exact
-    /// bytes. Old-generation-only, unstamped-lineage and impostor rows DENY —
+    /// bytes. Old-generation-only, RETIRED-fact and impostor rows DENY —
     /// bound code has no verbatim/stitching fallback (an explicitly
     /// authorized historical read goes through `exact_source` with a lease,
     /// a different operation).
@@ -319,10 +349,7 @@ impl CodeBindingCoordinator {
             ParticipantRouting::WithoutCurrent { lineage_record_ids } => {
                 return Ok(ParticipantExactSource::Denied {
                     symbol_selection: false,
-                    reason: format!(
-                        "bound source has no current canonical participants (durable \
-                         lineage only on non-published generations: {lineage_record_ids:?})"
-                    ),
+                    reason: without_current_reason(&lineage_record_ids),
                 });
             }
             ParticipantRouting::Ambiguous { origins } => {
@@ -386,11 +413,7 @@ impl CodeBindingCoordinator {
                         ParticipantRouting::WithoutCurrent { lineage_record_ids } => {
                             return Ok(ParticipantExactSource::Denied {
                                 symbol_selection: false,
-                                reason: format!(
-                                    "bound source has no current canonical participants \
-                                     (durable lineage only on non-published generations: \
-                                     {lineage_record_ids:?})"
-                                ),
+                                reason: without_current_reason(&lineage_record_ids),
                             });
                         }
                         ParticipantRouting::Ambiguous { origins } => {

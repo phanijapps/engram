@@ -774,6 +774,20 @@ mod tests {
             }
         }
 
+        /// Records RETIRED durable lineage (a retirement fact on the row's
+        /// own generation — positive ownership, denied participation).
+        fn with_retired_lineage(&self, entries: &[(String, String)]) {
+            let mut lineage = self.extra_lineage.lock().expect("lineage lock");
+            for (record_id, generation_id) in entries {
+                lineage.push(engram_knowledge::TargetLineage {
+                    record_id: record_id.clone(),
+                    repo_id: self.binding.repo_id.0.clone(),
+                    generation_id: generation_id.clone(),
+                    retired: true,
+                });
+            }
+        }
+
         /// Two retained generations with gen-2 CURRENT (mixed-generation
         /// resolution fixtures): gen-1's snapshot is retained but no longer
         /// active; gen-2 is the published active generation.
@@ -1921,6 +1935,160 @@ mod tests {
                 err.message
             );
         }
+    }
+
+    /// Final r5 C3 (finding 1): a RETIREMENT-FACT fixture. The row is
+    /// UNSTAMPED and its durable lineage sits on the CURRENT published
+    /// generation with `retired: true` — `code_lineage_of()` resolves it to
+    /// `None`, which is exactly the shape the old router skipped without
+    /// recording noncurrent ownership. `with_current` adds a legitimate
+    /// current participant (alpha, lines 1–2) beside the retired row
+    /// (retiredfn, lines 4–5).
+    fn retired_fact_app(dir: &std::path::Path, with_current: bool) -> App {
+        let source =
+            b"def alpha():\r\n    return 1\r\n\r\ndef retiredfn():\r\n    return 9\r\n".to_vec();
+        let row = |id: &str, name: &str, start: u32, end: u32| {
+            engram_domain::KnowledgeChunk {
+                id: engram_domain::Id::from(id),
+                document_id: engram_domain::Id::from("doc-retired"),
+                source_id: engram_domain::Id::from("src-retired"),
+                kind: KnowledgeChunkKind::CodeSymbol,
+                text: format!("def {name}():"),
+                summary: None,
+                location: Some(engram_domain::SourceLocation {
+                    path: Some("src/bound.py".to_owned()),
+                    start_line: Some(start),
+                    end_line: Some(end),
+                    start_offset: None,
+                    end_offset: None,
+                    anchor: None,
+                }),
+                entities: vec![engram_domain::EntityRef {
+                    id: Some(engram_domain::Id::from(id)),
+                    kind: None,
+                    name: Some(name.to_owned()),
+                    aliases: Vec::new(),
+                }],
+                concepts: Vec::new(),
+                embedding_refs: Vec::new(),
+                content_hash: format!("sha256:{id}"),
+                provenance: fixture_provenance(),
+                policy: fixture_policy(),
+                created_at: chrono::Utc::now(),
+                updated_at: None,
+                // UNSTAMPED: no metadata at all — the durable lineage (and
+                // its retirement fact) is the only bound-code evidence.
+                metadata: None,
+            }
+        };
+        let retired_row = row("chunk-retired-1", "retiredfn", 4, 5);
+        let current_row = row("chunk-current-1", "alpha", 1, 2);
+        let rows = if with_current {
+            vec![current_row, retired_row]
+        } else {
+            vec![retired_row]
+        };
+        let current_lineage: &[(String, String)] = if with_current {
+            &[("chunk-current-1".to_owned(), "gen-1".to_owned())]
+        } else {
+            &[]
+        };
+        let (app, _root, bindings) = bound_app_with_rows(
+            dir,
+            vec![CommittedFile {
+                path: "src/bound.py".into(),
+                oid: "b".repeat(40),
+                mode: "100644".to_owned(),
+                bytes: source,
+            }],
+            rows,
+            current_lineage,
+        );
+        // The retirement fact on the CURRENT generation — the branch the
+        // old-generation denial can never reach (this generation IS
+        // published).
+        bindings.with_retired_lineage(&[("chunk-retired-1".to_owned(), "gen-1".to_owned())]);
+        app
+    }
+
+    /// Final r5 C3 (finding 1, the decisive retired-fact regression —
+    /// DISTINCT from old-generation lineage): an UNSTAMPED chunk with a
+    /// retirement fact on the CURRENT generation DENIES in EVERY mode,
+    /// including the fallback consumption paths. The stamp backstop cannot
+    /// catch it (there are no stamps); the lineage/retirement facts must.
+    #[test]
+    fn retired_fact_unstamped_chunk_denies_every_mode() {
+        let dir = tempfile::tempdir().unwrap();
+        let app = retired_fact_app(dir.path(), false);
+        for args in [
+            json!({ "path": "src/bound.py" }),
+            json!({ "path": "src/bound.py", "mode": "chunks" }),
+            json!({ "path": "src/bound.py", "mode": "verbatim" }),
+            json!({ "path": "src/bound.py", "symbol": "retiredfn" }),
+        ] {
+            let err = fetch_content(&app, &args).unwrap_err();
+            assert!(
+                err.message.contains("no current canonical participants"),
+                "an unstamped retired-fact row must DENY in every mode ({args}): {}",
+                err.message
+            );
+        }
+    }
+
+    /// Final r5 C3 (finding 1): a retired unstamped row BESIDE a current
+    /// participant — the current participant serves (exact path read, chunks
+    /// fallback, and its own symbol span) while the retired row NEVER leaks:
+    /// the chunks fallback consumes only validated current participants, and
+    /// the retired symbol has no selectable span.
+    #[test]
+    fn retired_row_beside_current_participant_serves_current_only() {
+        let dir = tempfile::tempdir().unwrap();
+        let app = retired_fact_app(dir.path(), true);
+
+        // The exact path read serves the digest-validated whole blob.
+        let out = content_of(
+            &fetch_content(&app, &json!({ "path": "src/bound.py" })).unwrap(),
+        );
+        assert_eq!(out["source"], "exact");
+
+        // The chunks fallback stitches ONLY the validated current
+        // participant — the retired row's stored text must not appear.
+        let chunks = content_of(
+            &fetch_content(&app, &json!({ "path": "src/bound.py", "mode": "chunks" })).unwrap(),
+        );
+        let chunks_text = chunks["content"].as_str().unwrap();
+        assert!(
+            chunks_text.contains("def alpha():"),
+            "the current participant's text serves: {chunks_text}"
+        );
+        assert!(
+            !chunks_text.contains("def retiredfn():"),
+            "the retired row never leaks into the chunks fallback: {chunks_text}"
+        );
+
+        // The current participant's symbol span serves byte-exactly.
+        let symbol = content_of(
+            &fetch_content(&app, &json!({ "path": "src/bound.py", "symbol": "alpha" })).unwrap(),
+        );
+        assert_eq!(symbol["source"], "exact");
+        assert_eq!(
+            symbol["content"].as_str().unwrap(),
+            "def alpha():\r\n    return 1\r\n",
+            "the current participant's symbol span is byte-exact"
+        );
+
+        // The retired symbol has no selectable span in the indexed
+        // generation — a request naming it denies (no resurrection).
+        let retired_symbol = fetch_content(
+            &app,
+            &json!({ "path": "src/bound.py", "symbol": "retiredfn" }),
+        )
+        .unwrap_err();
+        assert!(
+            retired_symbol.message.contains("symbol selection failed"),
+            "the retired symbol is not selectable: {}",
+            retired_symbol.message
+        );
     }
 
     /// A4 (r5): an IMPOSTOR-ONLY path — rows carrying FORGED current stamps

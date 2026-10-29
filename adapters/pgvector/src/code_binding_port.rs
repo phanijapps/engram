@@ -29,9 +29,9 @@ fn target_lineage_of_row(
     repo_id: String,
     generation_id: String,
     retired: bool,
-    lineage_json: String,
+    lineage_json: serde_json::Value,
 ) -> TargetLineage {
-    let lineage: Option<CodeLineage> = serde_json::from_str(&lineage_json).ok();
+    let lineage: Option<CodeLineage> = serde_json::from_value(lineage_json).ok();
     TargetLineage {
         record_id,
         repo_id,

@@ -15,4 +15,5 @@ engram-store-associative-graph = { path = "../associative-graph", version = "0.1
 futures.workspace = true
 
 [dev-dependencies]
+serde_json.workspace = true
 chrono.workspace = true

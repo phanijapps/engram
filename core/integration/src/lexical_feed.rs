@@ -31,4 +31,14 @@ pub trait LexicalFeed: Send + Sync {
         text: &str,
         generation_id: &str,
     ) -> CoreResult<()>;
+
+    /// Targeted warm-index retirement (task_014): removes every document the
+    /// retired generation contributed and returns the removed count — the
+    /// durable receipt. Targets holding OTHER contributor keys (an ordinary
+    /// `doc` contribution, a surviving generation) keep their tokens.
+    async fn retire_generation(&self, generation_id: &str) -> CoreResult<usize>;
+
+    /// Removes every contributor document for one target id (task_014
+    /// target-ID deletion).
+    async fn delete_target(&self, target_id: &str) -> CoreResult<()>;
 }

@@ -6,6 +6,7 @@ use std::collections::HashMap;
 use async_trait::async_trait;
 use engram_domain::{CommunityMetaEdge, CommunityMetaNode, CommunityOverview, Scope, ScopeCounts};
 use engram_graph_analytics::communities;
+use engram_retrieval::BoundCodeView;
 use engram_runtime::CoreResult;
 use engram_store_sqlite::SqlKnowledgeStore;
 
@@ -37,57 +38,121 @@ impl CommunityQuery for SqlKnowledgeStore {
             .iter()
             .filter_map(|(sn, si, on, oi)| Some((endpoint_key(sn, si)?, endpoint_key(on, oi)?)))
             .collect();
-        let name_to_label = communities(&edges, 2);
-        let total_communities = name_to_label.len();
-
-        let mut counts: HashMap<usize, usize> = HashMap::new();
-        for label in name_to_label.values() {
-            *counts.entry(*label).or_default() += 1;
-        }
-        let mut ranked: Vec<(usize, usize)> = counts.into_iter().collect();
-        ranked.sort_unstable_by_key(|a| std::cmp::Reverse(a.1));
-        let top_labels: std::collections::HashSet<usize> =
-            ranked.iter().take(limit).map(|(l, _)| *l).collect();
-
-        let communities_nodes: Vec<CommunityMetaNode> = ranked
-            .iter()
-            .take(limit)
-            .map(|(label, mc)| CommunityMetaNode {
-                label: *label as u32,
-                member_count: *mc,
-            })
-            .collect();
-
-        let mut ew: HashMap<(usize, usize), usize> = HashMap::new();
-        for (s, o) in &edges {
-            let (Some(ls), Some(lo)) = (name_to_label.get(s), name_to_label.get(o)) else {
-                continue;
-            };
-            let (ls, lo) = (*ls, *lo);
-            if ls == lo || !top_labels.contains(&ls) || !top_labels.contains(&lo) {
-                continue;
-            }
-            *ew.entry(if ls < lo { (ls, lo) } else { (lo, ls) })
-                .or_default() += 1;
-        }
-        let mut meta_edges: Vec<CommunityMetaEdge> = ew
-            .into_iter()
-            .map(|((a, b), w)| CommunityMetaEdge {
-                source_label: a as u32,
-                target_label: b as u32,
-                weight: w,
-            })
-            .collect();
-        meta_edges.sort_unstable_by_key(|e| std::cmp::Reverse(e.weight));
-        meta_edges.truncate(communities_nodes.len().saturating_mul(4));
-
-        Ok(CommunityOverview {
-            communities: communities_nodes,
-            edges: meta_edges,
-            total_communities,
-        })
+        overview_from_edges(&edges, limit)
     }
+}
 
+impl SqlKnowledgeStore {
+    /// Eligibility-constrained community overview (task_014): edges touching
+    /// a stale/retired/legacy-unbound code endpoint are removed BEFORE Louvain
+    /// so a retired generation neither shapes community structure nor leaks
+    /// into a mixed summary. Non-code endpoints always stay; an ordinary
+    /// doc-only community survives a code retirement intact.
+    pub async fn overview_eligible(
+        &self,
+        scope: &Scope,
+        limit: usize,
+        view: &BoundCodeView,
+    ) -> CoreResult<CommunityOverview> {
+        use engram_knowledge::KnowledgeRepository as _;
+        let entities = self.list_entities(scope).await?;
+        let mut removed: std::collections::HashSet<String> = Default::default();
+        for entity in &entities {
+            if !view.allows(entity.metadata.as_ref(), entity_unstamped_code(entity)) {
+                removed.insert(entity.id.to_string());
+            }
+        }
+        let rels = SqlKnowledgeStore::relationship_endpoints(self, scope).await?;
+        let edges: Vec<(String, String)> = rels
+            .iter()
+            .filter_map(|(sn, si, on, oi)| Some((endpoint_key(sn, si)?, endpoint_key(on, oi)?)))
+            .filter(|(subject, object)| !removed.contains(subject) && !removed.contains(object))
+            .collect();
+        overview_from_edges(&edges, limit)
+    }
+}
+
+/// True for code-symbol / code-artifact entities without a generation stamp
+/// (legacy unbound code — never eligible under a binding view).
+fn entity_unstamped_code(entity: &engram_domain::KnowledgeEntity) -> bool {
+    let stamped = entity
+        .metadata
+        .as_ref()
+        .and_then(|meta| meta.get(engram_retrieval::bound_filter::CODE_GENERATION_KEY))
+        .is_some();
+    if stamped {
+        return false;
+    }
+    engram_retrieval::is_code_artifact(entity)
+        || matches!(
+            entity.kind,
+            engram_domain::EntityKind::Class
+                | engram_domain::EntityKind::Function
+                | engram_domain::EntityKind::Method
+                | engram_domain::EntityKind::Struct
+                | engram_domain::EntityKind::Interface
+                | engram_domain::EntityKind::Trait
+                | engram_domain::EntityKind::TypeAlias
+                | engram_domain::EntityKind::Enum
+        )
+}
+
+/// Shared overview computation (Louvain over the edge set + meta-edges),
+/// used by the unconstrained and eligibility-constrained paths alike.
+fn overview_from_edges(edges: &[(String, String)], limit: usize) -> CoreResult<CommunityOverview> {
+    let name_to_label = communities(edges, 2);
+    let total_communities = name_to_label.len();
+
+    let mut counts: HashMap<usize, usize> = HashMap::new();
+    for label in name_to_label.values() {
+        *counts.entry(*label).or_default() += 1;
+    }
+    let mut ranked: Vec<(usize, usize)> = counts.into_iter().collect();
+    ranked.sort_unstable_by_key(|a| std::cmp::Reverse(a.1));
+    let top_labels: std::collections::HashSet<usize> =
+        ranked.iter().take(limit).map(|(l, _)| *l).collect();
+
+    let communities_nodes: Vec<CommunityMetaNode> = ranked
+        .iter()
+        .take(limit)
+        .map(|(label, mc)| CommunityMetaNode {
+            label: *label as u32,
+            member_count: *mc,
+        })
+        .collect();
+
+    let mut ew: HashMap<(usize, usize), usize> = HashMap::new();
+    for (s, o) in &edges {
+        let (Some(ls), Some(lo)) = (name_to_label.get(s), name_to_label.get(o)) else {
+            continue;
+        };
+        let (ls, lo) = (*ls, *lo);
+        if ls == lo || !top_labels.contains(&ls) || !top_labels.contains(&lo) {
+            continue;
+        }
+        *ew.entry(if ls < lo { (ls, lo) } else { (lo, ls) })
+            .or_default() += 1;
+    }
+    let mut meta_edges: Vec<CommunityMetaEdge> = ew
+        .into_iter()
+        .map(|((a, b), w)| CommunityMetaEdge {
+            source_label: a as u32,
+            target_label: b as u32,
+            weight: w,
+        })
+        .collect();
+    meta_edges.sort_unstable_by_key(|e| std::cmp::Reverse(e.weight));
+    meta_edges.truncate(communities_nodes.len().saturating_mul(4));
+
+    Ok(CommunityOverview {
+        communities: communities_nodes,
+        edges: meta_edges,
+        total_communities,
+    })
+}
+
+#[async_trait]
+impl CommunityQuery for SqlKnowledgeStore {
     async fn member_index(&self, scope: &Scope) -> CoreResult<HashMap<u32, Vec<String>>> {
         let rels = SqlKnowledgeStore::relationship_endpoints(self, scope).await?;
         let edges: Vec<(String, String)> = rels

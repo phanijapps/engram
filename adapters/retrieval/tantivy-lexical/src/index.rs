@@ -343,6 +343,37 @@ impl LexicalIndex {
         Ok(())
     }
 
+    /// Targeted warm-index retirement (task_014): removes EVERY document
+    /// contributed by `contributor_key` (e.g. `code:<generation-id>`) and
+    /// returns how many were removed — the durable receipt a generation
+    /// retirement records. Documents the same target holds under OTHER
+    /// contributor keys (an ordinary `doc` contribution, another surviving
+    /// generation) are untouched, so a mixed-lineage target never loses its
+    /// surviving tokens. The deletion commits atomically: after it returns,
+    /// a reopened warm index can no longer serve the retired tokens.
+    pub fn retire_contributor(&self, contributor_key: &str) -> tantivy::Result<usize> {
+        use tantivy::{collector::Count, query::TermQuery};
+        if contributor_key.trim().is_empty() {
+            return Err(tantivy::TantivyError::InvalidArgument(
+                "lexical contributor key must not be empty".to_owned(),
+            ));
+        }
+        self.reader.reload()?;
+        let term = Term::from_field_text(self.eligibility_field, contributor_key);
+        let retired = self
+            .reader
+            .searcher()
+            .search(
+                &TermQuery::new(term.clone(), tantivy::schema::IndexRecordOption::Basic),
+                &Count,
+            )
+            .unwrap_or(0);
+        let mut writer = self.writer.lock().expect("lexical writer lock poisoned");
+        writer.delete_term(term);
+        writer.commit()?;
+        Ok(retired)
+    }
+
     /// Returns `(target_id, bm25_score)` pairs ranked best-first, one hit per
     /// target (a target with several contributor documents keeps its
     /// best-scoring one).

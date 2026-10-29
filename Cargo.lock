@@ -1395,6 +1395,7 @@ dependencies = [
  "engram-runtime",
  "engram-store-associative-graph",
  "futures",
+ "serde_json",
 ]
 
 [[package]]

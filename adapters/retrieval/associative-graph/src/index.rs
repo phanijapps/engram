@@ -52,6 +52,13 @@ pub struct AssociativeGraphIndex {
     /// Trust-aware edge weights (F1): code edges contribute by binding tier
     /// (parsed > scoped_name > heuristic); non-code edges stay neutral 1.0.
     trust: engram_retrieval::TrustWeights,
+    /// Bound-code eligibility (task_014): when wired, the seed list, the PPR
+    /// universe and every edge are constrained to the published generation
+    /// set BEFORE the walk, so a stale/retired node neither seeds, ranks nor
+    /// consumes traversal budget, and no stale edge bridges generations. The
+    /// warm snapshot is epoch-stamped: a cached snapshot from a retired
+    /// generation is a MISS, never a served answer.
+    eligibility: Option<Arc<dyn engram_retrieval::CodeEligibilityResolver>>,
 }
 
 impl AssociativeGraphIndex {
@@ -73,6 +80,7 @@ impl AssociativeGraphIndex {
             default_limit,
             cache: None,
             trust: engram_retrieval::TrustWeights::default(),
+            eligibility: None,
         }
     }
 
@@ -86,6 +94,7 @@ impl AssociativeGraphIndex {
             default_limit: 20,
             cache: None,
             trust: engram_retrieval::TrustWeights::default(),
+            eligibility: None,
         }
     }
 
@@ -104,6 +113,28 @@ impl AssociativeGraphIndex {
             default_limit: 20,
             cache: Some(cache),
             trust: engram_retrieval::TrustWeights::default(),
+            eligibility: None,
+        }
+    }
+
+    /// [`Self::with_cache`] with bound-code eligibility wired (task_014):
+    /// every query resolves the scope's published generations, constrains
+    /// seeds/universe/edges before the Personalized PageRank walk, and
+    /// re-materializes the warm snapshot whenever the eligibility epoch
+    /// advances (a retired generation's snapshot is never served).
+    pub fn with_cache_and_eligibility(
+        source: Arc<dyn GraphRelationshipSource>,
+        config: PprConfig,
+        cache: Arc<dyn GraphCache>,
+        eligibility: Arc<dyn engram_retrieval::CodeEligibilityResolver>,
+    ) -> Self {
+        Self {
+            source,
+            config,
+            default_limit: 20,
+            cache: Some(cache),
+            trust: engram_retrieval::TrustWeights::default(),
+            eligibility: Some(eligibility),
         }
     }
 }
@@ -120,17 +151,42 @@ impl RetrievalIndex for AssociativeGraphIndex {
             .unwrap_or(self.default_limit);
         let scope = &request.scope;
 
+        // Bound-code eligibility (task_014): resolve the published generation
+        // set once. The observed epoch also gates the warm snapshot — a cached
+        // snapshot materialized under a retired epoch is a MISS.
+        let (view, observed_epoch) = match &self.eligibility {
+            Some(resolver) => {
+                let resolved = resolver.resolve(scope).await?;
+                match resolved {
+                    Some(eligibility) => {
+                        let epoch = eligibility.epoch;
+                        (
+                            Some(engram_retrieval::BoundCodeView::from_eligibility(
+                                &eligibility,
+                            )),
+                            Some(epoch),
+                        )
+                    }
+                    None => (Some(engram_retrieval::BoundCodeView::none_bound()), None),
+                }
+            }
+            None => (None, None),
+        };
+
         // Cache hit: serve the in-scope entities + relationships from the
         // materialized snapshot, skipping the per-query store reload. A miss
         // (or no cache) loads from the source as before and populates the
         // cache. Because this lane reads BOTH entities and relationships, it
         // always populates a full snapshot — so a sibling lane sharing the same
         // cache (e.g. the community-summary lane) hits on its next query.
+        // An eligibility-wired lane only accepts a snapshot stamped with the
+        // CURRENT epoch (see [`GraphSnapshot::current_for_epoch`]).
         let (entities, relationships): (
             Vec<engram_domain::KnowledgeEntity>,
             Vec<engram_domain::KnowledgeRelationship>,
         ) = if let Some(cache) = &self.cache
             && let Some(snap) = cache.get(scope).await
+            && snap.current_for_epoch(observed_epoch)
         {
             (snap.entities.clone(), snap.relationships.clone())
         } else {
@@ -149,11 +205,48 @@ impl RetrievalIndex for AssociativeGraphIndex {
                             entities: ents.clone(),
                             relationships: rels.clone(),
                             community_labels: None,
+                            eligibility_epoch: observed_epoch,
                         }),
                     )
                     .await;
             }
             (ents, rels)
+        };
+
+        // Eligibility partition BEFORE seeding and edge construction
+        // (task_014): stale/retired/legacy-unbound code entities leave the
+        // universe entirely — they cannot seed, rank, or carry the walk — and
+        // every edge touching a removed node is dropped, so a stale edge can
+        // neither consume traversal budget nor bridge into another
+        // generation. Non-code entities and their edges always stay.
+        let (entities, relationships) = match &view {
+            Some(view) => {
+                let mut removed_ids: std::collections::HashSet<String> = Default::default();
+                let mut entities = entities;
+                entities.retain(|entity| {
+                    let allowed =
+                        view.allows(entity.metadata.as_ref(), entity_is_unstamped_code(entity));
+                    if !allowed {
+                        removed_ids.insert(entity.id.to_string());
+                    }
+                    allowed
+                });
+                let relationships = relationships
+                    .into_iter()
+                    .filter(|relationship| {
+                        let touches_removed = [
+                            relationship.subject.id.as_ref().map(|id| id.as_str()),
+                            relationship.object.id.as_ref().map(|id| id.as_str()),
+                        ]
+                        .into_iter()
+                        .flatten()
+                        .any(|id| removed_ids.contains(id));
+                        !touches_removed
+                    })
+                    .collect::<Vec<_>>();
+                (entities, relationships)
+            }
+            None => (entities, relationships),
         };
 
         let entity_pairs: Vec<(String, String)> = entities
@@ -236,6 +329,32 @@ impl RetrievalIndex for AssociativeGraphIndex {
 /// `engram-codegraph-queries`.
 fn entity_key(reference: &EntityRef) -> Option<String> {
     reference.id.as_ref().map(|id| id.as_str().to_owned())
+}
+
+/// True when an entity is a code symbol or structural code artifact WITHOUT a
+/// generation stamp — legacy unbound code (pre-binding `scan_repo` output).
+/// Never eligible once a binding view constrains the lane (task_014).
+fn entity_is_unstamped_code(entity: &KnowledgeEntity) -> bool {
+    let stamped = entity
+        .metadata
+        .as_ref()
+        .and_then(|meta| meta.get(engram_retrieval::bound_filter::CODE_GENERATION_KEY))
+        .is_some();
+    if stamped {
+        return false;
+    }
+    engram_retrieval::is_code_artifact(entity)
+        || matches!(
+            entity.kind,
+            engram_domain::EntityKind::Class
+                | engram_domain::EntityKind::Function
+                | engram_domain::EntityKind::Method
+                | engram_domain::EntityKind::Struct
+                | engram_domain::EntityKind::Interface
+                | engram_domain::EntityKind::Trait
+                | engram_domain::EntityKind::TypeAlias
+                | engram_domain::EntityKind::Enum
+        )
 }
 
 /// Builds a `RetrievalResult` for a ranked entity, mirroring the lexical graph

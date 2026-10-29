@@ -18,14 +18,19 @@ use engram_domain::*;
 use engram_ingest::git_source::{
     CommittedFile, ResolvedCommit, RetainedSnapshotReader, retain_snapshot,
 };
+use engram_ingest::{
+    CommittedGenerationFiles, ScanOptions, prepare_generation, stage_generation_records,
+};
 use engram_integration::EngramProviderBuilder;
 use engram_integration::code_binding::{
-    CodeAuthorityAction, CodeBindingAuthorizer, CodeBindingCoordinator,
+    CodeAuthorityAction, CodeBindingAuthorizer, CodeBindingCoordinator, CodeGenerationStages,
+    CodeRebuildRequest, ExactReadCandidate, ParticipantExactSource,
 };
 use engram_knowledge::{
     CodeBindingRepository, KnowledgeRepository, RetainedSourceReader, StageReceipt,
 };
 use engram_runtime::CoreError;
+use engram_store_sqlite::SqlKnowledgeStore;
 use engram_store_sqlite::knowledge::SqlCodeBindingRepository;
 use futures::executor::block_on;
 
@@ -1003,6 +1008,813 @@ mod task_017 {
         assert!(
             exact.bytes.contains(&b'\r'),
             "exact bytes preserve CRLF; chunk stitching would not guarantee it"
+        );
+    }
+
+    // ---------- pre-gate obligation 2: durable scan → stage → publish → fetch --
+
+    /// Fixture texts (ground truth written to disk, then scanned back):
+    /// v1 of `src/service.py` carries `alpha` (1–2) and `legacy` (4–5) over
+    /// CRLF lines with non-ASCII; v2 moves `alpha` to 6–7, adds `beta` at
+    /// 3–4 plus a leading import (the real chunker stages a File chunk at
+    /// 1–1), and REMOVES `legacy`. `src/util.py` (LF) is content-identical
+    /// across both generations — its chunk ids still differ per generation
+    /// because staging namespaces ids by generation.
+    const E2E_SERVICE_V1: &str =
+        "def alpha():\r\n    return 'caf\u{e9}'\r\n\r\ndef legacy():\r\n    return 0\r\n";
+    const E2E_SERVICE_V2: &str = "import os\r\n\r\ndef beta():\r\n    return 2\r\n\r\ndef alpha():\r\n    return 'nuovo'\r\n";
+    const E2E_UTIL: &str = "def helper():\n    return 1\n";
+
+    /// REAL scan of the fixture working tree: every file read from disk,
+    /// deterministically ordered by path, with content-derived blob ids —
+    /// the same inventory shape `read_resolved_commit` produces for a real
+    /// git tree. The scanned bytes (never in-test literals) feed every
+    /// later stage.
+    fn scan_checkout(dir: &std::path::Path) -> Vec<CommittedFile> {
+        let mut scanned = Vec::new();
+        let mut stack = vec![dir.to_path_buf()];
+        while let Some(current) = stack.pop() {
+            let mut entries: Vec<_> = std::fs::read_dir(&current)
+                .expect("read fixture directory")
+                .collect();
+            entries.sort_by_key(|entry| entry.as_ref().expect("fixture entry").file_name());
+            for entry in entries
+                .into_iter()
+                .map(|entry| entry.expect("fixture entry"))
+            {
+                let path = entry.path();
+                if path.is_dir() {
+                    stack.push(path);
+                    continue;
+                }
+                let bytes = std::fs::read(&path).expect("read scanned fixture file");
+                let digest = engram_ingest::content_hash(&bytes)
+                    .trim_start_matches("sha256:")
+                    .to_string();
+                scanned.push((
+                    path.strip_prefix(dir)
+                        .expect("fixture-relative path")
+                        .to_path_buf(),
+                    digest[..40].to_string(),
+                    bytes,
+                ));
+            }
+        }
+        scanned.sort_by(|a, b| a.0.cmp(&b.0));
+        scanned
+            .into_iter()
+            .map(|(path, oid, bytes)| CommittedFile {
+                path,
+                oid,
+                mode: "100644".to_string(),
+                bytes,
+            })
+            .collect()
+    }
+
+    fn e2e_scan_options() -> ScanOptions {
+        ScanOptions {
+            scope: scope(),
+            policy: Policy {
+                visibility: Visibility::Workspace,
+                retention: Retention::Durable,
+                allowed_uses: vec![AllowedUse::Retrieval],
+                sensitivity: None,
+                expires_at: None,
+                delete_mode: None,
+            },
+            actor: actor(),
+            source_name: "task-017-e2e-scan".to_string(),
+            max_bytes: 0,
+            manifest: std::collections::HashMap::new(),
+            scan_filter: Default::default(),
+        }
+    }
+
+    /// The REAL lane implementations of one staged publication: the Source
+    /// lane receipts the digest of the ACTUALLY RETAINED snapshot; the
+    /// Knowledge lane performs `stage_generation_records` — the real durable
+    /// knowledge writes plus the real lineage/source staging and the real
+    /// manifest-derived receipt digest.
+    struct E2eStages {
+        manifest_root: std::path::PathBuf,
+        snapshot_digest: String,
+        prepared: engram_ingest::PreparedGeneration,
+        knowledge: Arc<SqlKnowledgeStore>,
+    }
+
+    #[async_trait]
+    impl CodeGenerationStages for E2eStages {
+        async fn stage(
+            &self,
+            lane: &CodeReceiptKind,
+            binding: &CodeBinding,
+            generation: &CodeGeneration,
+            attempt: &CodeAttempt,
+        ) -> engram_runtime::CoreResult<StageReceipt> {
+            let digest = match lane {
+                CodeReceiptKind::Source => self.snapshot_digest.clone(),
+                CodeReceiptKind::Knowledge => {
+                    stage_generation_records(
+                        &self.manifest_root,
+                        binding,
+                        &self.prepared,
+                        &attempt.id,
+                        self.knowledge.as_ref(),
+                    )
+                    .await?
+                    .digest
+                }
+                other => {
+                    return Err(CoreError::InvalidRequest {
+                        reason: format!("e2e declares no {other:?} lane"),
+                    });
+                }
+            };
+            let lane_name = serde_json::to_value(lane)
+                .ok()
+                .and_then(|value| value.as_str().map(str::to_owned))
+                .unwrap_or_default();
+            Ok(StageReceipt {
+                attempt_id: attempt.id.clone(),
+                generation_id: generation.id.clone(),
+                lane: lane_name,
+                digest,
+            })
+        }
+    }
+
+    /// One REAL composition pass: scan the fixture checkout from disk →
+    /// retain the immutable snapshot → prepare the generation over the
+    /// scanned bytes (the real ingest/staging path) → publish through the
+    /// coordinator's real begin → receipts → ready → publish sequence.
+    /// Every digest on the way is real (snapshot digest, manifest-derived
+    /// knowledge receipt); nothing is hand-stamped.
+    fn e2e_publish(
+        checkout: &std::path::Path,
+        retained_root: &std::path::Path,
+        manifest_root: &std::path::Path,
+        bindings: &Arc<SqlCodeBindingRepository>,
+        knowledge: &Arc<SqlKnowledgeStore>,
+        generation_id: &str,
+        commit_oid: &str,
+        attempt_id: &str,
+    ) -> (engram_ingest::PreparedGeneration, CodeBinding) {
+        let files = scan_checkout(checkout);
+        assert!(
+            !files.is_empty(),
+            "the fixture checkout must scan non-empty"
+        );
+        let commit = ResolvedCommit {
+            branch_ref: "refs/heads/main".to_string(),
+            oid: commit_oid.to_string(),
+            object_format: "sha1".to_string(),
+        };
+        let snapshot =
+            retain_snapshot(retained_root, commit.clone(), &files).expect("retain snapshot");
+        let repo = RepoId("repo-a".to_string());
+        let binding = block_on(bindings.get_binding(&scope(), &repo))
+            .expect("read binding")
+            .expect("repo-a is durably bound");
+        let generation = CodeGeneration {
+            id: generation_id.to_string(),
+            binding_version: binding.version,
+            commit_oid: commit.oid.clone(),
+            snapshot_digest: snapshot.digest.clone(),
+            parser_fingerprint: "e2e-parser".to_string(),
+            filter_fingerprint: "e2e-filter".to_string(),
+        };
+        let prepared = prepare_generation(
+            &binding,
+            &generation,
+            &CommittedGenerationFiles {
+                commit: &commit,
+                files: &files,
+            },
+            &e2e_scan_options(),
+        )
+        .expect("prepare generation over scanned bytes");
+        let stages = E2eStages {
+            manifest_root: manifest_root.to_path_buf(),
+            snapshot_digest: snapshot.digest.clone(),
+            prepared,
+            knowledge: knowledge.clone(),
+        };
+        let coordinator = CodeBindingCoordinator::new(
+            bindings.clone() as Arc<dyn CodeBindingRepository>,
+            Arc::new(AllowAuthorizer),
+            Vec::new(),
+        );
+        let published = block_on(coordinator.rebuild(
+            &actor(),
+            CodeRebuildRequest {
+                scope: scope(),
+                repo_id: RepoId("repo-a".to_string()),
+                generation,
+                attempt_id: attempt_id.to_string(),
+                idempotency_key: format!("idempotent-{attempt_id}"),
+            },
+            &stages,
+        ))
+        .expect("real staged publication");
+        let E2eStages { prepared, .. } = stages;
+        (prepared, published)
+    }
+
+    /// The MCP `fetch_content` handler's caller-side shaping, replicated
+    /// exactly (path match, source-order sort, names + anchor, first stored
+    /// line): the handler delegates its whole bound dispatch — exact read,
+    /// chunks reconstruction and symbol span — to the SAME provider
+    /// operation this test drives (`code_fetch_exact_participants`).
+    fn mcp_shaped_candidates(
+        chunks: &[engram_domain::KnowledgeChunk],
+        path: &str,
+    ) -> Vec<ExactReadCandidate> {
+        let mut matched: Vec<&engram_domain::KnowledgeChunk> = chunks
+            .iter()
+            .filter(|chunk| chunk.location.as_ref().and_then(|l| l.path.as_deref()) == Some(path))
+            .collect();
+        matched.sort_by_key(|chunk| {
+            (
+                chunk
+                    .location
+                    .as_ref()
+                    .and_then(|l| l.start_line)
+                    .unwrap_or(u32::MAX),
+                chunk
+                    .location
+                    .as_ref()
+                    .and_then(|l| l.end_line)
+                    .unwrap_or(u32::MAX),
+            )
+        });
+        matched
+            .iter()
+            .map(|chunk| {
+                let location = chunk.location.as_ref();
+                let mut names: Vec<String> = chunk
+                    .entities
+                    .iter()
+                    .filter_map(|e| e.name.clone())
+                    .collect();
+                if let Some(anchor) = location.and_then(|location| location.anchor.as_deref()) {
+                    names.push(anchor.to_owned());
+                }
+                ExactReadCandidate {
+                    record_id: chunk.id.to_string(),
+                    start_line: location.and_then(|location| location.start_line),
+                    end_line: location.and_then(|location| location.end_line),
+                    names,
+                    text_head: chunk.text.lines().next().unwrap_or("").to_owned(),
+                }
+            })
+            .collect()
+    }
+
+    /// Independent 1-based inclusive line-span → byte-range mapping over the
+    /// fixture bytes (computed here, never through the coordinator).
+    fn independent_line_span(bytes: &[u8], start_line: u32, end_line: u32) -> &[u8] {
+        let mut offsets = Vec::with_capacity(bytes.len() / 8 + 2);
+        offsets.push(0usize);
+        for (index, byte) in bytes.iter().enumerate() {
+            if *byte == b'\n' {
+                offsets.push(index + 1);
+            }
+        }
+        let start = offsets[(start_line - 1) as usize];
+        let end = if (end_line as usize) < offsets.len() {
+            offsets[end_line as usize]
+        } else {
+            bytes.len()
+        };
+        &bytes[start..end]
+    }
+
+    /// The MCP handler's `mode: "chunks"` reconstruction semantics over the
+    /// AUTHENTICATED participants only: durable-span-ordered, non-empty
+    /// UTF-8 slices of the digest-validated revision bytes, joined with the
+    /// code separator. Stored chunk text is never consumed.
+    fn reconstruct_chunks_mode(
+        view_bytes: &[u8],
+        participants: &[engram_integration::code_binding::BoundParticipant],
+    ) -> String {
+        let mut ordered = participants.to_vec();
+        ordered.sort_by_key(|participant| (participant.start_line, participant.end_line));
+        ordered
+            .iter()
+            .filter_map(|participant| {
+                let text = std::str::from_utf8(
+                    &view_bytes[participant.byte_span.0..participant.byte_span.1],
+                )
+                .expect("authenticated participant span is UTF-8");
+                (!text.is_empty()).then_some(text)
+            })
+            .collect::<Vec<_>>()
+            .join("\n")
+    }
+
+    /// durable_scan_stage_publish_fetch (pre-gate obligation 2): the WHOLE
+    /// bound chain over the durable SQLite cell — REAL fixture files scanned
+    /// from disk through the real ingest/staging path
+    /// (`prepare_generation` + `stage_generation_records`: real chunks, real
+    /// durable lineage with canonical spans, real indexed-source
+    /// descriptors), a REAL staged publication (`rebuild`: begin attempt →
+    /// real lane receipts → ready → publish at a retained commit), then the
+    /// provider operation the MCP `fetch_content` handler dispatches to
+    /// (`code_fetch_exact_participants`) for the exact read, the
+    /// chunks-mode reconstruction at ACTUALLY STAGED durable spans, and the
+    /// symbol span. Proves: working-tree drift never answers; a durable
+    /// current-row span substitution denies; a tampered retained blob denies
+    /// on the staged digest; a second publication flips the participants to
+    /// the new generation while the old generation's rows coexist; and an
+    /// old-only symbol / retired generation denies.
+    #[test]
+    fn durable_scan_stage_publish_fetch() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let checkout = dir.path().join("checkout");
+        std::fs::create_dir_all(checkout.join("src")).expect("mkdir checkout src");
+        std::fs::write(checkout.join("src/service.py"), E2E_SERVICE_V1).expect("write service v1");
+        std::fs::write(checkout.join("src/util.py"), E2E_UTIL).expect("write util");
+
+        // ONE durable SQLite cell serves knowledge AND code bindings.
+        let cell = dir.path().join("cell.sqlite");
+        let knowledge = Arc::new(SqlKnowledgeStore::open_file(&cell).expect("open knowledge"));
+        let bindings = Arc::new(SqlCodeBindingRepository::open(&cell).expect("open binding store"));
+        block_on(bindings.bind(CodeBinding {
+            scope: scope(),
+            repo_id: RepoId("repo-a".to_string()),
+            branch_ref: "refs/heads/main".to_string(),
+            version: 1,
+            active_generation: None,
+            epoch: 0,
+        }))
+        .expect("bind");
+
+        let retained_root = dir.path().join("retained-e2e");
+        let manifest_root = dir.path().join("manifests");
+        let commit1 = "1".repeat(40);
+        let commit2 = "2".repeat(40);
+        let (prepared1, published1) = e2e_publish(
+            &checkout,
+            &retained_root,
+            &manifest_root,
+            &bindings,
+            &knowledge,
+            "gen-e2e-1",
+            &commit1,
+            "attempt-e2e-1",
+        );
+        assert_eq!(published1.active_generation.as_deref(), Some("gen-e2e-1"));
+        assert_eq!(published1.epoch, 1);
+
+        // The fetch side rides the SAME durable cell: the real knowledge
+        // listing, the real coordinator over the binding store, and the real
+        // adapter-owned retained reader.
+        let coordinator = CodeBindingCoordinator::new(
+            bindings.clone() as Arc<dyn CodeBindingRepository>,
+            Arc::new(AllowAuthorizer),
+            Vec::new(),
+        );
+        let provider = EngramProviderBuilder::new(engram_integration::CapabilityReport::new(
+            CapabilityState::Supported,
+        ))
+        .knowledge_query(knowledge.clone() as Arc<dyn engram_integration::KnowledgeQuery>)
+        .code_bindings(Arc::new(coordinator))
+        .code_source(Arc::new(RetainedSnapshotReader::new(retained_root.clone())))
+        .build();
+
+        // -- the served read must ride the ACTUALLY STAGED descriptors -----
+        let service_descriptor = block_on(bindings.get_source_descriptor(
+            &scope(),
+            &RepoId("repo-a".to_string()),
+            "gen-e2e-1",
+            "src/service.py",
+        ))
+        .expect("descriptor lookup")
+        .expect("service descriptor staged");
+        let expected_digest = engram_ingest::content_hash(E2E_SERVICE_V1.as_bytes())
+            .trim_start_matches("sha256:")
+            .to_string();
+        assert_eq!(service_descriptor.path, "src/service.py");
+        assert_eq!(service_descriptor.commit_oid, commit1);
+        assert_eq!(
+            service_descriptor.content_digest, expected_digest,
+            "the staged descriptor digests the SCANNED file bytes"
+        );
+        let service_chunks1: Vec<&engram_domain::KnowledgeChunk> = prepared1
+            .documents
+            .iter()
+            .find(|doc| doc.source.path == "src/service.py")
+            .expect("service document")
+            .records
+            .chunks
+            .iter()
+            .collect();
+        assert_eq!(service_chunks1.len(), 2, "real chunker: alpha + legacy");
+        for chunk in &service_chunks1 {
+            let lineage = prepared1
+                .lineage
+                .get(&chunk.id.to_string())
+                .expect("staged lineage for chunk");
+            assert_eq!(lineage.source_path, "src/service.py");
+            assert!(
+                lineage.span.is_some(),
+                "staged chunks carry durable canonical spans"
+            );
+        }
+
+        // -- exact read (the handler's default mode) ----------------------
+        let chunks = block_on(
+            provider
+                .knowledge_query()
+                .expect("knowledge query")
+                .list_chunks(&scope()),
+        )
+        .expect("durable chunk listing");
+        assert!(chunks.len() >= 3, "both scanned files staged chunk rows");
+        let candidates = mcp_shaped_candidates(&chunks, "src/service.py");
+        assert_eq!(candidates.len(), 2);
+        let served = block_on(provider.code_fetch_exact_participants(
+            &actor(),
+            &scope(),
+            "src/service.py",
+            &candidates,
+            None,
+        ))
+        .expect("exact participant read");
+        let ParticipantExactSource::Served {
+            repo_id,
+            generation_id,
+            view,
+            span,
+            participants,
+        } = served
+        else {
+            panic!("the freshly published generation must serve: {served:?}");
+        };
+        assert_eq!(repo_id, "repo-a");
+        assert_eq!(generation_id, "gen-e2e-1");
+        assert_eq!(view.bytes, E2E_SERVICE_V1.as_bytes());
+        assert_eq!(view.commit_oid, commit1);
+        assert_eq!(view.full_content_digest, expected_digest);
+        assert_eq!(view.served_digest, view.full_content_digest);
+        assert_eq!(span, None, "no symbol requested: whole-file view");
+        // Participants are EXACTLY the staged gen-1 chunks at their staged
+        // durable canonical spans (1–2 alpha, 4–5 legacy).
+        assert_eq!(participants.len(), 2);
+        let mut durable_spans: Vec<(u32, u32)> = participants
+            .iter()
+            .map(|participant| (participant.start_line, participant.end_line))
+            .collect();
+        durable_spans.sort();
+        assert_eq!(durable_spans, vec![(1, 2), (4, 5)]);
+        for participant in &participants {
+            let lineage = prepared1
+                .lineage
+                .get(&participant.record_id)
+                .expect("participant is a staged record");
+            assert_eq!(
+                lineage.span,
+                Some(engram_domain::CanonicalSpan {
+                    start_line: participant.start_line,
+                    end_line: participant.end_line,
+                }),
+                "served spans ARE the staged durable spans"
+            );
+            let served_slice = &view.bytes[participant.byte_span.0..participant.byte_span.1];
+            assert_eq!(
+                served_slice,
+                independent_line_span(
+                    E2E_SERVICE_V1.as_bytes(),
+                    participant.start_line,
+                    participant.end_line
+                ),
+                "authenticated participant bytes are the fixture's own lines"
+            );
+        }
+
+        // -- chunks reconstruction from authenticated retained bytes ------
+        let reconstruction = reconstruct_chunks_mode(&view.bytes, &participants);
+        let expected_reconstruction = format!(
+            "{}\n{}",
+            String::from_utf8_lossy(independent_line_span(E2E_SERVICE_V1.as_bytes(), 1, 2)),
+            String::from_utf8_lossy(independent_line_span(E2E_SERVICE_V1.as_bytes(), 4, 5)),
+        );
+        assert_eq!(reconstruction, expected_reconstruction);
+        assert!(reconstruction.contains("def alpha():\r\n"));
+        assert!(reconstruction.contains("def legacy():\r\n"));
+        assert!(reconstruction.contains("caf\u{e9}"));
+
+        // -- symbol span ---------------------------------------------------
+        let symbol_served = block_on(provider.code_fetch_exact_participants(
+            &actor(),
+            &scope(),
+            "src/service.py",
+            &candidates,
+            Some("alpha"),
+        ))
+        .expect("symbol participant read");
+        let ParticipantExactSource::Served { span, .. } = symbol_served else {
+            panic!("alpha must resolve: {symbol_served:?}");
+        };
+        let (start, end) = span.expect("alpha span");
+        assert_eq!(
+            &view.bytes[start..end],
+            independent_line_span(E2E_SERVICE_V1.as_bytes(), 1, 2),
+            "the symbol span is the durable canonical span's exact bytes"
+        );
+        assert!(view.bytes[start..end].starts_with(b"def alpha"));
+        let missing = block_on(provider.code_fetch_exact_participants(
+            &actor(),
+            &scope(),
+            "src/service.py",
+            &candidates,
+            Some("nosuch"),
+        ))
+        .expect("denial is an outcome, not an error");
+        assert!(
+            matches!(&missing, ParticipantExactSource::Denied { symbol_selection: true, reason } if reason.contains("no chunk in the indexed generation")),
+            "missing symbol denies as a symbol selection: {missing:?}"
+        );
+
+        // -- second staged path: the util.py descriptor serves too ---------
+        let util_candidates = mcp_shaped_candidates(&chunks, "src/util.py");
+        assert_eq!(util_candidates.len(), 1);
+        let util_served = block_on(provider.code_fetch_exact_participants(
+            &actor(),
+            &scope(),
+            "src/util.py",
+            &util_candidates,
+            None,
+        ))
+        .expect("util participant read");
+        assert!(
+            matches!(&util_served, ParticipantExactSource::Served { view, participants, .. } if view.bytes == E2E_UTIL.as_bytes() && participants.len() == 1)
+        );
+
+        // -- working-tree DRIFT never answers ------------------------------
+        std::fs::write(checkout.join("src/service.py"), "IMPOSTOR WORKING TREE")
+            .expect("drift the working tree");
+        let drifted = block_on(provider.code_fetch_exact_participants(
+            &actor(),
+            &scope(),
+            "src/service.py",
+            &candidates,
+            None,
+        ))
+        .expect("participant read under working-tree drift");
+        assert!(
+            matches!(&drifted, ParticipantExactSource::Served { view, .. } if view.bytes == E2E_SERVICE_V1.as_bytes()),
+            "the retained revision answers, never the drifted checkout"
+        );
+
+        // -- durable CURRENT-row span SUBSTITUTION denies ------------------
+        let alpha_row = chunks
+            .iter()
+            .find(|chunk| {
+                chunk
+                    .entities
+                    .iter()
+                    .any(|entity| entity.name.as_deref() == Some("alpha"))
+                    && chunk
+                        .location
+                        .as_ref()
+                        .and_then(|location| location.path.as_deref())
+                        == Some("src/service.py")
+            })
+            .expect("durable alpha row")
+            .clone();
+        let mut substituted = alpha_row.clone();
+        substituted.location.as_mut().expect("location").start_line = Some(
+            substituted
+                .location
+                .as_ref()
+                .and_then(|l| l.start_line)
+                .expect("start")
+                + 1,
+        );
+        block_on(knowledge.put_chunk(substituted)).expect("durable row substitution");
+        let substituted_outcome = block_on(
+            provider.code_fetch_exact_participants(
+                &actor(),
+                &scope(),
+                "src/service.py",
+                &mcp_shaped_candidates(
+                    &block_on(
+                        provider
+                            .knowledge_query()
+                            .expect("knowledge query")
+                            .list_chunks(&scope()),
+                    )
+                    .expect("re-list"),
+                    "src/service.py",
+                ),
+                None,
+            ),
+        )
+        .expect("denial is an outcome");
+        assert!(
+            matches!(&substituted_outcome, ParticipantExactSource::Denied { symbol_selection: false, reason } if reason.contains("does not match the retained revision")),
+            "a drifted durable span claim denies: {substituted_outcome:?}"
+        );
+        block_on(knowledge.put_chunk(alpha_row.clone())).expect("restore the durable row");
+
+        // -- TAMPERED retained blob denies on the staged digest ------------
+        let blob = retained_root.join(&commit1).join("src").join("service.py");
+        {
+            use std::os::unix::fs::PermissionsExt as _;
+            std::fs::set_permissions(&blob, std::fs::Permissions::from_mode(0o600))
+                .expect("take write permission");
+        }
+        std::fs::write(&blob, b"TAMPERED BYTES").expect("tamper blob");
+        let tampered = block_on(provider.code_fetch_exact_participants(
+            &actor(),
+            &scope(),
+            "src/service.py",
+            &candidates,
+            None,
+        ));
+        assert!(
+            matches!(&tampered, Err(CoreError::InvalidRequest { reason }) if reason.contains("does not match the durable indexed-source digest")),
+            "tampered retained bytes deny on digest: {tampered:?}"
+        );
+        {
+            use std::os::unix::fs::PermissionsExt as _;
+            std::fs::set_permissions(&blob, std::fs::Permissions::from_mode(0o600))
+                .expect("write permission for restore");
+        }
+        std::fs::write(&blob, E2E_SERVICE_V1).expect("restore blob");
+        {
+            use std::os::unix::fs::PermissionsExt as _;
+            std::fs::set_permissions(&blob, std::fs::Permissions::from_mode(0o400))
+                .expect("restore readonly");
+        }
+
+        // -- SECOND publication flips the participants ---------------------
+        std::fs::write(checkout.join("src/service.py"), E2E_SERVICE_V2).expect("write service v2");
+        let (prepared2, published2) = e2e_publish(
+            &checkout,
+            &retained_root,
+            &manifest_root,
+            &bindings,
+            &knowledge,
+            "gen-e2e-2",
+            &commit2,
+            "attempt-e2e-2",
+        );
+        assert_eq!(published2.active_generation.as_deref(), Some("gen-e2e-2"));
+        assert_eq!(published2.epoch, 2);
+
+        // Durable coexistence: BOTH generations' rows list at the path.
+        let chunks_after = block_on(
+            provider
+                .knowledge_query()
+                .expect("knowledge query")
+                .list_chunks(&scope()),
+        )
+        .expect("re-list after second publication");
+        let id_of = |prepared: &engram_ingest::PreparedGeneration, path: &str| {
+            prepared
+                .documents
+                .iter()
+                .find(|doc| doc.source.path == path)
+                .expect("document")
+                .records
+                .chunks
+                .iter()
+                .map(|chunk| chunk.id.to_string())
+                .collect::<std::collections::HashSet<String>>()
+        };
+        let service_ids1 = id_of(&prepared1, "src/service.py");
+        let service_ids2 = id_of(&prepared2, "src/service.py");
+        assert_eq!(service_ids1.len(), 2);
+        assert_eq!(service_ids2.len(), 3, "v2: File + beta + alpha");
+        assert!(
+            service_ids1.is_disjoint(&service_ids2),
+            "generation namespaces"
+        );
+        let listed_service: std::collections::HashSet<String> = chunks_after
+            .iter()
+            .filter(|chunk| {
+                chunk
+                    .location
+                    .as_ref()
+                    .and_then(|location| location.path.as_deref())
+                    == Some("src/service.py")
+            })
+            .map(|chunk| chunk.id.to_string())
+            .collect();
+        assert!(
+            listed_service.is_superset(&service_ids1) && listed_service.is_superset(&service_ids2),
+            "retention coexistence: both generations' rows remain listed"
+        );
+
+        // The served origin flips to gen-e2e-2 with gen-e2e-2's spans.
+        let flipped = block_on(provider.code_fetch_exact_participants(
+            &actor(),
+            &scope(),
+            "src/service.py",
+            &mcp_shaped_candidates(&chunks_after, "src/service.py"),
+            None,
+        ))
+        .expect("flipped participant read");
+        let ParticipantExactSource::Served {
+            generation_id: flipped_generation,
+            view: flipped_view,
+            participants: flipped_participants,
+            ..
+        } = flipped
+        else {
+            panic!("gen-e2e-2 must serve: {flipped:?}");
+        };
+        assert_eq!(flipped_generation, "gen-e2e-2");
+        assert_eq!(flipped_view.bytes, E2E_SERVICE_V2.as_bytes());
+        assert_eq!(flipped_view.commit_oid, commit2);
+        let mut flipped_spans: Vec<(u32, u32)> = flipped_participants
+            .iter()
+            .map(|participant| (participant.start_line, participant.end_line))
+            .collect();
+        flipped_spans.sort();
+        assert_eq!(flipped_spans, vec![(1, 1), (3, 4), (6, 7)]);
+        for participant in &flipped_participants {
+            assert!(
+                service_ids2.contains(&participant.record_id),
+                "participants are the NEW generation's staged records"
+            );
+            assert!(
+                !service_ids1.contains(&participant.record_id),
+                "no retired-generation record rides the flip"
+            );
+            assert_eq!(
+                &flipped_view.bytes[participant.byte_span.0..participant.byte_span.1],
+                independent_line_span(
+                    E2E_SERVICE_V2.as_bytes(),
+                    participant.start_line,
+                    participant.end_line
+                )
+            );
+        }
+        let v2_reconstruction = reconstruct_chunks_mode(&flipped_view.bytes, &flipped_participants);
+        let expected_v2_reconstruction = [
+            independent_line_span(E2E_SERVICE_V2.as_bytes(), 1, 1),
+            independent_line_span(E2E_SERVICE_V2.as_bytes(), 3, 4),
+            independent_line_span(E2E_SERVICE_V2.as_bytes(), 6, 7),
+        ]
+        .iter()
+        .map(|slice| String::from_utf8_lossy(slice).into_owned())
+        .collect::<Vec<_>>()
+        .join("\n");
+        assert_eq!(v2_reconstruction, expected_v2_reconstruction);
+        assert!(v2_reconstruction.contains("import os\r\n"));
+        assert!(v2_reconstruction.contains("def beta():\r\n"));
+        assert!(v2_reconstruction.contains("return 'nuovo'\r\n"));
+
+        // The moved symbol resolves at its NEW durable span.
+        let moved = block_on(provider.code_fetch_exact_participants(
+            &actor(),
+            &scope(),
+            "src/service.py",
+            &mcp_shaped_candidates(&chunks_after, "src/service.py"),
+            Some("alpha"),
+        ))
+        .expect("moved symbol read");
+        let ParticipantExactSource::Served { span, .. } = moved else {
+            panic!("alpha must resolve in gen-e2e-2: {moved:?}");
+        };
+        let (start, end) = span.expect("moved span");
+        assert_eq!(
+            &flipped_view.bytes[start..end],
+            independent_line_span(E2E_SERVICE_V2.as_bytes(), 6, 7),
+            "alpha serves at its MOVED durable span"
+        );
+
+        // OLD-ONLY symbol denies: legacy's durable rows still list at the
+        // path, but none is a current participant.
+        let legacy = block_on(provider.code_fetch_exact_participants(
+            &actor(),
+            &scope(),
+            "src/service.py",
+            &mcp_shaped_candidates(&chunks_after, "src/service.py"),
+            Some("legacy"),
+        ))
+        .expect("denial is an outcome");
+        assert!(
+            matches!(&legacy, ParticipantExactSource::Denied { symbol_selection: true, reason } if reason.contains("no chunk in the indexed generation")),
+            "the old-only symbol denies: {legacy:?}"
+        );
+
+        // The RETIRED generation denies without an authorized lease.
+        let retired = block_on(provider.code_fetch_exact_at(
+            &actor(),
+            &scope(),
+            "repo-a",
+            "gen-e2e-1",
+            "src/service.py",
+            None,
+        ));
+        assert!(
+            matches!(&retired, Err(CoreError::InvalidRequest { reason }) if reason.contains("no authorized read lease")),
+            "the retired generation denies: {retired:?}"
         );
     }
 }

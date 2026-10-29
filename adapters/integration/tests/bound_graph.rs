@@ -1213,4 +1213,156 @@ mod task_016 {
             "no scope-wide maintenance shortcut exists: {empty:?}"
         );
     }
+
+    /// Task016 r3: maintenance through ACTUAL USE. A grant authorizes
+    /// nothing by possession: the validated operation seam denies a STALE
+    /// grant (publication between authorization and use) BEFORE the owned
+    /// mutation runs, executes a valid grant's mutation exactly once with
+    /// the pinned targets, and refuses a different caller.
+    #[test]
+    fn maintenance_use_barriers() {
+        use engram_integration::knowledge_query::AuthorizedKnowledgeQuery as _Seam;
+        let dir = tempfile::tempdir().expect("tempdir");
+        let (authorized, bindings) = gate_fixture(dir.path());
+        let knowledge = {
+            // The owned mutation target store: reach the provider's knowledge
+            // surface through the seam's wrapped query.
+            let provider_knowledge = authorized.query().clone();
+            let _ = provider_knowledge;
+            Arc::new(SqlKnowledgeStore::open_in_memory().expect("mutation store"))
+        };
+        // Seed an owned mutation target: an eligible chunk the mutation will
+        // delete. Lineage for "a-render" is already published in the fixture.
+        block_on(knowledge.put_entity(entity("a-render", "render", EntityKind::Function)))
+            .expect("put mutation target");
+
+        // (1) Valid grant: the mutation executes once with exactly the
+        // pinned targets.
+        let grant = block_on(authorized.authorize_maintenance_grant(
+            &actor(),
+            &scope(),
+            &["a-render".to_string()],
+        ))
+        .expect("grant authorizes");
+        assert_eq!(grant.targets(), &["a-render".to_string()]);
+        let executed = std::sync::Arc::new(std::sync::Mutex::new(Vec::<String>::new()));
+        let seen = executed.clone();
+        let used = block_on(
+            authorized.use_maintenance(&actor(), &grant, move |targets| {
+                let seen = seen.clone();
+                async move {
+                    seen.lock().expect("lock").push(format!("ran:{targets:?}"));
+                    Ok::<(), CoreError>(())
+                }
+            }),
+        );
+        used.expect("valid grant use executes");
+        assert_eq!(
+            executed.lock().expect("lock").len(),
+            1,
+            "the owned mutation ran exactly once"
+        );
+
+        // (2) Caller isolation: a DIFFERENT caller cannot use the grant.
+        let other = Actor {
+            id: Id::from("other-maintainer"),
+            kind: ActorKind::Agent,
+            display_name: None,
+            metadata: None,
+        };
+        let denied = block_on(
+            authorized.use_maintenance(&other, &grant, |targets| async move {
+                let _ = targets;
+                Ok::<(), CoreError>(())
+            }),
+        );
+        assert!(
+            matches!(&denied, Err(CoreError::InvalidRequest { reason }) if reason.contains("caller mismatch")),
+            "a grant is bound to its authorizing caller: {denied:?}"
+        );
+
+        // (3) Deterministic publication barrier: publishing a new generation
+        // between authorization and use MUST deny BEFORE the mutation runs.
+        let stale = block_on(authorized.authorize_maintenance_grant(
+            &actor(),
+            &scope(),
+            &["a-render".to_string()],
+        ))
+        .expect("grant authorizes");
+        publish_generation_for_scope(
+            &bindings,
+            &scope(),
+            "repo-b",
+            "gen-b-next",
+            1,
+            Some("gen-b"),
+            &["b-util-next"],
+        );
+        let ran = std::sync::Arc::new(std::sync::Mutex::new(false));
+        let ran_flag = ran.clone();
+        let stale_use = block_on(
+            authorized.use_maintenance(&actor(), &stale, move |targets| {
+                let ran_flag = ran_flag.clone();
+                async move {
+                    *ran_flag.lock().expect("lock") = true;
+                    let _ = targets;
+                    Ok::<(), CoreError>(())
+                }
+            }),
+        );
+        assert!(
+            matches!(&stale_use, Err(CoreError::Conflict { reason }) if reason.contains("GenerationChanged")),
+            "a publication after the grant denies the use: {stale_use:?}"
+        );
+        assert!(
+            !*ran.lock().expect("lock"),
+            "the owned mutation must NOT run for a stale grant"
+        );
+
+        // (4) The knowledge store target is untouched by the denied use.
+        let target = block_on(knowledge.get_entity(&Id::from("a-render"), &scope()))
+            .expect("get target")
+            .expect("target survives the denied use");
+        assert_eq!(target.id.as_str(), "a-render");
+    }
+
+    /// Task016 r3: explicit-ID query stays pinned through RETURN — a
+    /// publication between canonical selection and the caller receiving the
+    /// list retries once and never serves the stale selection.
+    #[test]
+    fn explicit_query_pinned_through_return() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let (authorized, bindings) = gate_fixture(dir.path());
+        // Baseline selection under the current epoch.
+        let selected = block_on(authorized.list_entities_authorized(&actor(), &scope(), &[]))
+            .expect("initial selection");
+        assert!(
+            selected
+                .iter()
+                .any(|entity| entity.id.as_str() == "a-render"),
+            "published endpoint selected: {:?}",
+            selected
+                .iter()
+                .map(|e| e.id.to_string())
+                .collect::<Vec<_>>()
+        );
+        // Publish (epoch bump): the same call reflects the CURRENT view —
+        // never a cached stale selection.
+        publish_generation_for_scope(
+            &bindings,
+            &scope(),
+            "repo-a",
+            "gen-a-next",
+            1,
+            Some("gen-a"),
+            &["a-render-next"],
+        );
+        let after = block_on(authorized.list_entities_authorized(&actor(), &scope(), &[]))
+            .expect("post-publication selection");
+        let ids: Vec<String> = after.iter().map(|e| e.id.to_string()).collect();
+        assert!(
+            !ids.iter().any(|id| id == "a-render"),
+            "the superseded generation's targets must not serve after publication: {ids:?}"
+        );
+    }
 }

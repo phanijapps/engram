@@ -16,6 +16,7 @@ use engram_domain::{
     Scope,
 };
 use engram_runtime::{CoreError, CoreResult};
+use std::future::Future;
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -86,6 +87,30 @@ pub trait KnowledgeQuery: Send + Sync {
         _scope: &Scope,
     ) -> CoreResult<Vec<KnowledgeChunk>> {
         Ok(Vec::new())
+    }
+}
+
+/// A validated maintenance grant (task_016 r3): authorization + canonical
+/// target selection ran under one pinned consistent-read window. The grant
+/// records the authorizing caller, scope, targets and the authorized view's
+/// epoch. Possession alone authorizes nothing — every use revalidates.
+#[derive(Clone, Debug)]
+pub struct MaintenanceGrant {
+    scope: Scope,
+    actor_id: String,
+    targets: Vec<String>,
+    epoch: u64,
+}
+
+impl MaintenanceGrant {
+    /// The authorized maintenance targets (pinned at authorization).
+    pub fn targets(&self) -> &[String] {
+        &self.targets
+    }
+
+    /// The eligibility epoch the grant was authorized against.
+    pub fn epoch(&self) -> u64 {
+        self.epoch
     }
 }
 
@@ -241,6 +266,121 @@ impl AuthorizedKnowledgeQuery {
                 },
             )
             .await
+    }
+
+    /// Authorizes maintenance and returns a PINNED grant bound to the
+    /// authorized view's epoch (task_016 r3). The grant is NOT authority by
+    /// possession: returning authorized ids from `consistent_read` never
+    /// authorizes a later mutation — pair the grant with
+    /// [`Self::use_maintenance`], which revalidates before any owned
+    /// mutation runs.
+    #[allow(clippy::double_must_use)]
+    pub async fn authorize_maintenance_grant(
+        &self,
+        actor: &engram_domain::Actor,
+        scope: &Scope,
+        requested: &[String],
+    ) -> CoreResult<MaintenanceGrant> {
+        if requested.is_empty() {
+            return Err(CoreError::InvalidRequest {
+                reason: "maintenance authorization requires explicit target ids".into(),
+            });
+        }
+        let anchor = self.authorize_caller(actor, scope).await?;
+        let requested = requested.to_vec();
+        let actor_id = actor.id.to_string();
+        let coordinator = Arc::clone(&self.coordinator);
+        let view_coordinator = Arc::clone(&coordinator);
+        coordinator
+            .consistent_read(
+                actor,
+                scope,
+                &anchor,
+                AUTHORIZED_QUERY_WINDOW,
+                move |eligibility| {
+                    let coordinator = Arc::clone(&view_coordinator);
+                    let requested = requested.clone();
+                    let actor_id = actor_id.clone();
+                    async move {
+                        let view = coordinator.eligibility_view(scope, None).await?;
+                        let mut authorized = Vec::with_capacity(requested.len());
+                        for id in &requested {
+                            if !view.is_code_record(id) || !view.allows(id, true) {
+                                return Err(foreign_target(&[id.clone()]));
+                            }
+                            authorized.push(id.clone());
+                        }
+                        Ok(MaintenanceGrant {
+                            scope: scope.clone(),
+                            actor_id,
+                            targets: authorized,
+                            epoch: eligibility.epoch,
+                        })
+                    }
+                },
+            )
+            .await
+    }
+
+    /// USE of a maintenance grant: revalidates the grant's pinned view
+    /// (caller identity, scope, epoch, target eligibility) under a fresh
+    /// consistent-read window and only THEN performs the owned mutation.
+    /// A publication between grant and use denies with `GenerationChanged`
+    /// BEFORE the mutation runs; a publication during validation retries
+    /// once (the coordinator's window) and then denies. This is not a
+    /// cross-store ACID claim — the barrier is validated-before-mutation.
+    #[allow(clippy::double_must_use)]
+    pub async fn use_maintenance<T, F, Fut>(
+        &self,
+        actor: &engram_domain::Actor,
+        grant: &MaintenanceGrant,
+        mutation: F,
+    ) -> CoreResult<T>
+    where
+        F: FnOnce(Vec<String>) -> Fut,
+        Fut: Future<Output = CoreResult<T>>,
+    {
+        if grant.actor_id != actor.id.to_string() {
+            return Err(CoreError::InvalidRequest {
+                reason: "maintenance grant caller mismatch: a grant is bound to its                          authorizing caller"
+                    .into(),
+            });
+        }
+        let anchor = self.authorize_caller(actor, &grant.scope).await?;
+        let epoch = grant.epoch;
+        let targets = grant.targets.clone();
+        let coordinator = Arc::clone(&self.coordinator);
+        let view_coordinator = Arc::clone(&coordinator);
+        coordinator
+            .consistent_read(
+                actor,
+                &grant.scope,
+                &anchor,
+                AUTHORIZED_QUERY_WINDOW,
+                |eligibility| {
+                    let coordinator = Arc::clone(&view_coordinator);
+                    let targets = targets.clone();
+                    let scope = grant.scope.clone();
+                    async move {
+                        if eligibility.epoch != epoch {
+                            return Err(CoreError::Conflict {
+                                reason: "GenerationChanged: maintenance grant is stale —                                          re-authorize against the current view"
+                                    .into(),
+                            });
+                        }
+                        let view = coordinator.eligibility_view(&scope, None).await?;
+                        for id in &targets {
+                            if !view.is_code_record(id) || !view.allows(id, true) {
+                                return Err(foreign_target(&[id.clone()]));
+                            }
+                        }
+                        Ok(())
+                    }
+                },
+            )
+            .await?;
+        // Validated: perform the owned mutation with the pinned targets.
+        mutation(grant.targets.clone()).await
     }
 
     /// Entities visible to `scope`, with code-derived entities constrained to

@@ -10,13 +10,14 @@ use engram_domain::{
 use engram_knowledge::KnowledgeRepository;
 use engram_memory::MemoryRepository;
 use engram_retrieval::{CandidateEvidence, CandidateEvidenceResolver};
-use engram_runtime::CoreResult;
+use engram_runtime::{CoreResult, PolicyAuthorizer};
 
 /// Reads each capability's canonical scoped record before permitting degraded recall.
 pub struct RepositoryCandidateEvidence {
     memory: Arc<dyn MemoryRepository>,
     beliefs: Arc<dyn BeliefRepository>,
     knowledge: Arc<dyn KnowledgeRepository>,
+    authorizer: Arc<dyn PolicyAuthorizer>,
 }
 
 impl RepositoryCandidateEvidence {
@@ -24,11 +25,13 @@ impl RepositoryCandidateEvidence {
         memory: Arc<dyn MemoryRepository>,
         beliefs: Arc<dyn BeliefRepository>,
         knowledge: Arc<dyn KnowledgeRepository>,
+        authorizer: Arc<dyn PolicyAuthorizer>,
     ) -> Self {
         Self {
             memory,
             beliefs,
             knowledge,
+            authorizer,
         }
     }
 }
@@ -83,7 +86,11 @@ impl CandidateEvidenceResolver for RepositoryCandidateEvidence {
                 .await?
             {
                 Some(record)
-                    if record.content.text == candidate.content
+                    if self
+                        .authorizer
+                        .can_retrieve(&request.requester, &record.scope, &record.policy)
+                        .is_ok()
+                        && record.content.text == candidate.content
                         && record.provenance == candidate.provenance
                         && record.policy == candidate.policy =>
                 {
@@ -97,7 +104,11 @@ impl CandidateEvidenceResolver for RepositoryCandidateEvidence {
                 .await?
             {
                 Some(record)
-                    if record.content == candidate.content
+                    if self
+                        .authorizer
+                        .can_retrieve(&request.requester, &record.scope, &record.policy)
+                        .is_ok()
+                        && record.content == candidate.content
                         && record.provenance == candidate.provenance
                         && record.policy == candidate.policy =>
                 {
@@ -110,18 +121,33 @@ impl CandidateEvidenceResolver for RepositoryCandidateEvidence {
                 .get_chunk(&candidate.target_id.clone().into(), &request.scope)
                 .await?
             {
-                Some(record)
-                    if record.text == candidate.content
-                        && record.provenance == candidate.provenance
-                        && record.policy == candidate.policy =>
+                Some(record) => match self
+                    .knowledge
+                    .get_source(&record.source_id, &request.scope)
+                    .await?
                 {
-                    if code_chunk(record.kind) {
-                        Ok(CandidateEvidence::CodeDependent)
-                    } else {
-                        Ok(dependency_evidence(&record.provenance))
+                    Some(source)
+                        if self
+                            .authorizer
+                            .can_retrieve(&request.requester, &source.scope, &source.policy)
+                            .is_ok()
+                            && self
+                                .authorizer
+                                .can_retrieve(&request.requester, &source.scope, &record.policy)
+                                .is_ok()
+                            && record.text == candidate.content
+                            && record.provenance == candidate.provenance
+                            && record.policy == candidate.policy =>
+                    {
+                        if code_chunk(record.kind) {
+                            Ok(CandidateEvidence::CodeDependent)
+                        } else {
+                            Ok(dependency_evidence(&record.provenance))
+                        }
                     }
-                }
-                Some(_) | None => Ok(CandidateEvidence::Unknown),
+                    Some(_) | None => Ok(CandidateEvidence::Unknown),
+                },
+                None => Ok(CandidateEvidence::Unknown),
             },
             RetrievalTargetType::Entity => match self
                 .knowledge

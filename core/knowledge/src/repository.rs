@@ -18,6 +18,15 @@ pub trait KnowledgeRepository: Send + Sync {
     /// Stores or updates a registered knowledge source.
     async fn put_source(&self, source: KnowledgeSource) -> CoreResult<KnowledgeSource>;
 
+    /// Looks up a source inside the caller-provided scope boundary.
+    async fn get_source(
+        &self,
+        _id: &SourceId,
+        _scope: &Scope,
+    ) -> CoreResult<Option<KnowledgeSource>> {
+        Ok(None)
+    }
+
     /// Stores a versioned document extracted from a source.
     async fn put_document(&self, document: SourceDocument) -> CoreResult<SourceDocument>;
 

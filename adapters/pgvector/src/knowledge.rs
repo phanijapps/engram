@@ -91,6 +91,20 @@ impl KnowledgeRepository for PgKnowledgeStore {
         Ok(source)
     }
 
+    async fn get_source(
+        &self,
+        id: &SourceId,
+        scope: &Scope,
+    ) -> CoreResult<Option<KnowledgeSource>> {
+        self.conn.block_on(async {
+            let row = self.conn.client.query_opt(
+                "SELECT record_json FROM knowledge_sources WHERE id=$1 AND tenant=$2 AND (subject IS NULL OR subject=$3) AND (workspace IS NULL OR workspace=$4)",
+                &[&id.to_string(), &scope.tenant, &scope.subject, &scope.workspace],
+            ).await.map_err(|e| Self::pg_err(e.to_string()))?;
+            row.map(|row| serde_json::from_value(row.get::<_, serde_json::Value>(0)).map_err(|e| Self::pg_err(e.to_string()))).transpose()
+        })
+    }
+
     async fn put_document(&self, doc: SourceDocument) -> CoreResult<SourceDocument> {
         let json = serde_json::to_value(&doc).map_err(|e| Self::pg_err(e.to_string()))?;
         let key = doc.path.as_deref().unwrap_or("");

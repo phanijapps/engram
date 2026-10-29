@@ -54,6 +54,8 @@ pub(crate) async fn durable_view_for_eligibility(
             repo_id: entry.repo_id,
             generation_id: entry.generation_id,
             retired: entry.retired,
+            source_path: entry.source_path,
+            span: entry.span,
         })
         .collect();
     Ok(engram_retrieval::BoundCodeView::from_eligibility(

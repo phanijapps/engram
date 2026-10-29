@@ -152,6 +152,23 @@ pub fn prepare_generation(
             }
         }
         let contributor = records.document.id.to_string();
+        // Durable canonical spans (final r5 finding 2): each staged chunk's
+        // line span is persisted WITH its lineage — the revision-bound span
+        // descriptor the exact-read window later validates mutable claims
+        // against. Records without a single canonical span (source, graph,
+        // relationships, documents) carry `None`.
+        let chunk_spans: std::collections::BTreeMap<String, engram_domain::CanonicalSpan> = records
+            .chunks
+            .iter()
+            .filter_map(|chunk| {
+                let location = chunk.location.as_ref()?;
+                let span = engram_domain::CanonicalSpan {
+                    start_line: location.start_line?,
+                    end_line: location.end_line?,
+                };
+                Some((chunk.id.to_string(), span))
+            })
+            .collect();
         let ids = std::iter::once(records.source.id.to_string())
             .chain(std::iter::once(contributor.clone()))
             .chain(records.chunks.iter().map(|c| c.id.to_string()))
@@ -159,14 +176,20 @@ pub fn prepare_generation(
             .chain(graph.entities.iter().map(|e| e.id.to_string()))
             .chain(graph.relationships.iter().map(|e| e.id.to_string()));
         for id in ids {
-            let value = lineage.entry(id).or_insert_with(|| CodeLineage {
+            let value = lineage.entry(id.clone()).or_insert_with(|| CodeLineage {
                 repo_id: binding.repo_id.clone(),
                 generation_id: generation.id.clone(),
                 source_path: path.into(),
                 contributors: Vec::new(),
+                span: None,
             });
             if value.source_path != path {
                 value.source_path = ".".into();
+            }
+            // A chunk keeps its own canonical span; a record seen under a
+            // second path (the "." collapse) keeps no single span.
+            if value.source_path != "." {
+                value.span = chunk_spans.get(&id).copied();
             }
             if !value.contributors.contains(&contributor) {
                 value.contributors.push(contributor.clone());

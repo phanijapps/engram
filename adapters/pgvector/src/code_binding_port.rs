@@ -19,6 +19,32 @@ pub(super) fn storage_error() -> CoreError {
     }
 }
 
+/// Builds one [`TargetLineage`] from a lineage row, decoding the persisted
+/// `CodeLineage` JSON for the durable canonical `source_path`/`span`
+/// (final r5 finding 2). A row whose JSON cannot be decoded keeps the
+/// fail-closed empty path / absent span — such records can never path- or
+/// span-match an exact participant read.
+fn target_lineage_of_row(
+    record_id: String,
+    repo_id: String,
+    generation_id: String,
+    retired: bool,
+    lineage_json: String,
+) -> TargetLineage {
+    let lineage: Option<CodeLineage> = serde_json::from_str(&lineage_json).ok();
+    TargetLineage {
+        record_id,
+        repo_id,
+        generation_id,
+        retired,
+        source_path: lineage
+            .as_ref()
+            .map(|value| value.source_path.clone())
+            .unwrap_or_default(),
+        span: lineage.as_ref().and_then(|value| value.span),
+    }
+}
+
 fn error(error: CodeBindingError) -> CoreError {
     match error {
         CodeBindingError::BindingConflict => CoreError::Conflict {
@@ -466,18 +492,21 @@ impl CodeBindingRepository for PgCodeBindingRepository {
                     .connection
                     .client
                     .query(
-                        "SELECT lineage.record_id, lineage.repo_id, lineage.generation_id, retirement.record_id IS NOT NULL FROM code_lineage lineage LEFT JOIN code_lineage_retirements retirement ON retirement.tenant = lineage.tenant AND retirement.scope_key = lineage.scope_key AND retirement.record_id = lineage.record_id WHERE lineage.tenant = $1 AND lineage.scope_key = $2 ORDER BY lineage.record_id",
+                        "SELECT lineage.record_id, lineage.repo_id, lineage.generation_id, retirement.record_id IS NOT NULL, lineage.lineage_json FROM code_lineage lineage LEFT JOIN code_lineage_retirements retirement ON retirement.tenant = lineage.tenant AND retirement.scope_key = lineage.scope_key AND retirement.record_id = lineage.record_id WHERE lineage.tenant = $1 AND lineage.scope_key = $2 ORDER BY lineage.record_id",
                         &[&scope.tenant, &key],
                     )
                     .await
                     .map_err(|_| storage_error())?;
                 Ok(rows
                     .iter()
-                    .map(|row| TargetLineage {
-                        record_id: row.get(0),
-                        repo_id: row.get(1),
-                        generation_id: row.get(2),
-                        retired: row.get(3),
+                    .map(|row| {
+                        target_lineage_of_row(
+                            row.get(0),
+                            row.get(1),
+                            row.get(2),
+                            row.get(3),
+                            row.get(4),
+                        )
                     })
                     .collect())
             })
@@ -502,16 +531,19 @@ impl CodeBindingRepository for PgCodeBindingRepository {
                     .connection
                     .client
                     .query_opt(
-                        "SELECT lineage.record_id, lineage.repo_id, lineage.generation_id, retirement.record_id IS NOT NULL FROM code_lineage lineage LEFT JOIN code_lineage_retirements retirement ON retirement.tenant = lineage.tenant AND retirement.scope_key = lineage.scope_key AND retirement.record_id = lineage.record_id WHERE lineage.tenant = $1 AND lineage.scope_key = $2 AND lineage.record_id = $3",
+                        "SELECT lineage.record_id, lineage.repo_id, lineage.generation_id, retirement.record_id IS NOT NULL, lineage.lineage_json FROM code_lineage lineage LEFT JOIN code_lineage_retirements retirement ON retirement.tenant = lineage.tenant AND retirement.scope_key = lineage.scope_key AND retirement.record_id = lineage.record_id WHERE lineage.tenant = $1 AND lineage.scope_key = $2 AND lineage.record_id = $3",
                         &[&scope.tenant, &key, &record_id],
                     )
                     .await
                     .map_err(|_| storage_error())?;
-                Ok(row.map(|row| TargetLineage {
-                    record_id: row.get(0),
-                    repo_id: row.get(1),
-                    generation_id: row.get(2),
-                    retired: row.get(3),
+                Ok(row.map(|row| {
+                    target_lineage_of_row(
+                        row.get(0),
+                        row.get(1),
+                        row.get(2),
+                        row.get(3),
+                        row.get(4),
+                    )
                 }))
             })
         })

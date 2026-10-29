@@ -346,6 +346,7 @@ mod maintenance_retirement_contract {
                     generation_id: generation_id.to_string(),
                     source_path: format!("src/{record}.rs"),
                     contributors: vec![record.to_string()],
+                    span: None,
                 },
             ))
             .expect("put lineage");
@@ -577,5 +578,78 @@ mod maintenance_retirement_contract {
                 "fence inputs must be explicit: {call:?}"
             );
         }
+    }
+}
+
+/// Final r5 C3 (finding 2): the durable canonical source path and line span
+/// staged with a record's lineage survive the put_lineage → target_lineage
+/// round trip (record_lineage too) — the revision-bound descriptors the
+/// exact-read window validates mutable claims against.
+mod canonical_span_roundtrip {
+    use super::*;
+    use engram_knowledge::CodeBindingRepository as _;
+    use engram_store_sqlite::knowledge::SqlCodeBindingRepository;
+    use futures::executor::block_on;
+
+    #[test]
+    fn target_lineage_carries_durable_path_and_span() {
+        let dir = tempdir().expect("tempdir");
+        let store = SqlCodeBindingRepository::open(dir.path().join("spans.sqlite")).expect("open");
+        let scope = Scope {
+            tenant: "t".into(),
+            subject: None,
+            workspace: Some("w-spans".into()),
+            session: None,
+            environment: None,
+        };
+        let repo_id = RepoId("repo-span".into());
+        block_on(store.bind(CodeBinding {
+            scope: scope.clone(),
+            repo_id: repo_id.clone(),
+            branch_ref: "refs/heads/main".into(),
+            version: 1,
+            active_generation: None,
+            epoch: 0,
+        }))
+        .expect("bind");
+        block_on(store.put_lineage(
+            &scope,
+            "chunk-span-1",
+            engram_domain::CodeLineage {
+                repo_id: repo_id.clone(),
+                generation_id: "gen-1".to_string(),
+                source_path: "src/lib.rs".to_owned(),
+                contributors: vec!["doc-1".to_owned()],
+                span: Some(engram_domain::CanonicalSpan {
+                    start_line: 4,
+                    end_line: 9,
+                }),
+            },
+        ))
+        .expect("put lineage with span");
+
+        let lineage = block_on(store.target_lineage(&scope)).expect("target lineage");
+        let entry = lineage
+            .iter()
+            .find(|entry| entry.record_id == "chunk-span-1")
+            .expect("lineage entry present");
+        assert_eq!(entry.source_path, "src/lib.rs");
+        assert_eq!(
+            entry.span,
+            Some(engram_domain::CanonicalSpan {
+                start_line: 4,
+                end_line: 9
+            })
+        );
+        assert!(!entry.retired);
+
+        let keyed = block_on(store.record_lineage(&scope, "chunk-span-1"))
+            .expect("keyed lineage")
+            .expect("entry");
+        assert_eq!(keyed.source_path, "src/lib.rs");
+        assert_eq!(
+            keyed.span.map(|span| (span.start_line, span.end_line)),
+            Some((4, 9))
+        );
     }
 }

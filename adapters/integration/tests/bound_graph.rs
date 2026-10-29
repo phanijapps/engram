@@ -290,6 +290,7 @@ fn publish_generation_for_scope(
                 generation_id: generation_id.to_string(),
                 source_path: format!("src/{record}.rs"),
                 contributors: vec![record.to_string()],
+                span: None,
             },
         ))
         .expect("put lineage");
@@ -440,6 +441,7 @@ fn seed_graph(bindings: &SqlCodeBindingRepository, knowledge: &SqlKnowledgeStore
             generation_id: "gen-c".to_string(),
             source_path: "src/c-render.rs".to_string(),
             contributors: vec!["c-render".to_string()],
+            span: None,
         },
     ))
     .expect("repo-c lineage");
@@ -1470,6 +1472,7 @@ fn publish_attempt(
                 generation_id: generation_id.to_string(),
                 source_path: format!("src/{record}.rs"),
                 contributors: vec![record.to_string()],
+                span: None,
             },
         ))?;
     }
@@ -1700,6 +1703,7 @@ mod task_016 {
                 generation_id: "gen-staged".to_string(),
                 source_path: "src/staged.rs".to_string(),
                 contributors: vec!["staged-concept".to_string()],
+                span: None,
             },
         ))
         .expect("staged lineage");
@@ -2727,6 +2731,7 @@ mod task_016 {
                 generation_id: "gen-u".to_string(),
                 source_path: "src/staged.rs".to_string(),
                 contributors: vec!["concept-staged".to_string()],
+                span: None,
             },
         ))
         .expect("staged lineage");

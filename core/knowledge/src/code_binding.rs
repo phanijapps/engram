@@ -194,6 +194,17 @@ pub struct TargetLineage {
     /// lineage but are excluded from published-generation eligibility.
     #[serde(default)]
     pub retired: bool,
+    /// The record's durable canonical source path at its generation's pinned
+    /// commit (final r5 finding 2). Empty for lineage persisted before this
+    /// field existed — such rows can never path-match and so deny exact
+    /// participation (fail closed).
+    #[serde(default)]
+    pub source_path: String,
+    /// The record's durable canonical line span within `source_path`
+    /// (final r5 finding 2). `None` for records without a single canonical
+    /// span.
+    #[serde(default)]
+    pub span: Option<engram_domain::CanonicalSpan>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]

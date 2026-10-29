@@ -395,6 +395,7 @@ mod maintenance_retirement_contract {
                     generation_id: generation_id.to_string(),
                     source_path: format!("src/{record}.rs"),
                     contributors: vec![record.to_string()],
+                    span: None,
                 },
             ))
             .expect("put lineage");

@@ -63,6 +63,8 @@ impl engram_retrieval::CodeEligibilityResolver for RepositoryEligibilitySource {
                 repo_id: entry.repo_id,
                 generation_id: entry.generation_id,
                 retired: entry.retired,
+                source_path: entry.source_path,
+                span: entry.span,
             })
             .collect();
         Ok(engram_retrieval::BoundCodeEligibility {

@@ -659,6 +659,9 @@ mod tests {
         /// Durable staged lineage for ADDITIONAL participating chunks (the
         /// canonical origin selector reads chunk lineage, never stamps).
         extra_lineage: std::sync::Mutex<Vec<engram_knowledge::TargetLineage>>,
+        /// Durable canonical span for the DEFAULT participant
+        /// (`chunk-bound-1`) — set by fixtures that vary its claimed span.
+        default_span: std::sync::Mutex<Option<engram_domain::CanonicalSpan>>,
         descriptor_digest: std::sync::Mutex<Option<String>>,
         live_lease: std::sync::Mutex<Option<engram_knowledge::CodeReadLease>>,
         /// Deterministic mid-window publication (A4 barrier fixtures): when
@@ -696,6 +699,7 @@ mod tests {
                 live_lease: std::sync::Mutex::new(None),
                 retained_old: None,
                 extra_lineage: std::sync::Mutex::new(Vec::new()),
+                default_span: std::sync::Mutex::new(None),
                 flip_at_descriptor: std::sync::atomic::AtomicUsize::new(0),
                 descriptor_reads: std::sync::atomic::AtomicUsize::new(0),
                 flip_applied: std::sync::atomic::AtomicBool::new(false),
@@ -761,21 +765,51 @@ mod tests {
             self.generation.clone()
         }
 
-        /// Records durable lineage for ADDITIONAL participating chunks.
-        fn with_chunk_lineage(&self, entries: &[(String, String)]) {
+        /// Records durable lineage for ADDITIONAL participating chunks on
+        /// this double's canonical path (`src/bound.py`), each with its
+        /// durable canonical line span (final r5 finding 2).
+        fn with_chunk_lineage(&self, entries: &[(String, String, u32, u32)]) {
             let mut lineage = self.extra_lineage.lock().expect("lineage lock");
-            for (record_id, generation_id) in entries {
+            for (record_id, generation_id, start_line, end_line) in entries {
                 lineage.push(engram_knowledge::TargetLineage {
                     record_id: record_id.clone(),
                     repo_id: self.binding.repo_id.0.clone(),
                     generation_id: generation_id.clone(),
                     retired: false,
+                    source_path: "src/bound.py".to_owned(),
+                    span: Some(engram_domain::CanonicalSpan {
+                        start_line: *start_line,
+                        end_line: *end_line,
+                    }),
+                });
+            }
+        }
+
+        /// Records durable lineage for a chunk on an EXPLICIT canonical
+        /// path (same-header/different-file fixtures).
+        fn with_chunk_lineage_at_path(
+            &self,
+            entries: &[(String, String, String, Option<(u32, u32)>)],
+        ) {
+            let mut lineage = self.extra_lineage.lock().expect("lineage lock");
+            for (record_id, generation_id, source_path, span) in entries {
+                lineage.push(engram_knowledge::TargetLineage {
+                    record_id: record_id.clone(),
+                    repo_id: self.binding.repo_id.0.clone(),
+                    generation_id: generation_id.clone(),
+                    retired: false,
+                    source_path: source_path.clone(),
+                    span: span.map(|(start_line, end_line)| engram_domain::CanonicalSpan {
+                        start_line,
+                        end_line,
+                    }),
                 });
             }
         }
 
         /// Records RETIRED durable lineage (a retirement fact on the row's
-        /// own generation — positive ownership, denied participation).
+        /// own generation — positive ownership, denied participation);
+        /// path/span are irrelevant (retirement denies at routing).
         fn with_retired_lineage(&self, entries: &[(String, String)]) {
             let mut lineage = self.extra_lineage.lock().expect("lineage lock");
             for (record_id, generation_id) in entries {
@@ -784,8 +818,19 @@ mod tests {
                     repo_id: self.binding.repo_id.0.clone(),
                     generation_id: generation_id.clone(),
                     retired: true,
+                    source_path: "src/bound.py".to_owned(),
+                    span: None,
                 });
             }
+        }
+
+        /// Sets the DEFAULT participant's durable canonical span.
+        fn set_default_span(&self, start_line: u32, end_line: u32) {
+            *self.default_span.lock().expect("default span lock") =
+                Some(engram_domain::CanonicalSpan {
+                    start_line,
+                    end_line,
+                });
         }
 
         /// Two retained generations with gen-2 CURRENT (mixed-generation
@@ -940,13 +985,16 @@ mod tests {
             if scope != &self.binding.scope {
                 return Ok(Vec::new());
             }
-            // Default: the single-chunk fixture participant. Mixed-generation
-            // fixtures seed `extra_lineage` for their participating chunks.
+            // Default: the single-chunk fixture participant on the double's
+            // canonical path. Mixed-generation fixtures seed `extra_lineage`
+            // for their participating chunks.
             let mut lineage = vec![engram_knowledge::TargetLineage {
                 record_id: "chunk-bound-1".to_owned(),
                 repo_id: self.binding.repo_id.0.clone(),
                 generation_id: self.generation.id.clone(),
                 retired: false,
+                source_path: "src/bound.py".to_owned(),
+                span: *self.default_span.lock().expect("default span lock"),
             }];
             lineage.extend(self.extra_lineage.lock().expect("lineage lock").clone());
             Ok(lineage)
@@ -1285,6 +1333,10 @@ mod tests {
         let retained_root = dir.join("retained");
         let snapshot = retain_snapshot(&retained_root, commit, &files).expect("retain snapshot");
         let bindings = std::sync::Arc::new(InMemoryBindings::published(&snapshot.commit.oid));
+        // The DEFAULT participant's durable canonical span matches the
+        // fixture's staged claim (final r5 finding 2 fixtures validate
+        // claims against DURABLE spans, not against stored text).
+        bindings.set_default_span(start_line, end_line);
         bindings.set_descriptor_digest(
             engram_ingest::content_hash(&source)
                 .trim_start_matches("sha256:")
@@ -1327,7 +1379,7 @@ mod tests {
         dir: &std::path::Path,
         files: Vec<CommittedFile>,
         rows: Vec<engram_domain::KnowledgeChunk>,
-        lineage: &[(String, String)],
+        lineage: &[(String, String, u32, u32)],
     ) -> (App, std::path::PathBuf, std::sync::Arc<InMemoryBindings>) {
         let scope = crate::scope::project_scope("bound-project", "default");
         let commit = ResolvedCommit {
@@ -1406,8 +1458,8 @@ mod tests {
         // Both ambiguous chunks carry durable lineage on the published
         // generation — canonical participants whose spans genuinely clash.
         bindings.with_chunk_lineage(&[
-            ("chunk-alpha-1".to_owned(), "gen-1".to_owned()),
-            ("chunk-alpha-2".to_owned(), "gen-1".to_owned()),
+            ("chunk-alpha-1".to_owned(), "gen-1".to_owned(), 1, 2),
+            ("chunk-alpha-2".to_owned(), "gen-1".to_owned(), 4, 5),
         ]);
         let coordinator = CodeBindingCoordinator::new(
             bindings.clone() as std::sync::Arc<dyn CodeBindingRepository>,
@@ -1674,10 +1726,10 @@ mod tests {
         // unstamped and forged-stamp IMPOSTORS deliberately carry NO
         // lineage — stamps are not admissible evidence.
         bindings.with_chunk_lineage(&[
-            ("chunk-old-alpha".to_owned(), "gen-1".to_owned()),
-            ("chunk-old-gamma".to_owned(), "gen-1".to_owned()),
-            ("chunk-new-beta".to_owned(), "gen-2".to_owned()),
-            ("chunk-new-alpha".to_owned(), "gen-2".to_owned()),
+            ("chunk-old-alpha".to_owned(), "gen-1".to_owned(), 1, 2),
+            ("chunk-old-gamma".to_owned(), "gen-1".to_owned(), 4, 5),
+            ("chunk-new-beta".to_owned(), "gen-2".to_owned(), 2, 3),
+            ("chunk-new-alpha".to_owned(), "gen-2".to_owned(), 6, 7),
         ]);
         let knowledge: std::sync::Arc<dyn engram_integration::KnowledgeQuery> =
             std::sync::Arc::new(SeededQuery { chunks });
@@ -1888,7 +1940,7 @@ mod tests {
         };
         // Durable lineage ONLY on the retained old generation — the row is
         // provably BOUND CODE (this is not an unbound path).
-        bindings.with_chunk_lineage(&[("chunk-oldonly-1".to_owned(), "gen-1".to_owned())]);
+        bindings.with_chunk_lineage(&[("chunk-oldonly-1".to_owned(), "gen-1".to_owned(), 1, 2)]);
         let knowledge: std::sync::Arc<dyn engram_integration::KnowledgeQuery> =
             std::sync::Arc::new(SeededQuery { chunks: vec![row] });
         let coordinator = CodeBindingCoordinator::new(
@@ -1988,8 +2040,8 @@ mod tests {
         } else {
             vec![retired_row]
         };
-        let current_lineage: &[(String, String)] = if with_current {
-            &[("chunk-current-1".to_owned(), "gen-1".to_owned())]
+        let current_lineage: &[(String, String, u32, u32)] = if with_current {
+            &[("chunk-current-1".to_owned(), "gen-1".to_owned(), 1, 2)]
         } else {
             &[]
         };
@@ -2046,9 +2098,7 @@ mod tests {
         let app = retired_fact_app(dir.path(), true);
 
         // The exact path read serves the digest-validated whole blob.
-        let out = content_of(
-            &fetch_content(&app, &json!({ "path": "src/bound.py" })).unwrap(),
-        );
+        let out = content_of(&fetch_content(&app, &json!({ "path": "src/bound.py" })).unwrap());
         assert_eq!(out["source"], "exact");
 
         // The chunks fallback stitches ONLY the validated current
@@ -2089,6 +2139,343 @@ mod tests {
             "the retired symbol is not selectable: {}",
             retired_symbol.message
         );
+    }
+
+    /// Final r5 C3 (finding 2, the decisive widened-span regression): a
+    /// WIDENED legitimate span — alpha's true lines 1–2 claimed as 1–5 so
+    /// the span would encompass beta — can never smuggle the adjacent
+    /// symbol: the claim is validated against the DURABLE canonical span
+    /// (1–2) and denies; a first-line match inside an enlarged span
+    /// authenticates nothing (the C2-era substring check is gone).
+    #[test]
+    fn widened_span_cannot_smuggle_adjacent_symbol() {
+        let dir = tempfile::tempdir().unwrap();
+        let bound = b"def alpha():\r\n    return 1\r\n\r\ndef beta():\r\n    return 2\r\n".to_vec();
+        let row = |id: &str, name: &str, start: u32, end: u32, text: &str| {
+            engram_domain::KnowledgeChunk {
+                id: engram_domain::Id::from(id),
+                document_id: engram_domain::Id::from("doc-widen"),
+                source_id: engram_domain::Id::from("src-widen"),
+                kind: KnowledgeChunkKind::CodeSymbol,
+                text: text.to_owned(),
+                summary: None,
+                location: Some(engram_domain::SourceLocation {
+                    path: Some("src/bound.py".to_owned()),
+                    start_line: Some(start),
+                    end_line: Some(end),
+                    start_offset: None,
+                    end_offset: None,
+                    anchor: None,
+                }),
+                entities: vec![engram_domain::EntityRef {
+                    id: Some(engram_domain::Id::from(id)),
+                    kind: None,
+                    name: Some(name.to_owned()),
+                    aliases: Vec::new(),
+                }],
+                concepts: Vec::new(),
+                embedding_refs: Vec::new(),
+                content_hash: format!("sha256:{id}"),
+                provenance: fixture_provenance(),
+                policy: fixture_policy(),
+                created_at: chrono::Utc::now(),
+                updated_at: None,
+                metadata: None,
+            }
+        };
+        // alpha's row WIDENS its legitimate 1–2 to 1–5 (beta's first line
+        // still matches inside the enlarged span — the old predicate's
+        // flaw); beta's row is entirely legitimate.
+        let rows = vec![
+            row("chunk-widen-alpha", "alpha", 1, 5, "def alpha():"),
+            row("chunk-widen-beta", "beta", 4, 5, "def beta():"),
+        ];
+        let (app, _root, _bindings) = bound_app_with_rows(
+            dir.path(),
+            vec![CommittedFile {
+                path: "src/bound.py".into(),
+                oid: "b".repeat(40),
+                mode: "100644".to_owned(),
+                bytes: bound,
+            }],
+            rows,
+            &[
+                // DURABLE canonical spans: alpha 1–2, beta 4–5.
+                ("chunk-widen-alpha".to_owned(), "gen-1".to_owned(), 1, 2),
+                ("chunk-widen-beta".to_owned(), "gen-1".to_owned(), 4, 5),
+            ],
+        );
+        for args in [
+            json!({ "path": "src/bound.py" }),
+            json!({ "path": "src/bound.py", "symbol": "alpha" }),
+        ] {
+            let err = fetch_content(&app, &args).unwrap_err();
+            assert!(
+                err.message
+                    .contains("span that does not match the retained revision")
+                    && err.message.contains("canonical lines 1-2"),
+                "the widened 1-5 claim denies against the durable 1-2 span ({args}): {}",
+                err.message
+            );
+        }
+    }
+
+    /// Final r5 C3 (finding 2, the decisive same-header/different-file
+    /// regression): a current-lineage row whose durable canonical source
+    /// path is ANOTHER FILE denies even though its declaration header,
+    /// claimed span, repository and generation all match the request —
+    /// routing repository/generation never authenticates path identity.
+    #[test]
+    fn same_header_different_file_denies() {
+        let dir = tempfile::tempdir().unwrap();
+        // BOTH files carry the SAME declaration header at the SAME lines —
+        // content evidence cannot distinguish them; only the durable path
+        // association can.
+        let bound = b"def alpha():\r\n    return 1\r\n".to_vec();
+        let other = b"def alpha():\r\n    return 7\r\n".to_vec();
+        let row = |id: &str, name: &str| engram_domain::KnowledgeChunk {
+            id: engram_domain::Id::from(id),
+            document_id: engram_domain::Id::from("doc-samehdr"),
+            source_id: engram_domain::Id::from("src-samehdr"),
+            kind: KnowledgeChunkKind::CodeSymbol,
+            text: "def alpha():".to_owned(),
+            summary: None,
+            location: Some(engram_domain::SourceLocation {
+                path: Some("src/bound.py".to_owned()),
+                start_line: Some(1),
+                end_line: Some(2),
+                start_offset: None,
+                end_offset: None,
+                anchor: None,
+            }),
+            entities: vec![engram_domain::EntityRef {
+                id: Some(engram_domain::Id::from(id)),
+                kind: None,
+                name: Some(name.to_owned()),
+                aliases: Vec::new(),
+            }],
+            concepts: Vec::new(),
+            embedding_refs: Vec::new(),
+            content_hash: format!("sha256:{id}"),
+            provenance: fixture_provenance(),
+            policy: fixture_policy(),
+            created_at: chrono::Utc::now(),
+            updated_at: None,
+            metadata: None,
+        };
+        let (app, _root, bindings) = bound_app_with_rows(
+            dir.path(),
+            vec![
+                CommittedFile {
+                    path: "src/bound.py".into(),
+                    oid: "b".repeat(40),
+                    mode: "100644".to_owned(),
+                    bytes: bound,
+                },
+                CommittedFile {
+                    path: "src/other.py".into(),
+                    oid: "c".repeat(40),
+                    mode: "100644".to_owned(),
+                    bytes: other,
+                },
+            ],
+            vec![
+                row("chunk-samehdr-real", "alpha"),
+                row("chunk-samehdr-moved", "alpha"),
+            ],
+            &[("chunk-samehdr-real".to_owned(), "gen-1".to_owned(), 1, 2)],
+        );
+        // The moved row's durable canonical association is the OTHER file
+        // (same header, same generation, same repository).
+        bindings.with_chunk_lineage_at_path(&[(
+            "chunk-samehdr-moved".to_owned(),
+            "gen-1".to_owned(),
+            "src/other.py".to_owned(),
+            Some((1, 2)),
+        )]);
+        for args in [
+            json!({ "path": "src/bound.py" }),
+            json!({ "path": "src/bound.py", "symbol": "alpha" }),
+        ] {
+            let err = fetch_content(&app, &args).unwrap_err();
+            assert!(
+                err.message.contains("canonical source path differs"),
+                "a same-header row from another file denies ({args}): {}",
+                err.message
+            );
+        }
+    }
+
+    /// Final r5 C3 (finding 2, repeated headers): when the same declaration
+    /// header occurs at multiple places in one file, a symbol request
+    /// serves ONLY the record's durable canonical occurrence — never an
+    /// enlarged span covering both, and never a silent merge (two records
+    /// with distinct canonical spans stay AMBIGUOUS).
+    #[test]
+    fn repeated_header_selects_only_canonical_occurrence() {
+        let dir = tempfile::tempdir().unwrap();
+        let bound =
+            b"def alpha():\r\n    return 1\r\n\r\ndef alpha():\r\n    return 2\r\n".to_vec();
+        let row = |id: &str, start: u32, end: u32| engram_domain::KnowledgeChunk {
+            id: engram_domain::Id::from(id),
+            document_id: engram_domain::Id::from("doc-repeated"),
+            source_id: engram_domain::Id::from("src-repeated"),
+            kind: KnowledgeChunkKind::CodeSymbol,
+            text: "def alpha():".to_owned(),
+            summary: None,
+            location: Some(engram_domain::SourceLocation {
+                path: Some("src/bound.py".to_owned()),
+                start_line: Some(start),
+                end_line: Some(end),
+                start_offset: None,
+                end_offset: None,
+                anchor: None,
+            }),
+            entities: vec![engram_domain::EntityRef {
+                id: Some(engram_domain::Id::from(id)),
+                kind: None,
+                name: Some("alpha".to_owned()),
+                aliases: Vec::new(),
+            }],
+            concepts: Vec::new(),
+            embedding_refs: Vec::new(),
+            content_hash: format!("sha256:{id}"),
+            provenance: fixture_provenance(),
+            policy: fixture_policy(),
+            created_at: chrono::Utc::now(),
+            updated_at: None,
+            metadata: None,
+        };
+        let file = || {
+            vec![CommittedFile {
+                path: "src/bound.py".into(),
+                oid: "b".repeat(40),
+                mode: "100644".to_owned(),
+                bytes: bound.clone(),
+            }]
+        };
+
+        // ONE record whose durable canonical occurrence is the SECOND
+        // header (lines 4–5): the symbol serves exactly those bytes.
+        let (app, _root, _bindings) = bound_app_with_rows(
+            &dir.path().join("one"),
+            file(),
+            vec![row("chunk-repeated-2", 4, 5)],
+            &[("chunk-repeated-2".to_owned(), "gen-1".to_owned(), 4, 5)],
+        );
+        let out = content_of(
+            &fetch_content(&app, &json!({ "path": "src/bound.py", "symbol": "alpha" })).unwrap(),
+        );
+        assert_eq!(out["source"], "exact");
+        assert_eq!(
+            out["content"].as_str().unwrap(),
+            "def alpha():\r\n    return 2\r\n",
+            "only the CANONICAL occurrence (lines 4-5) serves — never an enlarged \
+             span covering both occurrences"
+        );
+        let second_offset = bound
+            .windows(4)
+            .enumerate()
+            .filter(|(_, window)| window == b"def ")
+            .nth(1)
+            .expect("two occurrences")
+            .0;
+        assert_eq!(
+            out["span"]["start"],
+            json!(second_offset),
+            "the served span starts at the second occurrence's byte offset"
+        );
+
+        // TWO records with DISTINCT canonical occurrences: the symbol stays
+        // AMBIGUOUS — the occurrences are never silently merged into one
+        // enlarged span.
+        let (app2, _root2, _bindings2) = bound_app_with_rows(
+            &dir.path().join("two"),
+            file(),
+            vec![row("chunk-repeated-a", 1, 2), row("chunk-repeated-b", 4, 5)],
+            &[
+                ("chunk-repeated-a".to_owned(), "gen-1".to_owned(), 1, 2),
+                ("chunk-repeated-b".to_owned(), "gen-1".to_owned(), 4, 5),
+            ],
+        );
+        let err = fetch_content(&app2, &json!({ "path": "src/bound.py", "symbol": "alpha" }))
+            .unwrap_err();
+        assert!(
+            err.message.contains("symbol selection failed") && err.message.contains("ambiguous"),
+            "two distinct canonical occurrences stay ambiguous: {}",
+            err.message
+        );
+    }
+
+    /// Final r5 C3 (finding 2, malformed claims REJECT — never normalize,
+    /// never clamp, never skip): a participant without a claimed span, one
+    /// claiming line 0, reversed bounds, and an end beyond the revision all
+    /// deny with explicit malformed-bounds reasons; a missing span does not
+    /// skip validation.
+    #[test]
+    fn malformed_and_missing_span_claims_reject() {
+        let dir = tempfile::tempdir().unwrap();
+        let bound = b"def alpha():\r\n    return 1\r\n\r\ndef beta():\r\n    return 2\r\n".to_vec();
+        let row = |id: &str, start: Option<u32>, end: Option<u32>| engram_domain::KnowledgeChunk {
+            id: engram_domain::Id::from(id),
+            document_id: engram_domain::Id::from("doc-malformed"),
+            source_id: engram_domain::Id::from("src-malformed"),
+            kind: KnowledgeChunkKind::CodeSymbol,
+            text: "def alpha():".to_owned(),
+            summary: None,
+            location: Some(engram_domain::SourceLocation {
+                path: Some("src/bound.py".to_owned()),
+                start_line: start,
+                end_line: end,
+                start_offset: None,
+                end_offset: None,
+                anchor: None,
+            }),
+            entities: vec![engram_domain::EntityRef {
+                id: Some(engram_domain::Id::from(id)),
+                kind: None,
+                name: Some("alpha".to_owned()),
+                aliases: Vec::new(),
+            }],
+            concepts: Vec::new(),
+            embedding_refs: Vec::new(),
+            content_hash: format!("sha256:{id}"),
+            provenance: fixture_provenance(),
+            policy: fixture_policy(),
+            created_at: chrono::Utc::now(),
+            updated_at: None,
+            metadata: None,
+        };
+        let file = || {
+            vec![CommittedFile {
+                path: "src/bound.py".into(),
+                oid: "b".repeat(40),
+                mode: "100644".to_owned(),
+                bytes: bound.clone(),
+            }]
+        };
+        // (claim, expected denial fragment) — the DURABLE canonical span is
+        // the legitimate (1, 2) in every case.
+        let cases: [(Option<u32>, Option<u32>, &str); 4] = [
+            (None, None, "claims no line span"),
+            (Some(0), Some(2), "start line 0"),
+            (Some(3), Some(2), "reversed bounds reject"),
+            (Some(1), Some(99), "never clamped"),
+        ];
+        for (index, (start, end, fragment)) in cases.into_iter().enumerate() {
+            let (app, _root, _bindings) = bound_app_with_rows(
+                &dir.path().join(format!("case-{index}")),
+                file(),
+                vec![row(&format!("chunk-malformed-{index}"), start, end)],
+                &[(format!("chunk-malformed-{index}"), "gen-1".to_owned(), 1, 2)],
+            );
+            let err = fetch_content(&app, &json!({ "path": "src/bound.py" })).unwrap_err();
+            assert!(
+                err.message.contains(fragment),
+                "claim ({start:?}, {end:?}) must reject with `{fragment}`: {}",
+                err.message
+            );
+        }
     }
 
     /// A4 (r5): an IMPOSTOR-ONLY path — rows carrying FORGED current stamps
@@ -2209,8 +2596,10 @@ mod tests {
             }],
             rows,
             &[
-                ("chunk-span-real".to_owned(), "gen-1".to_owned()),
-                ("chunk-span-tampered".to_owned(), "gen-1".to_owned()),
+                ("chunk-span-real".to_owned(), "gen-1".to_owned(), 1, 2),
+                // The tampered row's DURABLE canonical span is beta's true
+                // span (4-5); its mutable claim says 1-1.
+                ("chunk-span-tampered".to_owned(), "gen-1".to_owned(), 4, 5),
             ],
         );
         let err = fetch_content(&app, &json!({ "path": "src/bound.py" })).unwrap_err();
@@ -2316,15 +2705,21 @@ mod tests {
                 },
             ],
             vec![legit, tampered],
-            &[
-                ("chunk-path-real".to_owned(), "gen-1".to_owned()),
-                ("chunk-path-tampered".to_owned(), "gen-1".to_owned()),
-            ],
+            &[("chunk-path-real".to_owned(), "gen-1".to_owned(), 1, 2)],
         );
+        // The tampered row's DURABLE canonical path is the OTHER FILE — its
+        // mutable location claims this path, but the durable association
+        // says src/other.py (final r5 finding 2: repository/generation
+        // match does not authenticate path identity).
+        _bindings.with_chunk_lineage_at_path(&[(
+            "chunk-path-tampered".to_owned(),
+            "gen-1".to_owned(),
+            "src/other.py".to_owned(),
+            Some((1, 2)),
+        )]);
         let err = fetch_content(&app, &json!({ "path": "src/bound.py" })).unwrap_err();
         assert!(
-            err.message
-                .contains("span that does not match the retained revision"),
+            err.message.contains("canonical source path differs"),
             "a changed path on a canonical-ID row denies: {}",
             err.message
         );
@@ -2438,7 +2833,10 @@ mod tests {
             .chain(b"'\r\n".to_vec())
             .collect();
         let lossy = String::from_utf8_lossy(&source_bytes).into_owned();
-        let (app, _retained) = bound_app_with_symbols_bytes(dir.path(), &source_bytes, 1, 3);
+        // The file has TWO lines (it ends with CRLF); the claim spans its
+        // true lines 1-2 — final r5 finding 2 rejects out-of-range span
+        // ends instead of clamping them to EOF.
+        let (app, _retained) = bound_app_with_symbols_bytes(dir.path(), &source_bytes, 1, 2);
         let out = content_of(&fetch_content(&app, &json!({ "path": "src/bound.py" })).unwrap());
         assert_eq!(out["source"], "exact");
         assert_eq!(out["encoding"], "hex");

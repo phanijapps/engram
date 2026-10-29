@@ -76,7 +76,11 @@ pub enum ParticipantExactSource {
 }
 
 /// Internal immutable participant descriptor (D3): exists only INSIDE this
-/// module's operations — deliberately not a public DTO.
+/// module's operations — deliberately not a public DTO. Carries BOTH the
+/// caller's claimed span (mutable row state) and the DURABLE canonical
+/// path/span copied from the pinned window's view (final r5 finding 2) —
+/// participation is authenticated by comparing the two, never by trusting
+/// the claim.
 #[derive(Debug, Clone)]
 struct ParticipantDescriptor {
     record_id: String,
@@ -84,6 +88,10 @@ struct ParticipantDescriptor {
     end_line: Option<u32>,
     names: Vec<String>,
     text_head: String,
+    /// The record's DURABLE canonical source path (from the pinned view).
+    canonical_path: String,
+    /// The record's DURABLE canonical line span (from the pinned view).
+    canonical_span: Option<engram_domain::CanonicalSpan>,
 }
 
 /// Internal routing classification of the candidate set against one view.
@@ -92,6 +100,14 @@ enum ParticipantRouting {
     Unbound,
     WithoutCurrent {
         lineage_record_ids: Vec<String>,
+    },
+    /// Current durable lineage whose CANONICAL SOURCE PATH differs from the
+    /// requested path (final r5 finding 2): repository/generation match is
+    /// not path identity — such rows deny instead of participating, and the
+    /// durable ownership means the request can never fall back to ordinary
+    /// verbatim/stitching.
+    ForeignPath {
+        record_ids: Vec<String>,
     },
     Ambiguous {
         origins: Vec<(String, String)>,
@@ -103,10 +119,26 @@ enum ParticipantRouting {
     },
 }
 
+/// Canonical path comparison form: the same normalization MCP applies
+/// (`./` prefix and trailing `/` stripped) so a durable staged path and a
+/// caller request compare by identity, not by spelling.
+fn normalize_source_path(path: &str) -> &str {
+    path.trim_start_matches("./").trim_end_matches('/')
+}
+
+fn foreign_path_reason(record_ids: &[String]) -> String {
+    format!(
+        "matched chunks carry current durable lineage whose canonical source \
+         path differs from the requested path (records: {record_ids:?})"
+    )
+}
+
 fn route_against_view(
     view: &engram_retrieval::BoundCodeView,
+    path: &str,
     candidates: &[ExactReadCandidate],
 ) -> ParticipantRouting {
+    let requested_path = normalize_source_path(path);
     let published: std::collections::BTreeSet<(String, String)> = view
         .eligible_bindings()
         .into_iter()
@@ -115,6 +147,7 @@ fn route_against_view(
     let mut descriptors = Vec::new();
     let mut origins: Vec<(String, String)> = Vec::new();
     let mut noncurrent: Vec<String> = Vec::new();
+    let mut foreign_path: Vec<String> = Vec::new();
     for candidate in candidates {
         // POSITIVE durable ownership (review r5, final finding 1) is
         // `is_code_record` — lineage membership INCLUDING retired records.
@@ -151,6 +184,20 @@ fn route_against_view(
             noncurrent.push(candidate.record_id.clone());
             continue;
         }
+        // Canonical PATH identity (final r5 finding 2): the routing
+        // association carries repository/generation, but a current-lineage
+        // row whose durable canonical source path differs from the
+        // requested path is a moved/impostor row for THIS path — it denies
+        // even when repository and generation match. The durable path is
+        // copied from the pinned view (never from the mutable row).
+        let canonical_path = view
+            .code_source_path_of(candidate.record_id.as_str())
+            .to_owned();
+        if normalize_source_path(&canonical_path) != requested_path {
+            foreign_path.push(candidate.record_id.clone());
+            continue;
+        }
+        let canonical_span = view.code_span_of(candidate.record_id.as_str());
         if !origins.contains(&origin) {
             origins.push(origin);
         }
@@ -160,7 +207,14 @@ fn route_against_view(
             end_line: candidate.end_line,
             names: candidate.names.clone(),
             text_head: candidate.text_head.clone(),
+            canonical_path,
+            canonical_span,
         });
+    }
+    if !foreign_path.is_empty() {
+        return ParticipantRouting::ForeignPath {
+            record_ids: foreign_path,
+        };
     }
     match origins.as_slice() {
         [] => {
@@ -196,74 +250,144 @@ fn line_start_offsets(blob: &[u8]) -> Vec<usize> {
 
 /// Computes the requested symbol's byte span from the participant
 /// descriptors and VALIDATES every participant's claimed span against the
-/// digest-validated retained bytes: a canonical-ID row whose claimed path or
-/// span was changed (its stored text line does not appear inside its claimed
-/// span of this revision's blob) denies — current durable-ID membership
-/// alone never authenticates a mutable row's span claim.
+/// DURABLE canonical span staged at publication (final r5 finding 2): a
+/// canonical-ID row whose claimed span does not EQUAL its durable span
+/// denies — current durable-ID membership alone never authenticates a
+/// mutable row's span claim, and mutable stored text is never consulted for
+/// span identity (the C2-era "first line found anywhere inside the claimed
+/// span" substring check authenticated neither the span's start nor its
+/// width). Malformed claims (missing, zero start, reversed, beyond-file
+/// end) reject; they are never normalized or clamped.
 fn participant_span(
     descriptors: &[ParticipantDescriptor],
     symbol: Option<&str>,
     blob: &[u8],
 ) -> Result<Option<(usize, usize)>, (bool, String)> {
     let offsets = line_start_offsets(blob);
+    // The revision's line count — the exclusive bound every claimed and
+    // durable span end is validated against BEFORE any byte offset is
+    // computed (final r5 finding 2: out-of-range ends REJECT, never clamp).
+    // A blob ending in `\n` has `offsets.len() - 1` lines (the final entry
+    // is EOF); one without a trailing newline has `offsets.len()` lines
+    // (the last line runs to EOF).
+    let line_count = if blob.last() == Some(&b'\n') || blob.is_empty() {
+        offsets.len().saturating_sub(1)
+    } else {
+        offsets.len()
+    } as u32;
+    // Byte span of a VALIDATED (start, end): both within [1, line_count].
+    // For `end == line_count` on a file without a trailing newline the line
+    // genuinely extends to EOF — `blob.len()` is that line's exact end, not
+    // a clamp (every bound was validated against `line_count` above).
     let span_bytes = |start_line: u32, end_line: u32| -> Option<(usize, usize)> {
-        let start_line = start_line.max(1) as usize;
-        let end_line = (end_line.max(start_line as u32)) as usize;
-        let start = *offsets.get(start_line.checked_sub(1)?)?;
-        let end = offsets.get(end_line).copied().unwrap_or(blob.len());
+        let start = *offsets.get(start_line.checked_sub(1)? as usize)?;
+        let end = offsets
+            .get(end_line as usize)
+            .copied()
+            .unwrap_or(blob.len());
         (start <= end && end <= blob.len()).then_some((start, end))
     };
-    // Content validation: every participant with a claimed span and stored
-    // text must have that text's FIRST LINE inside its claimed span of THIS
-    // revision's blob.
+    // Span identity (final r5 finding 2): every participant is validated
+    // against its DURABLE canonical span — nothing skips validation. The
+    // claimed bounds must be present and well-formed (malformed bounds
+    // REJECT: start 0, reversed, end beyond the revision are never
+    // normalized or clamped), and the claim must EQUAL the durable span
+    // recorded at publication (a first-line substring anywhere in an
+    // enlarged span authenticates nothing — mutable text is not consulted
+    // for span identity at all, so missing spans and empty first lines
+    // cannot skip this check either: both fail claim equality).
+    let mut durable_spans: Vec<(&ParticipantDescriptor, engram_domain::CanonicalSpan)> =
+        Vec::with_capacity(descriptors.len());
     for descriptor in descriptors {
-        let (Some(start_line), Some(end_line)) = (descriptor.start_line, descriptor.end_line)
+        let (Some(claimed_start), Some(claimed_end)) = (descriptor.start_line, descriptor.end_line)
         else {
-            continue;
-        };
-        let first_line = descriptor.text_head.lines().next().unwrap_or("");
-        if first_line.is_empty() {
-            continue;
-        }
-        let Some((start, end)) = span_bytes(start_line, end_line) else {
             return Err((
                 false,
                 format!(
-                    "participant '{}' claims a span outside the retained revision",
+                    "participant '{}' claims no line span — a participant without a \
+                     claimed span cannot be authenticated against its durable canonical span",
                     descriptor.record_id
                 ),
             ));
         };
-        if !blob[start..end]
-            .windows(first_line.len())
-            .any(|window| window == first_line.as_bytes())
+        if claimed_start == 0 {
+            return Err((
+                false,
+                format!(
+                    "participant '{}' claims a malformed span (start line 0 — lines are \
+                     1-based)",
+                    descriptor.record_id
+                ),
+            ));
+        }
+        if claimed_end < claimed_start {
+            return Err((
+                false,
+                format!(
+                    "participant '{}' claims a malformed span (end line {claimed_end} before \
+                     start line {claimed_start} — reversed bounds reject, they are never \
+                     normalized)",
+                    descriptor.record_id
+                ),
+            ));
+        }
+        if claimed_end > line_count {
+            return Err((
+                false,
+                format!(
+                    "participant '{}' claims a span beyond the retained revision (end line \
+                     {claimed_end} > {line_count} lines — out-of-range bounds reject, they \
+                     are never clamped)",
+                    descriptor.record_id
+                ),
+            ));
+        }
+        let Some(durable) = descriptor.canonical_span else {
+            return Err((
+                false,
+                format!(
+                    "participant '{}' has no durable canonical span for its path in the \
+                     indexed generation (pre-span lineage cannot be authenticated — denied)",
+                    descriptor.record_id
+                ),
+            ));
+        };
+        if durable.start_line == 0
+            || durable.end_line < durable.start_line
+            || durable.end_line > line_count
         {
             return Err((
                 false,
                 format!(
-                    "participant '{}' has a span that does not match the retained revision \
-                     (its path or span was changed)",
+                    "participant '{}' has a durable canonical span outside the retained \
+                     revision",
                     descriptor.record_id
                 ),
             ));
         }
+        if (claimed_start, claimed_end) != (durable.start_line, durable.end_line) {
+            return Err((
+                false,
+                format!(
+                    "participant '{}' has a span that does not match the retained revision \
+                     (its path or span was changed: claimed lines {claimed_start}-{claimed_end}, \
+                     canonical lines {}-{})",
+                    descriptor.record_id, durable.start_line, durable.end_line
+                ),
+            ));
+        }
+        durable_spans.push((descriptor, durable));
     }
     let Some(symbol) = symbol else {
         return Ok(None);
     };
-    let mut spans: Vec<(u32, u32)> = descriptors
+    // Symbol selection: names (mutable row state) select WHICH participant
+    // is served, but the SERVED span is always the DURABLE canonical span —
+    // repeated headers resolve to the record's canonical occurrence only.
+    let mut spans: Vec<(u32, u32)> = durable_spans
         .iter()
-        .filter_map(|descriptor| {
-            if !descriptor.names.iter().any(|name| name == symbol) {
-                return None;
-            }
-            Some((
-                descriptor.start_line.unwrap_or(1),
-                descriptor
-                    .end_line
-                    .unwrap_or(descriptor.start_line.unwrap_or(1)),
-            ))
-        })
+        .filter(|(descriptor, _)| descriptor.names.iter().any(|name| name == symbol))
+        .map(|(_, durable)| (durable.start_line, durable.end_line))
         .collect();
     spans.sort();
     spans.dedup();
@@ -344,12 +468,18 @@ impl CodeBindingCoordinator {
         retained: &Arc<dyn RetainedSourceReader>,
     ) -> CoreResult<ParticipantExactSource> {
         let routing_view = self.eligibility_view(scope, None).await?;
-        let anchor_repo = match route_against_view(&routing_view, candidates) {
+        let anchor_repo = match route_against_view(&routing_view, path, candidates) {
             ParticipantRouting::Unbound => return Ok(ParticipantExactSource::Unbound),
             ParticipantRouting::WithoutCurrent { lineage_record_ids } => {
                 return Ok(ParticipantExactSource::Denied {
                     symbol_selection: false,
                     reason: without_current_reason(&lineage_record_ids),
+                });
+            }
+            ParticipantRouting::ForeignPath { record_ids } => {
+                return Ok(ParticipantExactSource::Denied {
+                    symbol_selection: false,
+                    reason: foreign_path_reason(&record_ids),
                 });
             }
             ParticipantRouting::Ambiguous { origins } => {
@@ -400,7 +530,7 @@ impl CodeBindingCoordinator {
                         &eligibility,
                     )
                     .await?;
-                    let routed = route_against_view(&view, &candidates);
+                    let routed = route_against_view(&view, &path, &candidates);
                     let (repo_id, generation_id, descriptors) = match routed {
                         ParticipantRouting::Bound {
                             repo_id,
@@ -414,6 +544,12 @@ impl CodeBindingCoordinator {
                             return Ok(ParticipantExactSource::Denied {
                                 symbol_selection: false,
                                 reason: without_current_reason(&lineage_record_ids),
+                            });
+                        }
+                        ParticipantRouting::ForeignPath { record_ids } => {
+                            return Ok(ParticipantExactSource::Denied {
+                                symbol_selection: false,
+                                reason: foreign_path_reason(&record_ids),
                             });
                         }
                         ParticipantRouting::Ambiguous { origins } => {

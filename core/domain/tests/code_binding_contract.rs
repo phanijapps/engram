@@ -52,6 +52,7 @@ mod task_001 {
             generation_id: g.id.clone(),
             source_path: "src/lib.rs".into(),
             contributors: vec!["src/lib.rs".into()],
+            span: None,
         };
         l.validate().unwrap();
         roundtrip(&l);
@@ -121,6 +122,7 @@ mod task_001 {
             generation_id: "g".into(),
             source_path: "../secret".into(),
             contributors: vec!["x".into()],
+            span: None,
         };
         assert_eq!(l.validate(), Err(CodeBindingError::InvalidSource));
         l.source_path = "src/a".into();
@@ -205,6 +207,7 @@ mod task_002 {
             generation_id: g.id.clone(),
             source_path: "src/lib.rs".into(),
             contributors: vec!["src/lib.rs".into()],
+            span: None,
         };
         let source = IndexedSource {
             repo_id: b.repo_id.clone(),

@@ -62,12 +62,16 @@ mod tests {
                     repo_id: "repo".to_owned(),
                     generation_id: "gen-published".to_owned(),
                     retired: false,
+                    source_path: String::new(),
+                    span: None,
                 },
                 DurableLineage {
                     record_id: "chunk-stale".to_owned(),
                     repo_id: "repo".to_owned(),
                     generation_id: "gen-old".to_owned(),
                     retired: false,
+                    source_path: String::new(),
+                    span: None,
                 },
             ],
         };
@@ -1119,6 +1123,7 @@ mod authority_tests {
                 generation_id: "gen-a".to_string(),
                 source_path: "src/x.rs".to_string(),
                 contributors: vec![format!("{run}-entity-concept")],
+                span: None,
             },
         ))
         .expect("put lineage");

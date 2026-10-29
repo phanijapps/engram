@@ -49,12 +49,19 @@ pub struct BoundBinding {
 /// `retired` (review r5 finding 2) is the additive retirement fact: a retired
 /// association stays POSITIVE code ownership for classification (the record
 /// is never ordinary again) while being explicitly INELIGIBLE in every view.
-#[derive(Clone, Debug, PartialEq, Eq)]
+/// `source_path`/`span` (final r5 finding 2) are the record's durable
+/// canonical source path and line span at the generation's pinned commit —
+/// the revision-bound descriptors participant claims are validated against.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct DurableLineage {
     pub record_id: String,
     pub repo_id: String,
     pub generation_id: String,
     pub retired: bool,
+    /// Empty when unknown (pre-span lineage) — such rows can never
+    /// path-match an exact participant read and deny fail-closed.
+    pub source_path: String,
+    pub span: Option<engram_domain::CanonicalSpan>,
 }
 
 /// Published-generation eligibility for one scope, resolved once per request
@@ -98,6 +105,10 @@ pub struct BoundCodeView {
     /// Retired durable-lineage records (finding 2): positive code ownership,
     /// explicitly denied eligibility.
     retired: BTreeSet<String>,
+    /// record → durable canonical source path (final r5 finding 2).
+    source_paths: BTreeMap<String, String>,
+    /// record → durable canonical line span (final r5 finding 2).
+    canonical_spans: BTreeMap<String, engram_domain::CanonicalSpan>,
     requested_keys: Option<BTreeSet<String>>,
 }
 
@@ -153,6 +164,16 @@ impl BoundCodeView {
                 .iter()
                 .filter(|entry| entry.retired)
                 .map(|entry| entry.record_id.clone())
+                .collect(),
+            source_paths: eligibility
+                .lineage
+                .iter()
+                .map(|entry| (entry.record_id.clone(), entry.source_path.clone()))
+                .collect(),
+            canonical_spans: eligibility
+                .lineage
+                .iter()
+                .filter_map(|entry| entry.span.map(|span| (entry.record_id.clone(), span)))
                 .collect(),
             requested_keys: None,
         }
@@ -306,6 +327,24 @@ impl BoundCodeView {
             .get(record_id)
             .map(|(repo, generation)| (repo.as_str(), generation.as_str()))
     }
+
+    /// The record's durable canonical source path (final r5 finding 2) —
+    /// empty when the lineage carries no path (pre-path rows), which can
+    /// never equal a requested path and so fails closed at the participant
+    /// path check.
+    pub fn code_source_path_of(&self, record_id: &str) -> &str {
+        self.source_paths
+            .get(record_id)
+            .map(String::as_str)
+            .unwrap_or("")
+    }
+
+    /// The record's durable canonical line span (final r5 finding 2), when
+    /// one exists — the revision-bound span a mutable row's claim must equal
+    /// exactly to participate in an exact read.
+    pub fn code_span_of(&self, record_id: &str) -> Option<engram_domain::CanonicalSpan> {
+        self.canonical_spans.get(record_id).copied()
+    }
 }
 
 /// Rejects an unbound code read attempt with the typed contract error.
@@ -379,9 +418,61 @@ mod tests {
                     repo_id: (*repo).to_owned(),
                     generation_id: (*generation).to_owned(),
                     retired: false,
+                    source_path: String::new(),
+                    span: None,
                 })
                 .collect(),
         }
+    }
+
+    #[test]
+    fn durable_canonical_path_and_span_are_carried_by_the_view() {
+        // Final r5 finding 2: the view carries each record's durable
+        // canonical source path and line span — the revision-bound
+        // descriptors participant claims are validated against — and an
+        // unknown path resolves to the empty fail-closed string.
+        let eligibility = BoundCodeEligibility {
+            epoch: 3,
+            bindings: vec![BoundBinding {
+                repo_id: "repo-a".to_owned(),
+                branch_ref: "refs/heads/main".to_owned(),
+                generation_id: "gen-1".to_owned(),
+            }],
+            lineage: vec![
+                DurableLineage {
+                    record_id: "rec-spanned".to_owned(),
+                    repo_id: "repo-a".to_owned(),
+                    generation_id: "gen-1".to_owned(),
+                    retired: false,
+                    source_path: "src/lib.rs".to_owned(),
+                    span: Some(engram_domain::CanonicalSpan {
+                        start_line: 4,
+                        end_line: 9,
+                    }),
+                },
+                DurableLineage {
+                    record_id: "rec-legacy".to_owned(),
+                    repo_id: "repo-a".to_owned(),
+                    generation_id: "gen-1".to_owned(),
+                    retired: false,
+                    source_path: String::new(),
+                    span: None,
+                },
+            ],
+        };
+        let view = BoundCodeView::from_eligibility(&eligibility);
+        assert_eq!(view.code_source_path_of("rec-spanned"), "src/lib.rs");
+        assert_eq!(
+            view.code_span_of("rec-spanned"),
+            Some(engram_domain::CanonicalSpan {
+                start_line: 4,
+                end_line: 9
+            })
+        );
+        assert_eq!(view.code_source_path_of("rec-legacy"), "");
+        assert_eq!(view.code_span_of("rec-legacy"), None);
+        assert_eq!(view.code_source_path_of("rec-unknown"), "");
+        assert_eq!(view.code_span_of("rec-unknown"), None);
     }
 
     #[test]

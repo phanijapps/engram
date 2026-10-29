@@ -246,6 +246,7 @@ fn publish_with_lineage(
                 generation_id: generation_id.to_string(),
                 source_path: format!("src/{record}.rs"),
                 contributors: vec![record.to_string()],
+                span: None,
             },
         ))
         .expect("put lineage");
@@ -328,6 +329,7 @@ fn fixture(dir: &std::path::Path) -> Fixture {
                 generation_id: "gen-b".to_string(),
                 source_path: "src/crowd.rs".to_string(),
                 contributors: vec!["chunk-repo-b".to_string()],
+                span: None,
             },
         ))
         .expect("repo-b lineage");
@@ -3342,6 +3344,7 @@ mod task_013 {
                         generation_id: "gen-b-2".to_string(),
                         source_path: "src/staged.rs".to_string(),
                         contributors: vec![staged_memory.id.as_str().to_string()],
+                        span: None,
                     },
                 ))
                 .expect("staged lineage");
@@ -3927,6 +3930,7 @@ mod task_013 {
                         generation_id: "gen-a-1".to_string(),
                         source_path: "src/ep-stale.rs".to_string(),
                         contributors: vec!["entity-ep-stale".to_string()],
+                        span: None,
                     },
                 ))
                 .expect("stale endpoint lineage");
@@ -4201,6 +4205,7 @@ mod task_013 {
                             generation_id: generation.to_string(),
                             source_path: format!("src/{source}.rs"),
                             contributors: vec![source.to_string()],
+                            span: None,
                         },
                     ))
                     .expect("source lineage");
@@ -4831,6 +4836,7 @@ mod task_013 {
                                     generation_id: generation.to_string(),
                                     source_path: format!("src/{label}-{state}.rs"),
                                     contributors: vec![id.clone()],
+                                    span: None,
                                 },
                             ))
                             .expect("put artifact lineage");

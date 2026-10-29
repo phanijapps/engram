@@ -57,6 +57,32 @@ pub(super) fn storage_error() -> CoreError {
         message: "durable code authority is unavailable".into(),
     }
 }
+
+/// Builds one [`engram_knowledge::TargetLineage`] from a lineage row,
+/// decoding the persisted `CodeLineage` JSON for the durable canonical
+/// `source_path`/`span` (final r5 finding 2). A row whose JSON cannot be
+/// decoded keeps the fail-closed empty path / absent span — such records
+/// can never path- or span-match an exact participant read.
+fn target_lineage_of_row(
+    record_id: String,
+    repo_id: String,
+    generation_id: String,
+    retired: bool,
+    record_json: String,
+) -> engram_knowledge::TargetLineage {
+    let lineage: Option<CodeLineage> = serde_json::from_str(&record_json).ok();
+    engram_knowledge::TargetLineage {
+        record_id,
+        repo_id,
+        generation_id,
+        retired,
+        source_path: lineage
+            .as_ref()
+            .map(|value| value.source_path.clone())
+            .unwrap_or_default(),
+        span: lineage.as_ref().and_then(|value| value.span),
+    }
+}
 fn json<T: serde::Serialize>(value: &T) -> CoreResult<String> {
     serde_json::to_string(value).map_err(|_| storage_error())
 }
@@ -453,19 +479,20 @@ impl CodeBindingRepository for SqlCodeBindingRepository {
         let mut statement = store
             .connection
             .prepare(
-                "SELECT lineage.record_id, lineage.repo_id, lineage.generation_id, retirement.record_id IS NOT NULL FROM code_stage_lineage lineage \
+                "SELECT lineage.record_id, lineage.repo_id, lineage.generation_id, retirement.record_id IS NOT NULL, lineage.record_json FROM code_stage_lineage lineage \
                  LEFT JOIN code_stage_lineage_retirements retirement ON retirement.scope_key = lineage.scope_key AND retirement.record_id = lineage.record_id \
                  WHERE lineage.scope_key = ?1 ORDER BY lineage.record_id",
             )
             .map_err(|_| storage_error())?;
         let rows = statement
             .query_map(rusqlite::params![json(scope)?], |row| {
-                Ok(engram_knowledge::TargetLineage {
-                    record_id: row.get(0)?,
-                    repo_id: row.get(1)?,
-                    generation_id: row.get(2)?,
-                    retired: row.get(3)?,
-                })
+                Ok(target_lineage_of_row(
+                    row.get(0)?,
+                    row.get(1)?,
+                    row.get(2)?,
+                    row.get(3)?,
+                    row.get(4)?,
+                ))
             })
             .map_err(|_| storage_error())?
             .collect::<Result<Vec<_>, _>>()
@@ -488,19 +515,20 @@ impl CodeBindingRepository for SqlCodeBindingRepository {
         let mut statement = store
             .connection
             .prepare(
-                "SELECT lineage.record_id, lineage.repo_id, lineage.generation_id, retirement.record_id IS NOT NULL FROM code_stage_lineage lineage \
+                "SELECT lineage.record_id, lineage.repo_id, lineage.generation_id, retirement.record_id IS NOT NULL, lineage.record_json FROM code_stage_lineage lineage \
                  LEFT JOIN code_stage_lineage_retirements retirement ON retirement.scope_key = lineage.scope_key AND retirement.record_id = lineage.record_id \
                  WHERE lineage.scope_key = ?1 AND lineage.record_id = ?2",
             )
             .map_err(|_| storage_error())?;
         let row = statement
             .query_row(rusqlite::params![json(scope)?, record_id], |row| {
-                Ok(engram_knowledge::TargetLineage {
-                    record_id: row.get(0)?,
-                    repo_id: row.get(1)?,
-                    generation_id: row.get(2)?,
-                    retired: row.get(3)?,
-                })
+                Ok(target_lineage_of_row(
+                    row.get(0)?,
+                    row.get(1)?,
+                    row.get(2)?,
+                    row.get(3)?,
+                    row.get(4)?,
+                ))
             })
             .optional()
             .map_err(|_| storage_error())?;

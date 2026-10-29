@@ -34,6 +34,21 @@ pub struct CodeLineage {
     pub generation_id: String,
     pub source_path: String,
     pub contributors: Vec<String>,
+    /// The record's durable canonical line span in its `source_path` at the
+    /// generation's pinned commit (final r5 finding 2): staged once at
+    /// publication and never re-read from mutable rows. `None` for records
+    /// without a single canonical span (source/graph/relationship rows, and
+    /// pre-span lineage persisted before this field existed).
+    #[serde(default)]
+    pub span: Option<CanonicalSpan>,
+}
+
+/// A durable 1-based inclusive canonical line span.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CanonicalSpan {
+    pub start_line: u32,
+    pub end_line: u32,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -178,6 +193,11 @@ impl CodeLineage {
                 .any(|p| p == ".." || p.is_empty())
             || self.contributors.is_empty()
             || self.contributors.iter().any(|x| x.trim().is_empty())
+        {
+            return Err(CodeBindingError::InvalidSource);
+        }
+        if let Some(span) = &self.span
+            && (span.start_line == 0 || span.end_line < span.start_line)
         {
             return Err(CodeBindingError::InvalidSource);
         }

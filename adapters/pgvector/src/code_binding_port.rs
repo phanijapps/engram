@@ -264,25 +264,90 @@ impl CodeBindingRepository for PgCodeBindingRepository {
 
     async fn get_generation(
         &self,
-        _scope: &Scope,
-        _repo_id: &RepoId,
+        scope: &Scope,
+        repo_id: &RepoId,
         generation_id: &str,
     ) -> CoreResult<Option<CodeGeneration>> {
+        // Corrective r2 (finding 2): a generation id alone is not authority.
+        // The record resolves only when THIS scope + repository durably owns
+        // an attempt for that generation (code_attempts carries the
+        // tenant/scope/repo/generation ownership association).
         let generation_id = generation_id.to_owned();
+        let scope = scope.clone();
+        let repo_id = repo_id.0.clone();
         self.blocking(move |store| {
+            let key = scope_key(&scope).map_err(error)?;
             crate::connection::runtime().block_on(async {
                 let row = store
                     .connection
                     .client
                     .query_opt(
-                        "SELECT record_json FROM code_generations WHERE generation_id = $1",
-                        &[&generation_id],
+                        "SELECT g.record_json FROM code_generations g WHERE g.generation_id = $1 AND EXISTS (SELECT 1 FROM code_attempts a WHERE a.generation_id = $1 AND a.tenant = $2 AND a.scope_key = $3 AND a.repo_id = $4)",
+                        &[&generation_id, &scope.tenant, &key, &repo_id],
                     )
                     .await
                     .map_err(|_| storage_error())?;
                 row.map(|row| {
-                    serde_json::from_value::<CodeGeneration>(row.get(0))
-                        .map_err(|_| storage_error())
+                    serde_json::from_value::<CodeGeneration>(row.get(0)).map_err(|_| storage_error())
+                })
+                .transpose()
+            })
+        })
+        .await
+    }
+
+    async fn target_lineage(&self, scope: &Scope) -> CoreResult<Vec<TargetLineage>> {
+        let scope = scope.clone();
+        self.blocking(move |store| {
+            let key = scope_key(&scope).map_err(error)?;
+            crate::connection::runtime().block_on(async {
+                let rows = store
+                    .connection
+                    .client
+                    .query(
+                        "SELECT record_id, repo_id, generation_id FROM code_lineage WHERE tenant = $1 AND scope_key = $2 ORDER BY record_id",
+                        &[&scope.tenant, &key],
+                    )
+                    .await
+                    .map_err(|_| storage_error())?;
+                Ok(rows
+                    .iter()
+                    .map(|row| TargetLineage {
+                        record_id: row.get(0),
+                        repo_id: row.get(1),
+                        generation_id: row.get(2),
+                    })
+                    .collect())
+            })
+        })
+        .await
+    }
+
+    async fn get_source_descriptor(
+        &self,
+        scope: &Scope,
+        repo_id: &RepoId,
+        generation_id: &str,
+        path: &str,
+    ) -> CoreResult<Option<IndexedSource>> {
+        let scope = scope.clone();
+        let repo_id = repo_id.0.clone();
+        let generation_id = generation_id.to_owned();
+        let path = path.to_owned();
+        self.blocking(move |store| {
+            let key = scope_key(&scope).map_err(error)?;
+            crate::connection::runtime().block_on(async {
+                let row = store
+                    .connection
+                    .client
+                    .query_opt(
+                        "SELECT source_json FROM code_sources WHERE tenant = $1 AND scope_key = $2 AND repo_id = $3 AND generation_id = $4 AND path = $5",
+                        &[&scope.tenant, &key, &repo_id, &generation_id, &path],
+                    )
+                    .await
+                    .map_err(|_| storage_error())?;
+                row.map(|row| {
+                    serde_json::from_value::<IndexedSource>(row.get(0)).map_err(|_| storage_error())
                 })
                 .transpose()
             })

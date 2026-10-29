@@ -4465,6 +4465,203 @@ mod task_013 {
                     "a within-budget composed cycle does not exhaust: {stats:?}"
                 );
             }
+
+            /// F5 decisive regression (review r5 verification finding 3),
+            /// RESOLVER-LEVEL (labeled: this drives
+            /// `classify_with_dependencies` directly, like
+            /// `wide_input_counters_bounded`; the composed lane adds no
+            /// separate admission mechanics): DISTRIBUTED derivation-heavy
+            /// records — 100 DISTINCT ordinary targets, each carrying 500
+            /// EMPTY derivations (50,000 structural entries total, every
+            /// local frame trivially fitting) — must terminate at the ONE
+            /// shared, monotonically consumed admission-work budget
+            /// (1,024), not complete ~50,000 admission examinations under
+            /// the nominal budget as constructor-local reservations did.
+            #[test]
+            fn distributed_derivation_admission_hits_shared_budget() {
+                use engram_retrieval::CandidateEvidenceResolver;
+                let dir = tempfile::tempdir().expect("tempdir");
+                let fixture = fixture(dir.path());
+                let resolver = fixture.candidate_evidence();
+                let counters = resolver.walk_counters();
+                counters.reset();
+
+                // 100 distinct ordinary targets, each with 500 derivations
+                // whose input_refs are EMPTY (pure structural entries).
+                let empty_derivation = || engram_domain::DerivationRef {
+                    kind: engram_domain::DerivationKind::Extraction,
+                    model: None,
+                    prompt_hash: None,
+                    input_refs: Vec::new(),
+                    created_at: chrono::Utc::now(),
+                };
+                for index in 0..100 {
+                    let mut provenance = provenance();
+                    provenance.derivations =
+                        std::iter::repeat_with(empty_derivation).take(500).collect();
+                    let record = engram_domain::MemoryRecord {
+                        id: Id::from(format!("derivation-target-{index}")),
+                        kind: MemoryKind::Observation,
+                        content: MemoryContent {
+                            text: format!("derivation heavy target {index}"),
+                            summary: None,
+                            entities: Vec::new(),
+                            language: None,
+                            format: None,
+                            structured: None,
+                            hash: None,
+                        },
+                        scope: scope(),
+                        provenance,
+                        policy: policy(),
+                        status: engram_domain::MemoryStatus::Active,
+                        links: Vec::new(),
+                        assertions: Vec::new(),
+                        verdict: None,
+                        created_at: chrono::Utc::now(),
+                        updated_at: None,
+                        metadata: None,
+                    };
+                    use engram_memory::MemoryRepository;
+                    block_on(fixture.memory.put_memory(record)).expect("put target");
+                }
+                // The candidate references all 100 targets (100 evidence
+                // refs — far inside every budget on its own).
+                let candidate = write_memory_with_refs(
+                    &fixture,
+                    "distributed derivation candidate",
+                    (0..100)
+                        .map(|index| {
+                            evidence_ref(
+                                EvidenceTargetType::Memory,
+                                &format!("derivation-target-{index}"),
+                            )
+                        })
+                        .collect(),
+                );
+                let classification = block_on(resolver.classify_with_dependencies(
+                    &RetrievalResult {
+                        id: "distributed".to_string(),
+                        target_type: RetrievalTargetType::Memory,
+                        target_id: candidate.id.to_string(),
+                        content: candidate.content.text.clone(),
+                        score: engram_domain::RetrievalScore {
+                            total: 1.0,
+                            relevance: Some(1.0),
+                            recency: None,
+                            confidence: None,
+                            cue_match: None,
+                            hierarchical_fit: None,
+                            policy_fit: Some(1.0),
+                        },
+                        provenance: candidate.provenance.clone(),
+                        policy: candidate.policy.clone(),
+                        explanation: None,
+                        fusion_trace: None,
+                        metadata: None,
+                    },
+                    &request("parse", 10),
+                ))
+                .expect("classification");
+                assert_eq!(
+                    classification.evidence,
+                    CandidateEvidence::Unknown,
+                    "the shared admission budget terminates the walk: {classification:?}"
+                );
+                assert!(
+                    !classification.complete,
+                    "exhaustion is explicitly incomplete: {classification:?}"
+                );
+                let stats = counters.snapshot();
+                assert!(
+                    stats.admission_examined <= 1024,
+                    "admission examinations are bounded by the SHARED 1,024 budget — not ~50,000: {stats:?}"
+                );
+                assert!(
+                    stats.budget_exhaustions >= 1,
+                    "terminal exhaustion attested: {stats:?}"
+                );
+                assert!(
+                    stats.references_examined <= 1024,
+                    "reference examinations bounded: {stats:?}"
+                );
+                assert!(
+                    stats.bytes_accounted <= 128 * 1024,
+                    "ALL byte charges bounded: {stats:?}"
+                );
+            }
+
+            /// F5 decisive regression (review r5 verification finding 3),
+            /// RESOLVER-LEVEL (labeled): an OVERSIZED own dependency id on a
+            /// code-kind candidate (CodeSymbol chunk, empty provenance) is
+            /// charged against the byte budget BEFORE `merge_own`'s
+            /// `own_id.to_owned()` allocation — terminal admission
+            /// exhaustion, never an unmetered 128 KiB+ allocation into the
+            /// code-dependency set.
+            #[test]
+            fn oversized_own_id_code_candidate_charged_and_bounded() {
+                use engram_retrieval::CandidateEvidenceResolver;
+                let dir = tempfile::tempdir().expect("tempdir");
+                let fixture = fixture(dir.path());
+                let resolver = fixture.candidate_evidence();
+                let counters = resolver.walk_counters();
+                counters.reset();
+
+                // A code-kind chunk whose own id exceeds the 128 KiB
+                // dependency-byte budget (131,072 bytes).
+                let oversized_id = format!("oversized-{}", "x".repeat(132_000));
+                let text = "oversized own id code chunk".to_string();
+                let record = chunk(&oversized_id, &text, KnowledgeChunkKind::CodeSymbol);
+                let record_provenance = record.provenance.clone();
+                let record_policy = record.policy.clone();
+                block_on(fixture.knowledge.put_chunk(record)).expect("put oversized chunk");
+                let classification = block_on(resolver.classify_with_dependencies(
+                    &RetrievalResult {
+                        id: "oversized-own".to_string(),
+                        target_type: RetrievalTargetType::Chunk,
+                        target_id: oversized_id.clone(),
+                        content: text,
+                        score: engram_domain::RetrievalScore {
+                            total: 1.0,
+                            relevance: Some(1.0),
+                            recency: None,
+                            confidence: None,
+                            cue_match: None,
+                            hierarchical_fit: None,
+                            policy_fit: Some(1.0),
+                        },
+                        provenance: record_provenance,
+                        policy: record_policy,
+                        explanation: None,
+                        fusion_trace: None,
+                        metadata: None,
+                    },
+                    &request("parse", 10),
+                ))
+                .expect("classification");
+                assert_eq!(
+                    classification.evidence,
+                    CandidateEvidence::Unknown,
+                    "the oversized own id is terminal exhaustion, never accepted: {classification:?}"
+                );
+                assert!(
+                    !classification.complete,
+                    "exhaustion is explicitly incomplete: {classification:?}"
+                );
+                let stats = counters.snapshot();
+                assert!(
+                    stats.own_id_charges >= 1,
+                    "the own-id charge attempt is instrumented BEFORE allocation: {stats:?}"
+                );
+                assert!(
+                    stats.budget_exhaustions >= 1,
+                    "terminal exhaustion attested: {stats:?}"
+                );
+                assert!(
+                    stats.bytes_accounted <= 128 * 1024,
+                    "the oversized id never enters byte accounting — it is rejected BEFORE allocation: {stats:?}"
+                );
+            }
         }
     }
 

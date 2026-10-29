@@ -233,6 +233,34 @@ impl AuthorizedKnowledgeQuery {
         scope: &Scope,
         requested: &[String],
     ) -> CoreResult<Vec<KnowledgeEntity>> {
+        let initial_view = self.coordinator.eligibility_view(scope, None).await?;
+        if initial_view.eligible_bindings().is_empty() {
+            // No code binding exists, so there is no repository authority to
+            // pin. Preserve positively typed ordinary knowledge while denying
+            // every code-kind or lineage-bearing record without inventing a
+            // synthetic repository authority.
+            let entities = self.query.list_entities(scope).await?;
+            if requested.is_empty() {
+                return Ok(entities
+                    .into_iter()
+                    .filter(|entity| !entity_is_code_kind(entity))
+                    .collect());
+            }
+            let requested: std::collections::HashSet<&str> =
+                requested.iter().map(String::as_str).collect();
+            let selected: Vec<KnowledgeEntity> = entities
+                .into_iter()
+                .filter(|entity| requested.contains(entity.id.as_str()))
+                .collect();
+            if selected.len() != requested.len() || selected.iter().any(entity_is_code_kind) {
+                return Err(CoreError::InvalidRequest {
+                    reason:
+                        "BindingRequired: code target ids are foreign or unpublished in this scope"
+                            .into(),
+                });
+            }
+            return Ok(selected);
+        }
         let anchor = self.authorize_caller(actor, scope).await?;
         let requested = requested.to_vec();
         let query = Arc::clone(&self.query);

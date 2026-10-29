@@ -797,6 +797,50 @@ mod task_016 {
         );
     }
 
+    /// Unbound scopes retain positively established ordinary knowledge while
+    /// rejecting code IDs without inventing a repository anchor.
+    #[test]
+    fn unbound_scope_denies_code_and_preserves_ordinary_records() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let bindings = Arc::new(
+            SqlCodeBindingRepository::open(dir.path().join("unbound-bindings.sqlite"))
+                .expect("open bindings"),
+        );
+        let knowledge = Arc::new(SqlKnowledgeStore::open_in_memory().expect("knowledge"));
+        let unbound = Scope {
+            tenant: "task-015".to_string(),
+            subject: None,
+            workspace: Some("unbound-ordinary".to_string()),
+            session: None,
+            environment: None,
+        };
+        let mut ordinary = entity("unbound-doc", "ordinary", EntityKind::Concept);
+        ordinary.scope = unbound.clone();
+        block_on(knowledge.put_entity(ordinary)).expect("put ordinary");
+        let mut code = entity("unbound-code", "render", EntityKind::Function);
+        code.scope = unbound.clone();
+        block_on(knowledge.put_entity(code)).expect("put code");
+        let coordinator = Arc::new(CodeBindingCoordinator::new(
+            bindings as Arc<dyn CodeBindingRepository>,
+            Arc::new(AllowAuthorizer),
+            Vec::new(),
+        ));
+        let authorized = AuthorizedKnowledgeQuery::new(knowledge, coordinator);
+        let ordinary = block_on(authorized.list_entities_authorized(&actor(), &unbound, &[]))
+            .expect("ordinary records survive without a code binding");
+        assert_eq!(ordinary.len(), 1);
+        assert_eq!(ordinary[0].id.as_str(), "unbound-doc");
+        let denied = block_on(authorized.list_entities_authorized(
+            &actor(),
+            &unbound,
+            &["unbound-code".to_string()],
+        ));
+        assert!(
+            matches!(&denied, Err(CoreError::InvalidRequest { reason }) if reason.contains("BindingRequired")),
+            "unbound code IDs must deny: {denied:?}"
+        );
+    }
+
     /// maintenance_scope_denied (accepted name): maintenance requires
     /// explicit ELIGIBLE CODE ids — ordinary ids, staged ids and empty
     /// requests all deny; published code authorizes. The finding-4 companion

@@ -1841,9 +1841,10 @@ mod task_016 {
     }
 
     /// Corrective r4 (canonical 3a): the owned maintenance mutation is a
-    /// REAL fenced retirement of durable lineage. A valid grant retires the
-    /// target's lineage rows and advances the binding epoch exactly once;
-    /// the follow-on continuation observes the fenced result.
+    /// REAL fenced retirement of durable eligibility. A valid grant preserves
+    /// the target's positive code-ownership row as retired and advances the
+    /// binding epoch exactly once; the follow-on continuation observes the
+    /// fenced result.
     #[test]
     fn maintenance_owned_retirement_fences_first_side_effect() {
         let dir = tempfile::tempdir().expect("tempdir");
@@ -1888,17 +1889,19 @@ mod task_016 {
         )
         .expect("fenced use executes");
 
-        // The OWNED first side effect landed: the durable lineage row is
-        // GONE from the real store, exactly once, and the binding epoch
-        // advanced — the fence linearized the mutation.
+        // The OWNED first side effect landed: code ownership remains durable
+        // but its generation is retired, so a surviving target cannot become
+        // ordinary while it is no longer eligible for the active generation.
         let after = block_on(engram_knowledge::CodeBindingRepository::target_lineage(
             &*store,
             &scope(),
         ))
         .expect("lineage after");
         assert!(
-            !after.iter().any(|entry| entry.record_id == "a-render"),
-            "the owned retirement removed the target's durable lineage: {after:?}"
+            after.iter().any(|entry| {
+                entry.record_id == "a-render" && entry.generation_id == "retired:gen-a"
+            }),
+            "the owned retirement preserves positive code ownership as retired: {after:?}"
         );
         let binding_epoch_after = block_on(engram_knowledge::CodeBindingRepository::get_binding(
             &*store,

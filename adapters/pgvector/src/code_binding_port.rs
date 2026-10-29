@@ -249,13 +249,36 @@ impl CodeBindingRepository for PgCodeBindingRepository {
                         return Err(error(CodeBindingError::StaleGeneration));
                     }
                 }
+                // Preserve code ownership after retirement. Deletion would
+                // turn a surviving code-owned record into an apparently
+                // ordinary record on an unbound/degraded read.
                 for target in &targets {
-                    tx.execute(
-                        "DELETE FROM code_lineage WHERE tenant=$1 AND scope_key=$2 AND record_id=$3",
-                        &[&tenant, &key, target],
-                    )
-                    .await
-                    .map_err(|_| storage_error())?;
+                    let row = tx
+                        .query_opt(
+                            "SELECT repo_id, generation_id FROM code_lineage WHERE tenant=$1 AND scope_key=$2 AND record_id=$3 FOR UPDATE",
+                            &[&tenant, &key, target],
+                        )
+                        .await
+                        .map_err(|_| storage_error())?;
+                    let Some(row) = row else {
+                        return Err(error(CodeBindingError::StaleGeneration));
+                    };
+                    let repo_id: String = row.get(0);
+                    let generation_id: String = row.get(1);
+                    if !repos.iter().any(|repo| repo == &repo_id) {
+                        return Err(error(CodeBindingError::StaleGeneration));
+                    }
+                    let retired_generation = format!("retired:{generation_id}");
+                    let updated = tx
+                        .execute(
+                            "UPDATE code_lineage SET generation_id=$1 WHERE tenant=$2 AND scope_key=$3 AND record_id=$4 AND repo_id=$5 AND generation_id=$6",
+                            &[&retired_generation, &tenant, &key, target, &repo_id, &generation_id],
+                        )
+                        .await
+                        .map_err(|_| storage_error())?;
+                    if updated != 1 {
+                        return Err(error(CodeBindingError::StaleGeneration));
+                    }
                 }
                 tx.execute(
                     "INSERT INTO code_epochs(tenant,scope_key,epoch) VALUES($1,$2,1) ON CONFLICT(tenant,scope_key) DO UPDATE SET epoch=code_epochs.epoch+1",

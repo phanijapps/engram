@@ -202,11 +202,33 @@ impl CodeBindingRepository for SqlCodeBindingRepository {
             )
             .map_err(|_| storage_error())?;
         }
-        // (2) The owned first side effect: retire the durable lineage rows.
+        // (2) Preserve durable positive ownership while removing eligibility.
+        // Deleting this row would make a surviving code-owned record look
+        // ordinary to an unbound/degraded read. Retire only an exact target
+        // association from this grant, never another repository's target.
         for target in targets {
+            let lineage: Option<(String, String)> = tx
+                .query_row(
+                    "SELECT repo_id, generation_id FROM code_stage_lineage WHERE scope_key=?1 AND record_id=?2",
+                    params![key, target],
+                    |row| Ok((row.get(0)?, row.get(1)?)),
+                )
+                .optional()
+                .map_err(|_| storage_error())?;
+            let Some((repo_id, generation_id)) = lineage else {
+                return Err(CoreError::Conflict {
+                    reason: "GenerationChanged: maintenance target has no durable lineage".into(),
+                });
+            };
+            if !expected_binding_epochs.iter().any(|(repo, _)| repo.0 == repo_id) {
+                return Err(CoreError::Conflict {
+                    reason: "GenerationChanged: maintenance target belongs to another repository".into(),
+                });
+            }
+            let retired_generation = format!("retired:{generation_id}");
             tx.execute(
-                "DELETE FROM code_stage_lineage WHERE scope_key=?1 AND record_id=?2",
-                params![key, target],
+                "UPDATE code_stage_lineage SET generation_id=?1 WHERE scope_key=?2 AND record_id=?3 AND repo_id=?4 AND generation_id=?5",
+                params![retired_generation, key, target, repo_id, generation_id],
             )
             .map_err(|_| storage_error())?;
         }

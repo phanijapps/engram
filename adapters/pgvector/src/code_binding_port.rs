@@ -261,7 +261,12 @@ impl CodeBindingRepository for PgCodeBindingRepository {
                     };
                     let repo_id: String = row.get(0);
                     let generation_id: String = row.get(1);
-                    let retired: bool = row.get::<_, i64>(2) != 0;
+                    // Review r5 (verification finding 1): the projection is
+                    // a PostgreSQL BOOL (`retirement.record_id IS NOT NULL`);
+                    // decode it as `bool` exactly like the target_lineage /
+                    // record_lineage readers — an i64 decode of a BOOL panics
+                    // on every existing-target retirement.
+                    let retired: bool = row.get(2);
                     if !repos.iter().any(|repo| repo == &repo_id) {
                         return Err(error(CodeBindingError::StaleGeneration));
                     }

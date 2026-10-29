@@ -4024,16 +4024,21 @@ mod task_013 {
                     block_on(fixture.knowledge.put_relationship(relationship))
                         .expect("put relationship");
                 }
-                // CYCLIC endpoints: the endpoint entity's own provenance
-                // references the very memory that references the relationship —
-                // the walk must settle through the visited-set back-edge.
-                let cycle_memory =
-                    write_memory_with_refs(&fixture, "endpoint cycle memory", Vec::new());
+                // CYCLIC endpoints (review r5 verification finding 4): a
+                // REAL closed loop with STABLE ids —
+                // Memory(memory-ep-cycle) -> Relationship(rel-ep-cyclic) ->
+                // Entity(entity-ep-cyc) -> THE SAME Memory(memory-ep-cycle).
+                // The endpoint entity's provenance references the very
+                // memory that references the relationship; the walk settles
+                // through the visited-set back-edge. (The pre-C1 fixture
+                // pointed the endpoint at an EMPTY-references memory while a
+                // DIFFERENT memory chained the relationship — an acyclic
+                // chain mislabeled as a cycle.)
                 let mut cyc_endpoint = symbol_entity("entity-ep-cyc", "entity-ep-cyc");
                 cyc_endpoint.kind = EntityKind::Concept;
                 cyc_endpoint.provenance = provenance_with(vec![evidence_ref(
                     EvidenceTargetType::Memory,
-                    cycle_memory.id.as_str(),
+                    "memory-ep-cycle",
                 )]);
                 block_on(fixture.knowledge.put_entity(cyc_endpoint)).expect("put cyclic endpoint");
                 let cyclic = rel(
@@ -4057,15 +4062,15 @@ mod task_013 {
                 let missing_mem = chained("rel-ep-missing");
                 let foreign_mem = chained("rel-ep-foreign");
                 let idless_mem = chained("rel-ep-idless");
-                let cyclic_mem = write_memory_with_refs(
+                let cyclic_mem = put_memory_with_id(
                     &fixture,
+                    "memory-ep-cycle",
                     "endpoint chain cyclic",
                     vec![evidence_ref(
                         EvidenceTargetType::Relationship,
                         "rel-ep-cyclic",
                     )],
                 );
-                let _ = cycle_memory;
 
                 // Permitted view (real authorizer): ordinary/eligible/cyclic
                 // chains accept; stale/missing/foreign/idless deny.
@@ -4079,7 +4084,11 @@ mod task_013 {
                         eligible_mem.id.as_str(),
                         true,
                     ),
-                    ("cyclic endpoint settles", cyclic_mem.id.as_str(), true),
+                    (
+                        "cyclic endpoint settles through the closed loop",
+                        cyclic_mem.id.as_str(),
+                        true,
+                    ),
                     ("stale-code endpoint denies", stale_mem.id.as_str(), false),
                     ("missing endpoint denies", missing_mem.id.as_str(), false),
                     (
@@ -4660,6 +4669,113 @@ mod task_013 {
                 assert!(
                     stats.bytes_accounted <= 128 * 1024,
                     "the oversized id never enters byte accounting — it is rejected BEFORE allocation: {stats:?}"
+                );
+            }
+
+            /// F4 decisive cycle case (review r5 verification finding 4):
+            /// a REAL closed endpoint loop with STABLE ids through composed
+            /// recall — Memory(memory-cycle-real) →
+            /// Relationship(rel-cycle-real) → Entity(entity-cycle-real) →
+            /// THE SAME Memory — settles as ordinary AND the back-edge is
+            /// OBSERVED on the walk counters (`cycle_backedges ≥ 1`). The
+            /// pre-C1 'cyclic' matrix case was an acyclic chain: its
+            /// endpoint referenced an empty-references memory while a
+            /// different record chained the relationship.
+            #[test]
+            fn relationship_endpoint_cycle_composed() {
+                use engram_knowledge::KnowledgeRepository as _;
+                let dir = tempfile::tempdir().expect("tempdir");
+                let fixture = fixture(dir.path());
+                let resolver = fixture.candidate_evidence();
+                let counters = resolver.walk_counters();
+                counters.reset();
+
+                // Distinct endpoint entities so the ONLY possible
+                // back-edge is the closed loop itself: the OBJECT entity's
+                // provenance references the SAME memory that references the
+                // relationship. (Two identical endpoint ids would yield a
+                // trivial duplicate back-edge proving nothing about the
+                // Memory → Relationship → Entity → Memory loop.)
+                let mut subject_entity = symbol_entity("entity-cycle-subject", "cycleSubject");
+                subject_entity.kind = EntityKind::Concept;
+                block_on(fixture.knowledge.put_entity(subject_entity)).expect("put cycle subject");
+                let mut endpoint = symbol_entity("entity-cycle-real", "cycleReal");
+                endpoint.kind = EntityKind::Concept;
+                endpoint.provenance = provenance_with(vec![evidence_ref(
+                    EvidenceTargetType::Memory,
+                    "memory-cycle-real",
+                )]);
+                block_on(fixture.knowledge.put_entity(endpoint)).expect("put cycle endpoint");
+                block_on(fixture.knowledge.put_relationship(
+                    engram_domain::KnowledgeRelationship {
+                        id: engram_domain::RelationshipId::from("rel-cycle-real"),
+                        graph_id: Some(Id::from("graph-task-013")),
+                        predicate: "mentions".to_string(),
+                        subject: engram_domain::EntityRef {
+                            id: Some(Id::from("entity-cycle-subject")),
+                            kind: None,
+                            name: Some("cycleSubject".to_string()),
+                            aliases: Vec::new(),
+                        },
+                        object: engram_domain::EntityRef {
+                            id: Some(Id::from("entity-cycle-real")),
+                            kind: None,
+                            name: Some("cycleReal".to_string()),
+                            aliases: Vec::new(),
+                        },
+                        scope: scope(),
+                        evidence: Vec::new(),
+                        confidence: None,
+                        provenance: provenance(),
+                        created_at: chrono::Utc::now(),
+                        updated_at: None,
+                        code_resolution: None,
+                        archived_at: None,
+                    },
+                ))
+                .expect("put cycle relationship");
+                let cycle_memory = put_memory_with_id(
+                    &fixture,
+                    "memory-cycle-real",
+                    "endpointloop closed cycle",
+                    vec![evidence_ref(
+                        EvidenceTargetType::Relationship,
+                        "rel-cycle-real",
+                    )],
+                );
+
+                let recall = SqlUnifiedRecall::new(
+                    fixture.memory.clone(),
+                    Vec::new(),
+                    fixture.beliefs.clone(),
+                )
+                .with_code_eligibility(
+                    fixture.eligibility() as Arc<dyn engram_retrieval::CodeEligibilityResolver>
+                )
+                .with_candidate_evidence(resolver.clone());
+                let payload = block_on(recall.recall(request("endpointloop", 20))).expect("recall");
+                let ids = target_ids(&payload);
+                assert!(
+                    ids.iter().any(|id| id == cycle_memory.id.as_str()),
+                    "the closed-loop candidate flows through composed recall: {ids:?}"
+                );
+                assert_eq!(
+                    ids.len(),
+                    1,
+                    "the page contains ONLY the cycle memory, so the observed back-edge can only come from the loop: {ids:?}"
+                );
+                let stats = counters.snapshot();
+                assert!(
+                    stats.cycle_backedges >= 1,
+                    "the loop's back-edge is OBSERVED on the walk counters (Memory → Relationship → Entity → same Memory): {stats:?}"
+                );
+                assert_eq!(
+                    stats.budget_exhaustions, 0,
+                    "the closed loop settles within budget — no exhaustion: {stats:?}"
+                );
+                assert!(
+                    stats.visited_records <= 256 && stats.max_queue_depth <= 16,
+                    "set and queue stay bounded: {stats:?}"
                 );
             }
         }

@@ -803,8 +803,9 @@ mod authority_tests {
     /// `validate_historical_read_lease` contract — presented-live lease
     /// validates; released, expired, foreign-scope, wrong-generation,
     /// wrong-repo and record-mismatched leases all deny. Generation
-    /// ownership alone is not this proof. NOT_RUN until parent helper
-    /// clearance (compile-only in this preparation phase).
+    /// ownership alone is not this proof. The fixture takes real durable
+    /// custody of gen-old, then a real publication advances the binding to
+    /// gen-cur, so the validated generation is genuinely historical.
     #[test]
     #[ignore = "requires ENGRAM_TEST_PG_URL against the approved marked disposable fixture"]
     fn pg_historical_lease_validator_direct_cases() {
@@ -827,21 +828,21 @@ mod authority_tests {
             repo_id: repo.clone(),
             branch_ref: "refs/heads/main".to_string(),
             version: 1,
-            active_generation: None,
+            active_generation: Some("gen-old".to_string()),
             epoch: 0,
         }))
         .expect("bind");
-        let eligibility = CodeEligibility {
-            scope: test_scope.clone(),
-            epoch: 1,
-            generations: vec!["gen-old".to_string(), "gen-cur".to_string()],
-            repository_ids: vec![repo.0.clone()],
-        };
-        let lease = |eligibility: CodeEligibility,
+        // Fixture-truth repair (parent decision Option 1): the lease is
+        // acquired against the DURABLE eligibility of this moment — exactly
+        // like every green lease suite — never a hand-stamped snapshot, so
+        // the scope really owns gen-old when custody is taken.
+        let eligibility = block_on(bindings.eligibility(&test_scope)).expect("durable eligibility");
+        let lease = |id: &str,
+                     eligibility: CodeEligibility,
                      expires: engram_domain::Timestamp|
          -> engram_knowledge::CodeReadLease {
             engram_knowledge::CodeReadLease {
-                id: format!("lease-{run}-{}", eligibility.epoch),
+                id: format!("lease-{run}-{id}"),
                 eligibility,
                 fencing_token: 1,
                 expires_at: expires,
@@ -850,10 +851,90 @@ mod authority_tests {
         let now = chrono::Utc::now();
         let live = block_on(engram_knowledge::CodeReadLeases::acquire_read_lease(
             &bindings,
-            lease(eligibility.clone(), now + chrono::Duration::minutes(10)),
+            lease(
+                "live",
+                eligibility.clone(),
+                now + chrono::Duration::minutes(10),
+            ),
             now,
         ))
         .expect("acquire live lease");
+        // All three leases take custody BEFORE the world advances, each
+        // under its own id (a released id is tombstoned forever, so ids are
+        // never reused).
+        let short = block_on(engram_knowledge::CodeReadLeases::acquire_read_lease(
+            &bindings,
+            lease(
+                "short",
+                eligibility.clone(),
+                now + chrono::Duration::milliseconds(1),
+            ),
+            now,
+        ))
+        .expect("acquire short lease");
+        let again = block_on(engram_knowledge::CodeReadLeases::acquire_read_lease(
+            &bindings,
+            lease(
+                "again",
+                eligibility.clone(),
+                now + chrono::Duration::minutes(10),
+            ),
+            now,
+        ))
+        .expect("acquire again");
+        // A REAL publication advances the binding from gen-old to gen-cur
+        // (begin_attempt → receipts → ready → publish), making gen-old a
+        // genuinely historical generation for the assertions below.
+        let attempt_id = format!("attempt-{run}");
+        block_on(bindings.begin_attempt(
+            &test_scope,
+            &repo,
+            engram_domain::CodeGeneration {
+                id: "gen-cur".to_string(),
+                binding_version: 1,
+                commit_oid: "a".repeat(40),
+                snapshot_digest: "b".repeat(64),
+                parser_fingerprint: "parser".to_string(),
+                filter_fingerprint: "filter".to_string(),
+            },
+            engram_domain::CodeAttempt {
+                id: attempt_id.clone(),
+                idempotency_key: format!("idem-{run}"),
+                binding_version: 1,
+                expected_epoch: 0,
+                expected_active_generation: Some("gen-old".to_string()),
+                fencing_token: 0,
+                state: engram_domain::CodeAttemptState::Created,
+                receipt_kinds: vec![
+                    engram_domain::CodeReceiptKind::Source,
+                    engram_domain::CodeReceiptKind::Knowledge,
+                ],
+            },
+        ))
+        .expect("begin attempt");
+        for lane in [
+            engram_domain::CodeReceiptKind::Source,
+            engram_domain::CodeReceiptKind::Knowledge,
+        ] {
+            block_on(
+                bindings.record_receipt(engram_knowledge::StageReceipt {
+                    attempt_id: attempt_id.clone(),
+                    generation_id: "gen-cur".to_string(),
+                    lane: serde_json::to_value(&lane)
+                        .ok()
+                        .and_then(|value| value.as_str().map(str::to_owned))
+                        .unwrap_or_default(),
+                    digest: format!("digest-{run}-{lane:?}"),
+                }),
+            )
+            .expect("receipt");
+        }
+        let (_, stored) = block_on(bindings.get_attempt(&test_scope, &repo, &attempt_id))
+            .expect("get attempt")
+            .expect("attempt exists");
+        block_on(bindings.mark_ready(&test_scope, &repo, &attempt_id, stored.fencing_token))
+            .expect("mark ready");
+        block_on(bindings.publish(&test_scope, &repo, &attempt_id, 0)).expect("publish");
 
         // (1) Presented LIVE lease: validates for the pinned generation.
         assert!(
@@ -890,12 +971,6 @@ mod authority_tests {
         );
 
         // (3) EXPIRED lease denies.
-        let short = block_on(engram_knowledge::CodeReadLeases::acquire_read_lease(
-            &bindings,
-            lease(eligibility.clone(), now + chrono::Duration::milliseconds(1)),
-            now,
-        ))
-        .expect("acquire short lease");
         std::thread::sleep(std::time::Duration::from_millis(50));
         assert!(
             !block_on(
@@ -913,12 +988,6 @@ mod authority_tests {
 
         // (4) Canonical-equality: a MODIFIED copy of a live durable lease
         // (record mismatch) denies.
-        let again = block_on(engram_knowledge::CodeReadLeases::acquire_read_lease(
-            &bindings,
-            lease(eligibility.clone(), now + chrono::Duration::minutes(10)),
-            now,
-        ))
-        .expect("acquire again");
         let mut tampered = again.clone();
         tampered.expires_at += chrono::Duration::minutes(5);
         assert!(

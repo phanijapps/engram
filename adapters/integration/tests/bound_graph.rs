@@ -2164,4 +2164,492 @@ mod task_016 {
             "the superseded generation's targets must not serve after publication: {ids:?}"
         );
     }
+
+    /// Review r5 (finding 8): in a POPULATED bound scope whose code
+    /// repositories the actor CANNOT inspect, ordinary per-record
+    /// authorization is independent of code authorization — the positively
+    /// authorized ordinary subset flows through its real graph policies
+    /// (and the graphless lane default), while the code entities are
+    /// withheld. A HIGH-policy concept still denies: the fallback is
+    /// ordinary authorization, not an allow-all.
+    #[test]
+    fn code_denied_caller_keeps_authorized_ordinary_entities() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let bindings = SqlCodeBindingRepository::open(dir.path().join("fallback-bindings.sqlite"))
+            .expect("open fallback store");
+        block_on(bindings.bind(CodeBinding {
+            scope: scope(),
+            repo_id: RepoId("repo-a".to_string()),
+            branch_ref: "refs/heads/main".to_string(),
+            version: 1,
+            active_generation: None,
+            epoch: 0,
+        }))
+        .expect("bind repo-a");
+        publish_generation_for_scope(
+            &bindings,
+            &scope(),
+            "repo-a",
+            "gen-a",
+            0,
+            None,
+            &["a-render"],
+        );
+        let bindings = Arc::new(bindings);
+        let knowledge = Arc::new(SqlKnowledgeStore::open_in_memory().expect("knowledge open"));
+        let mut low_policy = policy();
+        low_policy.sensitivity = Some(Sensitivity::Low);
+        let mut strict_policy = policy();
+        strict_policy.sensitivity = Some(Sensitivity::High);
+        for (id, graph_policy) in [
+            (Id::from("low-graph"), low_policy),
+            (Id::from("strict-graph"), strict_policy),
+        ] {
+            block_on(knowledge.put_graph(KnowledgeGraph {
+                id,
+                scope: scope(),
+                name: "ordinary policy graph".to_string(),
+                uri: None,
+                version: None,
+                ontology_refs: Vec::new(),
+                policy: graph_policy,
+                provenance: provenance(),
+                created_at: chrono::Utc::now(),
+                updated_at: None,
+                metadata: None,
+            }))
+            .expect("put graph");
+        }
+        let mut low_concept = entity("low-concept", "lowPolicyConcept", EntityKind::Concept);
+        low_concept.graph_id = Some(Id::from("low-graph"));
+        block_on(knowledge.put_entity(low_concept)).expect("put low concept");
+        let mut strict_concept = entity("strict-concept", "strictConcept", EntityKind::Concept);
+        strict_concept.graph_id = Some(Id::from("strict-graph"));
+        block_on(knowledge.put_entity(strict_concept)).expect("put strict concept");
+        block_on(knowledge.put_entity(entity("plain-doc", "ordinaryConcept", EntityKind::Concept)))
+            .expect("put graphless concept");
+        block_on(knowledge.put_entity(entity("a-render", "render", EntityKind::Function)))
+            .expect("put code entity");
+        // The code authority DENIES this caller; the ordinary authorizer
+        // permits Low-policy and lane-default records only.
+        let coordinator = CodeBindingCoordinator::new(
+            bindings.clone() as Arc<dyn CodeBindingRepository>,
+            Arc::new(DenyAllAuthorizer),
+            Vec::new(),
+        );
+        let authorized = AuthorizedKnowledgeQuery::new(knowledge.clone(), Arc::new(coordinator))
+            .with_policy_authorizer(Arc::new(LowGraphPolicyOnly))
+            .with_graph_repository(knowledge.clone() as Arc<dyn KnowledgeGraphRepository>);
+
+        let listed = block_on(authorized.list_entities_authorized(&actor(), &scope(), &[]))
+            .expect("a code-denied caller still receives the authorized ordinary subset");
+        let mut ids: Vec<String> = listed.iter().map(|e| e.id.to_string()).collect();
+        ids.sort();
+        assert_eq!(
+            ids,
+            vec!["low-concept".to_string(), "plain-doc".to_string()],
+            "the ordinary-permitted subset flows; code entities and denied-policy records do not"
+        );
+
+        // Explicit ordinary reads keep working for the code-denied caller.
+        let explicit = block_on(authorized.list_entities_authorized(
+            &actor(),
+            &scope(),
+            &["low-concept".to_string()],
+        ))
+        .expect("explicit ordinary read survives the code denial");
+        assert_eq!(explicit[0].id.as_str(), "low-concept");
+        // Explicit CODE ids still deny for the code-denied caller.
+        let denied = block_on(authorized.list_entities_authorized(
+            &actor(),
+            &scope(),
+            &["a-render".to_string()],
+        ));
+        assert!(
+            matches!(&denied, Err(CoreError::InvalidRequest { reason }) if reason.contains("BindingRequired")),
+            "code ids deny without code authority: {denied:?}"
+        );
+    }
+
+    /// Review r5 (finding 2): retirement preserves POSITIVE code ownership
+    /// while denying eligibility everywhere — a retired published code-owned
+    /// CONCEPT (ordinary kind, retained knowledge row) denies through the
+    /// ordinary listing, the explicit read AND the unbound-scope listing,
+    /// while an unrelated authorized ordinary Concept survives every path.
+    #[test]
+    fn retired_code_owned_concept_denied_across_reads() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let bindings = SqlCodeBindingRepository::open(dir.path().join("retired-bindings.sqlite"))
+            .expect("open retired store");
+        block_on(bindings.bind(CodeBinding {
+            scope: scope(),
+            repo_id: RepoId("repo-a".to_string()),
+            branch_ref: "refs/heads/main".to_string(),
+            version: 1,
+            active_generation: None,
+            epoch: 0,
+        }))
+        .expect("bind repo-a");
+        publish_generation_for_scope(
+            &bindings,
+            &scope(),
+            "repo-a",
+            "gen-a",
+            0,
+            None,
+            &["concept-code"],
+        );
+        let bindings = Arc::new(bindings);
+        let knowledge = Arc::new(SqlKnowledgeStore::open_in_memory().expect("knowledge open"));
+        block_on(knowledge.put_entity(entity("concept-code", "codeConcept", EntityKind::Concept)))
+            .expect("put code-owned concept");
+        block_on(knowledge.put_entity(entity(
+            "concept-plain",
+            "plainConcept",
+            EntityKind::Concept,
+        )))
+        .expect("put ordinary concept");
+        let coordinator = CodeBindingCoordinator::new(
+            bindings.clone() as Arc<dyn CodeBindingRepository>,
+            Arc::new(AllowAuthorizer),
+            Vec::new(),
+        );
+        let authorized = AuthorizedKnowledgeQuery::new(knowledge.clone(), Arc::new(coordinator))
+            .with_policy_authorizer(Arc::new(AllowAllPolicy))
+            .with_graph_repository(knowledge.clone() as Arc<dyn KnowledgeGraphRepository>);
+
+        // Before retirement the code-owned Concept is ELIGIBLE code (it lists).
+        let before = block_on(authorized.list_entities_authorized(&actor(), &scope(), &[]))
+            .expect("pre-retirement listing");
+        let before_ids: Vec<String> = before.iter().map(|e| e.id.to_string()).collect();
+        assert!(
+            before_ids.contains(&"concept-code".to_string())
+                && before_ids.contains(&"concept-plain".to_string()),
+            "sanity: the code-owned concept lists while eligible: {before_ids:?}"
+        );
+
+        // Retire through the REAL grant path (retained knowledge row).
+        let grant = block_on(authorized.authorize_maintenance_grant(
+            &actor(),
+            &scope(),
+            &["concept-code".to_string()],
+        ))
+        .expect("grant authorizes");
+        block_on(authorized.use_maintenance(
+            &actor(),
+            &grant,
+            engram_integration::knowledge_query::MaintenanceOperation::RetireLineageTargets,
+        ))
+        .expect("retirement executes");
+
+        // Populated ordinary listing: the retired Concept denies while the
+        // unrelated authorized ordinary Concept survives.
+        let after = block_on(authorized.list_entities_authorized(&actor(), &scope(), &[]))
+            .expect("post-retirement listing");
+        let after_ids: Vec<String> = after.iter().map(|e| e.id.to_string()).collect();
+        assert!(
+            !after_ids.contains(&"concept-code".to_string()),
+            "a retired code-owned Concept must not resurrect through the ordinary listing: {after_ids:?}"
+        );
+        assert!(
+            after_ids.contains(&"concept-plain".to_string()),
+            "the unrelated authorized ordinary Concept survives: {after_ids:?}"
+        );
+        // Explicit read of the retired Concept denies.
+        let explicit = block_on(authorized.list_entities_authorized(
+            &actor(),
+            &scope(),
+            &["concept-code".to_string()],
+        ));
+        assert!(
+            matches!(&explicit, Err(CoreError::InvalidRequest { reason }) if reason.contains("BindingRequired")),
+            "explicit reads of a retired code-owned record deny: {explicit:?}"
+        );
+
+        // UNBOUND scope: staged lineage + retirement keeps the record
+        // excluded (retirement stays POSITIVE code ownership — the
+        // coordinator view no longer drops retired rows, which previously
+        // let the record flow as ordinary here).
+        let unbound = Scope {
+            tenant: "task-015".to_string(),
+            subject: None,
+            workspace: Some("retired-unbound".to_string()),
+            session: None,
+            environment: None,
+        };
+        block_on(bindings.bind(CodeBinding {
+            scope: unbound.clone(),
+            repo_id: RepoId("repo-u".to_string()),
+            branch_ref: "refs/heads/main".to_string(),
+            version: 1,
+            active_generation: None,
+            epoch: 0,
+        }))
+        .expect("bind repo-u (never published)");
+        block_on(bindings.put_lineage(
+            &unbound,
+            "concept-staged",
+            CodeLineage {
+                repo_id: RepoId("repo-u".to_string()),
+                generation_id: "gen-u".to_string(),
+                source_path: "src/staged.rs".to_string(),
+                contributors: vec!["concept-staged".to_string()],
+            },
+        ))
+        .expect("staged lineage");
+        let mut staged = entity("concept-staged", "stagedConcept", EntityKind::Concept);
+        staged.scope = unbound.clone();
+        block_on(knowledge.put_entity(staged)).expect("put staged concept");
+        let mut unbound_plain = entity(
+            "concept-unbound-plain",
+            "unboundPlainConcept",
+            EntityKind::Concept,
+        );
+        unbound_plain.scope = unbound.clone();
+        block_on(knowledge.put_entity(unbound_plain)).expect("put unbound plain concept");
+        let unbound_coordinator = CodeBindingCoordinator::new(
+            bindings.clone() as Arc<dyn CodeBindingRepository>,
+            Arc::new(AllowAuthorizer),
+            Vec::new(),
+        );
+        let unbound_authorized =
+            AuthorizedKnowledgeQuery::new(knowledge, Arc::new(unbound_coordinator))
+                .with_policy_authorizer(Arc::new(AllowAllPolicy));
+        let pre = block_on(unbound_authorized.list_entities_authorized(&actor(), &unbound, &[]))
+            .expect("pre-retirement unbound listing");
+        let pre_ids: Vec<String> = pre.iter().map(|e| e.id.to_string()).collect();
+        assert_eq!(
+            pre_ids,
+            vec!["concept-unbound-plain".to_string()],
+            "staged code ownership already excludes the concept: {pre_ids:?}"
+        );
+        block_on(
+            engram_knowledge::CodeBindingRepository::retire_lineage_targets(
+                &*bindings,
+                &unbound,
+                &[(RepoId("repo-u".to_string()), 0)],
+                &[engram_knowledge::RetirementTarget {
+                    repo_id: "repo-u".to_string(),
+                    generation_id: "gen-u".to_string(),
+                    record_id: "concept-staged".to_string(),
+                }],
+            ),
+        )
+        .expect("store-level retirement of the staged concept");
+        let post = block_on(unbound_authorized.list_entities_authorized(&actor(), &unbound, &[]))
+            .expect("post-retirement unbound listing");
+        let post_ids: Vec<String> = post.iter().map(|e| e.id.to_string()).collect();
+        assert_eq!(
+            post_ids,
+            vec!["concept-unbound-plain".to_string()],
+            "retirement keeps the record code-owned in the unbound listing (no resurrection): {post_ids:?}"
+        );
+    }
+
+    /// Boundary-seam fixture (finding 11): a populated scope with ONE
+    /// published repository, one published target, and the deterministic
+    /// retirement-boundary observation seam attached to the REAL durable
+    /// store. No separate-store fictions, no mutex counters — assertions are
+    /// made against the PERSISTED durable rows.
+    fn boundary_fixture(
+        dir: &std::path::Path,
+        boundary: engram_store_sqlite::knowledge::RetirementBoundary,
+    ) -> (AuthorizedKnowledgeQuery, Arc<SqlCodeBindingRepository>) {
+        let bindings = SqlCodeBindingRepository::open(dir.join("boundary-bindings.sqlite"))
+            .expect("open boundary store")
+            .with_retirement_boundary(boundary);
+        block_on(bindings.bind(CodeBinding {
+            scope: scope(),
+            repo_id: RepoId("repo-a".to_string()),
+            branch_ref: "refs/heads/main".to_string(),
+            version: 1,
+            active_generation: None,
+            epoch: 0,
+        }))
+        .expect("bind repo-a");
+        publish_generation_for_scope(
+            &bindings,
+            &scope(),
+            "repo-a",
+            "gen-a",
+            0,
+            None,
+            &["a-render"],
+        );
+        let bindings = Arc::new(bindings);
+        let knowledge = Arc::new(SqlKnowledgeStore::open_in_memory().expect("knowledge open"));
+        block_on(knowledge.put_entity(entity("a-render", "render", EntityKind::Function)))
+            .expect("put boundary target");
+        let coordinator = CodeBindingCoordinator::new(
+            bindings.clone() as Arc<dyn CodeBindingRepository>,
+            Arc::new(AllowAuthorizer),
+            Vec::new(),
+        );
+        let authorized = AuthorizedKnowledgeQuery::new(knowledge, Arc::new(coordinator))
+            .with_policy_authorizer(Arc::new(AllowAllPolicy));
+        (authorized, bindings)
+    }
+
+    /// Review r5 (finding 11), order 1: the typed operation pauses at its
+    /// actual first side effect's boundary (after whole-set validation,
+    /// before the fenced write transaction opens). A REAL publication from
+    /// a second handle on the SAME durable file commits during the pause;
+    /// the resumed fence MUST deny stale, and the persisted target is
+    /// unchanged (not retired, original generation).
+    #[test]
+    fn maintenance_boundary_publication_before_write_denies_stale() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let (reached_tx, reached_rx) = std::sync::mpsc::channel::<()>();
+        let (resume_tx, resume_rx) = std::sync::mpsc::channel::<()>();
+        let reached_tx = std::sync::Mutex::new(reached_tx);
+        let resume_rx = std::sync::Mutex::new(resume_rx);
+        let boundary: engram_store_sqlite::knowledge::RetirementBoundary = Arc::new(move |phase| {
+            if phase == engram_store_sqlite::knowledge::RetirementPhase::BeforeWriteTransaction {
+                reached_tx
+                    .lock()
+                    .expect("boundary signal lock")
+                    .send(())
+                    .expect("boundary signal");
+                resume_rx
+                    .lock()
+                    .expect("boundary resume lock")
+                    .recv()
+                    .expect("boundary resume");
+            }
+        });
+        let (authorized, bindings) = boundary_fixture(dir.path(), boundary);
+        let grant = block_on(authorized.authorize_maintenance_grant(
+            &actor(),
+            &scope(),
+            &["a-render".to_string()],
+        ))
+        .expect("grant authorizes");
+        let publisher = SqlCodeBindingRepository::open(dir.path().join("boundary-bindings.sqlite"))
+            .expect("second durable handle");
+        let publisher_thread = std::thread::spawn(move || {
+            reached_rx.recv().expect("boundary reached");
+            // REAL publication with the CURRENT binding epoch (1 after
+            // gen-a published from 0).
+            let outcome = publish_attempt(
+                &publisher,
+                "repo-a",
+                "gen-a-next",
+                1,
+                Some("gen-a"),
+                &["a-render-next"],
+            );
+            resume_tx.send(()).expect("resume signal");
+            outcome
+        });
+        let denied = block_on(authorized.use_maintenance(
+            &actor(),
+            &grant,
+            engram_integration::knowledge_query::MaintenanceOperation::RetireLineageTargets,
+        ));
+        let publication = publisher_thread.join().expect("publisher thread");
+        publication.expect("the real publication at the boundary commits");
+        assert!(
+            matches!(&denied, Err(CoreError::Conflict { reason }) if reason.contains("GenerationChanged")),
+            "the resumed fence denies stale against the publication: {denied:?}"
+        );
+        let lineage = block_on(engram_knowledge::CodeBindingRepository::target_lineage(
+            &*bindings,
+            &scope(),
+        ))
+        .expect("lineage read");
+        assert!(
+            lineage.iter().any(|entry| entry.record_id == "a-render"
+                && entry.generation_id == "gen-a"
+                && !entry.retired),
+            "the persisted target is unchanged by the stale-denied fence: {lineage:?}"
+        );
+    }
+
+    /// Review r5 (finding 11), order 2: a publication attempted DURING the
+    /// fence — after the transaction's FIRST side effect, while the write
+    /// fence is held — cannot interleave: the attempt fails against the
+    /// held write lock, the retirement commits, and a publication retried
+    /// against the ADVANCED epoch succeeds (a retryable CAS, not a deadlock).
+    #[test]
+    fn maintenance_boundary_publication_during_fence_cannot_interleave() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let (reached_tx, reached_rx) = std::sync::mpsc::channel::<()>();
+        let (resume_tx, resume_rx) = std::sync::mpsc::channel::<()>();
+        let reached_tx = std::sync::Mutex::new(reached_tx);
+        let resume_rx = std::sync::Mutex::new(resume_rx);
+        let boundary: engram_store_sqlite::knowledge::RetirementBoundary = Arc::new(move |phase| {
+            if phase == engram_store_sqlite::knowledge::RetirementPhase::AfterFirstSideEffect {
+                reached_tx
+                    .lock()
+                    .expect("boundary signal lock")
+                    .send(())
+                    .expect("boundary signal");
+                resume_rx
+                    .lock()
+                    .expect("boundary resume lock")
+                    .recv()
+                    .expect("boundary resume");
+            }
+        });
+        let (authorized, bindings) = boundary_fixture(dir.path(), boundary);
+        let grant = block_on(authorized.authorize_maintenance_grant(
+            &actor(),
+            &scope(),
+            &["a-render".to_string()],
+        ))
+        .expect("grant authorizes");
+        let publisher = SqlCodeBindingRepository::open(dir.path().join("boundary-bindings.sqlite"))
+            .expect("second durable handle");
+        let publisher_thread = std::thread::spawn(move || {
+            reached_rx.recv().expect("boundary reached");
+            // Publication attempt with the PRE-fence binding epoch: it
+            // cannot commit while the fence holds the write lock.
+            let outcome = publish_attempt(
+                &publisher,
+                "repo-a",
+                "gen-during-fence",
+                1,
+                Some("gen-a"),
+                &[],
+            );
+            resume_tx.send(()).expect("resume signal");
+            outcome
+        });
+        block_on(authorized.use_maintenance(
+            &actor(),
+            &grant,
+            engram_integration::knowledge_query::MaintenanceOperation::RetireLineageTargets,
+        ))
+        .expect("the fenced retirement commits");
+        let blocked = publisher_thread.join().expect("publisher thread");
+        assert!(
+            blocked.is_err(),
+            "a publication attempted while the fence holds the write lock cannot interleave: {blocked:?}"
+        );
+        let lineage = block_on(engram_knowledge::CodeBindingRepository::target_lineage(
+            &*bindings,
+            &scope(),
+        ))
+        .expect("lineage read");
+        assert!(
+            lineage
+                .iter()
+                .any(|entry| entry.record_id == "a-render" && entry.retired),
+            "the retirement held: {lineage:?}"
+        );
+        // The same publication retried against the ADVANCED epoch commits —
+        // the fence serializes by CAS, it does not deadlock.
+        let retried = publish_attempt(
+            &bindings,
+            "repo-a",
+            "gen-after-fence",
+            2,
+            Some("gen-a"),
+            &[],
+        );
+        assert!(
+            retried.is_ok(),
+            "retry against the advanced epoch succeeds: {retried:?}"
+        );
+    }
 }

@@ -71,16 +71,19 @@ fn durable_lineage() -> Vec<DurableLineage> {
             record_id: "entity-stale".to_owned(),
             repo_id: "repo-a".to_owned(),
             generation_id: "gen-1".to_owned(),
+            retired: false,
         },
         DurableLineage {
             record_id: "entity-stale-2".to_owned(),
             repo_id: "repo-a".to_owned(),
             generation_id: "gen-1".to_owned(),
+            retired: false,
         },
         DurableLineage {
             record_id: "entity-eligible".to_owned(),
             repo_id: "repo-a".to_owned(),
             generation_id: "gen-2".to_owned(),
+            retired: false,
         },
     ]
 }
@@ -327,21 +330,25 @@ impl TwoRepoEligibility {
                         record_id: "a-alpha".to_owned(),
                         repo_id: "repo-a".to_owned(),
                         generation_id: "gen-a".to_owned(),
+                        retired: false,
                     },
                     DurableLineage {
                         record_id: "a-beta".to_owned(),
                         repo_id: "repo-a".to_owned(),
                         generation_id: "gen-a".to_owned(),
+                        retired: false,
                     },
                     DurableLineage {
                         record_id: "b-gamma".to_owned(),
                         repo_id: "repo-b".to_owned(),
                         generation_id: "gen-b".to_owned(),
+                        retired: false,
                     },
                     DurableLineage {
                         record_id: "b-delta".to_owned(),
                         repo_id: "repo-b".to_owned(),
                         generation_id: "gen-b".to_owned(),
+                        retired: false,
                     },
                 ],
             }),

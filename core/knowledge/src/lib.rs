@@ -20,6 +20,7 @@ mod maintenance;
 mod ontology;
 mod repository;
 pub mod retained_source;
+pub mod retirement;
 mod taxonomy;
 mod taxonomy_validation;
 
@@ -45,5 +46,6 @@ pub use repository::KnowledgeRepository;
 pub use retained_source::{
     ExactSourceView, RetainedPath, RetainedSourceReader, content_digest, exact_unavailable,
 };
+pub use retirement::RetirementTarget;
 pub use taxonomy::TaxonomyRepository;
 pub use taxonomy_validation::validate_taxonomy_proposal;

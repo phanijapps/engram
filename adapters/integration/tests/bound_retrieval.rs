@@ -2785,6 +2785,82 @@ mod task_013 {
             );
         }
 
+        /// Review r5 (finding 2): a retired published code-owned CONCEPT
+        /// (ordinary kind, retained knowledge row) denies through DEGRADED
+        /// recall (authority failure) while an unrelated ordinary Concept
+        /// survives the same degraded page; the successful-view page denies
+        /// it just the same. Retirement stays POSITIVE code ownership in the
+        /// evidence resolver's keyed lineage read.
+        #[test]
+        fn retired_code_owned_concept_denied_degraded() {
+            let dir = tempfile::tempdir().expect("tempdir");
+            let fixture = fixture(dir.path());
+            let concept = |id: &str, name: &str| {
+                let mut record = symbol_entity(id, name);
+                record.kind = EntityKind::Concept;
+                record
+            };
+            block_on(
+                fixture
+                    .knowledge
+                    .put_entity(concept("concept-retired", "retiredConcept")),
+            )
+            .expect("put retired concept");
+            block_on(
+                fixture
+                    .knowledge
+                    .put_entity(concept("concept-ordinary", "ordinaryConcept")),
+            )
+            .expect("put ordinary concept");
+            publish_with_lineage(
+                &fixture.bindings,
+                "repo-a",
+                "gen-a-3",
+                2,
+                Some("gen-a-2"),
+                &["concept-retired"],
+            );
+            // Retire through the typed store fence (binding epoch is 3 after
+            // the fixture's two publications plus gen-a-3).
+            block_on(
+                engram_knowledge::CodeBindingRepository::retire_lineage_targets(
+                    &*fixture.bindings,
+                    &scope(),
+                    &[(RepoId("repo-a".to_string()), 3)],
+                    &[engram_knowledge::RetirementTarget {
+                        repo_id: "repo-a".to_string(),
+                        generation_id: "gen-a-3".to_string(),
+                        record_id: "concept-retired".to_string(),
+                    }],
+                ),
+            )
+            .expect("retire the concept");
+
+            let degraded = block_on(erroring_recall(&fixture).recall(request("concept", 20)))
+                .expect("degraded recall");
+            let ids = target_ids(&degraded);
+            assert!(
+                ids.contains(&"concept-ordinary".to_string()),
+                "the unrelated ordinary Concept survives the degraded page: {ids:?}"
+            );
+            assert!(
+                !ids.contains(&"concept-retired".to_string()),
+                "the retired code-owned Concept denies through the degraded page (retained lineage stays positive code ownership): {ids:?}"
+            );
+
+            let successful = block_on(composed_recall(&fixture).recall(request("concept", 20)))
+                .expect("composed recall");
+            let ids = target_ids(&successful);
+            assert!(
+                !ids.contains(&"concept-retired".to_string()),
+                "the retired code-owned Concept denies through the bound view as well: {ids:?}"
+            );
+            assert!(
+                ids.contains(&"concept-ordinary".to_string()),
+                "the ordinary Concept keeps flowing through the bound view: {ids:?}"
+            );
+        }
+
         /// Sibling orders are order-independent: [current, stale] /
         /// [stale, current], [current, unknown] / [unknown, current], and
         /// denied siblings in both orders all deny; the all-eligible pair

@@ -29,7 +29,7 @@ mod scope;
 mod service;
 mod taxonomy;
 
-pub use code_binding_port::SqlCodeBindingRepository;
+pub use code_binding_port::{RetirementBoundary, RetirementPhase, SqlCodeBindingRepository};
 pub use identity::SqlIdentityStore;
 pub use retrieval::{GraphCandidateSource, GraphRetrievalIndex};
 pub use service::SqlKnowledgeStore;

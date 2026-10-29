@@ -177,20 +177,24 @@ impl CodeBindingRepository for PgCodeBindingRepository {
         })).await
     }
 
-    /// Corrective r4 (canonical 3a): the owned maintenance mutation. One
+    /// Corrective r4 (canonical 3a) + review r5 (findings 3/10): the owned
+    /// maintenance mutation, SEMANTICALLY IDENTICAL to the SQLite cell. One
     /// transaction takes the SAME advisory lock publications take, locks the
-    /// involved binding rows FOR UPDATE, CASes their epochs, retires the
-    /// durable lineage of every target and advances each binding epoch plus
-    /// the scope epoch. The first side effect (lineage retirement)
-    /// linearizes atomically with the authority check: a publication that
-    /// committed first fails the CAS (no retirement), and a racing
-    /// publication that has not committed fails or retries against the
-    /// advanced epoch — the mutation cannot apply on stale authority.
+    /// involved binding rows FOR UPDATE, validates EVERY binding epoch and
+    /// EVERY typed target association (repository membership AND exact
+    /// expected generation) BEFORE any change, then CASes the epochs,
+    /// retires the durable lineage of every target that still needs
+    /// retirement and advances each binding epoch plus the scope epoch. A
+    /// repeated retirement whose associations match exactly is an idempotent
+    /// no-op SUCCESS that advances no epochs; a wrong- or old-generation
+    /// target from an allowed repository rejects the whole set. The first
+    /// side effect (the epoch-CAS update) linearizes atomically with the
+    /// authority and association checks.
     async fn retire_lineage_targets(
         &self,
         scope: &Scope,
         expected_binding_epochs: &[(RepoId, u64)],
-        targets: &[String],
+        targets: &[engram_knowledge::RetirementTarget],
     ) -> CoreResult<()> {
         if expected_binding_epochs.is_empty() || targets.is_empty() {
             return Err(CoreError::InvalidRequest {
@@ -222,6 +226,10 @@ impl CodeBindingRepository for PgCodeBindingRepository {
                 )
                 .await
                 .map_err(|_| storage_error())?;
+                // (1) Whole-set validation BEFORE any change (findings 3/10):
+                // every binding epoch under FOR UPDATE row locks, and every
+                // typed association — repository membership AND exact
+                // expected generation — with its needs-retirement flag.
                 for (repo, expected_epoch) in repos.iter().zip(expected.iter()) {
                     let row = tx
                         .query_opt(
@@ -237,28 +245,14 @@ impl CodeBindingRepository for PgCodeBindingRepository {
                     if current != *expected_epoch {
                         return Err(error(CodeBindingError::StaleGeneration));
                     }
-                    let advanced = current + 1;
-                    let updated = tx
-                        .execute(
-                            "UPDATE code_repo_bindings SET epoch=$1, record_json=jsonb_set(record_json,'{epoch}',to_jsonb($1::bigint)) WHERE tenant=$2 AND scope_key=$3 AND repo_id=$4 AND epoch=$5",
-                            &[&advanced, &tenant, &key, repo, &current],
-                        )
-                        .await
-                        .map_err(|_| storage_error())?;
-                    if updated != 1 {
-                        return Err(error(CodeBindingError::StaleGeneration));
-                    }
                 }
-                // Preserve code ownership after retirement. Deletion would
-                // turn a surviving code-owned record into an apparently
-                // ordinary record on an unbound/degraded read.
-                // The additive table preserves the historical generation.
                 tx.batch_execute("CREATE TABLE IF NOT EXISTS code_lineage_retirements(tenant TEXT NOT NULL,scope_key TEXT NOT NULL,record_id TEXT NOT NULL,PRIMARY KEY(tenant,scope_key,record_id))").await.map_err(|_| storage_error())?;
+                let mut needs = Vec::with_capacity(targets.len());
                 for target in &targets {
                     let row = tx
                         .query_opt(
-                            "SELECT repo_id, generation_id FROM code_lineage WHERE tenant=$1 AND scope_key=$2 AND record_id=$3 FOR UPDATE",
-                            &[&tenant, &key, target],
+                            "SELECT lineage.repo_id, lineage.generation_id, retirement.record_id IS NOT NULL FROM code_lineage lineage LEFT JOIN code_lineage_retirements retirement ON retirement.tenant = lineage.tenant AND retirement.scope_key = lineage.scope_key AND retirement.record_id = lineage.record_id WHERE lineage.tenant=$1 AND lineage.scope_key=$2 AND lineage.record_id=$3 FOR UPDATE OF lineage",
+                            &[&tenant, &key, &target.record_id],
                         )
                         .await
                         .map_err(|_| storage_error())?;
@@ -267,20 +261,63 @@ impl CodeBindingRepository for PgCodeBindingRepository {
                     };
                     let repo_id: String = row.get(0);
                     let generation_id: String = row.get(1);
+                    let retired: bool = row.get::<_, i64>(2) != 0;
                     if !repos.iter().any(|repo| repo == &repo_id) {
                         return Err(error(CodeBindingError::StaleGeneration));
                     }
-                    let _ = generation_id;
-                    let inserted = tx
+                    // The typed association names the repository it
+                    // validated: a declared repository that differs from the
+                    // durable lineage repository is a mismatched association
+                    // (finding 3).
+                    if repo_id != target.repo_id {
+                        return Err(error(CodeBindingError::StaleGeneration));
+                    }
+                    // The typed expected-generation association (finding 3):
+                    // a wrong- or old-generation target from an ALLOWED
+                    // repository rejects — repository membership alone is
+                    // not authority.
+                    if generation_id != target.generation_id {
+                        return Err(error(CodeBindingError::StaleGeneration));
+                    }
+                    needs.push(!retired);
+                }
+                // Idempotent repeated retirement (parent-adopted contract):
+                // nothing needs retirement — success WITHOUT advancing
+                // binding or scope epochs, and WITHOUT any write.
+                if !needs.iter().any(|needed| *needed) {
+                    tx.commit().await.map_err(|_| storage_error())?;
+                    return Ok(());
+                }
+                // (2) FIRST SIDE EFFECT: advance every involved binding's
+                // epoch inside the same transaction so a racing publication
+                // CAS fails against the mutated state.
+                for (repo, expected_epoch) in repos.iter().zip(expected.iter()) {
+                    let advanced = expected_epoch + 1;
+                    let updated = tx
                         .execute(
-                            "INSERT INTO code_lineage_retirements(tenant,scope_key,record_id) VALUES($1,$2,$3) ON CONFLICT(tenant,scope_key,record_id) DO NOTHING",
-                            &[&tenant, &key, target],
+                            "UPDATE code_repo_bindings SET epoch=$1, record_json=jsonb_set(record_json,'{epoch}',to_jsonb($1::bigint)) WHERE tenant=$2 AND scope_key=$3 AND repo_id=$4 AND epoch=$5",
+                            &[&advanced, &tenant, &key, repo, &expected_epoch],
                         )
                         .await
                         .map_err(|_| storage_error())?;
-                    if inserted != 1 {
+                    if updated != 1 {
                         return Err(error(CodeBindingError::StaleGeneration));
                     }
+                }
+                // (3) Preserve code ownership after retirement. Deletion
+                // would turn a surviving code-owned record into an
+                // apparently ordinary record on an unbound/degraded read;
+                // the additive table preserves the historical generation.
+                for (target, needed) in targets.iter().zip(needs.iter()) {
+                    if !needed {
+                        continue;
+                    }
+                    tx.execute(
+                        "INSERT INTO code_lineage_retirements(tenant,scope_key,record_id) VALUES($1,$2,$3) ON CONFLICT(tenant,scope_key,record_id) DO NOTHING",
+                        &[&tenant, &key, &target.record_id],
+                    )
+                    .await
+                    .map_err(|_| storage_error())?;
                 }
                 tx.execute(
                     "INSERT INTO code_epochs(tenant,scope_key,epoch) VALUES($1,$2,1) ON CONFLICT(tenant,scope_key) DO UPDATE SET epoch=code_epochs.epoch+1",
@@ -563,7 +600,10 @@ impl CodeEligibilityGate for PgCodeBindingRepository {
                         .connection
                         .client
                         .query(
- "SELECT l.record_id FROM code_lineage l JOIN code_repo_bindings b ON b.tenant = l.tenant AND b.scope_key = l.scope_key AND b.repo_id = l.repo_id AND b.active_generation = l.generation_id WHERE l.tenant = $1 AND l.scope_key = $2 ORDER BY l.record_id LIMIT $3",
+                            // Review r5 finding 2: retirement facts are
+                            // excluded in SQL BEFORE the limit — identical
+                            // semantics to the SQLite gate.
+                            "SELECT l.record_id FROM code_lineage l JOIN code_repo_bindings b ON b.tenant = l.tenant AND b.scope_key = l.scope_key AND b.repo_id = l.repo_id AND b.active_generation = l.generation_id WHERE l.tenant = $1 AND l.scope_key = $2 AND NOT EXISTS (SELECT 1 FROM code_lineage_retirements r WHERE r.tenant = l.tenant AND r.scope_key = l.scope_key AND r.record_id = l.record_id) ORDER BY l.record_id LIMIT $3",
                             &[&scope.tenant, &key, &(limit as i64)],
                         )
                         .await
@@ -578,7 +618,10 @@ impl CodeEligibilityGate for PgCodeBindingRepository {
                             .connection
                             .client
                             .query_opt(
- "SELECT l.record_id FROM code_lineage l JOIN code_repo_bindings b ON b.tenant = l.tenant AND b.scope_key = l.scope_key AND b.repo_id = l.repo_id AND b.active_generation = l.generation_id WHERE l.record_id = $1 AND l.tenant = $2 AND l.scope_key = $3",
+                                // Review r5 finding 2: explicit ids deny when
+                                // the target is retired (identical semantics
+                                // to the SQLite gate).
+                                "SELECT l.record_id FROM code_lineage l JOIN code_repo_bindings b ON b.tenant = l.tenant AND b.scope_key = l.scope_key AND b.repo_id = l.repo_id AND b.active_generation = l.generation_id WHERE l.record_id = $1 AND l.tenant = $2 AND l.scope_key = $3 AND NOT EXISTS (SELECT 1 FROM code_lineage_retirements r WHERE r.tenant = l.tenant AND r.scope_key = l.scope_key AND r.record_id = l.record_id)",
                                 &[id, &scope.tenant, &key],
                             )
                             .await

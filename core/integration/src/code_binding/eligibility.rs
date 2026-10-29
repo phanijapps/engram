@@ -46,14 +46,18 @@ impl CodeBindingCoordinator {
             .target_lineage(scope)
             .await?
             .into_iter()
-            // Retirement is an additive ownership fact: keep it available to
-            // callers that classify durable code ownership, but never admit a
-            // retired target into a published-generation eligibility view.
-            .filter(|entry| !entry.retired)
+            // Review r5 finding 2: retired associations stay in the
+            // classification universe as POSITIVE code ownership with
+            // explicitly denied eligibility — dropping them here made a
+            // retired code-owned record look ordinary again. The view's
+            // `retired` fact carries the denial; consumers that must not
+            // admit retired records use `allows`/`classify`, and exact-read
+            // participation (`code_lineage_of`) excludes them.
             .map(|entry| engram_retrieval::DurableLineage {
                 record_id: entry.record_id,
                 repo_id: entry.repo_id,
                 generation_id: entry.generation_id,
+                retired: entry.retired,
             })
             .collect();
         let view = engram_retrieval::BoundCodeView::from_eligibility(
@@ -171,16 +175,18 @@ impl CodeBindingCoordinator {
 
     /// Owned maintenance mutation (corrective r4, canonical 3a): authorizes
     /// the caller for every involved repository, then executes the store's
-    /// EPOCH-CAS fenced lineage retirement. The retirement is the owned
-    /// first side effect and linearizes atomically with the epoch check in
-    /// one store transaction — a publication that committed first denies
-    /// with `GenerationChanged` and NOTHING is retired.
+    /// EPOCH-CAS fenced lineage retirement over TYPED expected target
+    /// associations (scope/repository/EXACT generation — review r5 finding
+    /// 3). The retirement is the owned first side effect and linearizes
+    /// atomically with the epoch check and the whole-set association
+    /// validation in one store transaction — a publication that committed
+    /// first denies with `GenerationChanged` and NOTHING is retired.
     pub async fn retire_maintenance_targets(
         &self,
         actor: &Actor,
         scope: &Scope,
         expected_binding_epochs: &[(RepoId, u64)],
-        targets: &[String],
+        targets: &[engram_knowledge::RetirementTarget],
     ) -> CoreResult<()> {
         for (repo, _) in expected_binding_epochs {
             self.authorize(actor, scope, repo).await?;

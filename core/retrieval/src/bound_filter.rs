@@ -46,11 +46,15 @@ pub struct BoundBinding {
 
 /// One durable target-lineage association: `record_id` is code contributed by
 /// `generation_id` of `repo_id` (the scanner's staged lineage record).
+/// `retired` (review r5 finding 2) is the additive retirement fact: a retired
+/// association stays POSITIVE code ownership for classification (the record
+/// is never ordinary again) while being explicitly INELIGIBLE in every view.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct DurableLineage {
     pub record_id: String,
     pub repo_id: String,
     pub generation_id: String,
+    pub retired: bool,
 }
 
 /// Published-generation eligibility for one scope, resolved once per request
@@ -87,8 +91,13 @@ impl BoundCodeEligibility {
 pub struct BoundCodeView {
     /// repo → (branch, generation) for every published binding.
     published: BTreeMap<String, (String, String)>,
-    /// record → (repo, generation) from durable staged lineage.
+    /// record → (repo, generation) from durable staged lineage, RETIRED
+    /// records included (finding 2): retirement is an ownership fact, so a
+    /// retired record never loses its code identity — only its eligibility.
     lineage: BTreeMap<String, (String, String)>,
+    /// Retired durable-lineage records (finding 2): positive code ownership,
+    /// explicitly denied eligibility.
+    retired: BTreeSet<String>,
     requested_keys: Option<BTreeSet<String>>,
 }
 
@@ -113,7 +122,10 @@ impl BoundCodeView {
         Self::default()
     }
 
-    /// Builds the view over published bindings + durable lineage.
+    /// Builds the view over published bindings + durable lineage. Retired
+    /// lineage entries STAY in the classification universe (finding 2): the
+    /// record remains code for `is_code_record`/`code_records` while
+    /// [`Self::classify`] denies it.
     pub fn from_eligibility(eligibility: &BoundCodeEligibility) -> Self {
         Self {
             published: eligibility
@@ -135,6 +147,12 @@ impl BoundCodeView {
                         (entry.repo_id.clone(), entry.generation_id.clone()),
                     )
                 })
+                .collect(),
+            retired: eligibility
+                .lineage
+                .iter()
+                .filter(|entry| entry.retired)
+                .map(|entry| entry.record_id.clone())
                 .collect(),
             requested_keys: None,
         }
@@ -210,12 +228,18 @@ impl BoundCodeView {
     /// Classifies one record from DURABLE LINEAGE + record kind. Metadata
     /// stamps are never consulted (finding 4).
     ///
+    /// - RETIRED lineage (finding 2) → always `IneligibleCode`, even when the
+    ///   immutable historical generation still matches a published binding:
+    ///   retirement preserves ownership while denying eligibility.
     /// - `record_id` with a durable lineage entry → code: eligible only when
     ///   the lineage repository's PUBLISHED generation equals the lineage
     ///   generation AND that repository survives narrowing.
     /// - No lineage + `kind_is_code` → legacy unbound code: ineligible.
     /// - No lineage + non-code kind → `NonCode`.
     pub fn classify(&self, record_id: &str, kind_is_code: bool) -> RecordEligibility {
+        if self.retired.contains(record_id) {
+            return RecordEligibility::IneligibleCode;
+        }
         match self.lineage.get(record_id) {
             Some((repo, generation)) => {
                 let published = self.published.get(repo).map(|(_, generation)| generation);
@@ -244,10 +268,17 @@ impl BoundCodeView {
     }
 
     /// True when `record_id` carries durable code lineage (regardless of
-    /// eligibility) — the authoritative code test for seams that must treat
-    /// code and non-code differently (finding 4).
+    /// eligibility — RETIRED records included, finding 2) — the authoritative
+    /// code test for seams that must treat code and non-code differently
+    /// (finding 4). Retirement never makes a record ordinary.
     pub fn is_code_record(&self, record_id: &str) -> bool {
         self.lineage.contains_key(record_id)
+    }
+
+    /// True when `record_id` is RETIRED durable code lineage (finding 2):
+    /// positive ownership, denied eligibility.
+    pub fn is_retired_record(&self, record_id: &str) -> bool {
+        self.retired.contains(record_id)
     }
 
     /// The repository a durable-lineage record belongs to, when its lineage
@@ -263,10 +294,14 @@ impl BoundCodeView {
     }
 
     /// The durable lineage association (repository, generation) of one
-    /// record, when it exists — the canonical origin association used to
-    /// select PARTICIPATING chunks for exact reads (corrective r4,
-    /// canonical 10: stamps are never authority).
+    /// NON-RETIRED record, when it exists — the canonical origin association
+    /// used to select PARTICIPATING chunks for exact reads (corrective r4,
+    /// canonical 10: stamps are never authority). A retired association
+    /// resolves to `None`: retired code never participates (finding 2).
     pub fn code_lineage_of(&self, record_id: &str) -> Option<(&str, &str)> {
+        if self.retired.contains(record_id) {
+            return None;
+        }
         self.lineage
             .get(record_id)
             .map(|(repo, generation)| (repo.as_str(), generation.as_str()))
@@ -343,9 +378,55 @@ mod tests {
                     record_id: (*record).to_owned(),
                     repo_id: (*repo).to_owned(),
                     generation_id: (*generation).to_owned(),
+                    retired: false,
                 })
                 .collect(),
         }
+    }
+
+    #[test]
+    fn retired_lineage_stays_code_ownership_with_denied_eligibility() {
+        // Review r5 finding 2: a retired durable-lineage record never
+        // resurrects as ordinary — it stays POSITIVE code ownership
+        // (is_code_record / code_records) while being explicitly
+        // ineligible, even when its immutable generation still matches the
+        // published binding, and it never participates in exact reads.
+        let eligibility = eligibility_with_lineage(
+            &[("repo-a", "refs/heads/main", "gen-1")],
+            &[
+                ("rec-retired", "repo-a", "gen-1"),
+                ("rec-live", "repo-a", "gen-1"),
+            ],
+        );
+        eligibility.lineage[0].retired = true;
+        let view = BoundCodeView::from_eligibility(&eligibility);
+        assert!(
+            view.is_code_record("rec-retired"),
+            "retired stays code-owned"
+        );
+        assert!(view.is_retired_record("rec-retired"));
+        assert!(!view.is_retired_record("rec-live"));
+        assert_eq!(
+            view.classify("rec-retired", false),
+            RecordEligibility::IneligibleCode,
+            "a retired ordinary-KIND record with retained lineage denies (never NonCode)"
+        );
+        assert_eq!(
+            view.classify("rec-retired", true),
+            RecordEligibility::IneligibleCode
+        );
+        assert!(!view.allows("rec-retired", false));
+        assert!(view.allows("rec-live", false));
+        assert!(
+            view.code_records().contains(&"rec-retired"),
+            "wildcard/classification universes keep the retired record"
+        );
+        assert_eq!(
+            view.code_lineage_of("rec-retired"),
+            None,
+            "retired code never participates in exact reads"
+        );
+        assert!(view.code_lineage_of("rec-live").is_some());
     }
 
     #[test]

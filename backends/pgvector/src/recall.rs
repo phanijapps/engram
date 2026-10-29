@@ -61,11 +61,13 @@ mod tests {
                     record_id: "chunk-published".to_owned(),
                     repo_id: "repo".to_owned(),
                     generation_id: "gen-published".to_owned(),
+                    retired: false,
                 },
                 DurableLineage {
                     record_id: "chunk-stale".to_owned(),
                     repo_id: "repo".to_owned(),
                     generation_id: "gen-old".to_owned(),
+                    retired: false,
                 },
             ],
         };

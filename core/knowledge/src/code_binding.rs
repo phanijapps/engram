@@ -124,20 +124,26 @@ pub trait CodeBindingRepository: crate::CodeReadLeases + Send + Sync {
         record_id: &str,
         lineage: CodeLineage,
     ) -> CoreResult<CodeLineage>;
-    /// Owned maintenance mutation (corrective r4, canonical 3a): retires the
-    /// durable lineage of `targets` under an EPOCH-CAS fence. The
-    /// expected-epoch comparison, the lineage retirement (the owned first
-    /// side effect) and the epoch advance all commit in ONE transaction, so
-    /// the mutation cannot apply on stale authority: a publication that
-    /// committed first makes the CAS fail with `GenerationChanged` (no side
-    /// effect), and a publication that has not committed either fails or
-    /// retries against the advanced epoch. Default: unsupported (unrelated
+    /// Owned maintenance mutation (corrective r4, canonical 3a; review r5
+    /// findings 3/10): retires the durable lineage of `targets` — TYPED
+    /// expected scope/repository/generation associations — under an
+    /// EPOCH-CAS fence. The expected-epoch comparison, the validation of
+    /// EVERY target association (repository membership AND exact expected
+    /// generation) and the lineage retirement (the owned first side effect)
+    /// all commit in ONE transaction, and the whole set is validated before
+    /// the FIRST change: a publication that committed first makes the CAS
+    /// fail with `GenerationChanged` (no side effect), a target whose
+    /// durable lineage carries a different generation than the grant
+    /// validated rejects the whole operation, and a repeated retirement
+    /// whose associations match exactly is an idempotent no-op SUCCESS that
+    /// advances no epochs. Epochs advance only when at least one target
+    /// actually needs retirement. Default: unsupported (unrelated
     /// implementors keep compiling).
     async fn retire_lineage_targets(
         &self,
         _scope: &Scope,
         _expected_binding_epochs: &[(engram_domain::RepoId, u64)],
-        _targets: &[String],
+        _targets: &[crate::RetirementTarget],
     ) -> CoreResult<()> {
         Err(CoreError::CapabilityUnsupported {
             capability: "code-maintenance-retire".into(),

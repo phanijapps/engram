@@ -140,6 +140,19 @@ impl MaintenanceGrant {
     pub fn binding_epochs(&self) -> &[(engram_domain::RepoId, u64)] {
         &self.binding_epochs
     }
+
+    /// The typed retirement associations (repository + EXACT generation per
+    /// record) the store fence validates (review r5, finding 3).
+    pub fn retirement_targets(&self) -> Vec<engram_knowledge::RetirementTarget> {
+        self.targets
+            .iter()
+            .map(|target| engram_knowledge::RetirementTarget {
+                repo_id: target.repo_id.0.clone(),
+                generation_id: target.generation_id.clone(),
+                record_id: target.record_id.clone(),
+            })
+            .collect()
+    }
 }
 
 /// Shared scoped authorization for explicit-ID code reads, wildcard listing
@@ -468,12 +481,62 @@ impl AuthorizedKnowledgeQuery {
         }).await?;
         match operation {
             MaintenanceOperation::RetireLineageTargets => {
-                let ids = grant.targets();
+                let targets = grant.retirement_targets();
                 coordinator
-                    .retire_maintenance_targets(actor, &grant.scope, &grant.binding_epochs, &ids)
+                    .retire_maintenance_targets(
+                        actor,
+                        &grant.scope,
+                        &grant.binding_epochs,
+                        &targets,
+                    )
                     .await
             }
         }
+    }
+
+    /// The positively authorized ORDINARY subset of a scope's entities
+    /// (review r5, finding 8): every code-owned record (durable lineage,
+    /// RETIRED records included — finding 2) and every code-kind record is
+    /// withheld, and each surviving ordinary entity is authorized through
+    /// its OWN graph policy or the graphless lane default via the configured
+    /// authorizer. Used for unbound scopes AND for populated scopes whose
+    /// code authority denies the caller — a code denial must never erase the
+    /// independently authorized ordinary subset.
+    async fn ordinary_entities_authorized(
+        &self,
+        actor: &engram_domain::Actor,
+        scope: &Scope,
+        requested: &[String],
+        view: &engram_retrieval::BoundCodeView,
+    ) -> CoreResult<Vec<KnowledgeEntity>> {
+        let code_owned: std::collections::HashSet<String> =
+            view.code_records().into_iter().map(str::to_owned).collect();
+        let entities = self.query.list_entities(scope).await?;
+        let mut ordinary = Vec::new();
+        for entity in entities {
+            if !entity_is_code_kind(&entity)
+                && !code_owned.contains(entity.id.as_str())
+                && self.ordinary_authorized(actor, &entity).await?
+            {
+                ordinary.push(entity);
+            }
+        }
+        if requested.is_empty() {
+            return Ok(ordinary);
+        }
+        let requested: std::collections::HashSet<&str> =
+            requested.iter().map(String::as_str).collect();
+        let selected: Vec<KnowledgeEntity> = ordinary
+            .into_iter()
+            .filter(|entity| requested.contains(entity.id.as_str()))
+            .collect();
+        if selected.len() != requested.len() {
+            return Err(CoreError::InvalidRequest {
+                reason: "BindingRequired: code target ids are foreign or unpublished in this scope"
+                    .into(),
+            });
+        }
+        Ok(selected)
     }
 
     /// Entities visible to `scope`, with code-derived entities constrained to
@@ -496,40 +559,25 @@ impl AuthorizedKnowledgeQuery {
             // a staged code-owned record denies even when its kind is
             // ordinary-looking (e.g. a Concept contributed by a staged
             // attempt), and every code-kind record denies.
-            let code_owned: std::collections::HashSet<String> = initial_view
-                .code_records()
-                .into_iter()
-                .map(str::to_owned)
-                .collect();
-            let entities = self.query.list_entities(scope).await?;
-            let mut ordinary = Vec::new();
-            for entity in entities {
-                if !entity_is_code_kind(&entity)
-                    && !code_owned.contains(entity.id.as_str())
-                    && self.ordinary_authorized(actor, &entity).await?
-                {
-                    ordinary.push(entity);
-                }
-            }
-            if requested.is_empty() {
-                return Ok(ordinary);
-            }
-            let requested: std::collections::HashSet<&str> =
-                requested.iter().map(String::as_str).collect();
-            let selected: Vec<KnowledgeEntity> = ordinary
-                .into_iter()
-                .filter(|entity| requested.contains(entity.id.as_str()))
-                .collect();
-            if selected.len() != requested.len() {
-                return Err(CoreError::InvalidRequest {
-                    reason:
-                        "BindingRequired: code target ids are foreign or unpublished in this scope"
-                            .into(),
-                });
-            }
-            return Ok(selected);
+            return self
+                .ordinary_entities_authorized(actor, scope, requested, &initial_view)
+                .await;
         }
-        let anchor = self.authorize_caller(actor, scope).await?;
+        // Review r5 (finding 8): ordinary per-record authorization is
+        // SEPARATE from code authorization. When the caller cannot inspect
+        // the scope's published code repositories, the code entities are
+        // withheld but the positively authorized ordinary subset still
+        // flows through its own graph policies — the code denial is not an
+        // ordinary-record denial.
+        let anchor = match self.authorize_caller(actor, scope).await {
+            Ok(anchor) => anchor,
+            Err(CoreError::PolicyDenied { .. }) => {
+                return self
+                    .ordinary_entities_authorized(actor, scope, requested, &initial_view)
+                    .await;
+            }
+            Err(error) => return Err(error),
+        };
         let requested = requested.to_vec();
         let query = Arc::clone(&self.query);
         let coordinator = Arc::clone(&self.coordinator);

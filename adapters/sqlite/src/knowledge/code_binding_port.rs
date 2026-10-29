@@ -11,7 +11,29 @@ use std::{
 
 pub struct SqlCodeBindingRepository {
     store: Mutex<SqlCodeBindingStore>,
+    /// Deterministic observation seam at the retirement boundary (review
+    /// r5, finding 11): invoked at the typed operation's actual first side
+    /// effect. Production NEVER configures it; tests use it to interleave a
+    /// REAL publication at the mutation boundary and assert the fence.
+    retirement_boundary: Option<RetirementBoundary>,
 }
+
+/// Phase of the fenced retirement transaction the boundary seam observes.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum RetirementPhase {
+    /// After whole-set validation, BEFORE the fenced write transaction
+    /// opens (no locks held): a publication landing here must make the
+    /// fence deny stale with the persisted target unchanged.
+    BeforeWriteTransaction,
+    /// Immediately after the transaction's FIRST side effect (the epoch-CAS
+    /// binding update, write locks held): a publication attempted here
+    /// cannot interleave — it blocks and then conflicts with the advanced
+    /// epoch.
+    AfterFirstSideEffect,
+}
+
+/// Test-only observation hook at the retirement boundary.
+pub type RetirementBoundary = std::sync::Arc<dyn Fn(RetirementPhase) + Send + Sync>;
 fn error(error: CodeBindingError) -> CoreError {
     match error {
         CodeBindingError::BindingConflict => CoreError::Conflict {
@@ -42,7 +64,13 @@ impl SqlCodeBindingRepository {
     pub fn open(path: impl AsRef<Path>) -> CoreResult<Self> {
         Ok(Self {
             store: Mutex::new(SqlCodeBindingStore::open(path).map_err(|_| storage_error())?),
+            retirement_boundary: None,
         })
+    }
+    /// Attaches the retirement-boundary observation seam (tests only).
+    pub fn with_retirement_boundary(mut self, boundary: RetirementBoundary) -> Self {
+        self.retirement_boundary = Some(boundary);
+        self
     }
     pub(super) fn lock(&self) -> CoreResult<MutexGuard<'_, SqlCodeBindingStore>> {
         self.store.lock().map_err(|_| storage_error())
@@ -143,19 +171,26 @@ impl CodeBindingRepository for SqlCodeBindingRepository {
         store.connection.execute("INSERT OR IGNORE INTO code_stage_lineage(scope_key,record_id,repo_id,generation_id,record_json) VALUES(?1,?2,?3,?4,?5)",params![key,record_id,lineage.repo_id.0,lineage.generation_id,value]).map_err(|_| storage_error())?;
         Ok(lineage)
     }
-    /// Corrective r4 (canonical 3a): the owned maintenance mutation. One
-    /// IMMEDIATE transaction performs the binding-epoch CAS, retires the
-    /// durable staged lineage of every target and advances each involved
-    /// binding's epoch plus the scope epoch. The first side effect
-    /// (lineage retirement) linearizes atomically with the authority check:
-    /// a publication that committed first fails the CAS (no retirement), and
+    /// Corrective r4 (canonical 3a) + review r5 (findings 3/10/11): the
+    /// owned maintenance mutation. The ENTIRE target set is validated
+    /// (binding epochs + every typed repository/EXACT-generation
+    /// association) before the FIRST change, in a read pass and again under
+    /// the write fence. One IMMEDIATE transaction then performs the
+    /// epoch-CAS, retires the durable staged lineage of every target that
+    /// still needs retirement and advances each involved binding's epoch
+    /// plus the scope epoch. A repeated retirement whose associations match
+    /// exactly is an idempotent NO-OP SUCCESS that advances no epochs; a
+    /// wrong- or old-generation target from an allowed repository rejects
+    /// the whole operation. The first side effect (the epoch-CAS update)
+    /// linearizes atomically with the authority and association checks: a
+    /// publication that committed first fails the CAS (no retirement), and
     /// a racing publication that has not committed fails or retries against
     /// the advanced epoch — the mutation cannot apply on stale authority.
     async fn retire_lineage_targets(
         &self,
         scope: &Scope,
         expected_binding_epochs: &[(engram_domain::RepoId, u64)],
-        targets: &[String],
+        targets: &[engram_knowledge::RetirementTarget],
     ) -> CoreResult<()> {
         if expected_binding_epochs.is_empty() || targets.is_empty() {
             return Err(CoreError::InvalidRequest {
@@ -164,14 +199,52 @@ impl CodeBindingRepository for SqlCodeBindingRepository {
         }
         let mut store = self.lock()?;
         let key = json(scope)?;
+        store.connection.execute_batch("CREATE TABLE IF NOT EXISTS code_stage_lineage(scope_key TEXT NOT NULL,record_id TEXT NOT NULL,repo_id TEXT NOT NULL,generation_id TEXT NOT NULL,record_json TEXT NOT NULL,PRIMARY KEY(scope_key,record_id)); CREATE TABLE IF NOT EXISTS code_stage_lineage_retirements(scope_key TEXT NOT NULL,record_id TEXT NOT NULL,PRIMARY KEY(scope_key,record_id))")
+            .map_err(|_| storage_error())?;
+        // (0) Whole-set validation BEFORE any mutation (read pass): every
+        // binding epoch and every typed association, and which targets
+        // still need retirement. Nothing has been written at this point.
+        let needs = {
+            let tx = store
+                .connection
+                .transaction()
+                .map_err(|_| storage_error())?;
+            let needs =
+                validate_retirement_set(&tx, scope, &key, expected_binding_epochs, targets)?;
+            tx.commit().map_err(|_| storage_error())?;
+            needs
+        };
+        // Idempotent repeated retirement (parent-adopted contract): every
+        // association matched and nothing needs retirement — success
+        // WITHOUT advancing binding or scope epochs.
+        if !needs.iter().any(|needed| *needed) {
+            return Ok(());
+        }
+        // Boundary seam (finding 11): after whole-set validation, before the
+        // fenced write transaction opens. A REAL publication landing here
+        // must be caught by the in-transaction revalidation below.
+        if let Some(boundary) = &self.retirement_boundary {
+            boundary(RetirementPhase::BeforeWriteTransaction);
+        }
         let tx = store
             .connection
             .transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)
             .map_err(|_| storage_error())?;
-        tx.execute_batch("CREATE TABLE IF NOT EXISTS code_stage_lineage(scope_key TEXT NOT NULL,record_id TEXT NOT NULL,repo_id TEXT NOT NULL,generation_id TEXT NOT NULL,record_json TEXT NOT NULL,PRIMARY KEY(scope_key,record_id)); CREATE TABLE IF NOT EXISTS code_stage_lineage_retirements(scope_key TEXT NOT NULL,record_id TEXT NOT NULL,PRIMARY KEY(scope_key,record_id))")
-            .map_err(|_| storage_error())?;
-        // (1) Authority CAS on every involved binding epoch.
-        for (repo_id, expected_epoch) in expected_binding_epochs {
+        // (1) Authority + association revalidation UNDER the write fence
+        // (the read pass may be stale — a publication may have committed at
+        // the boundary above): epochs CAS and every typed association again,
+        // before the first change.
+        let needs = validate_retirement_set(&tx, scope, &key, expected_binding_epochs, targets)?;
+        if !needs.iter().any(|needed| *needed) {
+            // A concurrent retirement of the same set won the fence: this
+            // use is the idempotent no-op (nothing written, no epochs).
+            tx.commit().map_err(|_| storage_error())?;
+            return Ok(());
+        }
+        // (2) FIRST SIDE EFFECT: advance every involved binding's epoch
+        // inside the same transaction so a racing publication CAS fails
+        // against the mutated state.
+        for (repo_id, _) in expected_binding_epochs {
             let record: Option<String> = tx
                 .query_row(
                     "SELECT record_json FROM code_repo_bindings WHERE tenant=?1 AND scope_key=?2 AND repo_id=?3",
@@ -187,13 +260,6 @@ impl CodeBindingRepository for SqlCodeBindingRepository {
             };
             let mut binding: engram_domain::CodeBinding =
                 serde_json::from_str(&record).map_err(|_| storage_error())?;
-            if binding.epoch != *expected_epoch {
-                return Err(CoreError::Conflict {
-                    reason: "GenerationChanged: maintenance authority is stale".into(),
-                });
-            }
-            // (3) Advance the binding epoch inside the same transaction so a
-            // racing publication CAS fails against the mutated state.
             binding.epoch += 1;
             let updated = serde_json::to_string(&binding).map_err(|_| storage_error())?;
             tx.execute(
@@ -202,38 +268,25 @@ impl CodeBindingRepository for SqlCodeBindingRepository {
             )
             .map_err(|_| storage_error())?;
         }
-        // (2) Preserve durable positive ownership while removing eligibility.
-        // Deleting this row would make a surviving code-owned record look
-        // ordinary to an unbound/degraded read. Retire only an exact target
-        // association from this grant, never another repository's target.
-        for target in targets {
-            let lineage: Option<(String, String)> = tx
-                .query_row(
-                    "SELECT repo_id, generation_id FROM code_stage_lineage WHERE scope_key=?1 AND record_id=?2",
-                    params![key, target],
-                    |row| Ok((row.get(0)?, row.get(1)?)),
-                )
-                .optional()
-                .map_err(|_| storage_error())?;
-            let Some((repo_id, _generation_id)) = lineage else {
-                return Err(CoreError::Conflict {
-                    reason: "GenerationChanged: maintenance target has no durable lineage".into(),
-                });
-            };
-            if !expected_binding_epochs
-                .iter()
-                .any(|(repo, _)| repo.0 == repo_id)
-            {
-                return Err(CoreError::Conflict {
-                    reason: "GenerationChanged: maintenance target belongs to another repository"
-                        .into(),
-                });
+        // Boundary seam (finding 11): the transaction's first side effect
+        // has happened and holds the write fence — a publication attempted
+        // here cannot interleave.
+        if let Some(boundary) = &self.retirement_boundary {
+            boundary(RetirementPhase::AfterFirstSideEffect);
+        }
+        // (3) Preserve durable positive ownership while removing
+        // eligibility. Deleting the lineage row would make a surviving
+        // code-owned record look ordinary to an unbound/degraded read —
+        // retire only validated targets of THIS grant, never another
+        // repository's rows. Historical lineage stays immutable, so indexed
+        // columns and record_json always agree.
+        for (target, needed) in targets.iter().zip(needs.iter()) {
+            if !needed {
+                continue;
             }
-            // Retirement is an additive typed fact. Historical lineage stays
-            // immutable, so indexed columns and record_json always agree.
             tx.execute(
                 "INSERT OR IGNORE INTO code_stage_lineage_retirements(scope_key,record_id) VALUES(?1,?2)",
-                params![key, target],
+                params![key, target.record_id],
             )
             .map_err(|_| storage_error())?;
         }
@@ -494,6 +547,96 @@ impl CodeBindingRepository for SqlCodeBindingRepository {
     }
 }
 
+/// Whole-set validation for fenced retirement (review r5, findings 3/10):
+/// every expected binding must exist at the expected epoch (the CAS
+/// pre-check), and every TYPED target association must match its durable
+/// lineage EXACTLY — repository membership AND generation. Returns one flag
+/// per target: `true` when the target still needs retirement (no retirement
+/// fact yet). Any violation rejects the whole set before any change.
+fn validate_retirement_set(
+    connection: &rusqlite::Connection,
+    scope: &Scope,
+    key: &str,
+    expected_binding_epochs: &[(engram_domain::RepoId, u64)],
+    targets: &[engram_knowledge::RetirementTarget],
+) -> CoreResult<Vec<bool>> {
+    for (repo_id, expected_epoch) in expected_binding_epochs {
+        let record: Option<String> = connection
+            .query_row(
+                "SELECT record_json FROM code_repo_bindings WHERE tenant=?1 AND scope_key=?2 AND repo_id=?3",
+                params![scope.tenant, key, repo_id.0],
+                |r| r.get(0),
+            )
+            .optional()
+            .map_err(|_| storage_error())?;
+        let Some(record) = record else {
+            return Err(CoreError::Conflict {
+                reason: "GenerationChanged: maintenance repo is not bound".into(),
+            });
+        };
+        let binding: engram_domain::CodeBinding =
+            serde_json::from_str(&record).map_err(|_| storage_error())?;
+        if binding.epoch != *expected_epoch {
+            return Err(CoreError::Conflict {
+                reason: "GenerationChanged: maintenance authority is stale".into(),
+            });
+        }
+    }
+    let mut needs = Vec::with_capacity(targets.len());
+    for target in targets {
+        let lineage: Option<(String, String, bool)> = connection
+            .query_row(
+                "SELECT lineage.repo_id, lineage.generation_id, retirement.record_id IS NOT NULL \
+                 FROM code_stage_lineage lineage \
+                 LEFT JOIN code_stage_lineage_retirements retirement \
+                   ON retirement.scope_key = lineage.scope_key AND retirement.record_id = lineage.record_id \
+                 WHERE lineage.scope_key=?1 AND lineage.record_id=?2",
+                params![key, target.record_id],
+                |row| Ok((row.get(0)?, row.get(1)?, row.get::<_, i64>(2)? != 0)),
+            )
+            .optional()
+            .map_err(|_| storage_error())?;
+        let Some((repo_id, generation_id, retired)) = lineage else {
+            return Err(CoreError::Conflict {
+                reason: "GenerationChanged: maintenance target has no durable lineage".into(),
+            });
+        };
+        if !expected_binding_epochs
+            .iter()
+            .any(|(repo, _)| repo.0 == repo_id)
+        {
+            return Err(CoreError::Conflict {
+                reason: "GenerationChanged: maintenance target belongs to another repository"
+                    .into(),
+            });
+        }
+        // The typed association names the repository it validated: a
+        // target whose declared repository differs from its DURABLE lineage
+        // repository is a mismatched association (finding 3).
+        if repo_id != target.repo_id {
+            return Err(CoreError::Conflict {
+                reason: format!(
+                    "GenerationChanged: maintenance target {} association mismatch (expected repository {})",
+                    target.record_id, target.repo_id
+                ),
+            });
+        }
+        // The typed expected-generation association (finding 3): a wrong-
+        // or old-generation target from an ALLOWED repository rejects —
+        // repository membership alone is not authority.
+        if generation_id != target.generation_id {
+            return Err(CoreError::Conflict {
+                reason: format!(
+                    "GenerationChanged: maintenance target {} association mismatch (expected generation {})",
+                    target.record_id, target.generation_id
+                ),
+            });
+        }
+        needs.push(!retired);
+    }
+    Ok(needs)
+}
+
 pub(super) fn read_eligibility(
     connection: &rusqlite::Connection,
     scope: &Scope,
@@ -580,7 +723,10 @@ impl engram_knowledge::CodeEligibilityGate for SqlCodeBindingRepository {
             let rows = {
                 let mut statement = tx
                     .prepare(
-                        "SELECT l.record_id FROM code_stage_lineage l JOIN code_repo_bindings b ON b.repo_id = l.repo_id AND b.active_generation = l.generation_id WHERE l.scope_key = ?1 AND b.tenant = ?2 AND b.scope_key = ?1 ORDER BY l.record_id LIMIT ?3",
+                        // Review r5 finding 2: retirement facts are excluded in
+                        // SQL BEFORE the limit — a retired target must not
+                        // consume a wildcard slot or authorize explicitly.
+                        "SELECT l.record_id FROM code_stage_lineage l JOIN code_repo_bindings b ON b.repo_id = l.repo_id AND b.active_generation = l.generation_id WHERE l.scope_key = ?1 AND b.tenant = ?2 AND b.scope_key = ?1 AND NOT EXISTS (SELECT 1 FROM code_stage_lineage_retirements r WHERE r.scope_key = l.scope_key AND r.record_id = l.record_id) ORDER BY l.record_id LIMIT ?3",
                     )
                     .map_err(|_| storage_error())?;
                 statement
@@ -606,7 +752,9 @@ impl engram_knowledge::CodeEligibilityGate for SqlCodeBindingRepository {
             {
                 let mut statement = tx
                     .prepare(
-                        "SELECT l.record_id FROM code_stage_lineage l JOIN code_repo_bindings b ON b.repo_id = l.repo_id AND b.active_generation = l.generation_id WHERE l.record_id = ?1 AND b.tenant = ?2 AND b.scope_key = ?3 AND l.scope_key = ?3",
+                        // Review r5 finding 2: explicit ids deny when the
+                        // target is retired, exactly like staged/foreign ids.
+                        "SELECT l.record_id FROM code_stage_lineage l JOIN code_repo_bindings b ON b.repo_id = l.repo_id AND b.active_generation = l.generation_id WHERE l.record_id = ?1 AND b.tenant = ?2 AND b.scope_key = ?3 AND l.scope_key = ?3 AND NOT EXISTS (SELECT 1 FROM code_stage_lineage_retirements r WHERE r.scope_key = l.scope_key AND r.record_id = l.record_id)",
                     )
                     .map_err(|_| storage_error())?;
                 for id in requested_target_ids {

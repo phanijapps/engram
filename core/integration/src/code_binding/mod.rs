@@ -53,10 +53,15 @@ impl engram_retrieval::CodeEligibilityResolver for RepositoryEligibilitySource {
             .target_lineage(scope)
             .await?
             .into_iter()
+            // Review r5 finding 2: retired associations remain POSITIVE code
+            // ownership with denied eligibility — the view carries the
+            // retirement fact instead of discarding the row (a discarded row
+            // made retired code flow through retirement-blind lanes).
             .map(|entry| engram_retrieval::DurableLineage {
                 record_id: entry.record_id,
                 repo_id: entry.repo_id,
                 generation_id: entry.generation_id,
+                retired: entry.retired,
             })
             .collect();
         Ok(engram_retrieval::BoundCodeEligibility {

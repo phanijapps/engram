@@ -237,6 +237,7 @@ impl AuthorizedKnowledgeQuery {
         let requested = requested.to_vec();
         let query = Arc::clone(&self.query);
         let coordinator = Arc::clone(&self.coordinator);
+        let view_coordinator = Arc::clone(&coordinator);
         // Pin authority, canonical selection, entity load, and returned view
         // into one consistency window. A publication race retries once or
         // returns GenerationChanged before stale results can be returned.
@@ -248,7 +249,7 @@ impl AuthorizedKnowledgeQuery {
                 AUTHORIZED_QUERY_WINDOW,
                 move |_lease| {
                     let query = Arc::clone(&query);
-                    let coordinator = Arc::clone(&coordinator);
+                    let coordinator = Arc::clone(&view_coordinator);
                     let requested = requested.clone();
                     async move {
                         let view = coordinator.eligibility_view(scope, None).await?;

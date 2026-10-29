@@ -146,8 +146,9 @@ fn receipt(attempt_id: &str, generation_id: &str, lane: CodeReceiptKind) -> Stag
     }
 }
 
-fn publish_generation(
+fn publish_generation_for_scope(
     store: &SqlCodeBindingRepository,
+    target_scope: &Scope,
     repo: &str,
     generation_id: &str,
     expected_epoch: u64,
@@ -157,7 +158,7 @@ fn publish_generation(
     let repo_id = RepoId(repo.to_string());
     let attempt_id = format!("attempt-{repo}-{generation_id}");
     block_on(store.begin_attempt(
-        &scope(),
+        target_scope,
         &repo_id,
         generation(generation_id),
         attempt(&attempt_id, expected_epoch, expected_active),
@@ -171,15 +172,15 @@ fn publish_generation(
         CodeReceiptKind::Knowledge,
     )))
     .expect("knowledge receipt");
-    let (_, stored) = block_on(store.get_attempt(&scope(), &repo_id, &attempt_id))
+    let (_, stored) = block_on(store.get_attempt(target_scope, &repo_id, &attempt_id))
         .expect("get attempt")
         .expect("attempt exists");
-    block_on(store.mark_ready(&scope(), &repo_id, &attempt_id, stored.fencing_token))
+    block_on(store.mark_ready(target_scope, &repo_id, &attempt_id, stored.fencing_token))
         .expect("mark ready");
-    block_on(store.publish(&scope(), &repo_id, &attempt_id, expected_epoch)).expect("publish");
+    block_on(store.publish(target_scope, &repo_id, &attempt_id, expected_epoch)).expect("publish");
     for record in lineage_records {
         block_on(store.put_lineage(
-            &scope(),
+            target_scope,
             record,
             CodeLineage {
                 repo_id: RepoId(repo.to_string()),
@@ -190,6 +191,25 @@ fn publish_generation(
         ))
         .expect("put lineage");
     }
+}
+
+fn publish_generation(
+    store: &SqlCodeBindingRepository,
+    repo: &str,
+    generation_id: &str,
+    expected_epoch: u64,
+    expected_active: Option<&str>,
+    lineage_records: &[&str],
+) {
+    publish_generation_for_scope(
+        store,
+        &scope(),
+        repo,
+        generation_id,
+        expected_epoch,
+        expected_active,
+        lineage_records,
+    );
 }
 
 fn entity(id: &str, name: &str, kind: EntityKind) -> KnowledgeEntity {
@@ -386,6 +406,32 @@ fn seed_graph(bindings: &SqlCodeBindingRepository, knowledge: &SqlKnowledgeStore
     }
 }
 
+fn seed_foreign_scope(bindings: &SqlCodeBindingRepository, knowledge: &SqlKnowledgeStore) {
+    let foreign = foreign_scope();
+    let repo = RepoId("repo-foreign".to_string());
+    block_on(bindings.bind(CodeBinding {
+        scope: foreign.clone(),
+        repo_id: repo,
+        branch_ref: "refs/heads/foreign".to_string(),
+        version: 1,
+        active_generation: None,
+        epoch: 0,
+    }))
+    .expect("bind populated foreign scope");
+    publish_generation_for_scope(
+        bindings,
+        &foreign,
+        "repo-foreign",
+        "gen-foreign",
+        0,
+        None,
+        &["foreign-render"],
+    );
+    let mut foreign_entity = entity("foreign-render", "foreignRender", EntityKind::Function);
+    foreign_entity.scope = foreign;
+    block_on(knowledge.put_entity(foreign_entity)).expect("put populated foreign entity");
+}
+
 fn provider_with(
     dir: &std::path::Path,
     authorizer: Arc<dyn CodeBindingAuthorizer>,
@@ -405,6 +451,7 @@ fn provider_with(
     }
     let knowledge = Arc::new(SqlKnowledgeStore::open_in_memory().expect("knowledge open"));
     seed_graph(&bindings, &knowledge);
+    seed_foreign_scope(&bindings, &knowledge);
     let bindings = Arc::new(bindings);
     let coordinator = CodeBindingCoordinator::new(
         bindings.clone() as Arc<dyn CodeBindingRepository>,

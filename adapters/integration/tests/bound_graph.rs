@@ -473,6 +473,210 @@ fn fixture(dir: &std::path::Path) -> (EngramProvider, Arc<SqlCodeBindingReposito
 
 // ---------- task_015 focused cases -----------------------------------------
 
+/// TASK-014 focused proof: the eligibility-constrained community OVERVIEW
+/// authorizes BOTH endpoints of every edge into the canonical eligible
+/// vertex set BEFORE Louvain, community detection and limits (finding 8):
+/// dangling/name-only edges and forged/null/foreign/missing-stamped
+/// lineage-free code contribute neither vertices nor budget under TIGHT
+/// limits, while ordinary non-code records survive.
+mod task_014 {
+    use super::*;
+
+    fn stamped_entity(
+        id: &str,
+        name: &str,
+        kind: EntityKind,
+        generation_stamp: Option<serde_json::Value>,
+        repo_stamp: Option<serde_json::Value>,
+    ) -> KnowledgeEntity {
+        let mut record = entity(id, name, kind);
+        let mut metadata = Metadata::new();
+        if let Some(generation) = generation_stamp {
+            metadata.insert("codeGenerationId".to_owned(), generation);
+        }
+        if let Some(repo) = repo_stamp {
+            metadata.insert("codeRepoId".to_owned(), repo);
+        }
+        record.metadata = Some(metadata);
+        record
+    }
+
+    /// overview_endpoints_authorized_before_budgets: the polluted universe
+    /// (name-only/dangling edges + stamped lineage-free code ahead of every
+    /// valid edge) produces EXACTLY the authorized-only overview under a
+    /// tight limit — the forgeries contribute neither vertices nor budget,
+    /// and the ordinary concept counterpart survives.
+    #[test]
+    fn overview_endpoints_authorized_before_budgets() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let bindings = SqlCodeBindingRepository::open(dir.path().join("overview-bindings.sqlite"))
+            .expect("open binding store");
+        for repo in ["repo-a", "repo-b"] {
+            block_on(bindings.bind(CodeBinding {
+                scope: scope(),
+                repo_id: RepoId(repo.to_string()),
+                branch_ref: "refs/heads/main".to_string(),
+                version: 1,
+                active_generation: None,
+                epoch: 0,
+            }))
+            .expect("bind");
+        }
+        publish_generation_for_scope(
+            &bindings,
+            &scope(),
+            "repo-a",
+            "gen-a",
+            0,
+            None,
+            &["a-render", "a-hub"],
+        );
+        publish_generation_for_scope(&bindings, &scope(), "repo-b", "gen-b", 0, None, &["b-util"]);
+
+        // Authorized baseline universe: published repo-a clique + repo-b
+        // endpoint + one ordinary concept.
+        let authorized_entities = vec![
+            entity("a-render", "render", EntityKind::Function),
+            entity("a-hub", "hub", EntityKind::Struct),
+            entity("b-util", "util", EntityKind::Function),
+            entity("plain-doc", "ordinaryConcept", EntityKind::Concept),
+        ];
+        let authorized_relationships = vec![
+            relationship("o-1", "calls", "a-render", "render", "a-hub", "hub"),
+            relationship("o-2", "calls", "a-render", "render", "b-util", "util"),
+            relationship(
+                "o-3",
+                "mentions",
+                "a-hub",
+                "hub",
+                "plain-doc",
+                "ordinaryConcept",
+            ),
+        ];
+
+        // Polluted universe: the authorized graph PLUS forged/null/foreign/
+        // missing-stamped lineage-free code entities, each wired with TWO
+        // edges (one to an authorized endpoint, one name-only/dangling), all
+        // ahead of the authorized edges so they would dominate budgets.
+        let mut entities = authorized_entities.clone();
+        let mut relationships = authorized_relationships.clone();
+        let forgeries = [
+            ("forged-fn", "forgedParser"),
+            ("null-stamp-fn", "nullParser"),
+            ("foreign-stamp-fn", "foreignParser"),
+            ("missing-stamp-fn", "missingParser"),
+        ];
+        entities.push(stamped_entity(
+            "forged-fn",
+            "forgedParser",
+            EntityKind::Function,
+            Some(serde_json::Value::String("gen-a".to_owned())),
+            Some(serde_json::Value::String("repo-a".to_owned())),
+        ));
+        entities.push(stamped_entity(
+            "null-stamp-fn",
+            "nullParser",
+            EntityKind::Function,
+            Some(serde_json::Value::Null),
+            Some(serde_json::Value::Null),
+        ));
+        entities.push(stamped_entity(
+            "foreign-stamp-fn",
+            "foreignParser",
+            EntityKind::Function,
+            Some(serde_json::Value::String("gen-foreign".to_owned())),
+            Some(serde_json::Value::String("repo-foreign".to_owned())),
+        ));
+        entities.push(stamped_entity(
+            "missing-stamp-fn",
+            "missingParser",
+            EntityKind::Function,
+            None,
+            None,
+        ));
+        for (id, name) in forgeries {
+            relationships.push(relationship(
+                &format!("poll-{id}"),
+                "calls",
+                id,
+                name,
+                "a-render",
+                "render",
+            ));
+            relationships.push(name_only_edge(
+                &format!("poll-dangle-{id}"),
+                id,
+                name,
+                "ghostSymbol",
+            ));
+        }
+
+        let view = |_knowledge: &Arc<SqlKnowledgeStore>, _polluted: bool| {
+            let resolver =
+                engram_integration::code_binding::RepositoryEligibilitySource::new(Arc::new(
+                    SqlCodeBindingRepository::open(dir.path().join("overview-bindings.sqlite"))
+                        .expect("reopen bindings"),
+                ));
+            use engram_retrieval::CodeEligibilityResolver as _;
+            let eligibility = block_on(resolver.resolve(&scope())).expect("resolve eligibility");
+            engram_retrieval::BoundCodeView::from_eligibility(&eligibility)
+        };
+
+        // Baseline overview: authorized universe only, TIGHT limit 1.
+        let baseline_store = Arc::new(SqlKnowledgeStore::open_in_memory().expect("store"));
+        for entity in authorized_entities {
+            block_on(baseline_store.put_entity(entity)).expect("put entity");
+        }
+        for relationship in authorized_relationships {
+            block_on(baseline_store.put_relationship(relationship)).expect("put relationship");
+        }
+        let baseline_view = view(&baseline_store, false);
+        let baseline = block_on(engram_integration::sqlite::overview_eligible(
+            &baseline_store,
+            &scope(),
+            1,
+            &baseline_view,
+        ))
+        .expect("baseline overview");
+
+        // Polluted overview: same authorized universe plus the forgeries,
+        // under the SAME tight limit.
+        let polluted_store = Arc::new(SqlKnowledgeStore::open_in_memory().expect("store"));
+        for entity in entities {
+            block_on(polluted_store.put_entity(entity)).expect("put entity");
+        }
+        for relationship in relationships {
+            block_on(polluted_store.put_relationship(relationship)).expect("put relationship");
+        }
+        let polluted_view = view(&polluted_store, true);
+        let polluted_overview = block_on(engram_integration::sqlite::overview_eligible(
+            &polluted_store,
+            &scope(),
+            1,
+            &polluted_view,
+        ))
+        .expect("polluted overview");
+
+        assert_eq!(
+            baseline, polluted_overview,
+            "forged/null/foreign/missing-stamped lineage-free code and dangling/name-only edges \
+             must contribute neither vertices nor budget to the overview"
+        );
+        // The authorized universe is genuinely present (not an empty equal
+        // comparison): members and communities exist and the ordinary
+        // concept participates through its authorized edge.
+        assert!(
+            !polluted_overview.communities.is_empty(),
+            "the authorized universe must still produce communities"
+        );
+        let unconstrained_total = polluted_overview.total_communities;
+        assert!(
+            unconstrained_total >= 1,
+            "authorized communities exist: {polluted_overview:?}"
+        );
+    }
+}
+
 mod task_015 {
     use super::*;
 

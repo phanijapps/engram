@@ -303,6 +303,28 @@ fn empty_filter_with_keys(keys: Vec<String>) -> engram_domain::QueryFilter {
 }
 
 /// The store KEEPS serving every record; only eligibility flips.
+
+/// Like [`entity`] but carrying metadata stamps — FORGED/null/foreign
+/// variations used to prove stamps are never classification authority.
+fn stamped_entity(
+    id: &str,
+    name: &str,
+    kind: EntityKind,
+    generation_stamp: Option<serde_json::Value>,
+    repo_stamp: Option<serde_json::Value>,
+) -> KnowledgeEntity {
+    let mut record = entity(id, name, kind);
+    let mut metadata = engram_domain::Metadata::new();
+    if let Some(generation) = generation_stamp {
+        metadata.insert("codeGenerationId".to_owned(), generation);
+    }
+    if let Some(repo) = repo_stamp {
+        metadata.insert("codeRepoId".to_owned(), repo);
+    }
+    record.metadata = Some(metadata);
+    record
+}
+
 fn graph() -> StubSource {
     StubSource {
         entities: vec![
@@ -338,6 +360,105 @@ fn bound_index(
 // ---------- task_014 focused cases -----------------------------------------
 
 mod task_014 {
+
+    /// Corrective r2 (finding 4): FORGED, null, foreign and missing metadata
+    /// stamps on LINEAGE-FREE code entities never make them eligible through
+    /// the REAL associative lane — they never seed or rank — while the
+    /// ordinary non-code counterpart keeps serving.
+    #[test]
+    fn forged_and_missing_stamps_never_seed_or_rank() {
+        let eligibility = Arc::new(FlipEligibility::gen1());
+        eligibility.retire_gen1_publish_gen2();
+        // The eligible universe plus four stamped lineage-free Functions
+        // wired AHEAD of the eligible seed so an unsound classifier would
+        // rank them first.
+        let mut entities = graph().entities;
+        let mut relationships = graph().relationships;
+        entities.push(stamped_entity(
+            "forged-fn",
+            "forgedParser",
+            EntityKind::Function,
+            Some(serde_json::Value::String("gen-2".to_owned())),
+            Some(serde_json::Value::String("repo-a".to_owned())),
+        ));
+        entities.push(stamped_entity(
+            "null-stamp-fn",
+            "nullParser",
+            EntityKind::Function,
+            Some(serde_json::Value::Null),
+            Some(serde_json::Value::Null),
+        ));
+        entities.push(stamped_entity(
+            "foreign-stamp-fn",
+            "foreignParser",
+            EntityKind::Function,
+            Some(serde_json::Value::String("gen-foreign".to_owned())),
+            Some(serde_json::Value::String("repo-foreign".to_owned())),
+        ));
+        entities.push(stamped_entity(
+            "missing-stamp-fn",
+            "missingParser",
+            EntityKind::Function,
+            None,
+            None,
+        ));
+        for id in [
+            "forged-fn",
+            "null-stamp-fn",
+            "foreign-stamp-fn",
+            "missing-stamp-fn",
+        ] {
+            relationships.push(edge(&format!("stamp-{id}"), id, "entity-eligible", "calls"));
+        }
+        let index = bound_index(
+            Arc::new(StubSource {
+                entities,
+                relationships,
+            }),
+            eligibility,
+            Arc::new(InMemoryGraphCache::new()),
+        );
+
+        // A query matching only the stamped names returns nothing.
+        let forged = block_on(index.retrieve_candidates(&request(
+            "forgedParser nullParser foreignParser missingParser",
+        )))
+        .expect("forged query");
+        assert!(
+            forged.is_empty(),
+            "stamped lineage-free code never seeds: {:?}",
+            forged
+                .iter()
+                .map(|r| r.target_id.clone())
+                .collect::<Vec<_>>()
+        );
+
+        // The eligible query still serves the eligible + ordinary universe
+        // and never leaks a stamped record through traversal.
+        let eligible =
+            block_on(index.retrieve_candidates(&request("eligibleFn"))).expect("eligible query");
+        let ids: Vec<String> = eligible.iter().map(|r| r.target_id.clone()).collect();
+        assert!(
+            ids.contains(&"entity-eligible".to_owned()),
+            "eligible code ranks: {ids:?}"
+        );
+        assert!(
+            ids.contains(&"entity-shared".to_owned()),
+            "the ordinary record keeps serving: {ids:?}"
+        );
+        for forbidden in [
+            "forged-fn",
+            "null-stamp-fn",
+            "foreign-stamp-fn",
+            "missing-stamp-fn",
+        ] {
+            assert!(
+                !ids.iter().any(|id| id == forbidden),
+                "a stamped lineage-free record must never rank or traverse: {ids:?}"
+            );
+        }
+    }
+
     use super::*;
 
     /// warm_generation_retirement: the warm cache snapshot materialized under

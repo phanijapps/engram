@@ -36,39 +36,6 @@ pub const DEFAULT_MAX_BYTES: usize = 100 * 1024;
 /// Hard ceiling for `max_bytes` overrides (matches the scanner's 1 MiB limit).
 pub const MAX_BYTES_CEILING: usize = 1024 * 1024;
 
-/// The bound-code origin `(repo_id, generation_id)` of a chunk set: present
-/// exactly when the chunks carry the scanner's generation stamps (task_017).
-/// Non-code / unbound documents return `None` and keep the historical read
-/// paths.
-fn bound_code_origin(
-    chunks: &[&engram_domain::KnowledgeChunk],
-) -> Result<Option<(String, String)>, String> {
-    let mut origin: Option<(String, String)> = None;
-    for chunk in chunks {
-        let Some(metadata) = chunk.metadata.as_ref() else {
-            continue;
-        };
-        let generation = metadata
-            .get("codeGenerationId")
-            .and_then(|value| value.as_str());
-        let repo = metadata.get("codeRepoId").and_then(|value| value.as_str());
-        match (repo, generation) {
-            (None, None) => continue,
-            (Some(repo), Some(generation)) => {
-                let candidate = (repo.to_owned(), generation.to_owned());
-                if let Some(existing) = &origin
-                    && existing != &candidate
-                {
-                    return Err("matched chunks span multiple bound repository generations".into());
-                }
-                origin = Some(candidate);
-            }
-            _ => return Err("bound chunk provenance is incomplete".into()),
-        }
-    }
-    Ok(origin)
-}
-
 /// Canonical participating chunks (corrective r4, canonical 10 / original
 /// 11): a chunk participates in the EXACT path only when its ID carries
 /// DURABLE LINEAGE whose (repository, generation) matches a PUBLISHED
@@ -80,12 +47,12 @@ fn bound_code_origin(
 fn canonical_participating_chunks<'a>(
     app: &App,
     matched: &[&'a engram_domain::KnowledgeChunk],
-) -> Result<Vec<&'a engram_domain::KnowledgeChunk>, String> {
+) -> Result<(Vec<&'a engram_domain::KnowledgeChunk>, Option<(String, String)>), String> {
     let Ok(coordinator) = app.provider.code_bindings() else {
         // No binding coordinator configured: no canonical participant can be
         // established and the exact path does not apply (the verbatim path
         // is the caller's fallback). This is not an ambiguity error.
-        return Ok(Vec::new());
+        return Ok((Vec::new(), None));
     };
     let view = futures::executor::block_on(coordinator.eligibility_view(&app.scope, None))
         .map_err(|error| format!("eligibility resolution failed: {error}"))?;
@@ -116,7 +83,7 @@ fn canonical_participating_chunks<'a>(
         origin = Some(candidate);
         participants.push(*chunk);
     }
-    Ok(participants)
+    Ok((participants, origin))
 }
 
 /// Resolves `symbol` against the matched (same-generation) chunks and maps
@@ -319,23 +286,27 @@ pub fn fetch_content(app: &App, args: &Value) -> Result<Value, ToolError> {
     // missing snapshot stays an error in auto and verbatim modes alike
     // (REQ-006: exact content or an explicit unavailable error, never a
     // checkout masquerading as the revision).
-    let participants = canonical_participating_chunks(app, &ordered).map_err(|reason| {
+    let (participants, bound_origin) = canonical_participating_chunks(app, &ordered).map_err(|reason| {
         ToolError::new(
             -32602,
             format!("bound source origin is ambiguous: {reason}"),
         )
     })?;
-    let bound_origin = participants
-        .first()
-        .and_then(|chunk| chunk.metadata.as_ref())
-        .and_then(|metadata| {
-            let repo = metadata.get("codeRepoId").and_then(|v| v.as_str());
-            let generation = metadata.get("codeGenerationId").and_then(|v| v.as_str());
-            match (repo, generation) {
-                (Some(repo), Some(generation)) => Some((repo.to_owned(), generation.to_owned())),
-                _ => None,
-            }
-        });
+    // A row that asserts bound-code metadata or has durable (but retired)
+    // lineage cannot fall through to verbatim/stitching when no current
+    // canonical participant exists. That would resurrect old-only or forged
+    // rows as ordinary content.
+    let has_bound_claim = ordered.iter().any(|chunk| {
+        chunk.metadata.as_ref().is_some_and(|metadata| {
+            metadata.contains_key("codeRepoId") || metadata.contains_key("codeGenerationId")
+        })
+    });
+    if participants.is_empty() && has_bound_claim {
+        return Err(ToolError::new(
+            -32602,
+            "bound source has no current canonical participants",
+        ));
+    }
     // Symbol/span selection uses ONLY the participants.
     let span_chunks: Vec<&engram_domain::KnowledgeChunk> = if bound_origin.is_some() {
         participants.clone()

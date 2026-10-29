@@ -37,6 +37,20 @@ pub trait LexicalTargetResolver: Send + Sync {
         target_id: &str,
         request: &RetrievalRequest,
     ) -> CoreResult<Option<LexicalResolvedTarget>>;
+
+    /// Returns canonical target IDs allowed for this request's resolved view.
+    /// The collector consumes this set before TopDocs, so contributor stamps
+    /// alone can never admit a forged current-generation or legacy code row.
+    async fn eligible_target_ids(
+        &self,
+        _request: &RetrievalRequest,
+        _view: &engram_retrieval::BoundCodeView,
+    ) -> CoreResult<std::collections::BTreeSet<String>> {
+        Err(CoreError::CapabilityUnsupported {
+            capability: "lexical-canonical-target-eligibility".to_owned(),
+            reason: "resolver does not expose canonical target eligibility".to_owned(),
+        })
+    }
 }
 
 /// Canonical target data required before a lexical hit can become a result.
@@ -176,9 +190,12 @@ impl RetrievalIndex for LexicalRetrievalIndex {
         };
         let hits = match &view {
             Some(view) => {
-                let keys = Self::allowed_contributor_keys(view);
+                let target_ids = self
+                    .target_resolver
+                    .eligible_target_ids(request, view)
+                    .await?;
                 self.index
-                    .search_within(&request.query, fetch, &keys)
+                    .search_targets_within(&request.query, fetch, &target_ids)
                     .map_err(|e| CoreError::Adapter {
                         adapter: "engram-store-lexical".to_owned(),
                         message: e.to_string(),

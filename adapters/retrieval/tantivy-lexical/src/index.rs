@@ -408,6 +408,53 @@ impl LexicalIndex {
         self.search_contributors(query, limit, Some(allowed_keys))
     }
 
+    /// Canonical target constraint for bound retrieval.  Target IDs come from
+    /// the authoritative store resolver, not from a Tantivy contributor stamp,
+    /// and are intersected with the user query before TopDocs consumes budget.
+    pub fn search_targets_within(
+        &self,
+        query: &str,
+        limit: usize,
+        target_ids: &std::collections::BTreeSet<String>,
+    ) -> tantivy::Result<Vec<(String, f32)>> {
+        use std::collections::BTreeSet;
+        use tantivy::query::{BooleanQuery, TermSetQuery};
+        if target_ids.is_empty() {
+            return Ok(Vec::new());
+        }
+        if limit == 0 {
+            return Ok(Vec::new());
+        }
+        let normalized = normalize_identifier_text(query);
+        self.reader.reload()?;
+        let searcher = self.reader.searcher();
+        let parser = QueryParser::for_index(&self.index, vec![self.text_field]);
+        let parsed = parser.parse_query(&normalized)?;
+        let terms: BTreeSet<Term> = target_ids
+            .iter()
+            .map(|id| Term::from_field_text(self.target_id_field, id))
+            .collect();
+        let query = BooleanQuery::new(vec![
+            (tantivy::query::Occur::Must, Box::new(parsed)),
+            (
+                tantivy::query::Occur::Must,
+                Box::new(TermSetQuery::new(terms)),
+            ),
+        ]);
+        let top = searcher.search(&query, &TopDocs::with_limit(limit))?;
+        top.into_iter()
+            .map(|(score, addr)| {
+                let doc = searcher.doc::<TantivyDocument>(addr)?;
+                let id = doc
+                    .get_first(self.target_id_field)
+                    .and_then(|v| v.as_str())
+                    .map(str::to_owned)
+                    .unwrap_or_default();
+                Ok((id, score))
+            })
+            .collect()
+    }
+
     /// Shared search path. `allowed_keys` adds a `TermSetQuery` over the
     /// `eligibility` field ANDed with the parsed user query (`None` = the
     /// historical unconstrained page).

@@ -375,6 +375,37 @@ impl LexicalTargetResolver for KnowledgeLexicalResolver {
         }
         Ok(None)
     }
+
+    async fn eligible_target_ids(
+        &self,
+        request: &RetrievalRequest,
+        view: &engram_retrieval::BoundCodeView,
+    ) -> CoreResult<std::collections::BTreeSet<String>> {
+        // Resolve canonical records before Tantivy collection.  A record with
+        // durable eligible lineage is allowed, as is a positively typed
+        // ordinary non-code chunk/entity.  Code kinds with absent, forged, or
+        // mismatched metadata remain code and cannot enter via `doc`.
+        let mut ids = std::collections::BTreeSet::new();
+        for chunk in self.store.list_chunks(&request.scope).await? {
+            if view.allows(
+                chunk.id.as_str(),
+                matches!(
+                    chunk.kind,
+                    KnowledgeChunkKind::CodeSymbol
+                        | KnowledgeChunkKind::CodeBlock
+                        | KnowledgeChunkKind::DiffHunk
+                ),
+            ) {
+                ids.insert(chunk.id.to_string());
+            }
+        }
+        for entity in self.store.list_entities(&request.scope).await? {
+            if view.allows(entity.id.as_str(), is_code_entity_kind(&entity)) {
+                ids.insert(entity.id.to_string());
+            }
+        }
+        Ok(ids)
+    }
 }
 
 /// Vector-lane target resolver backed by the knowledge store: rehydrates a

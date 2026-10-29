@@ -153,9 +153,9 @@ impl RepositoryCandidateEvidence {
                     }
                     stack.push((next, frame_depth + 1));
                 }
-                if aggregate == CandidateEvidence::CodeDependent {
-                    return Ok(CandidateEvidence::CodeDependent);
-                }
+                // Do not stop at the first code dependency. Every reachable
+                // reference must be resolved so a stale, denied, or missing
+                // sibling cannot be hidden behind an eligible dependency.
             }
         }
         Ok(aggregate)
@@ -493,11 +493,13 @@ pub(crate) fn graph_default_policy() -> Policy {
 /// unresolved evidence degrades ordinary (never the other way round).
 fn upgrade(current: CandidateEvidence, next: CandidateEvidence) -> CandidateEvidence {
     match (current, next) {
-        (CandidateEvidence::CodeDependent, _) | (_, CandidateEvidence::CodeDependent) => {
-            CandidateEvidence::CodeDependent
-        }
+        // Unknown is fail-closed. A positive code dependency must not erase
+        // an unresolved, denied, or over-bound sibling in the same walk.
         (CandidateEvidence::Unknown, _) | (_, CandidateEvidence::Unknown) => {
             CandidateEvidence::Unknown
+        }
+        (CandidateEvidence::CodeDependent, _) | (_, CandidateEvidence::CodeDependent) => {
+            CandidateEvidence::CodeDependent
         }
         (CandidateEvidence::Ordinary, CandidateEvidence::Ordinary) => CandidateEvidence::Ordinary,
     }

@@ -17,6 +17,9 @@ use engram_domain::{
 };
 use engram_runtime::{CoreError, CoreResult};
 use std::sync::Arc;
+use std::time::Duration;
+
+const AUTHORIZED_QUERY_WINDOW: Duration = Duration::from_secs(30);
 
 /// Read port: list the entities / relationships / chunks visible to a scope.
 /// Lean chunk reference for embed/index paths (see
@@ -127,8 +130,15 @@ impl AuthorizedKnowledgeQuery {
         &self,
         actor: &engram_domain::Actor,
         scope: &Scope,
-    ) -> CoreResult<()> {
+    ) -> CoreResult<engram_domain::RepoId> {
         let view = self.coordinator.eligibility_view(scope, None).await?;
+        let anchor = view
+            .eligible_bindings()
+            .first()
+            .map(|binding| engram_domain::RepoId(binding.repo_id.clone()))
+            .ok_or_else(|| CoreError::InvalidRequest {
+                reason: "BindingRequired: no published bound repository in this scope".into(),
+            })?;
         for binding in view.eligible_bindings() {
             self.coordinator
                 .authorize(
@@ -138,7 +148,7 @@ impl AuthorizedKnowledgeQuery {
                 )
                 .await?;
         }
-        Ok(())
+        Ok(anchor)
     }
 
     /// Authorizes an explicit-id (or wildcard, when `requested` is empty)
@@ -153,7 +163,7 @@ impl AuthorizedKnowledgeQuery {
         requested: &[String],
         limit: usize,
     ) -> CoreResult<Vec<String>> {
-        self.authorize_caller(actor, scope).await?;
+        let _anchor = self.authorize_caller(actor, scope).await?;
         let view = self.coordinator.eligibility_view(scope, None).await?;
         if requested.is_empty() {
             // Wildcard: exactly the eligible code targets (durable lineage of
@@ -200,7 +210,7 @@ impl AuthorizedKnowledgeQuery {
                 reason: "maintenance authorization requires explicit target ids".into(),
             });
         }
-        self.authorize_caller(actor, scope).await?;
+        let _anchor = self.authorize_caller(actor, scope).await?;
         let view = self.coordinator.eligibility_view(scope, None).await?;
         let mut authorized = Vec::with_capacity(requested.len());
         for id in requested {
@@ -223,28 +233,55 @@ impl AuthorizedKnowledgeQuery {
         scope: &Scope,
         requested: &[String],
     ) -> CoreResult<Vec<KnowledgeEntity>> {
-        let entities = self.query.list_entities(scope).await?;
-        let view = self.coordinator.eligibility_view(scope, None).await?;
-        self.authorize_caller(actor, scope).await?;
-        if requested.is_empty() {
-            return Ok(entities
-                .into_iter()
-                .filter(|entity| view.allows(entity.id.as_str(), entity_is_code_kind(entity)))
-                .collect());
-        }
-        let authorized: std::collections::HashSet<String> = self
-            .authorize_read(actor, scope, requested, requested.len())
-            .await?
-            .into_iter()
-            .collect();
-        Ok(entities
-            .into_iter()
-            .filter(|entity| {
-                // Explicit listing: authorized ids (code or ordinary) pass;
-                // everything else drops (a narrowed explicit read).
-                authorized.contains(&entity.id.to_string())
-            })
-            .collect())
+        let anchor = self.authorize_caller(actor, scope).await?;
+        let requested = requested.to_vec();
+        let query = Arc::clone(&self.query);
+        let coordinator = Arc::clone(&self.coordinator);
+        // Pin authority, canonical selection, entity load, and returned view
+        // into one consistency window. A publication race retries once or
+        // returns GenerationChanged before stale results can be returned.
+        coordinator
+            .consistent_read(
+                actor,
+                scope,
+                &anchor,
+                AUTHORIZED_QUERY_WINDOW,
+                move |_lease| {
+                    let query = Arc::clone(&query);
+                    let coordinator = Arc::clone(&coordinator);
+                    let requested = requested.clone();
+                    async move {
+                        let view = coordinator.eligibility_view(scope, None).await?;
+                        let entities = query.list_entities(scope).await?;
+                        if requested.is_empty() {
+                            return Ok(entities
+                                .into_iter()
+                                .filter(|entity| {
+                                    view.allows(entity.id.as_str(), entity_is_code_kind(entity))
+                                })
+                                .collect());
+                        }
+                        let mut authorized = std::collections::HashSet::new();
+                        for id in &requested {
+                            if view.is_code_record(id) {
+                                if !view.allows(id, true) {
+                                    return Err(foreign_target(&[id.clone()]));
+                                }
+                                authorized.insert(id.clone());
+                            } else if await_non_code_record(&query, scope, id).await? {
+                                authorized.insert(id.clone());
+                            } else {
+                                return Err(foreign_target(&[id.clone()]));
+                            }
+                        }
+                        Ok(entities
+                            .into_iter()
+                            .filter(|entity| authorized.contains(&entity.id.to_string()))
+                            .collect())
+                    }
+                },
+            )
+            .await
     }
 
     /// The wrapped read surface (for unconstrained non-code reads).

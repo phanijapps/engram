@@ -764,6 +764,125 @@ mod task_015 {
         );
     }
 
+    /// Task015 regression: artifact suppression filters ONLY discovery
+    /// seeds. A SYMBOL-seeded traversal still crosses authorized File /
+    /// Module vertices to reach other symbols while suppression is ON — the
+    /// structural traversal universe is never narrowed by the flag.
+    #[test]
+    fn symbol_traversal_crosses_artifact_nodes_under_suppression() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let bindings = SqlCodeBindingRepository::open(dir.path().join("artifact-bindings.sqlite"))
+            .expect("open binding store");
+        block_on(bindings.bind(CodeBinding {
+            scope: scope(),
+            repo_id: RepoId("repo-a".to_string()),
+            branch_ref: "refs/heads/main".to_string(),
+            version: 1,
+            active_generation: None,
+            epoch: 0,
+        }))
+        .expect("bind");
+        publish_generation_for_scope(
+            &bindings,
+            &scope(),
+            "repo-a",
+            "gen-a",
+            0,
+            None,
+            &["a-render", "a-app-file", "a-helper"],
+        );
+        let knowledge = Arc::new(SqlKnowledgeStore::open_in_memory().expect("knowledge"));
+        for entity in [
+            entity("a-render", "render", EntityKind::Function),
+            entity("a-app-file", "src/app.rs", EntityKind::File),
+            entity("a-helper", "helper", EntityKind::Function),
+        ] {
+            block_on(knowledge.put_entity(entity)).expect("put entity");
+        }
+        for relationship in [
+            relationship(
+                "x-1",
+                "contains",
+                "a-render",
+                "render",
+                "a-app-file",
+                "src/app.rs",
+            ),
+            relationship(
+                "x-2",
+                "contains",
+                "a-app-file",
+                "src/app.rs",
+                "a-helper",
+                "helper",
+            ),
+        ] {
+            block_on(knowledge.put_relationship(relationship)).expect("put relationship");
+        }
+        let bindings = Arc::new(bindings);
+        let coordinator = CodeBindingCoordinator::new(
+            bindings as Arc<dyn CodeBindingRepository>,
+            Arc::new(crate::AllowAuthorizer),
+            Vec::new(),
+        );
+        let provider = EngramProviderBuilder::new(engram_integration::CapabilityReport::new(
+            CapabilityState::Supported,
+        ))
+        .knowledge_query(knowledge)
+        .code_bindings(Arc::new(coordinator))
+        .build();
+
+        // Suppression ON: the artifact-only query seeds nothing...
+        let suppressed = block_on(provider.code_graph_explore_bound(
+            &actor(),
+            &scope(),
+            "src/app.rs",
+            Some(2),
+            Some(24),
+            Some(64),
+            false,
+        ))
+        .expect("suppressed artifact query");
+        assert!(
+            suppressed.is_empty(),
+            "artifact-only queries never seed under suppression: {suppressed:?}"
+        );
+
+        // ...but a SYMBOL query still traverses THROUGH the File vertex to
+        // the symbol on the other side: the structural universe is intact.
+        let through = block_on(provider.code_graph_explore_bound(
+            &actor(),
+            &scope(),
+            "render",
+            Some(2),
+            Some(24),
+            Some(64),
+            false,
+        ))
+        .expect("symbol query under suppression");
+        let ids: Vec<&str> = through.iter().map(|node| node.id.as_str()).collect();
+        assert!(
+            ids.contains(&"a-helper"),
+            "symbol traversal must cross the artifact vertex to reach a-helper: {ids:?}"
+        );
+
+        // Suppression OFF: the artifact seeds directly.
+        let seeded = block_on(provider.code_graph_explore_bound(
+            &actor(),
+            &scope(),
+            "src/app.rs",
+            Some(2),
+            Some(24),
+            Some(64),
+            true,
+        ))
+        .expect("artifact query with artifacts included");
+        assert!(
+            seeded.iter().any(|node| node.id == "a-app-file"),
+            "the artifact seeds when explicitly requested: {seeded:?}"
+        );
+    }
+
     /// bound_cross_repo_edges: an authorized edge BETWEEN two bound
     /// published repositories stays traversable; an import that explicitly
     /// targets repo-b's IDENTICAL PATH resolves there (finding 10) even

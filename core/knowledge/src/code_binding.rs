@@ -85,6 +85,23 @@ pub trait CodeBindingRepository: crate::CodeReadLeases + Send + Sync {
             reason: "this cell does not expose target lineage".into(),
         })
     }
+    /// The durable lineage association for ONE record in a scope (work
+    /// package A3): a BOUNDED KEYED ownership read. Dependency walks that
+    /// resolve a single candidate's own lineage must not materialize the
+    /// whole scope's lineage per record. Store-backed implementors MUST
+    /// override this with a keyed read; the compatibility default falls
+    /// back to [`Self::target_lineage`] and scans the result.
+    async fn record_lineage(
+        &self,
+        scope: &Scope,
+        record_id: &str,
+    ) -> CoreResult<Option<TargetLineage>> {
+        Ok(self
+            .target_lineage(scope)
+            .await?
+            .into_iter()
+            .find(|entry| entry.record_id == record_id))
+    }
     /// The durable indexed-source descriptor for one (scope, repository,
     /// generation, path) — the retained-blob content digest authority
     /// (finding 7). Default: unsupported.

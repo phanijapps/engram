@@ -108,8 +108,10 @@ impl RepositoryCandidateEvidence {
     }
 
     /// True when `record_id` carries durable code lineage in the request
-    /// scope. An unconfigured ownership reader cannot establish the negative
-    /// and callers treat that as `Unknown` (never as a negative lookup).
+    /// scope — resolved through the BOUNDED KEYED ownership read (work
+    /// package A3), never a per-record full-scope lineage materialization.
+    /// An unconfigured ownership reader cannot establish the negative and
+    /// callers treat that as `Unknown` (never as a negative lookup).
     async fn in_code_lineage(
         &self,
         record_id: &str,
@@ -118,9 +120,11 @@ impl RepositoryCandidateEvidence {
         let Some(ownership) = &self.ownership else {
             return Ok(None);
         };
-        let lineage = ownership.target_lineage(&request.scope).await?;
         Ok(Some(
-            lineage.iter().any(|entry| entry.record_id == record_id),
+            ownership
+                .record_lineage(&request.scope, record_id)
+                .await?
+                .is_some(),
         ))
     }
 

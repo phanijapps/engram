@@ -420,6 +420,40 @@ impl CodeBindingRepository for SqlCodeBindingRepository {
         Ok(rows)
     }
 
+    /// Bounded keyed ownership read (work package A3): one (scope, record)
+    /// row instead of the full-scope lineage materialization per record.
+    async fn record_lineage(
+        &self,
+        scope: &Scope,
+        record_id: &str,
+    ) -> CoreResult<Option<engram_knowledge::TargetLineage>> {
+        let store = self.lock()?;
+        store
+            .connection
+            .execute_batch("CREATE TABLE IF NOT EXISTS code_stage_lineage(scope_key TEXT NOT NULL,record_id TEXT NOT NULL,repo_id TEXT NOT NULL,generation_id TEXT NOT NULL,record_json TEXT NOT NULL,PRIMARY KEY(scope_key,record_id)); CREATE TABLE IF NOT EXISTS code_stage_lineage_retirements(scope_key TEXT NOT NULL,record_id TEXT NOT NULL,PRIMARY KEY(scope_key,record_id))")
+            .map_err(|_| storage_error())?;
+        let mut statement = store
+            .connection
+            .prepare(
+                "SELECT lineage.record_id, lineage.repo_id, lineage.generation_id, retirement.record_id IS NOT NULL FROM code_stage_lineage lineage \
+                 LEFT JOIN code_stage_lineage_retirements retirement ON retirement.scope_key = lineage.scope_key AND retirement.record_id = lineage.record_id \
+                 WHERE lineage.scope_key = ?1 AND lineage.record_id = ?2",
+            )
+            .map_err(|_| storage_error())?;
+        let row = statement
+            .query_row(rusqlite::params![json(scope)?, record_id], |row| {
+                Ok(engram_knowledge::TargetLineage {
+                    record_id: row.get(0)?,
+                    repo_id: row.get(1)?,
+                    generation_id: row.get(2)?,
+                    retired: row.get(3)?,
+                })
+            })
+            .optional()
+            .map_err(|_| storage_error())?;
+        Ok(row)
+    }
+
     async fn get_source_descriptor(
         &self,
         scope: &Scope,

@@ -443,6 +443,39 @@ impl CodeBindingRepository for PgCodeBindingRepository {
         .await
     }
 
+    /// Bounded keyed ownership read (work package A3): one (scope, record)
+    /// row instead of the full-scope lineage materialization per record.
+    async fn record_lineage(
+        &self,
+        scope: &Scope,
+        record_id: &str,
+    ) -> CoreResult<Option<TargetLineage>> {
+        let scope = scope.clone();
+        let record_id = record_id.to_owned();
+        self.blocking(move |store| {
+            let key = scope_key(&scope).map_err(error)?;
+            crate::connection::runtime().block_on(async {
+                store.connection.client.batch_execute("CREATE TABLE IF NOT EXISTS code_lineage_retirements(tenant TEXT NOT NULL,scope_key TEXT NOT NULL,record_id TEXT NOT NULL,PRIMARY KEY(tenant,scope_key,record_id))").await.map_err(|_| storage_error())?;
+                let row = store
+                    .connection
+                    .client
+                    .query_opt(
+                        "SELECT lineage.record_id, lineage.repo_id, lineage.generation_id, retirement.record_id IS NOT NULL FROM code_lineage lineage LEFT JOIN code_lineage_retirements retirement ON retirement.tenant = lineage.tenant AND retirement.scope_key = lineage.scope_key AND retirement.record_id = lineage.record_id WHERE lineage.tenant = $1 AND lineage.scope_key = $2 AND lineage.record_id = $3",
+                        &[&scope.tenant, &key, &record_id],
+                    )
+                    .await
+                    .map_err(|_| storage_error())?;
+                Ok(row.map(|row| TargetLineage {
+                    record_id: row.get(0),
+                    repo_id: row.get(1),
+                    generation_id: row.get(2),
+                    retired: row.get(3),
+                }))
+            })
+        })
+        .await
+    }
+
     async fn get_source_descriptor(
         &self,
         scope: &Scope,

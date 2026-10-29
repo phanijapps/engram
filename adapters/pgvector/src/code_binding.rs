@@ -25,7 +25,7 @@ impl PgCodeBindingStore {
         Self { connection }
     }
     pub fn initialize(&self) -> Result<(), CodeBindingError> {
-        runtime().block_on(async{db(self.connection.client.batch_execute("CREATE TABLE IF NOT EXISTS code_repository_registrations(repo_id TEXT PRIMARY KEY, locator_id TEXT NOT NULL, acquisition TEXT NOT NULL, record_json JSONB NOT NULL); CREATE TABLE IF NOT EXISTS code_repo_bindings(tenant TEXT NOT NULL,scope_key TEXT NOT NULL,repo_id TEXT NOT NULL,branch_ref TEXT NOT NULL,version BIGINT NOT NULL,active_generation TEXT,epoch BIGINT NOT NULL,record_json JSONB NOT NULL,PRIMARY KEY(tenant,scope_key,repo_id)); CREATE TABLE IF NOT EXISTS code_generations(generation_id TEXT PRIMARY KEY,record_json JSONB NOT NULL); CREATE TABLE IF NOT EXISTS code_attempts(attempt_id TEXT PRIMARY KEY,tenant TEXT NOT NULL,scope_key TEXT NOT NULL,repo_id TEXT NOT NULL,generation_id TEXT NOT NULL,binding_version BIGINT NOT NULL,expected_epoch BIGINT NOT NULL,expected_active_generation TEXT,fence BIGINT NOT NULL,idempotency_key TEXT NOT NULL,state TEXT NOT NULL,required_receipts JSONB NOT NULL,record_json JSONB NOT NULL,UNIQUE(tenant,scope_key,repo_id,idempotency_key)); CREATE TABLE IF NOT EXISTS code_attempt_receipts(attempt_id TEXT NOT NULL,lane TEXT NOT NULL,digest TEXT NOT NULL,PRIMARY KEY(attempt_id,lane)); CREATE TABLE IF NOT EXISTS code_lineage(tenant TEXT NOT NULL,scope_key TEXT NOT NULL,repo_id TEXT NOT NULL,generation_id TEXT NOT NULL,record_id TEXT NOT NULL,lineage_json JSONB NOT NULL,PRIMARY KEY(tenant,scope_key,repo_id,generation_id,record_id)); CREATE TABLE IF NOT EXISTS code_sources(tenant TEXT NOT NULL,scope_key TEXT NOT NULL,repo_id TEXT NOT NULL,generation_id TEXT NOT NULL,path TEXT NOT NULL,source_json JSONB NOT NULL,PRIMARY KEY(tenant,scope_key,repo_id,generation_id,path)); CREATE TABLE IF NOT EXISTS code_reset_journals(preview_hash TEXT PRIMARY KEY,tenant TEXT NOT NULL,scope_key TEXT NOT NULL,repo_id TEXT NOT NULL,journal_json JSONB NOT NULL,checkpoint TEXT NOT NULL); CREATE TABLE IF NOT EXISTS code_epochs(tenant TEXT NOT NULL,scope_key TEXT NOT NULL,epoch BIGINT NOT NULL,PRIMARY KEY(tenant,scope_key));").await).map_err(|e|e)})
+        runtime().block_on(async{db(self.connection.client.batch_execute("CREATE TABLE IF NOT EXISTS code_repository_registrations(repo_id TEXT PRIMARY KEY, locator_id TEXT NOT NULL, acquisition TEXT NOT NULL, record_json JSONB NOT NULL); CREATE TABLE IF NOT EXISTS code_repo_bindings(tenant TEXT NOT NULL,scope_key TEXT NOT NULL,repo_id TEXT NOT NULL,branch_ref TEXT NOT NULL,version BIGINT NOT NULL,active_generation TEXT,epoch BIGINT NOT NULL,record_json JSONB NOT NULL,PRIMARY KEY(tenant,scope_key,repo_id)); CREATE TABLE IF NOT EXISTS code_generations(generation_id TEXT PRIMARY KEY,record_json JSONB NOT NULL); CREATE TABLE IF NOT EXISTS code_attempts(attempt_id TEXT PRIMARY KEY,tenant TEXT NOT NULL,scope_key TEXT NOT NULL,repo_id TEXT NOT NULL,generation_id TEXT NOT NULL,binding_version BIGINT NOT NULL,expected_epoch BIGINT NOT NULL,expected_active_generation TEXT,fence BIGINT NOT NULL,idempotency_key TEXT NOT NULL,state TEXT NOT NULL,required_receipts JSONB NOT NULL,record_json JSONB NOT NULL,UNIQUE(tenant,scope_key,repo_id,idempotency_key)); CREATE TABLE IF NOT EXISTS code_attempt_receipts(attempt_id TEXT NOT NULL,lane TEXT NOT NULL,digest TEXT NOT NULL,PRIMARY KEY(attempt_id,lane)); CREATE TABLE IF NOT EXISTS code_lineage(tenant TEXT NOT NULL,scope_key TEXT NOT NULL,repo_id TEXT NOT NULL,generation_id TEXT NOT NULL,record_id TEXT NOT NULL,lineage_json JSONB NOT NULL,PRIMARY KEY(tenant,scope_key,repo_id,generation_id,record_id)); CREATE TABLE IF NOT EXISTS code_sources(tenant TEXT NOT NULL,scope_key TEXT NOT NULL,repo_id TEXT NOT NULL,generation_id TEXT NOT NULL,path TEXT NOT NULL,source_json JSONB NOT NULL,PRIMARY KEY(tenant,scope_key,repo_id,generation_id,path)); CREATE TABLE IF NOT EXISTS code_reset_journals(preview_hash TEXT PRIMARY KEY,tenant TEXT NOT NULL,scope_key TEXT NOT NULL,repo_id TEXT NOT NULL,journal_json JSONB NOT NULL,checkpoint TEXT NOT NULL); CREATE TABLE IF NOT EXISTS code_epochs(tenant TEXT NOT NULL,scope_key TEXT NOT NULL,epoch BIGINT NOT NULL,PRIMARY KEY(tenant,scope_key)); CREATE TABLE IF NOT EXISTS code_ref_observations(tenant TEXT NOT NULL,scope_key TEXT NOT NULL,repo_id TEXT NOT NULL,branch_ref TEXT NOT NULL,observed_oid TEXT NOT NULL,observed_at TEXT NOT NULL,policy TEXT NOT NULL,record_json JSONB NOT NULL,PRIMARY KEY(tenant,scope_key,repo_id));").await).map_err(|e|e)})
     }
     pub fn register(
         &self,
@@ -231,6 +231,68 @@ impl PgCodeBindingStore {
             binding,
             preview_hash: hash,
             target_ids: targets,
+        })
+    }
+    /// Persists one on-request ref observation keyed by (scope, repo)
+    /// (TASK-018), engine-neutral twin of the SQLite cell: observed OID/time
+    /// of the CONFIGURED branch ref, recorded separately from the indexed
+    /// generation OID. Binding-keyed — never keyed by a root basename or
+    /// source string.
+    pub fn put_ref_observation(
+        &self,
+        scope: &Scope,
+        repo: &str,
+        observation: &engram_knowledge::CodeRefObservation,
+    ) -> Result<engram_knowledge::CodeRefObservation, CodeBindingError> {
+        observation.validate()?;
+        let key = scope_key(scope)?;
+        let value = json(observation)?;
+        let policy = match observation.policy {
+            engram_knowledge::RefObservationPolicy::OnRequest => "on_request",
+        };
+        runtime().block_on(async {
+            db(self
+                .connection
+                .client
+                .execute(
+                    "INSERT INTO code_ref_observations(tenant,scope_key,repo_id,branch_ref,observed_oid,observed_at,policy,record_json) VALUES($1,$2,$3,$4,$5,$6,$7,$8) ON CONFLICT(tenant,scope_key,repo_id) DO UPDATE SET branch_ref=$4,observed_oid=$5,observed_at=$6,policy=$7,record_json=$8",
+                    &[
+                        &scope.tenant,
+                        &key,
+                        &repo,
+                        &observation.branch_ref,
+                        &observation.observed_oid,
+                        &observation.observed_at.to_rfc3339(),
+                        &policy,
+                        &value,
+                    ],
+                )
+                .await)?;
+            Ok(observation.clone())
+        })
+    }
+    /// The durable last ref observation for one bound repository; `None`
+    /// is the honest "no valid observation exists" state.
+    pub fn get_ref_observation(
+        &self,
+        scope: &Scope,
+        repo: &str,
+    ) -> Result<Option<engram_knowledge::CodeRefObservation>, CodeBindingError> {
+        let key = scope_key(scope)?;
+        runtime().block_on(async {
+            let row = db(self
+                .connection
+                .client
+                .query_opt(
+                    "SELECT record_json FROM code_ref_observations WHERE tenant=$1 AND scope_key=$2 AND repo_id=$3",
+                    &[&scope.tenant, &key, &repo],
+                )
+                .await)?;
+            row.map(|r| {
+                serde_json::from_value(r.get(0))
+                    .map_err(|_| CodeBindingError::PersistenceFailure)
+            })
+            .transpose()
         })
     }
 }

@@ -366,6 +366,106 @@ fn fixture_inner_with_lease_window(
     }
 }
 
+// ---------- task_018 fixture -------------------------------------------------
+
+/// One bound repository for TASK-018: a working-tree directory (shared
+/// `basename`) plus its published generation facts. The coordinator NEVER
+/// receives any path — durable records are the only authority.
+struct BoundRepo {
+    repo_id: String,
+    working_root: std::path::PathBuf,
+    commit_oid: String,
+    parser_fingerprint: String,
+    filter_fingerprint: String,
+}
+
+/// Binds `repos` in ONE scope, publishes one generation per repository
+/// (distinct OIDs and fingerprints), and returns the coordinator wired on
+/// the REAL SQLite binding cell. Each repo's working root carries the SAME
+/// basename so root-basename collisions are structurally present.
+struct ObservationFixture {
+    coordinator: Arc<CodeBindingCoordinator>,
+    bindings: Arc<SqlCodeBindingRepository>,
+    repos: Vec<BoundRepo>,
+    db_path: std::path::PathBuf,
+}
+
+fn observation_fixture(dir: &std::path::Path, repos: &[(&str, char, char)]) -> ObservationFixture {
+    let bindings = Arc::new(
+        SqlCodeBindingRepository::open(dir.join("bindings-t018.sqlite"))
+            .expect("open binding store"),
+    );
+    let mut bound = Vec::new();
+    for (index, (repo_id, oid_char, fingerprint_char)) in repos.iter().enumerate() {
+        let repo = RepoId(repo_id.to_string());
+        block_on(bindings.bind(CodeBinding {
+            scope: scope(),
+            repo_id: repo.clone(),
+            branch_ref: "refs/heads/main".to_string(),
+            version: 1,
+            active_generation: None,
+            epoch: 0,
+        }))
+        .expect("bind");
+        let generation = CodeGeneration {
+            id: format!("gen-t018-{index}-{repo_id}"),
+            binding_version: 1,
+            commit_oid: oid_char.to_string().repeat(40),
+            snapshot_digest: format!("{fingerprint_char}").repeat(64),
+            parser_fingerprint: format!("parser-{fingerprint_char}"),
+            filter_fingerprint: format!("filter-{fingerprint_char}"),
+        };
+        publish(
+            &bindings,
+            repo_id,
+            &generation,
+            &format!("attempt-t018-{index}"),
+            0,
+            None,
+        );
+        // Both working roots share the SAME basename (the collision hazard).
+        let working_root = dir.join(format!("root-{index}")).join("proj");
+        std::fs::create_dir_all(&working_root).expect("mkdir working root");
+        std::fs::write(working_root.join("src"), "uncommitted bytes\n")
+            .expect("write working copy");
+        bound.push(BoundRepo {
+            repo_id: repo_id.to_string(),
+            working_root,
+            commit_oid: generation.commit_oid.clone(),
+            parser_fingerprint: generation.parser_fingerprint.clone(),
+            filter_fingerprint: generation.filter_fingerprint.clone(),
+        });
+    }
+    let coordinator = Arc::new(CodeBindingCoordinator::new(
+        (Arc::clone(&bindings) as Arc<dyn engram_knowledge::CodeBindingRepository>),
+        Arc::new(AllowAuthorizer),
+        Vec::new(),
+    ));
+    ObservationFixture {
+        coordinator,
+        bindings,
+        repos: bound,
+        db_path: dir.join("bindings-t018.sqlite"),
+    }
+}
+
+impl ObservationFixture {
+    fn repo(&self, id: &str) -> &BoundRepo {
+        self.repos
+            .iter()
+            .find(|repo| repo.repo_id == id)
+            .unwrap_or_else(|| panic!("unknown fixture repo {id}"))
+    }
+
+    fn status(&self, repo_id: &str) -> engram_integration::code_binding::CodeBindingStatus {
+        block_on(
+            self.coordinator
+                .status(&actor(), &scope(), &RepoId(repo_id.to_string()), None),
+        )
+        .expect("status")
+    }
+}
+
 // ---------- task_017 focused cases -----------------------------------------
 
 mod task_017 {
@@ -1816,5 +1916,290 @@ mod task_017 {
             matches!(&retired, Err(CoreError::InvalidRequest { reason }) if reason.contains("no authorized read lease")),
             "the retired generation denies: {retired:?}"
         );
+    }
+}
+
+// ---------- task_018 focused cases -----------------------------------------
+
+mod task_018 {
+    use super::*;
+    use engram_integration::code_binding::CodeFreshnessState;
+    use engram_knowledge::{CodeBindingRepository, CodeRefObservation, RefObservationPolicy};
+
+    /// binding_ref_observation: an on-request observation of the CONFIGURED
+    /// ref is durably recorded SEPARATELY from the indexed generation OID;
+    /// status reports both facts independently, the observation never moves
+    /// the published pointer, and an observation naming any other ref is a
+    /// typed denial.
+    #[test]
+    fn binding_ref_observation() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let fixture = observation_fixture(dir.path(), &[("repo-a", 'a', 'c')]);
+        let repo = RepoId("repo-a".to_string());
+        let indexed_oid = "a".repeat(40);
+        let observed_oid = "b".repeat(40);
+
+        let observation = block_on(fixture.coordinator.record_ref_observation(
+            &actor(),
+            &scope(),
+            &repo,
+            &observed_oid,
+        ))
+        .expect("record observation");
+        assert_eq!(observation.branch_ref, "refs/heads/main");
+        assert_eq!(observation.observed_oid, observed_oid);
+        assert_eq!(observation.policy, RefObservationPolicy::OnRequest);
+
+        let status = fixture.status("repo-a");
+        assert_eq!(
+            status.indexed_commit_oid.as_deref(),
+            Some(indexed_oid.as_str()),
+            "indexed OID comes from the durable generation record"
+        );
+        assert_eq!(
+            status.freshness.observed_oid.as_deref(),
+            Some(observed_oid.as_str()),
+            "the observed ref OID is a SEPARATE fact from the indexed OID"
+        );
+        assert_eq!(status.freshness.observed_at, Some(observation.observed_at));
+        assert_eq!(
+            status.freshness.state,
+            CodeFreshnessState::Observed {
+                matches_indexed: Some(false)
+            }
+        );
+
+        // Durable: a FRESH process handle reads the same observation back,
+        // and the published pointer never moved for the observation.
+        let reopened =
+            SqlCodeBindingRepository::open(&fixture.db_path).expect("reopen binding store");
+        let stored = block_on(reopened.get_ref_observation(&scope(), &repo))
+            .expect("read observation")
+            .expect("observation persisted");
+        assert_eq!(stored, observation);
+        let binding = block_on(
+            (fixture.bindings.clone() as Arc<dyn CodeBindingRepository>)
+                .get_binding(&scope(), &repo),
+        )
+        .expect("read binding")
+        .expect("binding exists");
+        assert_eq!(
+            binding.active_generation.as_deref(),
+            Some("gen-t018-0-repo-a"),
+            "an observation never republishes or moves the active generation"
+        );
+
+        // An observation naming any ref OTHER than the bound branch is a
+        // typed denial, never a silent record.
+        let mismatch = block_on(
+            (fixture.bindings.clone() as Arc<dyn CodeBindingRepository>).put_ref_observation(
+                &scope(),
+                &repo,
+                CodeRefObservation {
+                    branch_ref: "refs/heads/other".to_string(),
+                    observed_oid: observed_oid.clone(),
+                    observed_at: observation.observed_at,
+                    policy: RefObservationPolicy::OnRequest,
+                },
+            ),
+        );
+        assert!(
+            matches!(mismatch, Err(CoreError::InvalidRequest { ref reason }) if reason == "BindingConflict"),
+            "foreign-ref observation must deny with BindingConflict, got {mismatch:?}"
+        );
+        // A malformed OID never persists.
+        assert!(
+            matches!(
+                block_on(fixture.coordinator.record_ref_observation(
+                    &actor(),
+                    &scope(),
+                    &repo,
+                    "not-an-oid"
+                )),
+                Err(CoreError::InvalidRequest { .. })
+            ),
+            "malformed observed OID must deny"
+        );
+    }
+
+    /// head_irrelevant: binding-keyed status/freshness/checkpoint facts are
+    /// unchanged by ANY mutation of an on-disk checkout — including a
+    /// HEAD-shaped file naming a different OID — because no checkout path is
+    /// ever an input to the durable reads.
+    #[test]
+    fn head_irrelevant() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let fixture = observation_fixture(dir.path(), &[("repo-a", 'a', 'c')]);
+        let repo = RepoId("repo-a".to_string());
+        let observed_oid = "b".repeat(40);
+        block_on(fixture.coordinator.record_ref_observation(
+            &actor(),
+            &scope(),
+            &repo,
+            &observed_oid,
+        ))
+        .expect("record observation");
+        let before = fixture.status("repo-a");
+
+        // Mutate the "checkout": rewrite the working copy, plant a
+        // HEAD-shaped file naming a THIRD oid, and add a packed-refs style
+        // file — none of it is an input to the binding-keyed reads.
+        let working = &fixture.repo("repo-a").working_root;
+        std::fs::write(working.join("src"), "totally different bytes\n").expect("rewrite working");
+        std::fs::create_dir_all(working.join(".git")).expect("mkdir .git");
+        let head_oid = "c".repeat(40);
+        std::fs::write(working.join(".git/HEAD"), &head_oid).expect("plant HEAD file");
+        std::fs::write(
+            working.join(".git/packed-refs"),
+            format!("{} refs/heads/main\n", head_oid),
+        )
+        .expect("plant packed-refs");
+
+        let after = fixture.status("repo-a");
+        assert_eq!(after.indexed_commit_oid, before.indexed_commit_oid);
+        assert_eq!(after.freshness.observed_oid, before.freshness.observed_oid);
+        assert_eq!(after.freshness.observed_at, before.freshness.observed_at);
+        assert_eq!(after.freshness.state, before.freshness.state);
+        assert_eq!(after.checkpoint, before.checkpoint);
+        assert_ne!(
+            after.indexed_commit_oid.as_deref(),
+            Some(head_oid.as_str()),
+            "a checkout HEAD oid must never leak into the indexed OID"
+        );
+        assert_ne!(
+            after.freshness.observed_oid.as_deref(),
+            Some(head_oid.as_str()),
+            "a checkout HEAD oid must never leak into the observed ref OID"
+        );
+
+        // Deleting the checkout entirely changes nothing either.
+        std::fs::remove_dir_all(working).expect("delete checkout");
+        let deleted = fixture.status("repo-a");
+        assert_eq!(deleted.indexed_commit_oid, before.indexed_commit_oid);
+        assert_eq!(
+            deleted.freshness.observed_oid,
+            before.freshness.observed_oid
+        );
+        assert_eq!(deleted.checkpoint, before.checkpoint);
+    }
+
+    /// stale_observation_unknown: without a valid observation the freshness
+    /// state is UNKNOWN with no observed OID/time — while the indexed OID
+    /// still comes from the durable generation record. Observations are
+    /// per-repository: recording one repository's ref never manufactures a
+    /// state for another.
+    #[test]
+    fn stale_observation_unknown() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let fixture =
+            observation_fixture(dir.path(), &[("repo-a", 'a', 'c'), ("repo-b", 'b', 'd')]);
+
+        let status = fixture.status("repo-a");
+        assert_eq!(
+            status.freshness.state,
+            CodeFreshnessState::Unknown,
+            "no observation exists: freshness must be unknown, never invented"
+        );
+        assert_eq!(status.freshness.observed_oid, None);
+        assert_eq!(status.freshness.observed_at, None);
+        assert_eq!(
+            status.indexed_commit_oid.as_deref(),
+            Some("a".repeat(40).as_str()),
+            "unknown freshness does not blank or invent the indexed OID"
+        );
+        assert_eq!(
+            status.freshness.branch_ref, "refs/heads/main",
+            "the CONFIGURED ref is always reported"
+        );
+
+        // Record for repo-a only: repo-b stays unknown (per-repo keying).
+        block_on(fixture.coordinator.record_ref_observation(
+            &actor(),
+            &scope(),
+            &RepoId("repo-a".to_string()),
+            &"9".repeat(40),
+        ))
+        .expect("record repo-a observation");
+        let repo_b = fixture.status("repo-b");
+        assert_eq!(repo_b.freshness.state, CodeFreshnessState::Unknown);
+        assert_eq!(repo_b.freshness.observed_oid, None);
+        assert_eq!(
+            repo_b.indexed_commit_oid.as_deref(),
+            Some("b".repeat(40).as_str())
+        );
+        let repo_a = fixture.status("repo-a");
+        assert_eq!(
+            repo_a.freshness.observed_oid.as_deref(),
+            Some("9".repeat(40).as_str())
+        );
+    }
+
+    /// basename_checkpoint_collision: two repositories whose scan roots
+    /// share the SAME basename select their OWN binding-keyed checkpoints —
+    /// RepoId + binding version + generation + OID + fingerprints — and
+    /// never each other's metadata or observations.
+    #[test]
+    fn basename_checkpoint_collision() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let fixture =
+            observation_fixture(dir.path(), &[("proj-x", 'a', 'c'), ("proj-y", 'b', 'd')]);
+        let roots: Vec<_> = fixture
+            .repos
+            .iter()
+            .map(|repo| repo.working_root.clone())
+            .collect();
+        let basenames: Vec<_> = roots
+            .iter()
+            .map(|root| root.file_name().unwrap().to_string_lossy().into_owned())
+            .collect();
+        assert_eq!(basenames[0], "proj", "fixture plants basename collisions");
+        assert_eq!(basenames[0], basenames[1]);
+
+        // Record an observation for proj-x ONLY.
+        block_on(fixture.coordinator.record_ref_observation(
+            &actor(),
+            &scope(),
+            &RepoId("proj-x".to_string()),
+            &"7".repeat(40),
+        ))
+        .expect("record proj-x observation");
+
+        let x = fixture.status("proj-x");
+        let y = fixture.status("proj-y");
+        assert_eq!(
+            x.checkpoint.repo_id,
+            RepoId("proj-x".to_string()),
+            "checkpoints are RepoId-keyed, never basename-keyed"
+        );
+        assert_eq!(y.checkpoint.repo_id, RepoId("proj-y".to_string()));
+        assert_eq!(
+            x.checkpoint.generation.as_ref().unwrap().commit_oid,
+            "a".repeat(40)
+        );
+        assert_eq!(
+            y.checkpoint.generation.as_ref().unwrap().commit_oid,
+            "b".repeat(40)
+        );
+        assert_ne!(
+            x.checkpoint.generation.as_ref().unwrap().commit_oid,
+            y.checkpoint.generation.as_ref().unwrap().commit_oid,
+            "the shared basename must never cross-select metadata"
+        );
+        // The full fingerprint set is part of each checkpoint key.
+        let xg = x.checkpoint.generation.as_ref().unwrap();
+        assert_eq!(xg.parser_fingerprint, "parser-c");
+        assert_eq!(xg.filter_fingerprint, "filter-c");
+        let yg = y.checkpoint.generation.as_ref().unwrap();
+        assert_eq!(yg.parser_fingerprint, "parser-d");
+        assert_eq!(yg.filter_fingerprint, "filter-d");
+        assert_eq!(x.checkpoint.binding_version, 1);
+        assert_eq!(y.checkpoint.binding_version, 1);
+        // Observations do not cross repositories either.
+        assert_eq!(
+            x.freshness.observed_oid.as_deref(),
+            Some("7".repeat(40).as_str())
+        );
+        assert_eq!(y.freshness.observed_oid, None);
+        assert_eq!(y.freshness.state, CodeFreshnessState::Unknown);
     }
 }

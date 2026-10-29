@@ -383,6 +383,46 @@ impl CodeBindingRepository for PgCodeBindingRepository {
             .await
     }
 
+    async fn put_ref_observation(
+        &self,
+        scope: &Scope,
+        repo_id: &RepoId,
+        observation: CodeRefObservation,
+    ) -> CoreResult<CodeRefObservation> {
+        // The observation must match the BOUND branch: an observation of a
+        // different ref is a typed denial, never a silent record for a ref
+        // this binding does not authorize (engine-neutral twin of the
+        // SQLite cell).
+        let binding = self
+            .get_binding(scope, repo_id)
+            .await?
+            .ok_or_else(|| error(CodeBindingError::BindingRequired))?;
+        if binding.branch_ref != observation.branch_ref {
+            return Err(CoreError::InvalidRequest {
+                reason: "BindingConflict".into(),
+            });
+        }
+        let scope = scope.clone();
+        let repo = repo_id.0.clone();
+        self.blocking(move |store| {
+            store
+                .put_ref_observation(&scope, &repo, &observation)
+                .map_err(error)
+        })
+        .await
+    }
+
+    async fn get_ref_observation(
+        &self,
+        scope: &Scope,
+        repo_id: &RepoId,
+    ) -> CoreResult<Option<CodeRefObservation>> {
+        let scope = scope.clone();
+        let repo = repo_id.0.clone();
+        self.blocking(move |store| store.get_ref_observation(&scope, &repo).map_err(error))
+            .await
+    }
+
     async fn record_receipt(&self, receipt: StageReceipt) -> CoreResult<StageReceipt> {
         self.blocking(move |store| store.record_receipt(&receipt).map_err(error))
             .await

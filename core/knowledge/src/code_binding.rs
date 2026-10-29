@@ -35,6 +35,43 @@ pub struct StageReceipt {
     pub digest: String,
 }
 
+/// Ref-observation policy (plan DEC-007): observations of the bound branch
+/// ref happen ONLY on an explicit on-request refresh — never on ordinary
+/// search, exact fetch, or status without refresh.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum RefObservationPolicy {
+    OnRequest,
+}
+
+/// One durable on-request observation of a bound branch ref (TASK-018):
+/// the last successful observation of the CONFIGURED ref, recorded
+/// SEPARATELY from the indexed generation OID. Never derived from a
+/// checkout HEAD, a scan-root sidecar, or any unrelated checkpoint.
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CodeRefObservation {
+    pub branch_ref: String,
+    pub observed_oid: String,
+    pub observed_at: engram_domain::Timestamp,
+    pub policy: RefObservationPolicy,
+}
+
+impl CodeRefObservation {
+    /// Durable-record validation: a full hex object id (40/64) on the
+    /// observed ref and a well-formed `refs/heads/…` branch (shared
+    /// [`engram_domain::validate_branch_ref`]). An invalid observation is
+    /// never persisted.
+    pub fn validate(&self) -> Result<(), engram_domain::CodeBindingError> {
+        if !matches!(self.observed_oid.len(), 40 | 64)
+            || !self.observed_oid.bytes().all(|b| b.is_ascii_hexdigit())
+        {
+            return Err(engram_domain::CodeBindingError::InvalidSource);
+        }
+        engram_domain::validate_branch_ref(&self.branch_ref)
+    }
+}
+
 #[allow(clippy::double_must_use)]
 #[async_trait]
 pub trait CodeBindingRepository: crate::CodeReadLeases + Send + Sync {
@@ -155,6 +192,31 @@ pub trait CodeBindingRepository: crate::CodeReadLeases + Send + Sync {
         scope: &Scope,
         source: IndexedSource,
     ) -> CoreResult<IndexedSource>;
+    /// Persists one on-request ref observation for a BOUND repository
+    /// (TASK-018). The observation is keyed by (scope, RepoId) — never by a
+    /// root basename or source string — and records the observed OID/time
+    /// separately from the indexed generation OID. Default: unsupported.
+    async fn put_ref_observation(
+        &self,
+        _scope: &Scope,
+        _repo_id: &engram_domain::RepoId,
+        _observation: CodeRefObservation,
+    ) -> CoreResult<CodeRefObservation> {
+        Err(CoreError::CapabilityUnsupported {
+            capability: "code-ref-observation".into(),
+            reason: "this cell does not persist ref observations".into(),
+        })
+    }
+    /// The durable last ref observation for one bound repository.
+    /// `Ok(None)` is the honest "no valid observation exists" state
+    /// (freshness stays UNKNOWN); it is not an error. Default: none.
+    async fn get_ref_observation(
+        &self,
+        _scope: &Scope,
+        _repo_id: &engram_domain::RepoId,
+    ) -> CoreResult<Option<CodeRefObservation>> {
+        Ok(None)
+    }
     async fn record_receipt(&self, receipt: StageReceipt) -> CoreResult<StageReceipt>;
     async fn mark_ready(
         &self,

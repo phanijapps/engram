@@ -30,7 +30,8 @@ pub use batch_ledger::{SourceBatchLedger, SourceBatchRecord, SourceBatchRecordKi
 pub use changes::{KnowledgeChangeLog, ScanCheckpointStore};
 pub use code_binding::{
     AcquisitionMode, CodeBindingRepository, CodeEligibility, CodeEligibilityGate,
-    ConstrainedCodeQuery, RepositoryRegistration, StageReceipt, TargetLineage,
+    CodeRefObservation, ConstrainedCodeQuery, RefObservationPolicy, RepositoryRegistration,
+    StageReceipt, TargetLineage,
 };
 pub use code_read_leases::{CodeReadLease, CodeReadLeases};
 pub use generation_staging::CodeGenerationStaging;

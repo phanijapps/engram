@@ -354,6 +354,37 @@ impl CodeBindingRepository for SqlCodeBindingRepository {
         store.connection.execute("INSERT OR IGNORE INTO code_stage_sources(scope_key,repo_id,generation_id,path,record_json) VALUES(?1,?2,?3,?4,?5)",params![key,source.repo_id.0,source.generation_id,source.path,value]).map_err(|_| storage_error())?;
         Ok(source)
     }
+    async fn put_ref_observation(
+        &self,
+        scope: &Scope,
+        repo_id: &RepoId,
+        observation: CodeRefObservation,
+    ) -> CoreResult<CodeRefObservation> {
+        // The observation must match the BOUND branch: an observation of a
+        // different ref is a typed denial, never a silent record for a ref
+        // this binding does not authorize.
+        let binding = self
+            .get_binding(scope, repo_id)
+            .await?
+            .ok_or_else(|| error(CodeBindingError::BindingRequired))?;
+        if binding.branch_ref != observation.branch_ref {
+            return Err(CoreError::InvalidRequest {
+                reason: "BindingConflict".into(),
+            });
+        }
+        let store = self.lock()?;
+        store
+            .put_ref_observation(scope, &repo_id.0, &observation)
+            .map_err(error)
+    }
+    async fn get_ref_observation(
+        &self,
+        scope: &Scope,
+        repo_id: &RepoId,
+    ) -> CoreResult<Option<CodeRefObservation>> {
+        let store = self.lock()?;
+        store.get_ref_observation(scope, &repo_id.0).map_err(error)
+    }
     async fn record_receipt(&self, receipt: StageReceipt) -> CoreResult<StageReceipt> {
         let mut store = self.lock()?;
         let generation: Option<String> = store

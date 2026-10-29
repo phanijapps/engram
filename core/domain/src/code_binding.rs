@@ -137,6 +137,34 @@ pub enum CodeBindingError {
     PublicationContention,
 }
 
+/// Shared full-branch-ref validation (Git ref-format rules for
+/// `refs/heads/...`): used by [`CodeBinding::validate`] and by ref
+/// observations (TASK-018) so both reject the same malformed refs - tags,
+/// HEAD, OID input, revision expressions, ambiguous shorthand, and
+/// case-distinct missing names never reach durable records.
+pub fn validate_branch_ref(branch_ref: &str) -> Result<(), CodeBindingError> {
+    let suffix = branch_ref
+        .strip_prefix("refs/heads/")
+        .ok_or(CodeBindingError::InvalidBranchRef)?;
+    if suffix.is_empty()
+        || suffix.starts_with('/')
+        || suffix.ends_with('/')
+        || suffix.ends_with('.')
+        || suffix.contains("..")
+        || suffix.contains("@{")
+        || suffix.contains("//")
+        || suffix
+            .chars()
+            .any(|c| c.is_control() || " ~^:?*[\\".contains(c))
+        || suffix
+            .split('/')
+            .any(|part| part.is_empty() || part.starts_with('.') || part.ends_with(".lock"))
+    {
+        return Err(CodeBindingError::InvalidBranchRef);
+    }
+    Ok(())
+}
+
 impl CodeBinding {
     pub fn validate(&self) -> Result<(), CodeBindingError> {
         if self.repo_id.0.trim().is_empty() {
@@ -148,27 +176,7 @@ impl CodeBinding {
         if self.active_generation.as_deref() == Some("") {
             return Err(CodeBindingError::InvalidGeneration);
         }
-        let suffix = self
-            .branch_ref
-            .strip_prefix("refs/heads/")
-            .ok_or(CodeBindingError::InvalidBranchRef)?;
-        if suffix.is_empty()
-            || suffix.starts_with('/')
-            || suffix.ends_with('/')
-            || suffix.ends_with('.')
-            || suffix.contains("..")
-            || suffix.contains("@{")
-            || suffix.contains("//")
-            || suffix
-                .chars()
-                .any(|c| c.is_control() || " ~^:?*[\\".contains(c))
-            || suffix
-                .split('/')
-                .any(|part| part.is_empty() || part.starts_with('.') || part.ends_with(".lock"))
-        {
-            return Err(CodeBindingError::InvalidBranchRef);
-        }
-        Ok(())
+        validate_branch_ref(&self.branch_ref)
     }
 }
 

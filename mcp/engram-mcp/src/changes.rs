@@ -70,7 +70,17 @@ pub fn subscribe_changes(app: &App, args: &Value) -> Result<Value, ToolError> {
 
 /// `code_staleness`: truthful freshness for the project's code graph. Reads
 /// the latest checkpoint; git facts are local-only (no fetch).
+///
+/// TASK-018 — binding-keyed freshness: when `repo` (a RepoId) names a BOUND
+/// repository, the answer comes from the DURABLE binding record — the
+/// CONFIGURED ref, the indexed generation OID, and the last on-request ref
+/// observation — and NEVER consults a checkout HEAD, the worktree, or any
+/// scan-root checkpoint (the legacy path below remains for unbound legacy
+/// indexes). Freshness is `unknown` when no valid observation exists.
 pub fn code_staleness(app: &App, args: &Value) -> Result<Value, ToolError> {
+    if let Some(repo) = args["repo"].as_str() {
+        return binding_keyed_freshness(app, repo);
+    }
     let log = app.provider.require_change_log().map_err(internal)?;
     // Explicit source_key wins; otherwise the FRESHEST checkpoint in this
     // scope (the tenant is not a source key — checkpoints are keyed by repo
@@ -182,4 +192,66 @@ pub fn staleness_note(app: &App) -> String {
                 .unwrap_or("STALENESS: unknown")
         )
     }
+}
+
+/// TASK-018: the binding-keyed freshness answer for one bound repository.
+/// Durable-record driven: configured ref, indexed generation OID, and the
+/// last on-request ref observation with its policy and time. Checkout HEAD,
+/// the worktree, and scan-root checkpoints are NEVER read — two repos whose
+/// scan roots share a basename cannot select each other's metadata because
+/// every fact is keyed by (scope, RepoId).
+fn binding_keyed_freshness(app: &App, repo: &str) -> Result<Value, ToolError> {
+    use engram_domain::RepoId;
+    let coordinator = app.provider.code_bindings().map_err(internal)?;
+    let requester = crate::tools::requester();
+    let actor = requester.actor;
+    let status = block_on(coordinator.status(&actor, &app.scope, &RepoId(repo.to_owned()), None))
+        .map_err(internal)?;
+    let mut out = format!(
+        "FRESHNESS (binding-keyed, durable records only — never checkout HEAD):\n  repository: {}\n  configured ref: {}\n  policy: on_request\n  indexed: {}",
+        status.checkpoint.repo_id.0,
+        status.freshness.branch_ref,
+        status
+            .indexed_commit_oid
+            .as_deref()
+            .unwrap_or("none (no published generation or unreadable)"),
+    );
+    match (&status.freshness.observed_oid, status.freshness.observed_at) {
+        (Some(oid), Some(at)) => out.push_str(&format!("\n  observed ref: {oid} at {at}")),
+        _ => out.push_str("\n  observed ref: none"),
+    }
+    match status.freshness.state {
+        engram_integration::code_binding::CodeFreshnessState::Unknown => {
+            out.push_str("\n  freshness: unknown (no valid observation — run an explicit refresh)")
+        }
+        engram_integration::code_binding::CodeFreshnessState::Observed {
+            matches_indexed: Some(true),
+        } => out.push_str("\n  freshness: observed at the indexed commit"),
+        engram_integration::code_binding::CodeFreshnessState::Observed {
+            matches_indexed: Some(false),
+        } => {
+            out.push_str("\n  freshness: observed ref moved past the indexed commit (rebuild required to index it)")
+        }
+        engram_integration::code_binding::CodeFreshnessState::Observed {
+            matches_indexed: None,
+        } => out.push_str("\n  freshness: observed; indexed commit unreadable"),
+    }
+    out.push_str(&format!(
+        "\n  binding version: {} (code epoch {})\n  checkpoint generation: {}",
+        status.checkpoint.binding_version,
+        status.checkpoint.code_epoch,
+        status
+            .checkpoint
+            .generation
+            .as_ref()
+            .map(|generation| format!(
+                "{} @ {} (parser {}, filter {})",
+                generation.id,
+                generation.commit_oid,
+                generation.parser_fingerprint,
+                generation.filter_fingerprint
+            ))
+            .unwrap_or_else(|| "none".to_owned()),
+    ));
+    Ok(protocol::text_content(out))
 }

@@ -11,7 +11,10 @@ use engram_domain::{
 use engram_knowledge::{CodeBindingRepository, CoreResult, StageReceipt};
 pub use publication::CodeRebuildRequest;
 pub use source::{BoundParticipant, ExactReadCandidate, ParticipantExactSource};
-pub use status::CodeBindingStatus;
+pub use status::{
+    CheckpointGeneration, CodeBindingCheckpoint, CodeBindingStatus, CodeFreshnessState,
+    CodeRefFreshness,
+};
 
 /// Engine-neutral [`CodeEligibilityResolver`] over the durable
 /// `CodeBindingRepository::eligibility` port: publishes the scope's published

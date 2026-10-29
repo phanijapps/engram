@@ -69,55 +69,54 @@ fn bound_code_origin(
     Ok(origin)
 }
 
-/// Mixed-generation resolution (corrective r2 finding 10, r3): retained
-/// chunks of an OLD and the CURRENT generation can coexist for one path.
-/// Blanket rejection is not resolution — resolve the CURRENT authorized
-/// binding (the scope's published active generation per stamped repository)
-/// and restrict the participating chunks to exactly that generation. Spans,
-/// symbols and the served revision then all come from ONE generation.
-fn resolve_current_generation_origin(
+/// Canonical participating chunks (corrective r4, canonical 10 / original
+/// 11): a chunk participates in the EXACT path only when its ID carries
+/// DURABLE LINEAGE whose (repository, generation) matches a PUBLISHED
+/// eligible binding in this scope — never a metadata stamp, and never an
+/// unstamped row. Participants span at most one published generation per
+/// repository (retired generations' lineages do not match any eligible
+/// binding), so the origin, the symbol spans and the served revision all
+/// come from the SAME canonical current generation within one read.
+fn canonical_participating_chunks<'a>(
     app: &App,
-    ordered: &mut Vec<&engram_domain::KnowledgeChunk>,
-) -> Result<Option<(String, String)>, String> {
-    let coordinator = app
-        .provider
-        .code_bindings()
-        .map_err(|error| format!("code binding coordinator unavailable: {error}"))?;
+    matched: &[&'a engram_domain::KnowledgeChunk],
+) -> Result<Vec<&'a engram_domain::KnowledgeChunk>, String> {
+    let Ok(coordinator) = app.provider.code_bindings() else {
+        // No binding coordinator configured: no canonical participant can be
+        // established and the exact path does not apply (the verbatim path
+        // is the caller's fallback). This is not an ambiguity error.
+        return Ok(Vec::new());
+    };
     let view = futures::executor::block_on(coordinator.eligibility_view(&app.scope, None))
         .map_err(|error| format!("eligibility resolution failed: {error}"))?;
-    let current: std::collections::BTreeSet<(String, String)> = view
+    let published: std::collections::BTreeSet<(String, String)> = view
         .eligible_bindings()
         .into_iter()
         .map(|binding| (binding.repo_id, binding.generation_id))
         .collect();
-    let selected: Vec<&engram_domain::KnowledgeChunk> = ordered
-        .iter()
-        .copied()
-        .filter(|chunk| {
-            let stamp_is_current = chunk.metadata.as_ref().map(|metadata| {
-                let generation = metadata
-                    .get("codeGenerationId")
-                    .and_then(|value| value.as_str());
-                let repo = metadata.get("codeRepoId").and_then(|value| value.as_str());
-                match (repo, generation) {
-                    (Some(repo), Some(generation)) => {
-                        current.contains(&(repo.to_owned(), generation.to_owned()))
-                    }
-                    _ => false,
-                }
-            });
-            stamp_is_current.unwrap_or(false)
-        })
-        .collect();
-    if selected.is_empty() {
-        return Err(
-            "matched chunks span multiple bound repository generations and none is              the current published generation"
-                .into(),
-        );
+    let mut participants: Vec<&'a engram_domain::KnowledgeChunk> = Vec::new();
+    let mut origin: Option<(String, String)> = None;
+    for chunk in matched {
+        let Some((repo, generation)) = view.code_lineage_of(chunk.id.as_str()) else {
+            // No durable lineage: unstamped or forged-stamp rows are not
+            // admissible participants.
+            continue;
+        };
+        if !published.contains(&(repo.to_owned(), generation.to_owned())) {
+            // Durable lineage on a NON-published generation (retained old
+            // generation): not a participant.
+            continue;
+        }
+        let candidate = (repo.to_owned(), generation.to_owned());
+        if let Some(existing) = &origin
+            && existing != &candidate
+        {
+            return Err("matched chunks span multiple published repository generations".into());
+        }
+        origin = Some(candidate);
+        participants.push(*chunk);
     }
-    let origin = bound_code_origin(&selected)?;
-    *ordered = selected;
-    Ok(origin)
+    Ok(participants)
 }
 
 /// Resolves `symbol` against the matched (same-generation) chunks and maps
@@ -313,29 +312,35 @@ pub fn fetch_content(app: &App, args: &Value) -> Result<Value, ToolError> {
     let kind = if is_code { "code" } else { "doc" };
 
     // --- Bound code: EXACT retained committed bytes (task_017) -----------
-    // Chunks stamped with a code generation serve the retained snapshot of
-    // THAT generation's commit — byte-exact, revision-labeled, and with NO
-    // working-tree fallback: a missing snapshot is an error in auto and
-    // verbatim modes alike (REQ-006: exact content or an explicit
-    // unavailable error, never a checkout masquerading as the revision).
-    let bound_origin = match bound_code_origin(&ordered) {
-        Ok(origin) => origin,
-        Err(reason) if reason.contains("multiple bound repository generations") => {
-            // Old + current retained chunks coexist: resolve the CURRENT
-            // authorized generation instead of rejecting the mix.
-            resolve_current_generation_origin(app, &mut ordered).map_err(|reason| {
-                ToolError::new(
-                    -32602,
-                    format!("bound source origin is ambiguous: {reason}"),
-                )
-            })?
-        }
-        Err(reason) => {
-            return Err(ToolError::new(
-                -32602,
-                format!("bound source origin is ambiguous: {reason}"),
-            ));
-        }
+    // The exact path is reserved for CANONICALLY PARTICIPATING chunks: ids
+    // with durable lineage on a PUBLISHED generation (corrective r4,
+    // canonical 10). Unstamped rows and forged stamps are never admissible —
+    // they cannot select the origin, a span, or the served revision, and a
+    // missing snapshot stays an error in auto and verbatim modes alike
+    // (REQ-006: exact content or an explicit unavailable error, never a
+    // checkout masquerading as the revision).
+    let participants = canonical_participating_chunks(app, &ordered).map_err(|reason| {
+        ToolError::new(
+            -32602,
+            format!("bound source origin is ambiguous: {reason}"),
+        )
+    })?;
+    let bound_origin = participants
+        .first()
+        .and_then(|chunk| chunk.metadata.as_ref())
+        .and_then(|metadata| {
+            let repo = metadata.get("codeRepoId").and_then(|v| v.as_str());
+            let generation = metadata.get("codeGenerationId").and_then(|v| v.as_str());
+            match (repo, generation) {
+                (Some(repo), Some(generation)) => Some((repo.to_owned(), generation.to_owned())),
+                _ => None,
+            }
+        });
+    // Symbol/span selection uses ONLY the participants.
+    let span_chunks: Vec<&engram_domain::KnowledgeChunk> = if bound_origin.is_some() {
+        participants.clone()
+    } else {
+        Vec::new()
     };
     if mode != "chunks"
         && let Some((repo_id, generation_id)) = bound_origin
@@ -370,9 +375,11 @@ pub fn fetch_content(app: &App, args: &Value) -> Result<Value, ToolError> {
                 ));
             }
         };
-        // Symbol selection: same-generation chunks naming the symbol decide
-        // the byte span; exactly one distinct span is required.
-        let span = match exact_symbol_span(&ordered, symbol, &full_view.bytes) {
+        // Symbol selection: canonical PARTICIPATING chunks naming the symbol
+        // decide the byte span; exactly one distinct span is required.
+        // Unstamped/forged impostors are not participants and can neither
+        // select nor ambiguate a span.
+        let span = match exact_symbol_span(&span_chunks, symbol, &full_view.bytes) {
             Ok(span) => span,
             Err(reason) => {
                 return Err(ToolError::new(
@@ -722,6 +729,9 @@ mod tests {
         generation: CodeGeneration,
         /// A retained-but-superseded generation (mixed-generation fixtures).
         retained_old: Option<CodeGeneration>,
+        /// Durable staged lineage for ADDITIONAL participating chunks (the
+        /// canonical origin selector reads chunk lineage, never stamps).
+        extra_lineage: std::sync::Mutex<Vec<engram_knowledge::TargetLineage>>,
         descriptor_digest: std::sync::Mutex<Option<String>>,
         live_lease: std::sync::Mutex<Option<engram_knowledge::CodeReadLease>>,
     }
@@ -748,6 +758,19 @@ mod tests {
                 descriptor_digest: std::sync::Mutex::new(None),
                 live_lease: std::sync::Mutex::new(None),
                 retained_old: None,
+                extra_lineage: std::sync::Mutex::new(Vec::new()),
+            }
+        }
+
+        /// Records durable lineage for ADDITIONAL participating chunks.
+        fn with_chunk_lineage(&self, entries: &[(String, String)]) {
+            let mut lineage = self.extra_lineage.lock().expect("lineage lock");
+            for (record_id, generation_id) in entries {
+                lineage.push(engram_knowledge::TargetLineage {
+                    record_id: record_id.clone(),
+                    repo_id: self.binding.repo_id.0.clone(),
+                    generation_id: generation_id.clone(),
+                });
             }
         }
 
@@ -897,11 +920,15 @@ mod tests {
             if scope != &self.binding.scope {
                 return Ok(Vec::new());
             }
-            Ok(vec![engram_knowledge::TargetLineage {
+            // Default: the single-chunk fixture participant. Mixed-generation
+            // fixtures seed `extra_lineage` for their participating chunks.
+            let mut lineage = vec![engram_knowledge::TargetLineage {
                 record_id: "chunk-bound-1".to_owned(),
                 repo_id: self.binding.repo_id.0.clone(),
                 generation_id: self.generation.id.clone(),
-            }])
+            }];
+            lineage.extend(self.extra_lineage.lock().expect("lineage lock").clone());
+            Ok(lineage)
         }
         async fn get_source_descriptor(
             &self,
@@ -1268,6 +1295,12 @@ mod tests {
                 .to_string(),
         );
         let knowledge = ambiguous_knowledge(&scope);
+        // Both ambiguous chunks carry durable lineage on the published
+        // generation — canonical participants whose spans genuinely clash.
+        bindings.with_chunk_lineage(&[
+            ("chunk-alpha-1".to_owned(), "gen-1".to_owned()),
+            ("chunk-alpha-2".to_owned(), "gen-1".to_owned()),
+        ]);
         let coordinator = CodeBindingCoordinator::new(
             bindings.clone() as std::sync::Arc<dyn CodeBindingRepository>,
             std::sync::Arc::new(PermissiveAuthorizer),
@@ -1483,7 +1516,7 @@ mod tests {
                 metadata: Some(stamp(generation)),
             }
         };
-        let chunks = vec![
+        let mut chunks = vec![
             // gen-1 (retained, superseded)
             chunk_of("chunk-old-alpha", "gen-1", "alpha", 1, 2, "def alpha():"),
             chunk_of("chunk-old-gamma", "gen-1", "gamma", 4, 5, "def gamma():"),
@@ -1491,6 +1524,37 @@ mod tests {
             chunk_of("chunk-new-beta", "gen-2", "beta", 2, 3, "def beta():"),
             chunk_of("chunk-new-alpha", "gen-2", "alpha", 6, 7, "def alpha():"),
         ];
+        // IMPOSTORS (canonical 10): an UNSTAMPED row and a FORGED-CURRENT-
+        // stamp row, both naming `alpha` at WRONG lines with NO durable
+        // lineage — neither may select or ambiguate the span.
+        let mut unstamped = chunk_of(
+            "chunk-impostor-unstamped",
+            "gen-none",
+            "alpha",
+            1,
+            1,
+            "def alpha():",
+        );
+        unstamped.metadata = None;
+        chunks.push(unstamped);
+        chunks.push(chunk_of(
+            "chunk-impostor-forged",
+            "gen-2",
+            "alpha",
+            3,
+            3,
+            "def alpha():",
+        ));
+        // Canonical durable lineage: the OLD chunks belong to the retired
+        // gen-1 (not participants) and the CURRENT chunks to gen-2; the
+        // unstamped and forged-stamp IMPOSTORS deliberately carry NO
+        // lineage — stamps are not admissible evidence.
+        bindings.with_chunk_lineage(&[
+            ("chunk-old-alpha".to_owned(), "gen-1".to_owned()),
+            ("chunk-old-gamma".to_owned(), "gen-1".to_owned()),
+            ("chunk-new-beta".to_owned(), "gen-2".to_owned()),
+            ("chunk-new-alpha".to_owned(), "gen-2".to_owned()),
+        ]);
         let knowledge: std::sync::Arc<dyn engram_integration::KnowledgeQuery> =
             std::sync::Arc::new(SeededQuery { chunks });
         let coordinator = CodeBindingCoordinator::new(

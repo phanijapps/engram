@@ -261,6 +261,16 @@ impl BoundCodeView {
     pub fn code_records(&self) -> Vec<&str> {
         self.lineage.keys().map(String::as_str).collect()
     }
+
+    /// The durable lineage association (repository, generation) of one
+    /// record, when it exists — the canonical origin association used to
+    /// select PARTICIPATING chunks for exact reads (corrective r4,
+    /// canonical 10: stamps are never authority).
+    pub fn code_lineage_of(&self, record_id: &str) -> Option<(&str, &str)> {
+        self.lineage
+            .get(record_id)
+            .map(|(repo, generation)| (repo.as_str(), generation.as_str()))
+    }
 }
 
 /// Rejects an unbound code read attempt with the typed contract error.

@@ -166,8 +166,7 @@ impl RetrievalIndex for CommunitySummaryIndex {
                 let entities = entities
                     .into_iter()
                     .filter(|entity| {
-                        let allowed =
-                            view.allows(entity.id.as_str(), entity_is_unstamped_code(entity));
+                        let allowed = view.allows(entity.id.as_str(), entity_is_code_kind(entity));
                         if allowed {
                             authorized_ids.insert(entity.id.to_string());
                         }
@@ -219,7 +218,8 @@ impl RetrievalIndex for CommunitySummaryIndex {
         // subsequent query reuses them until the graph changes. Entities and
         // relationships are already cached (above), so this only adds the label
         // map to the snapshot on the warm-up query.
-        let labels = if let Some(cache) = &self.cache
+        let labels = if view.is_none()
+            && let Some(cache) = &self.cache
             && let Some(snap) = cache.get(scope).await
             && snap.current_for_epoch(observed_epoch)
             && let Some(cached) = &snap.community_labels
@@ -227,7 +227,13 @@ impl RetrievalIndex for CommunitySummaryIndex {
             cached.clone()
         } else {
             let computed = communities(&edges, 20);
-            if let Some(cache) = &self.cache {
+            // The shared snapshot is request-independent raw graph data.
+            // Never replace it with a repository-narrowed graph or labels,
+            // because a later wildcard or differently narrowed request would
+            // otherwise reuse the prior request's universe.
+            if view.is_none()
+                && let Some(cache) = &self.cache
+            {
                 cache
                     .put(
                         scope,
@@ -390,18 +396,10 @@ fn name_matches_tokens(name: &str, tokens: &[String]) -> bool {
 }
 
 /// Resolves an entity reference to its entity-id key, or `None` if no id.
-/// True when an entity is a code symbol or structural code artifact WITHOUT a
-/// generation stamp — legacy unbound code. Never eligible once a binding view
-/// constrains the lane (task_014).
-fn entity_is_unstamped_code(entity: &KnowledgeEntity) -> bool {
-    let stamped = entity
-        .metadata
-        .as_ref()
-        .and_then(|meta| meta.get(engram_retrieval::bound_filter::CODE_GENERATION_KEY))
-        .is_some();
-    if stamped {
-        return false;
-    }
+/// Typed code classification never trusts a metadata stamp.  A code symbol or
+/// structural artifact without durable lineage remains code and is denied by
+/// a bound view.
+fn entity_is_code_kind(entity: &KnowledgeEntity) -> bool {
     engram_retrieval::is_code_artifact(entity)
         || matches!(
             entity.kind,

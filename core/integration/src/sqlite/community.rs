@@ -45,32 +45,29 @@ pub async fn overview_eligible(
 ) -> CoreResult<CommunityOverview> {
     use engram_knowledge::KnowledgeRepository as _;
     let entities = store.list_entities(scope).await?;
-    let mut removed: std::collections::HashSet<String> = Default::default();
-    for entity in &entities {
-        if !view.allows(entity.id.as_str(), entity_unstamped_code(entity)) {
-            removed.insert(entity.id.to_string());
-        }
-    }
+    // Build the authorized canonical vertex set first.  An endpoint is never
+    // admitted by its display name: it must carry an id and that id must name
+    // an entity which the durable-lineage view permits.
+    let authorized_ids: std::collections::HashSet<String> = entities
+        .iter()
+        .filter(|entity| view.allows(entity.id.as_str(), entity_is_code_kind(entity)))
+        .map(|entity| entity.id.to_string())
+        .collect();
     let rels = SqlKnowledgeStore::relationship_endpoints(store, scope).await?;
     let edges: Vec<(String, String)> = rels
         .iter()
-        .filter_map(|(sn, si, on, oi)| Some((endpoint_key(sn, si)?, endpoint_key(on, oi)?)))
-        .filter(|(subject, object)| !removed.contains(subject) && !removed.contains(object))
+        .filter_map(|(_sn, si, _on, oi)| Some((si.as_ref()?.clone(), oi.as_ref()?.clone())))
+        .filter(|(subject, object)| {
+            authorized_ids.contains(subject) && authorized_ids.contains(object)
+        })
         .collect();
     overview_from_edges(&edges, limit)
 }
 
-/// True for code-symbol / code-artifact entities without a generation stamp
-/// (legacy unbound code — never eligible under a binding view).
-fn entity_unstamped_code(entity: &engram_domain::KnowledgeEntity) -> bool {
-    let stamped = entity
-        .metadata
-        .as_ref()
-        .and_then(|meta| meta.get(engram_retrieval::bound_filter::CODE_GENERATION_KEY))
-        .is_some();
-    if stamped {
-        return false;
-    }
+/// True for every code-symbol / code-artifact entity.  Metadata is never a
+/// code-kind authority: forged, null, foreign and missing stamps all retain
+/// their typed classification and require durable lineage.
+fn entity_is_code_kind(entity: &engram_domain::KnowledgeEntity) -> bool {
     engram_retrieval::is_code_artifact(entity)
         || matches!(
             entity.kind,

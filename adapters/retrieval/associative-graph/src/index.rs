@@ -226,8 +226,7 @@ impl RetrievalIndex for AssociativeGraphIndex {
                 let entities = entities
                     .into_iter()
                     .filter(|entity| {
-                        let allowed =
-                            view.allows(entity.id.as_str(), entity_is_unstamped_code(entity));
+                        let allowed = view.allows(entity.id.as_str(), entity_is_code_kind(entity));
                         if allowed {
                             authorized_ids.insert(entity.id.to_string());
                         }
@@ -334,18 +333,10 @@ fn entity_key(reference: &EntityRef) -> Option<String> {
     reference.id.as_ref().map(|id| id.as_str().to_owned())
 }
 
-/// True when an entity is a code symbol or structural code artifact WITHOUT a
-/// generation stamp — legacy unbound code (pre-binding `scan_repo` output).
-/// Never eligible once a binding view constrains the lane (task_014).
-fn entity_is_unstamped_code(entity: &KnowledgeEntity) -> bool {
-    let stamped = entity
-        .metadata
-        .as_ref()
-        .and_then(|meta| meta.get(engram_retrieval::bound_filter::CODE_GENERATION_KEY))
-        .is_some();
-    if stamped {
-        return false;
-    }
+/// True when an entity is a typed code symbol or structural artifact.
+/// Metadata stamps are not code-kind authority, so forged, null, foreign and
+/// missing values cannot turn code into ordinary graph input.
+fn entity_is_code_kind(entity: &KnowledgeEntity) -> bool {
     engram_retrieval::is_code_artifact(entity)
         || matches!(
             entity.kind,

@@ -22,10 +22,10 @@ use std::sync::Arc;
 use async_trait::async_trait;
 use engram_belief::BeliefRepository;
 use engram_domain::{
-    AllowedUse, DeleteMode, EvidenceTargetType, KnowledgeChunkKind, Policy, Retention,
-    RetrievalRequest, RetrievalResult, RetrievalTargetType, Sensitivity, Visibility,
+    EvidenceTargetType, KnowledgeChunkKind, Policy, RetrievalRequest, RetrievalResult,
+    RetrievalTargetType,
 };
-use engram_knowledge::{CodeBindingRepository, KnowledgeRepository};
+use engram_knowledge::{CodeBindingRepository, KnowledgeGraphRepository, KnowledgeRepository};
 use engram_memory::MemoryRepository;
 use engram_retrieval::{CandidateEvidence, CandidateEvidenceResolver, EvidenceClassification};
 use engram_runtime::{CoreResult, PolicyAuthorizer};
@@ -47,6 +47,7 @@ pub struct RepositoryCandidateEvidence {
     knowledge: Arc<dyn KnowledgeRepository>,
     authorizer: Arc<dyn PolicyAuthorizer>,
     ownership: Option<Arc<dyn CodeBindingRepository>>,
+    graph: Option<Arc<dyn KnowledgeGraphRepository>>,
 }
 
 impl RepositoryCandidateEvidence {
@@ -56,6 +57,7 @@ impl RepositoryCandidateEvidence {
         knowledge: Arc<dyn KnowledgeRepository>,
         authorizer: Arc<dyn PolicyAuthorizer>,
         ownership: Option<Arc<dyn CodeBindingRepository>>,
+        graph: Option<Arc<dyn KnowledgeGraphRepository>>,
     ) -> Self {
         Self {
             memory,
@@ -63,7 +65,33 @@ impl RepositoryCandidateEvidence {
             knowledge,
             authorizer,
             ownership,
+            graph,
         }
+    }
+
+    /// Resolves graph-owned records through their canonical graph policy.
+    /// Graphless entities and relationships are resolved ordinary facts whose
+    /// domain default still flows through the configured owning authorizer.
+    /// Missing graph authority, a missing graph row, or a foreign graph deny.
+    async fn authorize_graph(
+        &self,
+        request: &RetrievalRequest,
+        scope: &engram_domain::Scope,
+        graph_id: Option<&engram_domain::KnowledgeGraphId>,
+    ) -> CoreResult<bool> {
+        let Some(graph_id) = graph_id else {
+            return Ok(self.authorize(request, scope, &Policy::graph_lane_default()));
+        };
+        let Some(graphs) = &self.graph else {
+            return Ok(false);
+        };
+        let Some(graph) = graphs.get_graph(graph_id, scope).await? else {
+            return Ok(false);
+        };
+        if graph.scope != *scope {
+            return Ok(false);
+        }
+        Ok(self.authorize(request, &graph.scope, &graph.policy))
     }
 
     /// The owning retrieval decision for one canonical record: the request's
@@ -255,7 +283,10 @@ impl RepositoryCandidateEvidence {
                 else {
                     return Ok((CandidateEvidence::Unknown, None));
                 };
-                if !self.authorize(request, &record.scope, &graph_default_policy()) {
+                if !self
+                    .authorize_graph(request, &record.scope, record.graph_id.as_ref())
+                    .await?
+                {
                     return Ok((CandidateEvidence::Unknown, None));
                 }
                 if entity_is_code_kind(&record) {
@@ -323,7 +354,10 @@ impl RepositoryCandidateEvidence {
                 else {
                     return Ok((CandidateEvidence::Unknown, None));
                 };
-                if !self.authorize(request, &record.scope, &graph_default_policy()) {
+                if !self
+                    .authorize_graph(request, &record.scope, record.graph_id.as_ref())
+                    .await?
+                {
                     return Ok((CandidateEvidence::Unknown, None));
                 }
                 let mut provenance = record.provenance.clone();
@@ -472,21 +506,6 @@ fn entity_is_code_kind(entity: &engram_domain::KnowledgeEntity) -> bool {
             | engram_domain::EntityKind::TypeAlias
             | engram_domain::EntityKind::Enum
     )
-}
-
-/// Entities and relationships carry no canonical policy field; the owning
-/// graph lane stamps this default on such candidates, so the evidence path
-/// authorizes the same shape (the owning decision, not a resolver-invented
-/// bypass).
-pub(crate) fn graph_default_policy() -> Policy {
-    Policy {
-        visibility: Visibility::Workspace,
-        retention: Retention::Durable,
-        sensitivity: Some(Sensitivity::Low),
-        allowed_uses: vec![AllowedUse::Retrieval],
-        expires_at: None,
-        delete_mode: Some(DeleteMode::Tombstone),
-    }
 }
 
 /// Upgrade the aggregate classification monoid: code dependence dominates,
@@ -669,7 +688,10 @@ impl CandidateEvidenceResolver for RepositoryCandidateEvidence {
                     if record.name == candidate.content
                         && record.provenance == candidate.provenance =>
                 {
-                    if !self.authorize(request, &record.scope, &graph_default_policy()) {
+                    if !self
+                        .authorize_graph(request, &record.scope, record.graph_id.as_ref())
+                        .await?
+                    {
                         return Ok(EvidenceClassification {
                             evidence: CandidateEvidence::Unknown,
                             code_dependencies: Vec::new(),

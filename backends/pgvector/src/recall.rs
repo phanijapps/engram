@@ -1224,6 +1224,7 @@ mod authority_tests {
                     knowledge.clone() as Arc<dyn engram_knowledge::KnowledgeRepository>,
                     memory.retrieval_authorizer(),
                     Some(ownership.clone() as Arc<dyn engram_knowledge::CodeBindingRepository>),
+                    Some(knowledge.clone() as Arc<dyn engram_knowledge::KnowledgeGraphRepository>),
                 ),
             )),
         };
@@ -1313,6 +1314,7 @@ mod authority_tests {
                     knowledge.clone() as Arc<dyn engram_knowledge::KnowledgeRepository>,
                     memory.retrieval_authorizer(),
                     Some(ownership.clone() as Arc<dyn engram_knowledge::CodeBindingRepository>),
+                    Some(knowledge.clone() as Arc<dyn engram_knowledge::KnowledgeGraphRepository>),
                 ),
             )),
         };

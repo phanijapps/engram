@@ -168,6 +168,7 @@ pub struct AuthorizedKnowledgeQuery {
     /// binding (corrective r4, canonical 3c/4): ordinary records still need
     /// their own caller authorization, never an invented repository anchor.
     policy_authorizer: Option<Arc<dyn engram_runtime::PolicyAuthorizer>>,
+    graph: Option<Arc<dyn engram_knowledge::KnowledgeGraphRepository>>,
 }
 
 impl AuthorizedKnowledgeQuery {
@@ -181,6 +182,7 @@ impl AuthorizedKnowledgeQuery {
             query,
             coordinator,
             policy_authorizer: None,
+            graph: None,
         }
     }
 
@@ -195,26 +197,25 @@ impl AuthorizedKnowledgeQuery {
         self
     }
 
-    /// The owning ordinary-record decision for one canonical record in an
-    /// UNBOUND scope: the request's caller against the record's scope and
-    /// the graph-lane default policy shape (entities carry no policy field).
-    fn ordinary_authorized(&self, actor: &engram_domain::Actor, scope: &Scope) -> bool {
-        let Some(authorizer) = &self.policy_authorizer else {
-            return false;
-        };
-        let requester = engram_domain::Requester {
-            actor: actor.clone(),
-            roles: Vec::new(),
-            permissions: Vec::new(),
-            on_behalf_of: None,
-        };
-        authorizer
-            .can_retrieve(
-                &requester,
-                scope,
-                &crate::candidate_evidence::graph_default_policy(),
-            )
-            .is_ok()
+    /// Attaches the canonical graph repository for graph-owned ordinary records.
+    pub fn with_graph_repository(
+        mut self,
+        graph: Arc<dyn engram_knowledge::KnowledgeGraphRepository>,
+    ) -> Self {
+        self.graph = Some(graph);
+        self
+    }
+
+    /// Authorizes one ordinary entity through its canonical graph policy, or
+    /// through the domain graphless default when it has no graph association.
+    /// A missing authorizer, graph repository, graph row, or foreign graph
+    /// fails closed.
+    async fn ordinary_authorized(
+        &self,
+        actor: &engram_domain::Actor,
+        entity: &KnowledgeEntity,
+    ) -> CoreResult<bool> {
+        ordinary_entity_authorized(&self.policy_authorizer, &self.graph, actor, entity).await
     }
 
     /// Authorizes the caller for every repository in the scope's published
@@ -279,8 +280,12 @@ impl AuthorizedKnowledgeQuery {
                 // Ordinary non-code record? It must actually exist as a
                 // non-code record in the read surface — otherwise it is an
                 // unknown id and denies.
-                if await_non_code_record(&self.query, scope, id).await? {
-                    authorized.push(id.clone());
+                if let Some(entity) = await_non_code_entity(&self.query, scope, id).await? {
+                    if self.ordinary_authorized(actor, &entity).await? {
+                        authorized.push(id.clone());
+                    } else {
+                        return Err(foreign_target(&[id.clone()]));
+                    }
                 } else {
                     return Err(foreign_target(&[id.clone()]));
                 }
@@ -491,21 +496,21 @@ impl AuthorizedKnowledgeQuery {
             // a staged code-owned record denies even when its kind is
             // ordinary-looking (e.g. a Concept contributed by a staged
             // attempt), and every code-kind record denies.
-            let caller_authorized = self.ordinary_authorized(actor, scope);
             let code_owned: std::collections::HashSet<String> = initial_view
                 .code_records()
                 .into_iter()
                 .map(str::to_owned)
                 .collect();
             let entities = self.query.list_entities(scope).await?;
-            let ordinary: Vec<KnowledgeEntity> = entities
-                .into_iter()
-                .filter(|entity| {
-                    !entity_is_code_kind(entity)
-                        && !code_owned.contains(entity.id.as_str())
-                        && caller_authorized
-                })
-                .collect();
+            let mut ordinary = Vec::new();
+            for entity in entities {
+                if !entity_is_code_kind(&entity)
+                    && !code_owned.contains(entity.id.as_str())
+                    && self.ordinary_authorized(actor, &entity).await?
+                {
+                    ordinary.push(entity);
+                }
+            }
             if requested.is_empty() {
                 return Ok(ordinary);
             }
@@ -529,6 +534,9 @@ impl AuthorizedKnowledgeQuery {
         let query = Arc::clone(&self.query);
         let coordinator = Arc::clone(&self.coordinator);
         let view_coordinator = Arc::clone(&coordinator);
+        let policy_authorizer = self.policy_authorizer.clone();
+        let graph = self.graph.clone();
+        let caller = actor.clone();
         // Pin authority, canonical selection, entity load, and returned view
         // into one consistency window. A publication race retries once or
         // returns GenerationChanged before stale results can be returned.
@@ -542,16 +550,32 @@ impl AuthorizedKnowledgeQuery {
                     let query = Arc::clone(&query);
                     let coordinator = Arc::clone(&view_coordinator);
                     let requested = requested.clone();
+                    let policy_authorizer = policy_authorizer.clone();
+                    let graph = graph.clone();
+                    let caller = caller.clone();
                     async move {
                         let view = coordinator.eligibility_view(scope, None).await?;
                         let entities = query.list_entities(scope).await?;
                         if requested.is_empty() {
-                            return Ok(entities
-                                .into_iter()
-                                .filter(|entity| {
-                                    view.allows(entity.id.as_str(), entity_is_code_kind(entity))
-                                })
-                                .collect());
+                            let mut authorized = Vec::new();
+                            for entity in entities {
+                                if view.is_code_record(entity.id.as_str()) {
+                                    if view.allows(entity.id.as_str(), true) {
+                                        authorized.push(entity);
+                                    }
+                                } else if !entity_is_code_kind(&entity)
+                                    && ordinary_entity_authorized(
+                                        &policy_authorizer,
+                                        &graph,
+                                        &caller,
+                                        &entity,
+                                    )
+                                    .await?
+                                {
+                                    authorized.push(entity);
+                                }
+                            }
+                            return Ok(authorized);
                         }
                         let mut authorized = std::collections::HashSet::new();
                         for id in &requested {
@@ -560,8 +584,21 @@ impl AuthorizedKnowledgeQuery {
                                     return Err(foreign_target(&[id.clone()]));
                                 }
                                 authorized.insert(id.clone());
-                            } else if await_non_code_record(&query, scope, id).await? {
-                                authorized.insert(id.clone());
+                            } else if let Some(entity) =
+                                await_non_code_entity(&query, scope, id).await?
+                            {
+                                if ordinary_entity_authorized(
+                                    &policy_authorizer,
+                                    &graph,
+                                    &caller,
+                                    &entity,
+                                )
+                                .await?
+                                {
+                                    authorized.insert(id.clone());
+                                } else {
+                                    return Err(foreign_target(&[id.clone()]));
+                                }
                             } else {
                                 return Err(foreign_target(&[id.clone()]));
                             }
@@ -596,20 +633,55 @@ fn eligible_lineage_records(view: &engram_retrieval::BoundCodeView, limit: usize
     eligible
 }
 
-/// True when `id` names an existing NON-CODE record in the read surface
-/// (an authorized ordinary read — finding 4). Code-kind records without
-/// lineage are legacy code and are NOT ordinary reads.
-async fn await_non_code_record(
+/// Returns an existing non-code entity from the read surface.
+/// Code-kind records without lineage are legacy code and are not ordinary reads.
+async fn await_non_code_entity(
     query: &Arc<dyn KnowledgeQuery>,
     scope: &Scope,
     id: &str,
+) -> CoreResult<Option<KnowledgeEntity>> {
+    Ok(query
+        .list_entities(scope)
+        .await?
+        .into_iter()
+        .find(|entity| entity.id.as_str() == id && !entity_is_code_kind(entity)))
+}
+
+/// Resolves one ordinary entity's policy authority without bypassing the
+/// configured policy authorizer.
+async fn ordinary_entity_authorized(
+    authorizer: &Option<Arc<dyn engram_runtime::PolicyAuthorizer>>,
+    graph_repository: &Option<Arc<dyn engram_knowledge::KnowledgeGraphRepository>>,
+    actor: &engram_domain::Actor,
+    entity: &KnowledgeEntity,
 ) -> CoreResult<bool> {
-    for entity in query.list_entities(scope).await? {
-        if entity.id.as_str() == id {
-            return Ok(!entity_is_code_kind(&entity));
+    let Some(authorizer) = authorizer else {
+        return Ok(false);
+    };
+    let requester = engram_domain::Requester {
+        actor: actor.clone(),
+        roles: Vec::new(),
+        permissions: Vec::new(),
+        on_behalf_of: None,
+    };
+    let policy = match &entity.graph_id {
+        None => engram_domain::Policy::graph_lane_default(),
+        Some(graph_id) => {
+            let Some(graphs) = graph_repository else {
+                return Ok(false);
+            };
+            let Some(graph) = graphs.get_graph(graph_id, &entity.scope).await? else {
+                return Ok(false);
+            };
+            if graph.scope != entity.scope {
+                return Ok(false);
+            }
+            graph.policy
         }
-    }
-    Ok(false)
+    };
+    Ok(authorizer
+        .can_retrieve(&requester, &entity.scope, &policy)
+        .is_ok())
 }
 
 /// True for symbol / structural code-artifact entity kinds.

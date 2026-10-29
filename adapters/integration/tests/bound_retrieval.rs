@@ -26,7 +26,9 @@ use engram_conformance::SqlUnifiedRecall;
 use engram_domain::*;
 use engram_integration::UnifiedRecall;
 use engram_integration::code_binding::RepositoryEligibilitySource;
-use engram_knowledge::{CodeBindingRepository, KnowledgeRepository, StageReceipt};
+use engram_knowledge::{
+    CodeBindingRepository, KnowledgeGraphRepository, KnowledgeRepository, StageReceipt,
+};
 use engram_memory::MemoryService;
 use engram_retrieval::{RetrievalIndex, RetrievalReranker};
 use engram_runtime::{CoreError, CoreResult};
@@ -145,7 +147,7 @@ fn chunk(id: &str, text: &str, kind: KnowledgeChunkKind) -> KnowledgeChunk {
 fn symbol_entity(id: &str, name: &str) -> KnowledgeEntity {
     KnowledgeEntity {
         id: Id::from(id),
-        graph_id: None,
+        graph_id: Some(Id::from("graph-task-013")),
         kind: EntityKind::Function,
         name: name.to_string(),
         aliases: Vec::new(),
@@ -264,6 +266,20 @@ fn fixture(dir: &std::path::Path) -> Fixture {
     let memory = Arc::new(SqlMemoryService::open_in_memory().expect("memory open"));
     let beliefs = Arc::new(SqlBeliefStore::open_in_memory().expect("beliefs open"));
     let knowledge = Arc::new(SqlKnowledgeStore::open_in_memory().expect("knowledge open"));
+    block_on(knowledge.put_graph(KnowledgeGraph {
+        id: Id::from("graph-task-013"),
+        scope: scope(),
+        name: "task-013 ordinary graph".to_string(),
+        uri: None,
+        version: None,
+        ontology_refs: Vec::new(),
+        policy: policy(),
+        provenance: provenance(),
+        created_at: chrono::Utc::now(),
+        updated_at: None,
+        metadata: None,
+    }))
+    .expect("put canonical graph");
 
     // Durable binding store: repo-a PUBLISHED at gen-a; repo-b staged only.
     let bindings =
@@ -529,6 +545,7 @@ impl Fixture {
                 self.knowledge.clone() as Arc<dyn engram_knowledge::KnowledgeRepository>,
                 self.memory.retrieval_authorizer(),
                 Some(self.bindings.clone() as Arc<dyn engram_knowledge::CodeBindingRepository>),
+                Some(self.knowledge.clone() as Arc<dyn engram_knowledge::KnowledgeGraphRepository>),
             ),
         )
     }
@@ -1529,6 +1546,7 @@ mod task_013 {
                 knowledge.clone() as Arc<dyn engram_knowledge::KnowledgeRepository>,
                 memory.retrieval_authorizer(),
                 None,
+                Some(knowledge.clone() as Arc<dyn engram_knowledge::KnowledgeGraphRepository>),
             );
             let classification =
                 block_on(resolver.evidence(&memory_candidate(&record), &request("parse", 10)))
@@ -1568,6 +1586,8 @@ mod task_013 {
                 fixture.knowledge.clone() as Arc<dyn engram_knowledge::KnowledgeRepository>,
                 fixture.memory.retrieval_authorizer(),
                 None,
+                Some(fixture.knowledge.clone()
+                    as Arc<dyn engram_knowledge::KnowledgeGraphRepository>),
             );
             let classification = block_on(resolver.evidence(
                 &bound_entity_candidate(&fixture, "entity-concept-e"),
@@ -1711,6 +1731,8 @@ mod task_013 {
                 fixture.knowledge.clone() as Arc<dyn engram_knowledge::KnowledgeRepository>,
                 Arc::new(DeniesHighSensitivity),
                 Some(fixture.bindings.clone() as Arc<dyn engram_knowledge::CodeBindingRepository>),
+                Some(fixture.knowledge.clone()
+                    as Arc<dyn engram_knowledge::KnowledgeGraphRepository>),
             );
             let result = candidate(
                 RetrievalTargetType::Chunk,
@@ -1790,7 +1812,7 @@ mod task_013 {
             let relationship_of =
                 |id: &str, refs: Vec<EvidenceRef>| engram_domain::KnowledgeRelationship {
                     id: engram_domain::RelationshipId::from(id),
-                    graph_id: None,
+                    graph_id: Some(Id::from("graph-task-013")),
                     predicate: "mentions".to_string(),
                     subject: engram_domain::EntityRef {
                         id: Some(Id::from("entity-published")),
@@ -1875,6 +1897,8 @@ mod task_013 {
                 fixture.knowledge.clone() as Arc<dyn engram_knowledge::KnowledgeRepository>,
                 fixture.memory.retrieval_authorizer(),
                 None,
+                Some(fixture.knowledge.clone()
+                    as Arc<dyn engram_knowledge::KnowledgeGraphRepository>),
             );
             let classification =
                 block_on(resolver.evidence(&memory_candidate(&referencing), &request("parse", 10)))

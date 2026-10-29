@@ -20,7 +20,9 @@ use engram_integration::code_binding::{
     CodeAuthorityAction, CodeBindingAuthorizer, CodeBindingCoordinator,
 };
 use engram_integration::{EngramProvider, EngramProviderBuilder};
-use engram_knowledge::{CodeBindingRepository, KnowledgeRepository, StageReceipt};
+use engram_knowledge::{
+    CodeBindingRepository, KnowledgeGraphRepository, KnowledgeRepository, StageReceipt,
+};
 use engram_runtime::{CoreError, CoreResult};
 use engram_store_sqlite::knowledge::{SqlCodeBindingRepository, SqlKnowledgeStore};
 use futures::executor::block_on;
@@ -119,6 +121,41 @@ impl engram_runtime::PolicyAuthorizer for DenyAllPolicy {
         Err(CoreError::PolicyDenied {
             reason: "ordinary reads denied".to_string(),
         })
+    }
+}
+
+/// Permits ordinary low-sensitivity graph policy and rejects stricter graph policy.
+struct LowGraphPolicyOnly;
+impl engram_runtime::PolicyAuthorizer for LowGraphPolicyOnly {
+    fn can_write(
+        &self,
+        _requester: &Requester,
+        _scope: &Scope,
+        _policy: &Policy,
+    ) -> CoreResult<()> {
+        Ok(())
+    }
+    fn can_retrieve(
+        &self,
+        _requester: &Requester,
+        _scope: &Scope,
+        policy: &Policy,
+    ) -> CoreResult<()> {
+        if policy.sensitivity == Some(Sensitivity::High) {
+            Err(CoreError::PolicyDenied {
+                reason: "high graph policy denied".to_string(),
+            })
+        } else {
+            Ok(())
+        }
+    }
+    fn can_forget(
+        &self,
+        _requester: &Requester,
+        _scope: &Scope,
+        _policy: &Policy,
+    ) -> CoreResult<()> {
+        Ok(())
     }
 }
 
@@ -527,7 +564,8 @@ fn provider_with(
     let provider = EngramProviderBuilder::new(engram_integration::CapabilityReport::new(
         CapabilityState::Supported,
     ))
-    .knowledge_query(knowledge)
+    .knowledge_query(knowledge.clone())
+    .graph(knowledge)
     .code_bindings(Arc::new(coordinator))
     .build();
     (provider, bindings)
@@ -1416,9 +1454,11 @@ mod task_016 {
             .knowledge_query()
             .cloned()
             .expect("knowledge query handle");
+        let graph = provider.graph().cloned().expect("graph repository handle");
         let coordinator = provider.code_bindings().expect("coordinator").clone();
         let authorized = AuthorizedKnowledgeQuery::new(knowledge, coordinator)
-            .with_policy_authorizer(Arc::new(crate::AllowAllPolicy));
+            .with_policy_authorizer(Arc::new(crate::AllowAllPolicy))
+            .with_graph_repository(graph);
         (authorized, bindings)
     }
 
@@ -1644,6 +1684,13 @@ mod task_016 {
             vec!["unbound-doc".to_string()],
             "only the positively authorized ordinary Concept survives: {ids:?}"
         );
+        let explicit_ordinary = block_on(permitted.list_entities_authorized(
+            &actor(),
+            &unbound,
+            &["unbound-doc".to_string()],
+        ))
+        .expect("graphless ordinary explicit read is authorized");
+        assert_eq!(explicit_ordinary[0].id.as_str(), "unbound-doc");
         // The staged code-owned Concept denies even on EXPLICIT request.
         let explicit = block_on(permitted.list_entities_authorized(
             &actor(),
@@ -1672,6 +1719,90 @@ mod task_016 {
             "a denied ordinary caller gets nothing: {:?}",
             empty.iter().map(|e| e.id.to_string()).collect::<Vec<_>>()
         );
+        let denied_explicit = block_on(denied_caller.list_entities_authorized(
+            &actor(),
+            &unbound,
+            &["unbound-doc".to_string()],
+        ));
+        assert!(
+            matches!(&denied_explicit, Err(CoreError::InvalidRequest { reason }) if reason.contains("BindingRequired")),
+            "a denied graphless ordinary explicit read must fail closed: {denied_explicit:?}"
+        );
+    }
+
+    /// Two real graph rows supply their own policy authority, while a missing
+    /// or foreign graph row fails closed rather than using a graphless default.
+    #[test]
+    fn graph_policy_owns_ordinary_concept_authorization() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let bindings = Arc::new(
+            SqlCodeBindingRepository::open(dir.path().join("graph-policy.sqlite"))
+                .expect("open bindings"),
+        );
+        let knowledge = Arc::new(SqlKnowledgeStore::open_in_memory().expect("knowledge"));
+        let low_graph_id = Id::from("low-graph");
+        let strict_graph_id = Id::from("strict-graph");
+        let foreign_graph_id = Id::from("foreign-graph");
+        let mut low_policy = policy();
+        low_policy.sensitivity = Some(Sensitivity::Low);
+        let mut strict_policy = policy();
+        strict_policy.sensitivity = Some(Sensitivity::High);
+        for (id, graph_scope, graph_policy) in [
+            (low_graph_id.clone(), scope(), low_policy),
+            (strict_graph_id.clone(), scope(), strict_policy),
+            (foreign_graph_id.clone(), foreign_scope(), policy()),
+        ] {
+            block_on(knowledge.put_graph(KnowledgeGraph {
+                id,
+                scope: graph_scope,
+                name: "ordinary policy graph".to_string(),
+                uri: None,
+                version: None,
+                ontology_refs: Vec::new(),
+                policy: graph_policy,
+                provenance: provenance(),
+                created_at: chrono::Utc::now(),
+                updated_at: None,
+                metadata: None,
+            }))
+            .expect("put graph");
+        }
+        for (id, graph_id) in [
+            ("low-concept", Some(low_graph_id)),
+            ("strict-concept", Some(strict_graph_id)),
+            ("missing-concept", Some(Id::from("missing-graph"))),
+            ("foreign-concept", Some(foreign_graph_id)),
+        ] {
+            let mut record = entity(id, id, EntityKind::Concept);
+            record.graph_id = graph_id;
+            block_on(knowledge.put_entity(record)).expect("put concept");
+        }
+        let coordinator = Arc::new(CodeBindingCoordinator::new(
+            bindings as Arc<dyn CodeBindingRepository>,
+            Arc::new(crate::AllowAuthorizer),
+            Vec::new(),
+        ));
+        let authorized = AuthorizedKnowledgeQuery::new(knowledge.clone(), coordinator)
+            .with_policy_authorizer(Arc::new(crate::LowGraphPolicyOnly))
+            .with_graph_repository(knowledge as Arc<dyn KnowledgeGraphRepository>);
+        let low = block_on(authorized.list_entities_authorized(
+            &actor(),
+            &scope(),
+            &["low-concept".to_string()],
+        ))
+        .expect("low graph policy permits its ordinary concept");
+        assert_eq!(low[0].id.as_str(), "low-concept");
+        for denied_id in ["strict-concept", "missing-concept", "foreign-concept"] {
+            let denied = block_on(authorized.list_entities_authorized(
+                &actor(),
+                &scope(),
+                &[denied_id.to_string()],
+            ));
+            assert!(
+                matches!(&denied, Err(CoreError::InvalidRequest { reason }) if reason.contains("BindingRequired")),
+                "{denied_id} must fail closed: {denied:?}"
+            );
+        }
     }
 
     /// maintenance_scope_denied (accepted name): maintenance requires

@@ -116,6 +116,7 @@ pub fn open(config: &EngramConfig) -> CoreResult<EngramProvider> {
                 knowledge.clone() as Arc<dyn engram_knowledge::KnowledgeRepository>,
                 memory.retrieval_authorizer(),
                 None,
+                Some(knowledge.clone() as Arc<dyn engram_knowledge::KnowledgeGraphRepository>),
             ),
         )),
     });

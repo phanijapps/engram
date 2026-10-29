@@ -992,6 +992,53 @@ mod task_015 {
 
 // ---------- task_016 focused cases -----------------------------------------
 
+/// Full durable publication state machine returning a Result (no panics) so
+/// CAS-failure semantics stay observable (canonical 3a serialization proof).
+fn publish_attempt(
+    store: &SqlCodeBindingRepository,
+    repo: &str,
+    generation_id: &str,
+    expected_epoch: u64,
+    expected_active: Option<&str>,
+    lineage_records: &[&str],
+) -> Result<(), CoreError> {
+    let repo_id = RepoId(repo.to_string());
+    let attempt_id = format!("attempt-{repo}-{generation_id}");
+    block_on(store.begin_attempt(
+        &scope(),
+        &repo_id,
+        generation(generation_id),
+        attempt(&attempt_id, expected_epoch, expected_active),
+    ))?;
+    block_on(store.record_receipt(receipt(&attempt_id, generation_id, CodeReceiptKind::Source)))?;
+    block_on(store.record_receipt(receipt(
+        &attempt_id,
+        generation_id,
+        CodeReceiptKind::Knowledge,
+    )))?;
+    let (_, stored) =
+        block_on(store.get_attempt(&scope(), &repo_id, &attempt_id))?.ok_or_else(|| {
+            CoreError::InvalidRequest {
+                reason: "attempt vanished".into(),
+            }
+        })?;
+    block_on(store.mark_ready(&scope(), &repo_id, &attempt_id, stored.fencing_token))?;
+    block_on(store.publish(&scope(), &repo_id, &attempt_id, expected_epoch))?;
+    for record in lineage_records {
+        block_on(store.put_lineage(
+            &scope(),
+            record,
+            CodeLineage {
+                repo_id: RepoId(repo.to_string()),
+                generation_id: generation_id.to_string(),
+                source_path: format!("src/{record}.rs"),
+                contributors: vec![record.to_string()],
+            },
+        ))?;
+    }
+    Ok(())
+}
+
 mod task_016 {
     use super::*;
     use engram_integration::knowledge_query::AuthorizedKnowledgeQuery;
@@ -1236,15 +1283,16 @@ mod task_016 {
         block_on(knowledge.put_entity(entity("a-render", "render", EntityKind::Function)))
             .expect("put mutation target");
 
-        // (1) Valid grant: the mutation executes once with exactly the
-        // pinned targets.
+        // (1) Valid grant: the fenced retirement executes once with exactly
+        // the pinned targets (the owned lineage retirement itself is proven
+        // in maintenance_owned_retirement_fences_first_side_effect).
         let grant = block_on(authorized.authorize_maintenance_grant(
             &actor(),
             &scope(),
-            &["a-render".to_string()],
+            &["b-util".to_string()],
         ))
         .expect("grant authorizes");
-        assert_eq!(grant.targets(), &["a-render".to_string()]);
+        assert_eq!(grant.targets(), &["b-util".to_string()]);
         let executed = std::sync::Arc::new(std::sync::Mutex::new(Vec::<String>::new()));
         let seen = executed.clone();
         let used = block_on(
@@ -1289,12 +1337,15 @@ mod task_016 {
             &["a-render".to_string()],
         ))
         .expect("grant authorizes");
+        // The fenced use in (1) advanced BOTH published bindings' epochs
+        // (the grant pins every published repository); this publication uses
+        // the current post-fence epoch of repo-b.
         publish_generation_for_scope(
             &bindings,
             &scope(),
             "repo-b",
             "gen-b-next",
-            1,
+            2,
             Some("gen-b"),
             &["b-util-next"],
         );
@@ -1324,6 +1375,203 @@ mod task_016 {
             .expect("get target")
             .expect("target survives the denied use");
         assert_eq!(target.id.as_str(), "a-render");
+    }
+
+    /// Corrective r4 (canonical 3a): the owned maintenance mutation is a
+    /// REAL fenced retirement of durable lineage. A valid grant retires the
+    /// target's lineage rows and advances the binding epoch exactly once;
+    /// the follow-on continuation observes the fenced result.
+    #[test]
+    fn maintenance_owned_retirement_fences_first_side_effect() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let (authorized, _bindings) = gate_fixture(dir.path());
+        let grant = block_on(authorized.authorize_maintenance_grant(
+            &actor(),
+            &scope(),
+            &["a-render".to_string()],
+        ))
+        .expect("grant authorizes");
+
+        // The target's durable lineage exists before the use.
+        let store = _bindings.clone();
+        let before = block_on(engram_knowledge::CodeBindingRepository::target_lineage(
+            &*store,
+            &scope(),
+        ))
+        .expect("lineage before");
+        assert!(
+            before.iter().any(|entry| entry.record_id == "a-render"),
+            "fixture sanity: a-render lineage exists before maintenance"
+        );
+        let binding_epoch_before = block_on(engram_knowledge::CodeBindingRepository::get_binding(
+            &*store,
+            &scope(),
+            &RepoId("repo-a".to_string()),
+        ))
+        .expect("binding before")
+        .expect("repo-a bound")
+        .epoch;
+
+        let retired = std::sync::Arc::new(std::sync::Mutex::new(Vec::<String>::new()));
+        let seen = retired.clone();
+        block_on(
+            authorized.use_maintenance(&actor(), &grant, move |targets| {
+                let seen = seen.clone();
+                async move {
+                    seen.lock().expect("lock").push(format!("ran:{targets:?}"));
+                    Ok::<(), CoreError>(())
+                }
+            }),
+        )
+        .expect("fenced use executes");
+
+        // The OWNED first side effect landed: the durable lineage row is
+        // GONE from the real store, exactly once, and the binding epoch
+        // advanced — the fence linearized the mutation.
+        let after = block_on(engram_knowledge::CodeBindingRepository::target_lineage(
+            &*store,
+            &scope(),
+        ))
+        .expect("lineage after");
+        assert!(
+            !after.iter().any(|entry| entry.record_id == "a-render"),
+            "the owned retirement removed the target's durable lineage: {after:?}"
+        );
+        let binding_epoch_after = block_on(engram_knowledge::CodeBindingRepository::get_binding(
+            &*store,
+            &scope(),
+            &RepoId("repo-a".to_string()),
+        ))
+        .expect("binding after")
+        .expect("repo-a bound")
+        .epoch;
+        assert_eq!(
+            binding_epoch_after,
+            binding_epoch_before + 1,
+            "the fence advanced the binding epoch exactly once"
+        );
+        assert_eq!(
+            retired.lock().expect("lock").len(),
+            1,
+            "the continuation ran exactly once, after the fence"
+        );
+    }
+
+    /// Corrective r4 (canonical 3a): stale authority cannot mutate — a
+    /// publication between grant and use fails the epoch CAS inside the
+    /// retirement transaction, NOTHING is retired and the real target's
+    /// lineage survives. This closes the validation-to-side-effect gap at
+    /// the owned boundary itself (the CAS and the retirement commit
+    /// atomically).
+    #[test]
+    fn maintenance_stale_authority_cannot_retarget_owned_mutation() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let (authorized, bindings) = gate_fixture(dir.path());
+        let grant = block_on(authorized.authorize_maintenance_grant(
+            &actor(),
+            &scope(),
+            &["a-render".to_string()],
+        ))
+        .expect("grant authorizes");
+
+        // A REAL publication lands between authorization and use.
+        publish_generation_for_scope(
+            &bindings,
+            &scope(),
+            "repo-a",
+            "gen-a-next",
+            1,
+            Some("gen-a"),
+            &["a-render-next"],
+        );
+
+        let ran = std::sync::Arc::new(std::sync::Mutex::new(false));
+        let ran_flag = ran.clone();
+        let denied = block_on(
+            authorized.use_maintenance(&actor(), &grant, move |targets| {
+                let ran_flag = ran_flag.clone();
+                async move {
+                    *ran_flag.lock().expect("lock") = true;
+                    let _ = targets;
+                    Ok::<(), CoreError>(())
+                }
+            }),
+        );
+        assert!(
+            matches!(&denied, Err(CoreError::Conflict { reason }) if reason.contains("GenerationChanged")),
+            "stale authority denies before any side effect: {denied:?}"
+        );
+        assert!(
+            !*ran.lock().expect("lock"),
+            "the continuation must not run for stale authority"
+        );
+        // The OWNED target is untouched: the real lineage row still exists.
+        let lineage = block_on(engram_knowledge::CodeBindingRepository::target_lineage(
+            &*bindings,
+            &scope(),
+        ))
+        .expect("lineage after denied use");
+        assert!(
+            lineage.iter().any(|entry| entry.record_id == "a-render"),
+            "the real target's durable lineage survives the denied use: {lineage:?}"
+        );
+    }
+
+    /// Corrective r4 (canonical 3a): maintenance and publication SERIALIZE on
+    /// the binding epoch — after a fenced retirement, a publication begun
+    /// with the OLD binding epoch denies with a real StaleGeneration CAS
+    /// failure (it must retry against the advanced epoch). Proven with the
+    /// real publication operation, not a lock probe.
+    #[test]
+    fn maintenance_and_publication_serialize_on_binding_epoch() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let (authorized, bindings) = gate_fixture(dir.path());
+        let grant = block_on(authorized.authorize_maintenance_grant(
+            &actor(),
+            &scope(),
+            &["a-render".to_string()],
+        ))
+        .expect("grant authorizes");
+        let epoch_before = grant.binding_epochs()[0].1;
+        block_on(
+            authorized.use_maintenance(&actor(), &grant, |_targets| async {
+                Ok::<(), CoreError>(())
+            }),
+        )
+        .expect("fenced retirement executes");
+
+        // A publication attempt begun with the PRE-maintenance binding epoch
+        // cannot commit: the epoch CAS fails against the advanced epoch.
+        let stale_publish = publish_attempt(
+            &bindings,
+            "repo-a",
+            "gen-after-maint",
+            epoch_before,
+            Some("gen-a"),
+            &["after-maint"],
+        );
+        assert!(
+            matches!(&stale_publish, Err(CoreError::Conflict { reason }) if reason.contains("GenerationChanged")),
+            "publication serializes against the fenced epoch: {stale_publish:?}"
+        );
+
+        // The same publication with the CURRENT (advanced) epoch succeeds —
+        // the serialization is a retryable CAS, not a deadlock.
+        let mut retry = publish_attempt(
+            &bindings,
+            "repo-a",
+            "gen-after-maint",
+            epoch_before + 1,
+            Some("gen-a"),
+            &["after-maint"],
+        );
+        // begin_attempt + receipts + ready + publish through the helper:
+        // the helper handles the full state machine.
+        let _ = &mut retry;
+        assert!(
+            retry.is_ok(),
+            "the retried publication against the advanced epoch succeeds"
+        );
     }
 
     /// Task016 r3: explicit-ID query stays pinned through RETURN — a

@@ -165,6 +165,27 @@ impl CodeBindingCoordinator {
         self.store.release_read_lease(lease).await
     }
 
+    /// Owned maintenance mutation (corrective r4, canonical 3a): authorizes
+    /// the caller for every involved repository, then executes the store's
+    /// EPOCH-CAS fenced lineage retirement. The retirement is the owned
+    /// first side effect and linearizes atomically with the epoch check in
+    /// one store transaction — a publication that committed first denies
+    /// with `GenerationChanged` and NOTHING is retired.
+    pub async fn retire_maintenance_targets(
+        &self,
+        actor: &Actor,
+        scope: &Scope,
+        expected_binding_epochs: &[(RepoId, u64)],
+        targets: &[String],
+    ) -> CoreResult<()> {
+        for (repo, _) in expected_binding_epochs {
+            self.authorize(actor, scope, repo).await?;
+        }
+        self.store()
+            .retire_lineage_targets(scope, expected_binding_epochs, targets)
+            .await
+    }
+
     /// Retry one changed generation set; never return a response from a stale epoch or expired lease.
     pub async fn consistent_read<T, F, Fut>(
         &self,

@@ -100,6 +100,10 @@ pub struct MaintenanceGrant {
     actor_id: String,
     targets: Vec<String>,
     epoch: u64,
+    /// Per-repository BINDING epochs captured at authorization — the CAS
+    /// values the owned retirement fence checks (corrective r4, canonical
+    /// 3a). The scope `epoch` stays as a fast pre-check only.
+    binding_epochs: Vec<(engram_domain::RepoId, u64)>,
 }
 
 impl MaintenanceGrant {
@@ -111,6 +115,11 @@ impl MaintenanceGrant {
     /// The eligibility epoch the grant was authorized against.
     pub fn epoch(&self) -> u64 {
         self.epoch
+    }
+
+    /// The per-repo binding epochs pinned at authorization (fence CAS input).
+    pub fn binding_epochs(&self) -> &[(engram_domain::RepoId, u64)] {
+        &self.binding_epochs
     }
 }
 
@@ -310,11 +319,24 @@ impl AuthorizedKnowledgeQuery {
                             }
                             authorized.push(id.clone());
                         }
+                        // Pin every published repository's BINDING epoch: the
+                        // owned retirement fence CASes these values.
+                        let mut binding_epochs = Vec::new();
+                        for binding in view.eligible_bindings() {
+                            let repo = engram_domain::RepoId(binding.repo_id.clone());
+                            let Some(binding_record) =
+                                coordinator.store().get_binding(scope, &repo).await?
+                            else {
+                                return Err(foreign_target(&[binding.repo_id.clone()]));
+                            };
+                            binding_epochs.push((repo, binding_record.epoch));
+                        }
                         Ok(MaintenanceGrant {
                             scope: scope.clone(),
                             actor_id,
                             targets: authorized,
                             epoch: eligibility.epoch,
+                            binding_epochs,
                         })
                     }
                 },
@@ -379,7 +401,16 @@ impl AuthorizedKnowledgeQuery {
                 },
             )
             .await?;
-        // Validated: perform the owned mutation with the pinned targets.
+        // The OWNED first side effect runs behind the epoch-CAS fence: the
+        // retirement and the authority comparison commit in ONE store
+        // transaction (canonical 3a), so a publication between validation
+        // and this point denies with GenerationChanged and NOTHING is
+        // retired. The caller's continuation (if any) observes the fenced
+        // result; it makes no cross-store ACID claim of its own.
+        let fence_epochs = grant.binding_epochs.clone();
+        coordinator
+            .retire_maintenance_targets(actor, &grant.scope, &fence_epochs, &grant.targets)
+            .await?;
         mutation(grant.targets.clone()).await
     }
 

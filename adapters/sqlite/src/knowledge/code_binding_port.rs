@@ -143,6 +143,83 @@ impl CodeBindingRepository for SqlCodeBindingRepository {
         store.connection.execute("INSERT OR IGNORE INTO code_stage_lineage(scope_key,record_id,repo_id,generation_id,record_json) VALUES(?1,?2,?3,?4,?5)",params![key,record_id,lineage.repo_id.0,lineage.generation_id,value]).map_err(|_| storage_error())?;
         Ok(lineage)
     }
+    /// Corrective r4 (canonical 3a): the owned maintenance mutation. One
+    /// IMMEDIATE transaction performs the binding-epoch CAS, retires the
+    /// durable staged lineage of every target and advances each involved
+    /// binding's epoch plus the scope epoch. The first side effect
+    /// (lineage retirement) linearizes atomically with the authority check:
+    /// a publication that committed first fails the CAS (no retirement), and
+    /// a racing publication that has not committed fails or retries against
+    /// the advanced epoch — the mutation cannot apply on stale authority.
+    async fn retire_lineage_targets(
+        &self,
+        scope: &Scope,
+        expected_binding_epochs: &[(engram_domain::RepoId, u64)],
+        targets: &[String],
+    ) -> CoreResult<()> {
+        if expected_binding_epochs.is_empty() || targets.is_empty() {
+            return Err(CoreError::InvalidRequest {
+                reason: "fenced maintenance requires explicit repos and targets".into(),
+            });
+        }
+        let mut store = self.lock()?;
+        let key = json(scope)?;
+        let tx = store
+            .connection
+            .transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)
+            .map_err(|_| storage_error())?;
+        tx.execute_batch("CREATE TABLE IF NOT EXISTS code_stage_lineage(scope_key TEXT NOT NULL,record_id TEXT NOT NULL,repo_id TEXT NOT NULL,generation_id TEXT NOT NULL,record_json TEXT NOT NULL,PRIMARY KEY(scope_key,record_id))")
+            .map_err(|_| storage_error())?;
+        // (1) Authority CAS on every involved binding epoch.
+        for (repo_id, expected_epoch) in expected_binding_epochs {
+            let record: Option<String> = tx
+                .query_row(
+                    "SELECT record_json FROM code_repo_bindings WHERE tenant=?1 AND scope_key=?2 AND repo_id=?3",
+                    params![scope.tenant, key, repo_id.0],
+                    |r| r.get(0),
+                )
+                .optional()
+                .map_err(|_| storage_error())?;
+            let Some(record) = record else {
+                return Err(CoreError::Conflict {
+                    reason: "GenerationChanged: maintenance repo is not bound".into(),
+                });
+            };
+            let mut binding: engram_domain::CodeBinding =
+                serde_json::from_str(&record).map_err(|_| storage_error())?;
+            if binding.epoch != *expected_epoch {
+                return Err(CoreError::Conflict {
+                    reason: "GenerationChanged: maintenance authority is stale".into(),
+                });
+            }
+            // (3) Advance the binding epoch inside the same transaction so a
+            // racing publication CAS fails against the mutated state.
+            binding.epoch += 1;
+            let updated = serde_json::to_string(&binding).map_err(|_| storage_error())?;
+            tx.execute(
+                "UPDATE code_repo_bindings SET record_json=?1, epoch=?2 WHERE tenant=?3 AND scope_key=?4 AND repo_id=?5",
+                params![updated, binding.epoch as i64, scope.tenant, key, repo_id.0],
+            )
+            .map_err(|_| storage_error())?;
+        }
+        // (2) The owned first side effect: retire the durable lineage rows.
+        for target in targets {
+            tx.execute(
+                "DELETE FROM code_stage_lineage WHERE scope_key=?1 AND record_id=?2",
+                params![key, target],
+            )
+            .map_err(|_| storage_error())?;
+        }
+        // (4) Scope-epoch advance: pinned read views revalidate.
+        tx.execute(
+            "INSERT INTO code_scope_epochs(scope_key,epoch) VALUES(?1,1) ON CONFLICT(scope_key) DO UPDATE SET epoch=epoch+1",
+            [&key],
+        )
+        .map_err(|_| storage_error())?;
+        tx.commit().map_err(|_| storage_error())?;
+        Ok(())
+    }
+
     async fn put_source_descriptor(
         &self,
         scope: &Scope,

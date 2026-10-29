@@ -177,6 +177,99 @@ impl CodeBindingRepository for PgCodeBindingRepository {
         })).await
     }
 
+    /// Corrective r4 (canonical 3a): the owned maintenance mutation. One
+    /// transaction takes the SAME advisory lock publications take, locks the
+    /// involved binding rows FOR UPDATE, CASes their epochs, retires the
+    /// durable lineage of every target and advances each binding epoch plus
+    /// the scope epoch. The first side effect (lineage retirement)
+    /// linearizes atomically with the authority check: a publication that
+    /// committed first fails the CAS (no retirement), and a racing
+    /// publication that has not committed fails or retries against the
+    /// advanced epoch — the mutation cannot apply on stale authority.
+    async fn retire_lineage_targets(
+        &self,
+        scope: &Scope,
+        expected_binding_epochs: &[(RepoId, u64)],
+        targets: &[String],
+    ) -> CoreResult<()> {
+        if expected_binding_epochs.is_empty() || targets.is_empty() {
+            return Err(CoreError::InvalidRequest {
+                reason: "fenced maintenance requires explicit repos and targets".into(),
+            });
+        }
+        let key = serde_json::to_string(scope).map_err(|_| storage_error())?;
+        let tenant = scope.tenant.clone();
+        let repos: Vec<String> = expected_binding_epochs
+            .iter()
+            .map(|(repo, _)| repo.0.clone())
+            .collect();
+        let expected: Vec<i64> = expected_binding_epochs
+            .iter()
+            .map(|(_, epoch)| i64::try_from(*epoch).map_err(|_| storage_error()))
+            .collect::<CoreResult<Vec<i64>>>()?;
+        let targets = targets.to_vec();
+        self.blocking(move |store| {
+            crate::connection::runtime().block_on(async {
+                let tx = store
+                    .connection
+                    .client
+                    .transaction()
+                    .await
+                    .map_err(|_| storage_error())?;
+                tx.execute(
+                    "SELECT pg_advisory_xact_lock(hashtextextended($1, 0))",
+                    &[&format!("{tenant}:{key}")],
+                )
+                .await
+                .map_err(|_| storage_error())?;
+                for (repo, expected_epoch) in repos.iter().zip(expected.iter()) {
+                    let row = tx
+                        .query_opt(
+                            "SELECT epoch FROM code_repo_bindings WHERE tenant=$1 AND scope_key=$2 AND repo_id=$3 FOR UPDATE",
+                            &[&tenant, &key, repo],
+                        )
+                        .await
+                        .map_err(|_| storage_error())?;
+                    let Some(row) = row else {
+                        return Err(error(CodeBindingError::BindingRequired));
+                    };
+                    let current: i64 = row.get(0);
+                    if current != *expected_epoch {
+                        return Err(error(CodeBindingError::StaleGeneration));
+                    }
+                    let advanced = current + 1;
+                    let updated = tx
+                        .execute(
+                            "UPDATE code_repo_bindings SET epoch=$1, record_json=jsonb_set(record_json,'{epoch}',to_jsonb($1::bigint)) WHERE tenant=$2 AND scope_key=$3 AND repo_id=$4 AND epoch=$5",
+                            &[&advanced, &tenant, &key, repo, &current],
+                        )
+                        .await
+                        .map_err(|_| storage_error())?;
+                    if updated != 1 {
+                        return Err(error(CodeBindingError::StaleGeneration));
+                    }
+                }
+                for target in &targets {
+                    tx.execute(
+                        "DELETE FROM code_lineage WHERE tenant=$1 AND scope_key=$2 AND record_id=$3",
+                        &[&tenant, &key, target],
+                    )
+                    .await
+                    .map_err(|_| storage_error())?;
+                }
+                tx.execute(
+                    "INSERT INTO code_epochs(tenant,scope_key,epoch) VALUES($1,$2,1) ON CONFLICT(tenant,scope_key) DO UPDATE SET epoch=code_epochs.epoch+1",
+                    &[&tenant, &key],
+                )
+                .await
+                .map_err(|_| storage_error())?;
+                tx.commit().await.map_err(|_| storage_error())?;
+                Ok(())
+            })
+        })
+        .await
+    }
+
     async fn put_source_descriptor(
         &self,
         scope: &Scope,

@@ -40,14 +40,24 @@ class BoundCodeMatrixControls(unittest.TestCase):
             self.assertEqual(len(calls), 2)
 
     def test_unmarked_database_is_refused_by_main_before_rows(self):
-        old = dict(os.environ)
+        old_env, old_runner = dict(os.environ), matrix.MatrixRunner
         try:
             with tempfile.TemporaryDirectory() as temp:
                 fixture = self.private_env(Path(temp))
+                calls = []
+                def fake(argv, **kwargs):
+                    calls.append(argv)
+                    if argv[1] == "inspect":
+                        identity = {"Id": matrix.PINNED_CONTAINER_ID, "State": {"Running": True}, "Config": {"Labels": matrix.PINNED_LABELS}, "Mounts": [], "HostConfig": {"Tmpfs": {"/var/lib/postgresql/data": "rw,size=2g"}}, "NetworkSettings": {"Ports": {"5432/tcp": [{"HostIp": "127.0.0.1", "HostPort": "5432"}]}}}
+                        return subprocess.CompletedProcess(argv, 0, json.dumps([identity]), "")
+                    return subprocess.CompletedProcess(argv, 0, "wrong-marker", "")
+                matrix.MatrixRunner = lambda: old_runner(fake)
                 os.environ.update({"ENGRAM_TEST_REQUIRE_PG": "1", matrix.PG_ENV_FILE: str(fixture), "ENGRAM_TEST_PG_URL": fixture.read_text().split("=", 1)[1].strip()})
                 self.assertEqual(matrix.main(["--sqlite-temp", "--fail-on-skip", "--stub-command", "/not/run"]), 2)
+                self.assertEqual([call[1] for call in calls], ["inspect", "exec"])
         finally:
-            os.environ.clear(); os.environ.update(old)
+            matrix.MatrixRunner = old_runner
+            os.environ.clear(); os.environ.update(old_env)
 
     def test_missing_required_credentials_refuses_not_skips(self):
         old = dict(os.environ)
@@ -80,14 +90,26 @@ class BoundCodeMatrixControls(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "custody"):
                 matrix.load_private_pg_env(str(fixture), "ENGRAM_TEST_PG_URL")
 
-    def test_mcp_rows_execute_authorized_real_transport_harnesses(self):
+    def test_row_aware_mcp_mapping_and_reset_gap_are_explicit(self):
         root = Path("/tmp/matrix-control")
         stdio = matrix.default_command(matrix.Row("binding", "sqlite", "mcp-stdio", True), root, "ENGRAM_TEST_PG_URL")
-        oneshot = matrix.default_command(matrix.Row("binding", "pgvector", "mcp-oneshot", True), root, "ENGRAM_TEST_PG_URL")
-        self.assertEqual(stdio[:10], ["cargo", "test", "-p", "engram-mcp", "--no-default-features", "--features", "pgvector", "--test", "bound_transports", "task_021::stdio_dispatch_parity"])
-        self.assertIn("task_021::stdio_dispatch_parity", stdio)
-        self.assertIn("task_022::oneshot_dispatch_parity", oneshot)
-        self.assertNotIn("--pg-connection-string-env", oneshot)
+        oneshot = matrix.default_command(matrix.Row("backfill", "pgvector", "mcp-oneshot", True), root, "ENGRAM_TEST_PG_URL")
+        reset = matrix.default_command(matrix.Row("reset", "sqlite", "mcp-stdio", True), root, "ENGRAM_TEST_PG_URL")
+        self.assertIn("task_021::stdio_dispatch_parity", stdio.argv)
+        self.assertEqual(stdio.marker, "stdio_dispatch_parity")
+        self.assertIn("task_022::backfill_not_rescan", oneshot.argv)
+        self.assertEqual(oneshot.marker, "backfill_not_rescan")
+        self.assertEqual(reset.surface, "coordinator-equivalent")
+        self.assertEqual(reset.transport_surface, "pending-r5")
+
+    def test_stale_artifact_invalidation_and_loaded_recipe_selection_are_synthetic(self):
+        root = Path("/tmp/matrix-control")
+        sqlite = matrix.default_command(matrix.Row("scan", "sqlite", "native", True), root, "ENGRAM_TEST_PG_URL")
+        pg = matrix.default_command(matrix.Row("scan", "pgvector", "native", True), root, "ENGRAM_TEST_PG_URL")
+        self.assertIn("code-binding.sqlite.test.ts", sqlite.argv)
+        self.assertIn("code-binding.pgvector.test.ts", pg.argv)
+        self.assertIn("bound_ingestion_pipeline", sqlite.argv)
+        self.assertNotEqual(sqlite.argv, pg.argv)
 
     def test_helper_argument_assembles_selected_recipe_only(self):
         argv = matrix.native_helper_argv("pgvector")
@@ -102,8 +124,8 @@ class BoundCodeMatrixControls(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temp:
             rows = [matrix.Row("binding", "sqlite", "rust", True), matrix.Row("scan", "sqlite", "native", True)]
             def fake(argv, **kwargs):
-                return subprocess.CompletedProcess(argv, 0, "ok", "")
-            result = matrix.MatrixRunner(fake).execute(rows, lambda row: ["synthetic", row.name], Path(temp), {}, True)
+                return subprocess.CompletedProcess(argv, 0, argv[-1], "")
+            result = matrix.MatrixRunner(fake).execute(rows, lambda row: matrix.CommandSpec(["synthetic", row.name], row.name), Path(temp), {}, True)
             self.assertEqual(result, 0)
             receipts = list(Path(temp).glob("[0-9][0-9][0-9]-*.json"))
             self.assertEqual(len(receipts), len(rows))
@@ -118,7 +140,7 @@ class BoundCodeMatrixControls(unittest.TestCase):
             row = matrix.Row("binding", "sqlite", "rust", True)
             def fake(argv, **kwargs):
                 return subprocess.CompletedProcess(argv, 1, f"postgresql://u:{secret}@host/db token={secret}", "")
-            matrix.MatrixRunner(fake).execute([row], lambda _: ["synthetic", f"postgresql://u:{secret}@host/db"], Path(temp), {}, True)
+            matrix.MatrixRunner(fake).execute([row], lambda _: matrix.CommandSpec(["synthetic", f"postgresql://u:{secret}@host/db"], row.name), Path(temp), {}, True)
             receipt = next(Path(temp).glob("[0-9][0-9][0-9]-*.json")).read_text()
             self.assertNotIn(secret, receipt)
             self.assertIn("[REDACTED]", receipt)

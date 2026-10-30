@@ -118,36 +118,65 @@ def matrix_rows(require_native: bool, require_mcp: bool, require_pg: bool) -> li
     return rows
 
 
-def default_command(row: Row, sqlite_root: Path, pg_url_name: str) -> list[str]:
+@dataclass(frozen=True)
+class CommandSpec:
+    argv: list[str]
+    marker: str
+    surface: str = "transport"
+    transport_surface: str | None = None
+
+
+def cargo_spec(package: str, target: str, filter_name: str, marker: str, backend: str) -> CommandSpec:
+    argv = ["cargo", "test", "-p", package]
+    if backend == "sqlite" and package == "engram-backend-sqlite":
+        argv.extend(["--no-default-features"])
+    if backend == "pgvector":
+        argv.extend(["--features", "pgvector"])
+    argv.extend(["--test", target, filter_name, "--", "--test-threads=1"])
+    return CommandSpec(argv, marker)
+
+
+def default_command(row: Row, sqlite_root: Path, pg_url_name: str) -> CommandSpec:
+    """Select one focused behavioral proof for this exact operation cell.
+
+    Rust operation labels map to their owned real-store targets.  Native and
+    MCP rows use their public surface where shipped.  Reset has no public
+    native/MCP forwarding until R5, so it is deliberately a coordinator proof
+    with a machine-readable transport gap rather than a false transport pass.
+    """
+    rust = {
+        "binding": ("engram-backend-sqlite" if row.backend == "sqlite" else "engram-backend-pgvector", "bound_recipe", "persisted_binding", "persisted_binding"),
+        "scan": ("engram-integration", "bound_source_status", "durable_scan_stage_publish_fetch", "durable_scan_stage_publish_fetch"),
+        "retrieval": ("engram-conformance", "bound_retrieval", "real_vector_lane_constrains_before_top_k", "real_vector_lane_constrains_before_top_k"),
+        "graph": ("engram-conformance", "bound_graph", "eligible_graph_budgets", "eligible_graph_budgets"),
+        "source": ("engram-integration", "bound_source_status", "exact_bytes_and_spans", "exact_bytes_and_spans"),
+        "reset": ("engram-conformance", "code_reset_recovery", "real_recipe_bundle_retires_code_and_preserves_ordinary_lexical_records", "real_recipe_bundle_retires_code_and_preserves_ordinary_lexical_records"),
+        "backfill": ("engram-mcp", "bound_transports", "task_022::backfill_not_rescan", "backfill_not_rescan"),
+    }
     if row.transport == "rust":
-        if row.backend == "sqlite":
-            return ["cargo", "test", "-p", "engram-backend-sqlite", "--test", "bound_recipe"]
-        return ["cargo", "test", "-p", "engram-backend-pgvector", "--test", "bound_recipe", "--", "--test-threads=1"]
+        package, target, filter_name, marker = rust[row.operation]
+        if row.operation == "reset" and row.backend == "pgvector":
+            package, target, filter_name, marker = "engram-backend-pgvector", "code_reset_recovery", "durable_journal_resume_and_recipe_lane_completion", "durable_journal_resume_and_recipe_lane_completion"
+        return cargo_spec(package, target, filter_name, marker, row.backend)
     if row.transport == "native":
-        return native_helper_argv(row.backend)
-    # The real transport harness starts the stdio server and executes its
-    # register -> bind -> status -> refresh flow, or invokes the one-shot
-    # code subcommands in that same authorized order.  It carries the PG URL
-    # only through the child environment, never through receipt argv.
-    test_name = (
-        "task_021::stdio_dispatch_parity"
-        if row.transport == "mcp-stdio"
-        else "task_022::oneshot_dispatch_parity"
-    )
-    return [
-        "cargo",
-        "test",
-        "-p",
-        "engram-mcp",
-        "--no-default-features",
-        "--features",
-        "pgvector",
-        "--test",
-        "bound_transports",
-        test_name,
-        "--",
-        "--test-threads=1",
-    ]
+        native = {
+            "binding": "deny_by_default_and_authorized_surface",
+            "scan": "bound_ingestion_pipeline",
+        }
+        if row.operation in native:
+            test_file = f"code-binding.{row.backend}.test.ts"
+            return CommandSpec(["pnpm", "--filter", "@engram/node", "test", "--", test_file, "-t", native[row.operation]], native[row.operation])
+        package, target, filter_name, marker = rust[row.operation]
+        return CommandSpec(cargo_spec(package, target, filter_name, marker, row.backend).argv, marker, "coordinator-equivalent", "pending-r5")
+    mcp = {
+        "binding": "task_021::stdio_dispatch_parity" if row.transport == "mcp-stdio" else "task_022::oneshot_dispatch_parity",
+        "backfill": "task_022::backfill_not_rescan",
+    }
+    if row.operation in mcp:
+        marker = mcp[row.operation].split("::")[-1]
+        return CommandSpec(cargo_spec("engram-mcp", "bound_transports", mcp[row.operation], marker, row.backend).argv, marker)
+    package, target, filter_name, marker = rust[row.operation]
+    return CommandSpec(cargo_spec(package, target, filter_name, marker, row.backend).argv, marker, "coordinator-equivalent", "pending-r5")
 
 
 class MatrixRunner:
@@ -190,19 +219,29 @@ class MatrixRunner:
             raise ValueError("PG database marker mismatch; refusing matrix operation")
         return fixture
 
-    def execute(self, rows: list[Row], commands: Callable[[Row], list[str]], receipt_dir: Path, environment: dict[str, str], fail_on_skip: bool) -> int:
+    def execute(self, rows: list[Row], commands: Callable[[Row], CommandSpec], receipt_dir: Path, environment: dict[str, str], fail_on_skip: bool) -> int:
         receipt_dir.mkdir(parents=True, exist_ok=True)
-        failed = skipped_required = 0
+        failed = skipped_required = transport_gaps = 0
         for ordinal, row in enumerate(rows, 1):
-            receipt = {"row": row.name, "required": row.required, "argv": [], "exit": None, "status": "skipped", "output": ""}
+            receipt = {"row": row.name, "required": row.required, "argv": [], "exit": None, "status": "skipped", "output": "", "marker": None, "surface": "transport", "transport_surface": None}
             try:
-                argv = commands(row)
-                receipt["argv"] = safe_argv(argv)
-                result = self.run(argv, text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, env=environment, cwd=ROOT)
+                spec = commands(row)
+                receipt["argv"] = safe_argv(spec.argv)
+                receipt["marker"] = spec.marker
+                receipt["surface"] = spec.surface
+                receipt["transport_surface"] = spec.transport_surface
+                result = self.run(spec.argv, text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, env=environment, cwd=ROOT)
                 receipt["exit"] = result.returncode
                 receipt["output"] = redact(result.stdout or "")[-4096:]
-                receipt["status"] = "passed" if result.returncode == 0 else "failed"
-                failed += result.returncode != 0
+                marker_seen = spec.marker in receipt["output"]
+                if result.returncode == 0 and marker_seen:
+                    receipt["status"] = "passed-transport-gap" if spec.transport_surface else "passed"
+                    transport_gaps += spec.transport_surface is not None
+                else:
+                    receipt["status"] = "failed"
+                    if result.returncode == 0:
+                        receipt["output"] = (receipt["output"] + f"\nmissing behavioral marker: {spec.marker}")[-4096:]
+                    failed += 1
             except FileNotFoundError as error:
                 receipt["output"] = redact(str(error))
                 receipt["status"] = "skipped"
@@ -226,7 +265,7 @@ class MatrixRunner:
                 "status": receipt["status"],
             })
         (receipt_dir / "manifest.json").write_text(
-            json.dumps({"receipt_count": len(manifest_receipts), "receipts": manifest_receipts}, indent=2, sort_keys=True) + "\n",
+            json.dumps({"receipt_count": len(manifest_receipts), "transport_gap_count": transport_gaps, "receipts": manifest_receipts}, indent=2, sort_keys=True) + "\n",
             encoding="utf-8",
         )
         if failed or (fail_on_skip and skipped_required):
@@ -264,11 +303,11 @@ def main(argv: list[str] | None = None) -> int:
         sqlite_root = Path(temp)
         receipt_dir = args.receipt_dir or sqlite_root / "receipts"
         rows = matrix_rows(args.require_native, args.require_mcp, require_pg)
-        def commands(row: Row) -> list[str]:
+        def commands(row: Row) -> CommandSpec:
             if row.backend == "pgvector" and not require_pg:
                 raise ValueError("PG credentials/service unavailable")
             if args.stub_command:
-                return [args.stub_command, row.name]
+                return CommandSpec([args.stub_command, row.name], row.name)
             return default_command(row, sqlite_root, args.pg_url_env)
         return runner.execute(rows, commands, receipt_dir, environment, args.fail_on_skip)
 

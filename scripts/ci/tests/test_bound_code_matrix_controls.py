@@ -94,13 +94,38 @@ class BoundCodeMatrixControls(unittest.TestCase):
         root = Path("/tmp/matrix-control")
         stdio = matrix.default_command(matrix.Row("binding", "sqlite", "mcp-stdio", True), root, "ENGRAM_TEST_PG_URL")
         oneshot = matrix.default_command(matrix.Row("backfill", "pgvector", "mcp-oneshot", True), root, "ENGRAM_TEST_PG_URL")
+        stdio_backfill = matrix.default_command(matrix.Row("backfill", "sqlite", "mcp-stdio", True), root, "ENGRAM_TEST_PG_URL")
         reset = matrix.default_command(matrix.Row("reset", "sqlite", "mcp-stdio", True), root, "ENGRAM_TEST_PG_URL")
         self.assertIn("task_021::stdio_dispatch_parity", stdio.argv)
         self.assertEqual(stdio.marker, "stdio_dispatch_parity")
+        self.assertIn("task_021::stdio_backfill_not_rescan", stdio_backfill.argv)
+        self.assertEqual(stdio_backfill.marker, "stdio_backfill_not_rescan")
         self.assertIn("task_022::backfill_not_rescan", oneshot.argv)
         self.assertEqual(oneshot.marker, "backfill_not_rescan")
         self.assertEqual(reset.surface, "transport")
         self.assertIsNone(reset.transport_surface)
+
+    def test_pg_rust_rows_select_pg_recipe_proofs_and_execute_ignored_reset(self):
+        root = Path("/tmp/matrix-control")
+        for operation in ("scan", "retrieval", "graph", "source"):
+            command = matrix.default_command(matrix.Row(operation, "pgvector", "rust", True), root, "ENGRAM_TEST_PG_URL")
+            self.assertIn("engram-backend-pgvector", command.argv)
+            self.assertIn("bound_recipe", command.argv)
+        reset = matrix.default_command(matrix.Row("reset", "pgvector", "rust", True), root, "ENGRAM_TEST_PG_URL")
+        self.assertIn("code_reset_recovery", reset.argv)
+        self.assertIn("--ignored", reset.argv)
+
+    def test_zero_executed_or_ignored_only_suite_fails_even_with_marker(self):
+        with tempfile.TemporaryDirectory() as temp:
+            row = matrix.Row("reset", "pgvector", "rust", True)
+            def fake(argv, **kwargs):
+                return subprocess.CompletedProcess(argv, 0, "marker\n\ntest result: ok. 0 passed; 0 failed; 1 ignored", "")
+            result = matrix.MatrixRunner(fake).execute([row], lambda _: matrix.CommandSpec(["synthetic"], "marker"), Path(temp), {}, True)
+            self.assertEqual(result, 1)
+            receipt = json.loads(next(Path(temp).glob("[0-9][0-9][0-9]-*.json")).read_text())
+            self.assertEqual(receipt["status"], "failed")
+            self.assertEqual(receipt["executed_tests"], 0)
+            self.assertIn("selected suite executed zero tests", receipt["output"])
 
     def test_stale_artifact_invalidation_and_loaded_recipe_selection_are_synthetic(self):
         root = Path("/tmp/matrix-control")
@@ -124,7 +149,7 @@ class BoundCodeMatrixControls(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temp:
             rows = [matrix.Row("binding", "sqlite", "rust", True), matrix.Row("scan", "sqlite", "native", True)]
             def fake(argv, **kwargs):
-                return subprocess.CompletedProcess(argv, 0, argv[-1], "")
+                return subprocess.CompletedProcess(argv, 0, f"{argv[-1]}\ntest result: ok. 1 passed; 0 failed; 0 ignored", "")
             result = matrix.MatrixRunner(fake).execute(rows, lambda row: matrix.CommandSpec(["synthetic", row.name], row.name), Path(temp), {}, True)
             self.assertEqual(result, 0)
             receipts = list(Path(temp).glob("[0-9][0-9][0-9]-*.json"))

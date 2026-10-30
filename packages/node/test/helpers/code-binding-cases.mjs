@@ -59,6 +59,22 @@ export function gitFixture(tag) {
 }
 
 /** Advances a fixture by one committed code revision. */
+export function gitFixtureWithContent(tag, source) {
+  const base = mkdtempSync(join(tmpdir(), `task020-git-${tag}-`));
+  const run = (args) =>
+    execFileSync("git", args, {
+      cwd: base,
+      env: { ...process.env, GIT_CONFIG_GLOBAL: "/dev/null", GIT_CONFIG_SYSTEM: "/dev/null" }
+    });
+  run(["init", "--initial-branch=main", "."]);
+  run(["config", "user.email", "task020@engram.test"]);
+  run(["config", "user.name", "task020"]);
+  writeFileSync(join(base, "lib.rs"), source);
+  run(["add", "."]);
+  run(["commit", "--no-gpg-sign", "-m", "fixture"]);
+  return { path: base, oid: run(["rev-parse", "HEAD"]).toString().trim() };
+}
+
 export function advanceGitFixture(path) {
   writeFileSync(join(path, "lib.rs"), "pub fn next_fixture() -> u32 { 2 }\n");
   const options = {
@@ -209,18 +225,30 @@ export function describeCodeBindingCases(getAddon, recipe) {
   });
 
   it(`${recipe}: bound_retrieval_eligible_results`, () => {
-    const { path: repoPath } = gitFixture(`${recipe}-retrieval`);
+    const eligible = gitFixtureWithContent(
+      `${recipe}-retrieval-eligible`,
+      "pub fn eligible_fixture_record() -> u32 { 1 }\n"
+    );
+    const ineligible = gitFixtureWithContent(
+      `${recipe}-retrieval-ineligible`,
+      "pub fn ineligible_fixture_record() -> u32 { 2 }\n"
+    );
     const base = mkdtempSync(join(tmpdir(), `task020-${recipe}-retrieval-`));
     const provider = new (getAddon().NativeProvider)(authorizedConfig(base));
-    const repo = `repo-${recipe}-retrieval`;
-    provider.codeRegisterJson(JSON.stringify({ scope, repo, path: repoPath }));
+    const repo = `repo-${recipe}-retrieval-eligible`;
+    provider.codeRegisterJson(JSON.stringify({ scope, repo, path: eligible.path }));
     provider.codeBindJson(JSON.stringify({ scope, repo, branchRef: "refs/heads/main" }));
     provider.scanRepositoryJson(JSON.stringify({ scope, repo }));
+    const foreign = new (getAddon().NativeProvider)(authorizedConfig(base, {}, foreignScope));
+    const foreignRepo = `repo-${recipe}-retrieval-ineligible`;
+    foreign.codeRegisterJson(JSON.stringify({ scope: foreignScope, repo: foreignRepo, path: ineligible.path }));
+    foreign.codeBindJson(JSON.stringify({ scope: foreignScope, repo: foreignRepo, branchRef: "refs/heads/main" }));
+    foreign.scanRepositoryJson(JSON.stringify({ scope: foreignScope, repo: foreignRepo }));
 
     const recalled = JSON.parse(
       provider.requireRecallApi().recallJson(
         JSON.stringify({
-          query: "fixture",
+          query: "eligible_fixture_record",
           scope,
           requester: { actor: { id: "task-020", kind: "agent", displayName: "task-020" }, roles: [], permissions: [] },
           modes: ["graph"],
@@ -231,22 +259,42 @@ export function describeCodeBindingCases(getAddon, recipe) {
     );
     expect(recalled).toHaveProperty("items");
     expect(Array.isArray(recalled.items)).toBe(true);
+    expect(recalled.items.length).toBeGreaterThan(0);
+    const resultText = JSON.stringify(recalled.items);
+    expect(resultText).toContain("eligible_fixture_record");
+    expect(resultText).not.toContain("ineligible_fixture_record");
     console.log("bound eligible results", recalled.items.length);
   });
 
   it(`${recipe}: bound_graph_traversal_answer`, () => {
-    const { path: repoPath } = gitFixture(`${recipe}-graph`);
+    const eligible = gitFixtureWithContent(
+      `${recipe}-graph-eligible`,
+      "pub fn eligible_graph_record() -> u32 { 1 }\n"
+    );
+    const ineligible = gitFixtureWithContent(
+      `${recipe}-graph-ineligible`,
+      "pub fn ineligible_graph_record() -> u32 { 2 }\n"
+    );
     const base = mkdtempSync(join(tmpdir(), `task020-${recipe}-graph-`));
     const provider = new (getAddon().NativeProvider)(authorizedConfig(base));
-    const repo = `repo-${recipe}-graph`;
-    provider.codeRegisterJson(JSON.stringify({ scope, repo, path: repoPath }));
+    const repo = `repo-${recipe}-graph-eligible`;
+    provider.codeRegisterJson(JSON.stringify({ scope, repo, path: eligible.path }));
     provider.codeBindJson(JSON.stringify({ scope, repo, branchRef: "refs/heads/main" }));
     provider.scanRepositoryJson(JSON.stringify({ scope, repo }));
+    const foreign = new (getAddon().NativeProvider)(authorizedConfig(base, {}, foreignScope));
+    const foreignRepo = `repo-${recipe}-graph-ineligible`;
+    foreign.codeRegisterJson(JSON.stringify({ scope: foreignScope, repo: foreignRepo, path: ineligible.path }));
+    foreign.codeBindJson(JSON.stringify({ scope: foreignScope, repo: foreignRepo, branchRef: "refs/heads/main" }));
+    foreign.scanRepositoryJson(JSON.stringify({ scope: foreignScope, repo: foreignRepo }));
 
     const answer = JSON.parse(
-      provider.exploreJson(JSON.stringify({ scope, query: "fixture", includeCodeArtifacts: true }))
+      provider.exploreJson(JSON.stringify({ scope, query: "eligible_graph_record", includeCodeArtifacts: true }))
     );
     expect(Array.isArray(answer)).toBe(true);
+    expect(answer.length).toBeGreaterThan(0);
+    const answerText = JSON.stringify(answer);
+    expect(answerText).toContain("eligible_graph_record");
+    expect(answerText).not.toContain("ineligible_graph_record");
     console.log("bound traversal answer", answer.length);
   });
 

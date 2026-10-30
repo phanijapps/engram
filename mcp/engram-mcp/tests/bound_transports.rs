@@ -415,6 +415,54 @@ mod task_021 {
         }
     }
 
+    /// stdio_backfill_not_rescan: the real MCP stdio `reindex` tool is the
+    /// embedding-backfill surface.  Its unwired-lane envelope is distinct
+    /// from code rebuild, and it leaves the bound code status byte-identical.
+    #[test]
+    fn stdio_backfill_not_rescan() {
+        let run = unique_suffix();
+        for (backend, tag) in backends() {
+            let (repo_path, _oid) = git_fixture(&format!("stdio-backfill-{tag}"));
+            let repo = format!("repo-stdio-backfill-{tag}-{run}");
+            let mut server = spawn_server(backend, &format!("stdio-backfill-{tag}"));
+            let init = server.call(1, "initialize", json!({}));
+            assert_eq!(init["result"]["serverInfo"]["name"], "engram-mcp");
+            let listed = server.call(2, "tools/list", json!({}));
+            assert!(
+                listed["result"]["tools"]
+                    .as_array()
+                    .is_some_and(|tools| tools.iter().any(|tool| tool["name"] == "reindex")),
+                "{backend} exposes the MCP stdio embedding-backfill tool: {listed}"
+            );
+            server.tool(
+                3,
+                "code_repo_register",
+                json!({ "repo": repo, "path": repo_path }),
+            );
+            let bound = server.tool(
+                4,
+                "code_bind",
+                json!({ "repo": repo, "branchRef": "refs/heads/main" }),
+            );
+            assert!(bound.get("error").is_none(), "{backend} bind: {bound}");
+            let before = Server::text_of(&server.tool(5, "code_status", json!({ "repo": repo })));
+            let backfill = server.tool(6, "reindex", json!({ "limit": 1 }));
+            assert!(
+                backfill.get("error").is_none(),
+                "{backend} stdio backfill envelope: {backfill}"
+            );
+            assert!(
+                Server::text_of(&backfill).contains("no embedding provider wired"),
+                "{backend} stdio backfill keeps the typed unwired outcome: {backfill}"
+            );
+            let after = Server::text_of(&server.tool(7, "code_status", json!({ "repo": repo })));
+            assert_eq!(
+                before, after,
+                "{backend} stdio backfill must not rebuild code"
+            );
+        }
+    }
+
     /// typed_errors_capabilities: failures are typed, inspectable diagnoses
     /// (BindingRequired kinds in the JSON-RPC error envelope) and the
     /// capability report exposes the bound-code states.

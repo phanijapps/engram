@@ -152,14 +152,24 @@ def default_command(row: Row, sqlite_root: Path, pg_url_name: str) -> CommandSpe
         "retrieval": ("engram-conformance", "bound_retrieval", "real_vector_lane_constrains_before_top_k", "real_vector_lane_constrains_before_top_k"),
         "graph": ("engram-conformance", "bound_graph", "eligible_graph_budgets", "eligible_graph_budgets"),
         "source": ("engram-integration", "bound_source_status", "exact_bytes_and_spans", "exact_bytes_and_spans"),
+        # These Pg Rust proofs must not use the SQLite integration/conformance
+        # fixtures above.  Each selected case opens the real pgvector recipe.
+        "pg_scan": ("engram-backend-pgvector", "bound_recipe", "task_019::authorized_registration", "authorized_registration"),
+        "pg_retrieval": ("engram-backend-pgvector", "bound_recipe", "task_019::required_handles", "required_handles"),
+        "pg_graph": ("engram-backend-pgvector", "bound_recipe", "task_019::required_handles", "required_handles"),
+        "pg_source": ("engram-backend-pgvector", "bound_recipe", "task_019::required_handles", "required_handles"),
         "reset": ("engram-conformance", "code_reset_recovery", "real_recipe_bundle_retires_code_and_preserves_ordinary_lexical_records", "real_recipe_bundle_retires_code_and_preserves_ordinary_lexical_records"),
         "backfill": ("engram-mcp", "bound_transports", "task_022::backfill_not_rescan", "backfill_not_rescan"),
     }
     if row.transport == "rust":
-        package, target, filter_name, marker = rust[row.operation]
+        key = f"pg_{row.operation}" if row.backend == "pgvector" and row.operation in {"scan", "retrieval", "graph", "source"} else row.operation
+        package, target, filter_name, marker = rust[key]
+        spec = cargo_spec(package, target, filter_name, marker, row.backend)
         if row.operation == "reset" and row.backend == "pgvector":
-            package, target, filter_name, marker = "engram-backend-pgvector", "code_reset_recovery", "durable_journal_resume_and_recipe_lane_completion", "durable_journal_resume_and_recipe_lane_completion"
-        return cargo_spec(package, target, filter_name, marker, row.backend)
+            package, target, filter_name, marker = "engram-backend-pgvector", "code_reset_recovery", "task_023::authorization_hash_and_ambiguous_ownership_are_behavioral", "authorization_hash_and_ambiguous_ownership_are_behavioral"
+            spec = cargo_spec(package, target, filter_name, marker, row.backend)
+            spec.argv.extend(["--ignored"])
+        return spec
     if row.transport == "native":
         native = {
             "binding": "deny_by_default_and_authorized_surface",
@@ -179,7 +189,7 @@ def default_command(row: Row, sqlite_root: Path, pg_url_name: str) -> CommandSpe
         "graph": "task_021::stdio_dispatch_parity" if row.transport == "mcp-stdio" else "task_022::oneshot_dispatch_parity",
         "source": "task_021::stdio_dispatch_parity" if row.transport == "mcp-stdio" else "task_022::oneshot_dispatch_parity",
         "reset": "task_021::stdio_dispatch_parity" if row.transport == "mcp-stdio" else "task_022::oneshot_dispatch_parity",
-        "backfill": "task_022::backfill_not_rescan",
+        "backfill": "task_021::stdio_backfill_not_rescan" if row.transport == "mcp-stdio" else "task_022::backfill_not_rescan",
     }
     marker = mcp[row.operation].split("::")[-1]
     return CommandSpec(cargo_spec("engram-mcp", "bound_transports", mcp[row.operation], marker, row.backend).argv, marker)
@@ -240,13 +250,20 @@ class MatrixRunner:
                 receipt["exit"] = result.returncode
                 receipt["output"] = redact(result.stdout or "")[-4096:]
                 marker_seen = spec.marker in receipt["output"]
-                if result.returncode == 0 and marker_seen:
+                # A marker printed by an ignored Cargo case is not behavioral
+                # evidence.  Every selected suite must execute at least one
+                # test, regardless of process exit status or marker presence.
+                import re
+                executed_tests = sum(int(count) for count in re.findall(r"\b(\d+) passed\b", receipt["output"]))
+                receipt["executed_tests"] = executed_tests
+                if result.returncode == 0 and marker_seen and executed_tests > 0:
                     receipt["status"] = "passed-transport-gap" if spec.transport_surface else "passed"
                     transport_gaps += spec.transport_surface is not None
                 else:
                     receipt["status"] = "failed"
                     if result.returncode == 0:
-                        receipt["output"] = (receipt["output"] + f"\nmissing behavioral marker: {spec.marker}")[-4096:]
+                        reason = f"missing behavioral marker: {spec.marker}" if not marker_seen else "selected suite executed zero tests"
+                        receipt["output"] = (receipt["output"] + f"\n{reason}")[-4096:]
                     failed += 1
             except FileNotFoundError as error:
                 receipt["output"] = redact(str(error))

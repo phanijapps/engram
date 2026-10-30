@@ -385,6 +385,10 @@ pub static DEFAULT_TOOLS: &[&str] = &[
     "code_status",
     "code_refresh",
     "code_rebuild",
+    // The existing stdio embedding-backfill operation.  It is distinct from
+    // bound-code rebuild and remains available for its historical `reindex`
+    // callers.
+    "reindex",
     "code_reset_preview",
     "code_reset_apply",
     "code_reset_resume",

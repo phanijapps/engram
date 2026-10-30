@@ -6,14 +6,14 @@ use engram_domain::{
     Policy, Provenance, RepoId, Retention, Scope, SourceDocument, SourceDocumentKind, SourceKind,
     Visibility,
 };
-use engram_integration::{KnowledgeQuery, LexicalFeed};
+use engram_integration::LexicalFeed;
 use engram_integration::code_binding::{
     CodeBindingCoordinator, PreservationRecordSource, RecipeResetLaneLifecycle, ResetLane,
     ResetLaneLifecycle, ResetLaneOutcome, ScopeSetAuthorizer,
 };
 use engram_knowledge::{
-    CodeBindingRepository, CodeReadLease, CodeReadLeases, KnowledgeRepository,
-    RepositoryRegistration, RetirementTarget,
+    CodeBindingRepository, CodeReadLease, CodeReadLeases, KnowledgeGraphRepository,
+    KnowledgeRepository, RepositoryRegistration, RetirementTarget,
 };
 use engram_store_sqlite::{SqlKnowledgeStore, knowledge::SqlCodeBindingRepository};
 use futures::executor::block_on;
@@ -527,6 +527,94 @@ mod task_024 {
         }
     }
 
+    fn seed_all_knowledge_classes(knowledge: &SqlKnowledgeStore) {
+        let graph_id = Id::from("full-class-preservation-graph");
+        let entity_a = Id::from("full-class-preservation-entity-a");
+        let entity_b = Id::from("full-class-preservation-entity-b");
+        let provenance = ordinary_source().provenance;
+        let policy = ordinary_source().policy;
+        block_on(knowledge.put_chunk(KnowledgeChunk {
+            id: Id::from("full-class-preservation-chunk"),
+            document_id: Id::from("ordinary-preservation-document"),
+            source_id: Id::from("ordinary-preservation-source"),
+            kind: KnowledgeChunkKind::Paragraph,
+            text: "full-class preservation content".into(),
+            summary: None,
+            location: None,
+            entities: Vec::new(),
+            concepts: Vec::new(),
+            embedding_refs: Vec::new(),
+            content_hash: "sha256:full-class-chunk".into(),
+            provenance: provenance.clone(),
+            policy: policy.clone(),
+            created_at: chrono::Utc::now(),
+            updated_at: None,
+            metadata: None,
+        }))
+        .expect("full-class chunk");
+        block_on(knowledge.put_graph(KnowledgeGraph {
+            id: graph_id.clone(),
+            scope: scope(),
+            name: "full-class preservation graph".into(),
+            uri: None,
+            version: None,
+            ontology_refs: Vec::new(),
+            policy,
+            provenance: provenance.clone(),
+            created_at: chrono::Utc::now(),
+            updated_at: None,
+            metadata: None,
+        }))
+        .expect("full-class graph");
+        for (id, name) in [(&entity_a, "full-class-a"), (&entity_b, "full-class-b")] {
+            block_on(knowledge.put_entity(KnowledgeEntity {
+                id: id.clone(),
+                graph_id: Some(graph_id.clone()),
+                kind: EntityKind::Function,
+                name: name.into(),
+                aliases: Vec::new(),
+                scope: scope(),
+                source_refs: Vec::new(),
+                concept_refs: Vec::new(),
+                ontology_class_refs: Vec::new(),
+                provenance: provenance.clone(),
+                created_at: chrono::Utc::now(),
+                updated_at: None,
+                valid_from: None,
+                valid_until: None,
+                archived_at: None,
+                metadata: None,
+            }))
+            .expect("full-class entity");
+        }
+        block_on(knowledge.put_relationship(KnowledgeRelationship {
+            id: Id::from("full-class-preservation-relationship"),
+            graph_id: Some(graph_id),
+            subject: EntityRef {
+                id: Some(entity_a),
+                kind: Some("function".into()),
+                name: None,
+                aliases: Vec::new(),
+            },
+            predicate: "calls".into(),
+            object: EntityRef {
+                id: Some(entity_b),
+                kind: Some("function".into()),
+                name: None,
+                aliases: Vec::new(),
+            },
+            scope: scope(),
+            evidence: Vec::new(),
+            confidence: Some(1.0),
+            code_resolution: None,
+            provenance,
+            created_at: chrono::Utc::now(),
+            updated_at: None,
+            archived_at: None,
+        }))
+        .expect("full-class relationship");
+    }
+
     fn coordinator_with_real_knowledge(
         bindings: SqlCodeBindingRepository,
         lanes: Arc<dyn ResetLaneLifecycle>,
@@ -821,6 +909,78 @@ mod task_024 {
                 .expect_err("ordinary store drift denies apply");
             assert!(format!("{error:?}").contains("ResetPreservationFailed"));
         }
+    }
+
+    #[test]
+    fn untouched_full_class_knowledge_inventory_survives_apply() {
+        let (coordinator, knowledge) = coordinator_with_real_knowledge(
+            setup(),
+            Arc::new(FailingLane {
+                fail_vector_once: Mutex::new(false),
+                calls: Mutex::new(Vec::new()),
+            }),
+        );
+        seed_all_knowledge_classes(&knowledge);
+        let preview = block_on(coordinator.preview_reset(&actor(), &scope(), &repo()))
+            .expect("preview complete knowledge inventory");
+        let classes: std::collections::BTreeSet<_> = preview
+            .preservation_inventory
+            .records
+            .iter()
+            .map(|record| record.record_class.as_str())
+            .collect();
+        assert_eq!(
+            classes,
+            std::collections::BTreeSet::from([
+                "source", "document", "chunk", "entity", "relationship", "graph",
+            ])
+        );
+        let approved = block_on(coordinator.journal_reset(
+            &actor(),
+            journal(preview.clone()),
+            "approved-by-fixture".into(),
+        ))
+        .expect("approval");
+        let applied = block_on(coordinator.apply_reset(&actor(), approved)).expect("apply");
+        assert!(
+            applied
+                .checkpoints
+                .iter()
+                .any(|checkpoint| checkpoint == "preservation:verified")
+        );
+        assert_eq!(
+            block_on(knowledge.list_sources(&scope()))
+                .expect("sources after apply")
+                .len(),
+            1
+        );
+        assert_eq!(
+            block_on(knowledge.list_documents(&scope()))
+                .expect("documents after apply")
+                .len(),
+            1
+        );
+        assert_eq!(block_on(knowledge.list_chunks(&scope())).expect("chunks after apply").len(), 1);
+        assert_eq!(block_on(knowledge.list_entities(&scope())).expect("entities after apply").len(), 2);
+        assert_eq!(
+            block_on(knowledge.list_relationships(&scope()))
+                .expect("relationships after apply")
+                .len(),
+            1
+        );
+        assert_eq!(block_on(knowledge.list_graphs(&scope())).expect("graphs after apply").len(), 1);
+        let post_apply = engram_integration::code_binding::KnowledgePreservationRecordSource::new(
+            knowledge.clone() as Arc<dyn engram_knowledge::KnowledgeRepository>,
+            knowledge.clone() as Arc<dyn engram_integration::KnowledgeQuery>,
+            coordinator.store(),
+        );
+        assert_eq!(
+            block_on(post_apply.inventory(&scope()))
+                .expect("post-apply inventory")
+                .digest,
+            preview.preservation_inventory.digest,
+            "all enumerated knowledge classes remain untouched"
+        );
     }
 
     #[test]

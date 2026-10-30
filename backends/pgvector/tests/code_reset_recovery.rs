@@ -257,6 +257,13 @@ mod task_024 {
                 .iter()
                 .any(|item| item == "reset-lane:source:done")
         );
+        assert!(
+            applied
+                .checkpoints
+                .iter()
+                .any(|item| item == "preservation:verified"),
+            "the recipe coordinator persists its injected-source verification"
+        );
         let resumed =
             block_on(coordinator.apply_reset(&actor(), approved)).expect("durable resume");
         assert_eq!(resumed.checkpoints, applied.checkpoints);

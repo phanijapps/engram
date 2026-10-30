@@ -148,53 +148,6 @@ pub trait CodeBindingRepository: crate::CodeReadLeases + Send + Sync {
     /// whole scope's lineage per record. Store-backed implementors MUST
     /// override this with a keyed read; the compatibility default falls
     /// back to [`Self::target_lineage`] and scans the result.
-    /// Builds the durable inventory of ordinary records that a reset of
-    /// `target_repo` must leave untouched.
-    async fn preservation_inventory(
-        &self,
-        scope: &Scope,
-        target_repo: &engram_domain::RepoId,
-    ) -> CoreResult<engram_domain::PreservationInventory> {
-        let mut records = self
-            .target_lineage(scope)
-            .await?
-            .into_iter()
-            .filter(|entry| entry.repo_id != target_repo.0)
-            .map(|entry| {
-                let content = serde_json::to_vec(&entry).map_err(|_| CoreError::Adapter {
-                    adapter: "engram-code-binding".into(),
-                    message: "cannot hash durable preservation record".into(),
-                })?;
-                let contributors =
-                    serde_json::to_vec(&entry.contributors).map_err(|_| CoreError::Adapter {
-                        adapter: "engram-code-binding".into(),
-                        message: "cannot hash durable preservation contributors".into(),
-                    })?;
-                Ok(engram_domain::PreservationRecord {
-                    record_class: "lineage".into(),
-                    record_id: entry.record_id,
-                    content_digest: Sha256::digest(content)
-                        .iter()
-                        .map(|byte| format!("{byte:02x}"))
-                        .collect(),
-                    contributor_digest: Sha256::digest(contributors)
-                        .iter()
-                        .map(|byte| format!("{byte:02x}"))
-                        .collect(),
-                })
-            })
-            .collect::<CoreResult<Vec<_>>>()?;
-        records.sort_by(|left, right| left.record_id.cmp(&right.record_id));
-        let mut inventory = engram_domain::PreservationInventory {
-            records,
-            digest: String::new(),
-        };
-        inventory.digest = inventory.content_hash().map_err(|_| CoreError::Adapter {
-            adapter: "engram-code-binding".into(),
-            message: "cannot hash preservation inventory".into(),
-        })?;
-        Ok(inventory)
-    }
     async fn record_lineage(
         &self,
         scope: &Scope,
@@ -500,34 +453,6 @@ pub trait CodeBindingRepository: crate::CodeReadLeases + Send + Sync {
                     .iter()
                     .map(|record_id| format!("completed:{record_id}")),
             );
-        }
-        // Re-read the durable ordinary-record inventory after mutation.
-        // This is intentionally independent of the owner-approved preview.
-        let durable_inventory = self.preservation_inventory(&scope, &repo).await?;
-        if durable_inventory != journal.preview.preservation_inventory {
-            journal
-                .checkpoints
-                .retain(|checkpoint| checkpoint != "preservation:verified");
-            journal
-                .checkpoints
-                .retain(|checkpoint| checkpoint != "preservation:failed");
-            journal.checkpoints.push("preservation:failed".into());
-            self.save_reset_journal(journal).await?;
-            return Err(CoreError::Conflict {
-                reason: "ResetPreservationFailed: ordinary preservation inventory changed".into(),
-            });
-        }
-        journal
-            .checkpoints
-            .retain(|checkpoint| checkpoint != "preservation:failed");
-        if !journal
-            .checkpoints
-            .iter()
-            .any(|checkpoint| checkpoint == "preservation:verified")
-        {
-            journal.checkpoints.push("preservation:verified".into());
-            // Retain the published spelling for transport compatibility.
-            journal.checkpoints.push("preservation-verified".into());
         }
         self.save_reset_journal(journal).await
     }

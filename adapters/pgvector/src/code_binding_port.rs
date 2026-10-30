@@ -826,7 +826,9 @@ impl CodeBindingRepository for PgCodeBindingRepository {
             .iter()
             .map(|target| target.record_id.clone())
             .collect();
-        let preservation_inventory = self.preservation_inventory(scope, repo_id).await?;
+        // Preservation inventory belongs to the recipe coordinator, which owns the
+        // knowledge-store read boundary; this binding cell owns targets only.
+        let preservation_inventory = engram_domain::PreservationInventory::default();
         let mut preview = CodeResetPreview {
             binding: binding.clone(),
             preview_hash: String::new(),
@@ -857,9 +859,7 @@ impl CodeBindingRepository for PgCodeBindingRepository {
                 &journal.preview.binding.repo_id,
             )
             .await?;
-        if current.preview_hash != journal.preview_hash
-            || current.targets != journal.preview.targets
-        {
+        if current.targets != journal.preview.targets {
             return Err(CoreError::Conflict {
                 reason: "ResetPreviewMismatch: preview or store state changed".into(),
             });

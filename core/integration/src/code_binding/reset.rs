@@ -191,7 +191,11 @@ impl CodeBindingCoordinator {
         self.authorizer
             .authorize(actor, &scope, &repo, CodeAuthorityAction::Reset)
             .await?;
+        // Probe the coordinator-owned source before the binding-cell mutation so a
+        // missing source fails closed without retiring a target.
+        let _ = self.preservation_source.inventory(&scope).await?;
         let mut durable = self.store.apply_reset(journal).await?;
+        // Re-inventory independently after the fenced retirement.
         let inventory = self.preservation_source.inventory(&scope).await?;
         if inventory != durable.preview.preservation_inventory {
             durable.checkpoints.retain(|checkpoint| {
@@ -206,6 +210,19 @@ impl CodeBindingCoordinator {
                 reason: "ResetPreservationFailed: knowledge preservation inventory changed".into(),
             });
         }
+        durable
+            .checkpoints
+            .retain(|checkpoint| checkpoint != "preservation:failed");
+        if !durable
+            .checkpoints
+            .iter()
+            .any(|checkpoint| checkpoint == "preservation:verified")
+        {
+            durable.checkpoints.push("preservation:verified".into());
+            // Retain the published spelling for transport compatibility.
+            durable.checkpoints.push("preservation-verified".into());
+        }
+        durable = self.store.save_reset_journal(durable).await?;
         let retired = durable.preview.targets.clone();
         let preserved = durable.preview.preservation_inventory.records.clone();
         let mut failed = false;

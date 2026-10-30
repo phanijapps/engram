@@ -5,8 +5,8 @@ use engram_domain::{
 };
 use engram_integration::LexicalFeed;
 use engram_integration::code_binding::{
-    CodeBindingCoordinator, RecipeResetLaneLifecycle, ResetLane, ResetLaneLifecycle,
-    ScopeSetAuthorizer,
+    CodeBindingCoordinator, PreservationRecordSource, RecipeResetLaneLifecycle, ResetLane,
+    ResetLaneLifecycle, ScopeSetAuthorizer,
 };
 use engram_knowledge::{
     CodeBindingRepository, CodeReadLease, CodeReadLeases, RepositoryRegistration, RetirementTarget,
@@ -135,19 +135,51 @@ fn add_target(store: &SqlCodeBindingRepository, id: &str) {
     ))
     .expect("additional lineage");
 }
-fn add_preserved(store: &SqlCodeBindingRepository, id: &str) {
-    block_on(store.put_lineage(
-        &scope(),
-        id,
-        CodeLineage {
-            repo_id: RepoId("ordinary-repo".into()),
-            generation_id: "ordinary-generation".into(),
-            source_path: format!("notes/{id}.md"),
-            contributors: vec!["ordinary-source".into()],
-            span: None,
-        },
-    ))
-    .expect("preserved lineage");
+#[derive(Default)]
+struct TestPreservationSource {
+    records: Arc<Mutex<Vec<String>>>,
+}
+
+impl TestPreservationSource {
+    fn inventory(&self) -> engram_domain::PreservationInventory {
+        let records = self
+            .records
+            .lock()
+            .expect("preservation records")
+            .iter()
+            .enumerate()
+            .map(|(index, value)| engram_domain::PreservationRecord {
+                record_class: "ordinary".into(),
+                record_id: format!("ordinary-{index}"),
+                content_digest: format!("{value:0>64}"),
+                contributor_digest: "c".repeat(64),
+            })
+            .collect();
+        let mut inventory = engram_domain::PreservationInventory {
+            records,
+            digest: String::new(),
+        };
+        inventory.digest = inventory.content_hash().expect("inventory hash");
+        inventory
+    }
+}
+
+#[async_trait]
+impl PreservationRecordSource for TestPreservationSource {
+    async fn inventory(
+        &self,
+        _scope: &Scope,
+    ) -> engram_runtime::CoreResult<engram_domain::PreservationInventory> {
+        Ok(self.inventory())
+    }
+}
+
+fn preservation_source(records: Arc<Mutex<Vec<String>>>) -> Arc<dyn PreservationRecordSource> {
+    Arc::new(TestPreservationSource { records })
+}
+
+fn empty_preservation_source() -> Arc<dyn PreservationRecordSource> {
+    preservation_source(Arc::new(Mutex::new(Vec::new())))
 }
 fn file_backed_store(file: &tempfile::NamedTempFile) -> SqlCodeBindingRepository {
     let store = SqlCodeBindingRepository::open(file.path()).expect("store");
@@ -234,18 +266,6 @@ mod task_023 {
         assert!(
             preview.validate().is_err(),
             "an ambiguity report cannot carry a deletion list"
-        );
-    }
-    #[test]
-    fn ordinary_preservation_digests_present() {
-        let store = setup();
-        let preview = block_on(store.preview_reset(&scope(), &repo())).expect("preview");
-        assert!(!preview.preservation_digests.is_empty());
-        assert!(
-            preview
-                .preservation_digests
-                .iter()
-                .all(|digest| digest.len() == 64)
         );
     }
     #[test]
@@ -362,12 +382,30 @@ mod task_024 {
         store: SqlCodeBindingRepository,
         lanes: Arc<dyn ResetLaneLifecycle>,
     ) -> CodeBindingCoordinator {
+        coordinator_with_source(store, lanes, empty_preservation_source())
+    }
+
+    fn coordinator_with_source(
+        store: SqlCodeBindingRepository,
+        lanes: Arc<dyn ResetLaneLifecycle>,
+        source: Arc<dyn PreservationRecordSource>,
+    ) -> CodeBindingCoordinator {
         CodeBindingCoordinator::new(
             Arc::new(store),
             Arc::new(ScopeSetAuthorizer::new(vec![scope()])),
             vec![],
         )
         .with_reset_lanes(lanes)
+        .with_preservation_source(source)
+    }
+
+    fn actor() -> engram_domain::Actor {
+        engram_domain::Actor {
+            id: "reset-owner".into(),
+            kind: engram_domain::ActorKind::Agent,
+            display_name: None,
+            metadata: None,
+        }
     }
 
     #[test]
@@ -385,18 +423,17 @@ mod task_024 {
             None,
             Arc::new(engram_retrieval::InMemoryGraphCache::new()),
         ));
-        let preview = block_on(store.preview_reset(&scope(), &repo())).expect("preview");
-        let approved_journal = approved(&store, journal(preview));
-        let applied = block_on(coordinator(store, lanes).apply_reset(
-            &engram_domain::Actor {
-                id: "reset-owner".into(),
-                kind: engram_domain::ActorKind::Agent,
-                display_name: None,
-                metadata: None,
-            },
-            approved_journal,
+        let coordinator = coordinator(store, lanes);
+        let preview = block_on(coordinator.preview_reset(&actor(), &scope(), &repo()))
+            .expect("coordinator preview");
+        let approved_journal = block_on(coordinator.journal_reset(
+            &actor(),
+            journal(preview),
+            "approved-by-fixture".into(),
         ))
-        .expect("real composed reset");
+        .expect("owner-approved journal");
+        let applied = block_on(coordinator.apply_reset(&actor(), approved_journal))
+            .expect("real composed reset");
         assert!(
             applied
                 .checkpoints
@@ -560,94 +597,105 @@ mod task_024 {
     }
 
     #[test]
-    fn preservation_digests_revalidated_after_apply() {
-        let store = setup();
-        let preview = block_on(store.preview_reset(&scope(), &repo())).expect("preview");
-        let applied =
-            block_on(store.apply_reset(approved(&store, journal(preview)))).expect("apply");
-        assert!(
-            applied
-                .checkpoints
-                .iter()
-                .any(|item| item == "preservation-verified")
+    fn preservation_is_verified_by_the_coordinator_and_persisted() {
+        let records = Arc::new(Mutex::new(vec!["a".into()]));
+        let coordinator = coordinator_with_source(
+            setup(),
+            Arc::new(FailingLane {
+                fail_vector_once: Mutex::new(false),
+                calls: Mutex::new(Vec::new()),
+            }),
+            preservation_source(records),
         );
-    }
-
-    #[test]
-    fn preserved_record_mutation_between_preview_and_apply_is_rejected() {
-        let file = tempfile::NamedTempFile::new().expect("database file");
-        let store = file_backed_store(&file);
-        add_preserved(&store, "ordinary-record");
-        let preview = block_on(store.preview_reset(&scope(), &repo())).expect("preview");
-        let value = approved(&store, journal(preview));
-        let changed = serde_json::to_string(&CodeLineage {
-            repo_id: RepoId("ordinary-repo".into()),
-            generation_id: "ordinary-generation".into(),
-            source_path: "notes/ordinary-record-rewritten.md".into(),
-            contributors: vec!["ordinary-source".into()],
-            span: None,
-        })
-        .expect("lineage json");
-        rusqlite::Connection::open(file.path())
-            .expect("database")
-            .execute(
-                "UPDATE code_stage_lineage SET record_json=?1 WHERE scope_key=?2 AND record_id=?3",
-                rusqlite::params![
-                    changed,
-                    serde_json::to_string(&scope()).expect("scope key"),
-                    "ordinary-record"
-                ],
-            )
-            .expect("durable mutation");
-        let error =
-            block_on(store.apply_reset(value.clone())).expect_err("preservation drift denial");
-        assert!(format!("{error:?}").contains("ResetPreservationFailed"));
-        let durable =
-            block_on(store.load_reset_journal("reset-1")).expect("failed journal persists");
-        assert!(
-            durable
-                .checkpoints
-                .iter()
-                .any(|checkpoint| checkpoint == "preservation:failed")
-        );
-        let retry = block_on(store.apply_reset(value)).expect_err("drift retry remains denied");
-        assert!(format!("{retry:?}").contains("ResetPreservationFailed"));
-    }
-
-    #[test]
-    fn preserved_record_deletion_between_preview_and_apply_is_rejected() {
-        let file = tempfile::NamedTempFile::new().expect("database file");
-        let store = file_backed_store(&file);
-        add_preserved(&store, "ordinary-record");
-        let preview = block_on(store.preview_reset(&scope(), &repo())).expect("preview");
-        let value = approved(&store, journal(preview));
-        rusqlite::Connection::open(file.path())
-            .expect("database")
-            .execute(
-                "DELETE FROM code_stage_lineage WHERE scope_key=?1 AND record_id=?2",
-                rusqlite::params![
-                    serde_json::to_string(&scope()).expect("scope key"),
-                    "ordinary-record"
-                ],
-            )
-            .expect("durable deletion");
-        let error = block_on(store.apply_reset(value)).expect_err("preservation drift denial");
-        assert!(format!("{error:?}").contains("ResetPreservationFailed"));
-    }
-
-    #[test]
-    fn untouched_preserved_record_is_verified() {
-        let store = setup();
-        add_preserved(&store, "ordinary-record");
-        let preview = block_on(store.preview_reset(&scope(), &repo())).expect("preview");
+        let preview = block_on(coordinator.preview_reset(&actor(), &scope(), &repo()))
+            .expect("coordinator preview");
         assert_eq!(preview.preservation_inventory.records.len(), 1);
-        let applied = block_on(store.apply_reset(approved(&store, journal(preview))))
-            .expect("preserved record verified");
+        let approved = block_on(coordinator.journal_reset(
+            &actor(),
+            journal(preview),
+            "approved-by-fixture".into(),
+        ))
+        .expect("approval");
+        let applied = block_on(coordinator.apply_reset(&actor(), approved)).expect("apply");
         assert!(
             applied
                 .checkpoints
                 .iter()
-                .any(|item| item == "preservation-verified")
+                .any(|item| item == "preservation:verified")
+        );
+    }
+
+    #[test]
+    fn preservation_mutation_deletion_foreign_content_and_retry_are_denied_by_coordinator() {
+        for replacement in [
+            Vec::new(),
+            vec!["changed".into()],
+            vec!["a".into(), "foreign".into()],
+        ] {
+            let records = Arc::new(Mutex::new(vec!["a".into()]));
+            let coordinator = coordinator_with_source(
+                setup(),
+                Arc::new(FailingLane {
+                    fail_vector_once: Mutex::new(false),
+                    calls: Mutex::new(Vec::new()),
+                }),
+                preservation_source(records.clone()),
+            );
+            let preview = block_on(coordinator.preview_reset(&actor(), &scope(), &repo()))
+                .expect("coordinator preview");
+            let approved = block_on(coordinator.journal_reset(
+                &actor(),
+                journal(preview),
+                "approved-by-fixture".into(),
+            ))
+            .expect("approval");
+            *records.lock().expect("records") = replacement;
+            let error = block_on(coordinator.apply_reset(&actor(), approved.clone()))
+                .expect_err("preservation drift denial");
+            assert!(format!("{error:?}").contains("ResetPreservationFailed"));
+            let durable = block_on(coordinator.store().load_reset_journal("reset-1"))
+                .expect("failed journal persists");
+            assert!(
+                durable
+                    .checkpoints
+                    .iter()
+                    .any(|item| item == "preservation:failed")
+            );
+            let retry = block_on(coordinator.apply_reset(&actor(), approved))
+                .expect_err("drift retry remains denied");
+            assert!(format!("{retry:?}").contains("ResetPreservationFailed"));
+        }
+    }
+
+    #[test]
+    fn missing_preservation_source_denies_preview_and_apply() {
+        let store = setup();
+        let coordinator = CodeBindingCoordinator::new(
+            Arc::new(store),
+            Arc::new(ScopeSetAuthorizer::new(vec![scope()])),
+            vec![],
+        );
+        let preview_error = block_on(coordinator.preview_reset(&actor(), &scope(), &repo()))
+            .expect_err("missing source denies preview");
+        assert!(format!("{preview_error:?}").contains("PreservationSourceUnavailable"));
+
+        let store = setup();
+        let preview = block_on(store.preview_reset(&scope(), &repo())).expect("cell preview");
+        let approved = approved(&store, journal(preview));
+        let coordinator = CodeBindingCoordinator::new(
+            Arc::new(store),
+            Arc::new(ScopeSetAuthorizer::new(vec![scope()])),
+            vec![],
+        );
+        let apply_error = block_on(coordinator.apply_reset(&actor(), approved))
+            .expect_err("missing source denies apply");
+        assert!(format!("{apply_error:?}").contains("PreservationSourceUnavailable"));
+        assert!(
+            !block_on(coordinator.store().record_lineage(&scope(), "target-a"))
+                .expect("target")
+                .expect("lineage")
+                .retired,
+            "apply denial must happen before binding-cell retirement"
         );
     }
 

@@ -1,23 +1,25 @@
 import { spawn } from "node:child_process";
-import { existsSync, mkdtempSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { dirname, join } from "node:path";
-import { fileURLToPath } from "node:url";
+import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
 const helperUrl = new URL("./helpers/build-native-recipes.mjs", import.meta.url).href;
-const repoRoot = join(dirname(fileURLToPath(import.meta.url)), "..", "..", "..");
-const sharedTargetLock = join(repoRoot, "target", ".engram-node-recipe-build.lock");
 
 type RecipeResult = Record<string, { path: string; sha256: string }>;
 type ParticipantResult = { result: RecipeResult; enteredAt: number; releasedAt: number };
 
-function runHelperParticipant(participant: number, artifactsRoot?: string, holdMilliseconds = 0): Promise<ParticipantResult> {
+function runHelperParticipant(participant: number, artifactsRoot?: string, holdMilliseconds = 0, entryMarker?: string): Promise<ParticipantResult> {
   const program = `
+    import { writeFileSync } from "node:fs";
     import { withRecipeArtifacts } from ${JSON.stringify(helperUrl)};
     const holdMilliseconds = ${holdMilliseconds};
+    const entryMarker = ${JSON.stringify(entryMarker)};
     const transaction = withRecipeArtifacts(({ paths, digests, rebuild: _rebuild }) => {
       const enteredAt = Date.now();
+      if (entryMarker) {
+        writeFileSync(entryMarker, "entered");
+      }
       if (holdMilliseconds > 0) {
         Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, holdMilliseconds);
       }
@@ -67,11 +69,11 @@ function runHelperParticipant(participant: number, artifactsRoot?: string, holdM
   });
 }
 
-async function waitForSharedTargetLock() {
+async function waitForParticipantEntry(entryMarker: string) {
   const deadline = Date.now() + 30_000;
-  while (!existsSync(sharedTargetLock)) {
+  while (!existsSync(entryMarker)) {
     if (Date.now() >= deadline) {
-      throw new Error(`timed out waiting for shared target lock: ${sharedTargetLock}`);
+      throw new Error(`timed out waiting for shared participant entry: ${entryMarker}`);
     }
     await new Promise((resolve) => setTimeout(resolve, 25));
   }
@@ -97,9 +99,10 @@ describe("task_020 helper cross-process serialization", () => {
 
   it("makes an isolated-root transaction wait for the shared-target pipeline", async () => {
     const isolatedRoot = mkdtempSync(join(tmpdir(), "engram-node-isolated-lock-"));
+    const sharedEntryMarker = join(isolatedRoot, "shared-entered");
     try {
-      const shared = runHelperParticipant(1, undefined, 750);
-      await waitForSharedTargetLock();
+      const shared = runHelperParticipant(1, undefined, 750, sharedEntryMarker);
+      await waitForParticipantEntry(sharedEntryMarker);
       const isolated = runHelperParticipant(2, isolatedRoot);
       const [sharedResult, isolatedResult] = await Promise.all([shared, isolated]);
 

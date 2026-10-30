@@ -118,6 +118,8 @@ impl EvidenceClassification {
 
 /// Resolves candidate evidence from the owning canonical stores under the
 /// request scope and policy boundary.
+// clippy roll 2026-10: async_trait generates redundant must_use futures.
+#[allow(clippy::double_must_use)]
 #[async_trait]
 pub trait CandidateEvidenceResolver: Send + Sync {
     async fn evidence(

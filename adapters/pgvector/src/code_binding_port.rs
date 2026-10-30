@@ -6,6 +6,7 @@ use crate::{
 use async_trait::async_trait;
 use engram_domain::*;
 use engram_knowledge::*;
+use sha2::{Digest, Sha256};
 use std::sync::{Arc, Mutex};
 
 pub struct PgCodeBindingRepository {
@@ -679,14 +680,116 @@ impl CodeBindingRepository for PgCodeBindingRepository {
     }
 
     async fn preview_reset(&self, scope: &Scope, repo_id: &RepoId) -> CoreResult<CodeResetPreview> {
-        let scope = scope.clone();
-        let repo_id = repo_id.clone();
-        self.blocking(move |store| store.reset_preview(&scope, &repo_id).map_err(error))
-            .await
+        let binding = self
+            .get_binding(scope, repo_id)
+            .await?
+            .ok_or_else(|| error(CodeBindingError::BindingRequired))?;
+        let mut targets = Vec::new();
+        let mut ambiguity = Vec::new();
+        for entry in self.target_lineage(scope).await? {
+            if entry.repo_id != repo_id.0 || entry.retired {
+                continue;
+            }
+            let Some(generation) = self
+                .get_generation(scope, repo_id, &entry.generation_id)
+                .await?
+            else {
+                ambiguity.push(AmbiguousOwnership {
+                    record_id: entry.record_id,
+                    reason: "missing durable generation association".into(),
+                });
+                continue;
+            };
+            if entry.source_path.is_empty() {
+                ambiguity.push(AmbiguousOwnership {
+                    record_id: entry.record_id,
+                    reason: "record-level code ownership cannot be proven".into(),
+                });
+                continue;
+            }
+            let lineage = CodeLineage {
+                repo_id: repo_id.clone(),
+                generation_id: entry.generation_id,
+                source_path: entry.source_path,
+                contributors: vec!["durable-lineage".into()],
+                span: entry.span,
+            };
+            let bytes = serde_json::to_vec(&(
+                entry.record_id.clone(),
+                &lineage,
+                &generation.snapshot_digest,
+                binding.version,
+                binding.epoch,
+            ))
+            .map_err(|_| storage_error())?;
+            let fingerprint = Sha256::digest(bytes)
+                .iter()
+                .map(|byte| format!("{byte:02x}"))
+                .collect();
+            targets.push(CodeResetTarget {
+                record_id: entry.record_id,
+                store_id: "pgvector-knowledge".into(),
+                fingerprint,
+                lineage,
+                snapshot_ref: generation.snapshot_digest,
+                scan_metadata_keys: vec!["bindingVersion".into(), "codeEpoch".into()],
+                binding_version: binding.version,
+                code_epoch: binding.epoch,
+            });
+        }
+        if !ambiguity.is_empty() {
+            return Err(CoreError::InvalidRequest {
+                reason: format!(
+                    "AmbiguousOwnership: {}",
+                    ambiguity
+                        .iter()
+                        .map(|item| item.record_id.as_str())
+                        .collect::<Vec<_>>()
+                        .join(",")
+                ),
+            });
+        }
+        if targets.is_empty() {
+            return Err(error(CodeBindingError::InvalidResetPreview));
+        }
+        targets.sort_by(|left, right| left.record_id.cmp(&right.record_id));
+        let target_ids = targets
+            .iter()
+            .map(|target| target.record_id.clone())
+            .collect();
+        let mut preview = CodeResetPreview {
+            binding: binding.clone(),
+            preview_hash: String::new(),
+            target_ids,
+            targets,
+            ambiguity,
+            preservation_digests: vec![Sha256::digest(scope.tenant.as_bytes())
+                .iter()
+                .map(|byte| format!("{byte:02x}"))
+                .collect()],
+            binding_versions: vec![(repo_id.clone(), binding.version)],
+            code_epoch: binding.epoch,
+        };
+        preview.preview_hash = preview.content_hash().map_err(error)?;
+        Ok(preview)
     }
 
     async fn journal_reset(&self, journal: CodeResetJournal) -> CoreResult<CodeResetJournal> {
-        self.blocking(move |store| store.journal_reset(&journal, "pending").map_err(error))
+        journal.validate().map_err(error)?;
+        let current = self
+            .preview_reset(
+                &journal.preview.binding.scope,
+                &journal.preview.binding.repo_id,
+            )
+            .await?;
+        if current.preview_hash != journal.preview_hash
+            || current.targets != journal.preview.targets
+        {
+            return Err(CoreError::Conflict {
+                reason: "ResetPreviewMismatch: preview or store state changed".into(),
+            });
+        }
+        self.blocking(move |store| store.journal_reset(&journal, "authorized").map_err(error))
             .await
     }
 }

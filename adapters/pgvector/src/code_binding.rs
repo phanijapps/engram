@@ -5,7 +5,6 @@ use engram_domain::{
     CodeResetPreview, IndexedSource, RepoId, Scope,
 };
 use engram_knowledge::{AcquisitionMode, CodeEligibility, RepositoryRegistration, StageReceipt};
-use sha2::{Digest, Sha256};
 use tokio_postgres::IsolationLevel;
 
 pub struct PgCodeBindingStore {
@@ -221,17 +220,18 @@ impl PgCodeBindingStore {
         if targets.is_empty() {
             return Err(CodeBindingError::InvalidResetPreview);
         }
-        let bytes = serde_json::to_vec(&(scope, repo, &targets, binding.version, binding.epoch))
-            .map_err(|_| CodeBindingError::PersistenceFailure)?;
-        let hash = Sha256::digest(bytes)
-            .iter()
-            .map(|b| format!("{b:02x}"))
-            .collect::<String>();
-        Ok(CodeResetPreview {
-            binding,
-            preview_hash: hash,
+        let mut preview = CodeResetPreview {
+            binding: binding.clone(),
+            preview_hash: String::new(),
             target_ids: targets,
-        })
+            targets: Vec::new(),
+            ambiguity: Vec::new(),
+            preservation_digests: Vec::new(),
+            binding_versions: vec![(repo.clone(), binding.version)],
+            code_epoch: binding.epoch,
+        };
+        preview.preview_hash = preview.content_hash()?;
+        Ok(preview)
     }
     /// Persists one on-request ref observation keyed by (scope, repo)
     /// (TASK-018), engine-neutral twin of the SQLite cell: observed OID/time

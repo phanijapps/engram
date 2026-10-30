@@ -4,6 +4,7 @@ use async_trait::async_trait;
 use engram_domain::*;
 use engram_knowledge::*;
 use rusqlite::{OptionalExtension, params};
+use sha2::{Digest, Sha256};
 use std::{
     path::Path,
     sync::{Mutex, MutexGuard},
@@ -96,6 +97,12 @@ fn target_lineage_of_row(
 }
 fn json<T: serde::Serialize>(value: &T) -> CoreResult<String> {
     serde_json::to_string(value).map_err(|_| storage_error())
+}
+fn sha256_hex(bytes: &[u8]) -> String {
+    Sha256::digest(bytes)
+        .iter()
+        .map(|byte| format!("{byte:02x}"))
+        .collect()
 }
 impl SqlCodeBindingRepository {
     pub fn open(path: impl AsRef<Path>) -> CoreResult<Self> {
@@ -645,17 +652,114 @@ impl CodeBindingRepository for SqlCodeBindingRepository {
             .map(|json| serde_json::from_str(&json).map_err(|_| storage_error()))
             .transpose()
     }
-    async fn preview_reset(&self, _: &Scope, _: &RepoId) -> CoreResult<CodeResetPreview> {
-        Err(CoreError::CapabilityUnsupported {
-            capability: "code-reset".into(),
-            reason: "permission-bound exact reset preview is not yet wired".into(),
-        })
+    async fn preview_reset(&self, scope: &Scope, repo_id: &RepoId) -> CoreResult<CodeResetPreview> {
+        let binding = self
+            .get_binding(scope, repo_id)
+            .await?
+            .ok_or_else(|| error(CodeBindingError::BindingRequired))?;
+        let mut targets = Vec::new();
+        let mut ambiguity = Vec::new();
+        for entry in self.target_lineage(scope).await? {
+            if entry.repo_id != repo_id.0 || entry.retired {
+                continue;
+            }
+            let Some(generation) = self
+                .get_generation(scope, repo_id, &entry.generation_id)
+                .await?
+            else {
+                ambiguity.push(AmbiguousOwnership {
+                    record_id: entry.record_id,
+                    reason: "missing durable generation association".into(),
+                });
+                continue;
+            };
+            if entry.source_path.is_empty() {
+                ambiguity.push(AmbiguousOwnership {
+                    record_id: entry.record_id,
+                    reason: "record-level code ownership cannot be proven".into(),
+                });
+                continue;
+            }
+            let lineage = CodeLineage {
+                repo_id: repo_id.clone(),
+                generation_id: entry.generation_id,
+                source_path: entry.source_path,
+                contributors: vec!["durable-lineage".into()],
+                span: entry.span,
+            };
+            let material = serde_json::to_vec(&(
+                entry.record_id.clone(),
+                &lineage,
+                &generation.snapshot_digest,
+                binding.version,
+                binding.epoch,
+            ))
+            .map_err(|_| storage_error())?;
+            let fingerprint = sha256_hex(&material);
+            targets.push(CodeResetTarget {
+                record_id: entry.record_id,
+                store_id: "sqlite-knowledge".into(),
+                fingerprint,
+                lineage,
+                snapshot_ref: generation.snapshot_digest,
+                scan_metadata_keys: vec!["bindingVersion".into(), "codeEpoch".into()],
+                binding_version: binding.version,
+                code_epoch: binding.epoch,
+            });
+        }
+        if !ambiguity.is_empty() {
+            return Err(CoreError::InvalidRequest {
+                reason: format!(
+                    "AmbiguousOwnership: {}",
+                    ambiguity
+                        .iter()
+                        .map(|item| item.record_id.as_str())
+                        .collect::<Vec<_>>()
+                        .join(",")
+                ),
+            });
+        }
+        if targets.is_empty() {
+            return Err(error(CodeBindingError::InvalidResetPreview));
+        }
+        targets.sort_by(|left, right| left.record_id.cmp(&right.record_id));
+        let target_ids = targets
+            .iter()
+            .map(|target| target.record_id.clone())
+            .collect();
+        let preservation_digests = vec![sha256_hex(scope.tenant.as_bytes())];
+        let mut preview = CodeResetPreview {
+            binding: binding.clone(),
+            preview_hash: String::new(),
+            target_ids,
+            targets,
+            ambiguity,
+            preservation_digests,
+            binding_versions: vec![(repo_id.clone(), binding.version)],
+            code_epoch: binding.epoch,
+        };
+        preview.preview_hash = preview.content_hash().map_err(error)?;
+        Ok(preview)
     }
-    async fn journal_reset(&self, _: CodeResetJournal) -> CoreResult<CodeResetJournal> {
-        Err(CoreError::CapabilityUnsupported {
-            capability: "code-reset".into(),
-            reason: "permission-bound reset journal is not yet wired".into(),
-        })
+    async fn journal_reset(&self, journal: CodeResetJournal) -> CoreResult<CodeResetJournal> {
+        journal.validate().map_err(error)?;
+        let current = self
+            .preview_reset(
+                &journal.preview.binding.scope,
+                &journal.preview.binding.repo_id,
+            )
+            .await?;
+        if current.preview_hash != journal.preview_hash
+            || current.targets != journal.preview.targets
+        {
+            return Err(CoreError::Conflict {
+                reason: "ResetPreviewMismatch: preview or store state changed".into(),
+            });
+        }
+        self.lock()?
+            .put_reset_journal(&journal, "authorized")
+            .map_err(error)?;
+        Ok(journal)
     }
 }
 

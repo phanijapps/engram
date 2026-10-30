@@ -97,18 +97,57 @@ pub enum CodeReceiptKind {
     Derived,
 }
 
+/// One exact, durable target in a reset preview.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CodeResetTarget {
+    pub record_id: String,
+    pub store_id: String,
+    pub fingerprint: String,
+    pub lineage: CodeLineage,
+    pub snapshot_ref: String,
+    pub scan_metadata_keys: Vec<String>,
+    pub binding_version: u64,
+    pub code_epoch: u64,
+}
+
+/// A legacy row that cannot be proved code-owned at record level.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AmbiguousOwnership {
+    pub record_id: String,
+    pub reason: String,
+}
+
+/// Immutable reset proposal only.
+/// This document names exact records and makes no cross-store atomicity claim.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CodeResetPreview {
     pub binding: CodeBinding,
     pub preview_hash: String,
+    /// Retained for transport compatibility; it exactly mirrors `targets`.
     pub target_ids: Vec<String>,
+    #[serde(default)]
+    pub targets: Vec<CodeResetTarget>,
+    #[serde(default)]
+    pub ambiguity: Vec<AmbiguousOwnership>,
+    #[serde(default)]
+    pub preservation_digests: Vec<String>,
+    #[serde(default)]
+    pub binding_versions: Vec<(RepoId, u64)>,
+    #[serde(default)]
+    pub code_epoch: u64,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CodeResetJournal {
+    pub reset_id: String,
     pub preview: CodeResetPreview,
+    pub preview_hash: String,
+    pub target_fingerprints: Vec<(String, String)>,
+    pub authorizing_decisions: Vec<String>,
     pub checkpoints: Vec<String>,
     pub preservation_digests: Vec<String>,
 }
@@ -254,12 +293,66 @@ impl CodeAttempt {
 }
 
 impl CodeResetPreview {
+    /// Hashes the complete proposal with its hash field blanked.
+    pub fn content_hash(&self) -> Result<String, CodeBindingError> {
+        let mut document = self.clone();
+        document.preview_hash.clear();
+        let bytes =
+            serde_json::to_vec(&document).map_err(|_| CodeBindingError::InvalidResetPreview)?;
+        use sha2::{Digest, Sha256};
+        Ok(Sha256::digest(bytes)
+            .iter()
+            .map(|byte| format!("{byte:02x}"))
+            .collect())
+    }
+
     pub fn validate(&self) -> Result<(), CodeBindingError> {
         self.binding.validate()?;
         if self.preview_hash.len() != 64
             || !self.preview_hash.bytes().all(|b| b.is_ascii_hexdigit())
             || self.target_ids.is_empty()
             || self.target_ids.iter().any(|x| x.trim().is_empty())
+            || !self.ambiguity.is_empty()
+            || (!self.targets.is_empty()
+                && (self.targets.len() != self.target_ids.len()
+                    || self
+                        .targets
+                        .iter()
+                        .map(|target| &target.record_id)
+                        .collect::<Vec<_>>()
+                        != self.target_ids.iter().collect::<Vec<_>>()))
+            || (!self.targets.is_empty() && self.content_hash()? != self.preview_hash)
+        {
+            return Err(CodeBindingError::InvalidResetPreview);
+        }
+        Ok(())
+    }
+}
+
+impl CodeResetJournal {
+    pub fn validate(&self) -> Result<(), CodeBindingError> {
+        self.preview.validate()?;
+        if self.reset_id.trim().is_empty()
+            || self.preview_hash != self.preview.preview_hash
+            || self.authorizing_decisions.is_empty()
+            || self.target_fingerprints.len() != self.preview.targets.len()
+            || self
+                .target_fingerprints
+                .iter()
+                .map(|(id, _)| id)
+                .collect::<Vec<_>>()
+                != self
+                    .preview
+                    .targets
+                    .iter()
+                    .map(|target| &target.record_id)
+                    .collect::<Vec<_>>()
+            || self
+                .target_fingerprints
+                .iter()
+                .zip(&self.preview.targets)
+                .any(|((_, fingerprint), target)| fingerprint != &target.fingerprint)
+            || self.preservation_digests != self.preview.preservation_digests
         {
             return Err(CodeBindingError::InvalidResetPreview);
         }

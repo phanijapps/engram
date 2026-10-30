@@ -4,6 +4,7 @@ mod eligibility;
 mod ingestion;
 mod publication;
 mod registration;
+mod reset;
 mod source;
 mod status;
 use async_trait::async_trait;

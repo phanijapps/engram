@@ -81,10 +81,19 @@ mod task_001 {
             binding: b,
             preview_hash: "d".repeat(64),
             target_ids: vec!["target".into()],
+            targets: vec![],
+            ambiguity: vec![],
+            preservation_digests: vec![],
+            binding_versions: vec![],
+            code_epoch: 0,
         };
         p.validate().unwrap();
         roundtrip(&p);
         let j = CodeResetJournal {
+            reset_id: "reset-1".into(),
+            preview_hash: p.preview_hash.clone(),
+            target_fingerprints: vec![],
+            authorizing_decisions: vec!["fixture".into()],
             preview: p,
             checkpoints: vec!["begin".into()],
             preservation_digests: vec!["e".repeat(64)],
@@ -178,10 +187,19 @@ mod task_001 {
         attempt.receipt_kinds.push(CodeReceiptKind::Knowledge);
         attempt.validate().unwrap();
         let journal = CodeResetJournal {
+            reset_id: "reset-1".into(),
+            preview_hash: "a".repeat(64),
+            target_fingerprints: vec![],
+            authorizing_decisions: vec!["fixture".into()],
             preview: CodeResetPreview {
                 binding: binding(),
                 preview_hash: "a".repeat(64),
                 target_ids: vec!["x".into()],
+                targets: vec![],
+                ambiguity: vec![],
+                preservation_digests: vec![],
+                binding_versions: vec![],
+                code_epoch: 0,
             },
             checkpoints: vec!["start".into()],
             preservation_digests: vec!["b".repeat(64)],
@@ -230,6 +248,11 @@ mod task_002 {
             binding: b,
             preview_hash: "d".repeat(64),
             target_ids: vec!["target".into()],
+            targets: vec![],
+            ambiguity: vec![],
+            preservation_digests: vec![],
+            binding_versions: vec![],
+            code_epoch: 0,
         };
         vec![
             ("CodeBinding", serde_json::to_value(binding()).unwrap()),
@@ -244,6 +267,10 @@ mod task_002 {
             (
                 "CodeResetJournal",
                 serde_json::to_value(CodeResetJournal {
+                    reset_id: "reset-1".into(),
+                    preview_hash: preview.preview_hash.clone(),
+                    target_fingerprints: vec![],
+                    authorizing_decisions: vec!["fixture".into()],
                     preview,
                     checkpoints: vec!["start".into()],
                     preservation_digests: vec!["e".repeat(64)],

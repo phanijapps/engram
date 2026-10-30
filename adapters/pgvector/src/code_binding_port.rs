@@ -43,6 +43,10 @@ fn target_lineage_of_row(
             .map(|value| value.source_path.clone())
             .unwrap_or_default(),
         span: lineage.as_ref().and_then(|value| value.span),
+        contributors: lineage
+            .as_ref()
+            .map(|value| value.contributors.clone())
+            .unwrap_or_default(),
     }
 }
 
@@ -711,7 +715,7 @@ impl CodeBindingRepository for PgCodeBindingRepository {
                 repo_id: repo_id.clone(),
                 generation_id: entry.generation_id,
                 source_path: entry.source_path,
-                contributors: vec!["durable-lineage".into()],
+                contributors: entry.contributors,
                 span: entry.span,
             };
             let bytes = serde_json::to_vec(&(
@@ -757,16 +761,15 @@ impl CodeBindingRepository for PgCodeBindingRepository {
             .iter()
             .map(|target| target.record_id.clone())
             .collect();
+        let preservation_inventory = self.preservation_inventory(scope, repo_id).await?;
         let mut preview = CodeResetPreview {
             binding: binding.clone(),
             preview_hash: String::new(),
             target_ids,
             targets,
             ambiguity,
-            preservation_digests: vec![Sha256::digest(scope.tenant.as_bytes())
-                .iter()
-                .map(|byte| format!("{byte:02x}"))
-                .collect()],
+            preservation_digests: vec![preservation_inventory.digest.clone()],
+            preservation_inventory,
             binding_versions: vec![(repo_id.clone(), binding.version)],
             code_epoch: binding.epoch,
         };

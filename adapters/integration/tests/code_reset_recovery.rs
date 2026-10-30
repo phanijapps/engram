@@ -71,7 +71,7 @@ fn setup() -> SqlCodeBindingRepository {
             repo_id: repo(),
             generation_id: generation.id,
             source_path: "src/lib.rs".into(),
-            contributors: vec!["src/lib.rs".into()],
+            contributors: vec!["src/lib.rs".into(), "src/mod.rs".into()],
             span: None,
         },
     ))
@@ -127,6 +127,68 @@ fn add_target(store: &SqlCodeBindingRepository, id: &str) {
         },
     ))
     .expect("additional lineage");
+}
+fn add_preserved(store: &SqlCodeBindingRepository, id: &str) {
+    block_on(store.put_lineage(
+        &scope(),
+        id,
+        CodeLineage {
+            repo_id: RepoId("ordinary-repo".into()),
+            generation_id: "ordinary-generation".into(),
+            source_path: format!("notes/{id}.md"),
+            contributors: vec!["ordinary-source".into()],
+            span: None,
+        },
+    ))
+    .expect("preserved lineage");
+}
+fn file_backed_store(file: &tempfile::NamedTempFile) -> SqlCodeBindingRepository {
+    let store = SqlCodeBindingRepository::open(file.path()).expect("store");
+    let binding = CodeBinding {
+        scope: scope(),
+        repo_id: repo(),
+        branch_ref: "refs/heads/main".into(),
+        version: 1,
+        active_generation: None,
+        epoch: 0,
+    };
+    block_on(store.register(RepositoryRegistration {
+        repo_id: repo(),
+        locator_id: "fixture".into(),
+        acquisition: engram_knowledge::AcquisitionMode::LocalOnly,
+    }))
+    .expect("register");
+    block_on(store.bind(binding)).expect("bind");
+    let generation = generation();
+    block_on(store.begin_attempt(
+        &scope(),
+        &repo(),
+        generation.clone(),
+        CodeAttempt {
+            id: "reset-attempt".into(),
+            idempotency_key: "reset-key".into(),
+            binding_version: 1,
+            expected_epoch: 0,
+            expected_active_generation: None,
+            fencing_token: 1,
+            state: CodeAttemptState::Created,
+            receipt_kinds: vec![CodeReceiptKind::Knowledge],
+        },
+    ))
+    .expect("attempt");
+    block_on(store.put_lineage(
+        &scope(),
+        "target-a",
+        CodeLineage {
+            repo_id: repo(),
+            generation_id: generation.id,
+            source_path: "src/lib.rs".into(),
+            contributors: vec!["src/lib.rs".into(), "src/mod.rs".into()],
+            span: None,
+        },
+    ))
+    .expect("lineage");
+    store
 }
 
 mod task_023 {
@@ -341,6 +403,106 @@ mod task_024 {
                 .iter()
                 .any(|item| item == "preservation-verified")
         );
+    }
+
+    #[test]
+    fn preserved_record_mutation_between_preview_and_apply_is_rejected() {
+        let file = tempfile::NamedTempFile::new().expect("database file");
+        let store = file_backed_store(&file);
+        add_preserved(&store, "ordinary-record");
+        let preview = block_on(store.preview_reset(&scope(), &repo())).expect("preview");
+        let value = approved(&store, journal(preview));
+        let changed = serde_json::to_string(&CodeLineage {
+            repo_id: RepoId("ordinary-repo".into()),
+            generation_id: "ordinary-generation".into(),
+            source_path: "notes/ordinary-record-rewritten.md".into(),
+            contributors: vec!["ordinary-source".into()],
+            span: None,
+        })
+        .expect("lineage json");
+        rusqlite::Connection::open(file.path())
+            .expect("database")
+            .execute(
+                "UPDATE code_stage_lineage SET record_json=?1 WHERE scope_key=?2 AND record_id=?3",
+                rusqlite::params![
+                    changed,
+                    serde_json::to_string(&scope()).expect("scope key"),
+                    "ordinary-record"
+                ],
+            )
+            .expect("durable mutation");
+        let error = block_on(store.apply_reset(value)).expect_err("preservation drift denial");
+        assert!(format!("{error:?}").contains("ResetPreservationFailed"));
+    }
+
+    #[test]
+    fn preserved_record_deletion_between_preview_and_apply_is_rejected() {
+        let file = tempfile::NamedTempFile::new().expect("database file");
+        let store = file_backed_store(&file);
+        add_preserved(&store, "ordinary-record");
+        let preview = block_on(store.preview_reset(&scope(), &repo())).expect("preview");
+        let value = approved(&store, journal(preview));
+        rusqlite::Connection::open(file.path())
+            .expect("database")
+            .execute(
+                "DELETE FROM code_stage_lineage WHERE scope_key=?1 AND record_id=?2",
+                rusqlite::params![
+                    serde_json::to_string(&scope()).expect("scope key"),
+                    "ordinary-record"
+                ],
+            )
+            .expect("durable deletion");
+        let error = block_on(store.apply_reset(value)).expect_err("preservation drift denial");
+        assert!(format!("{error:?}").contains("ResetPreservationFailed"));
+    }
+
+    #[test]
+    fn untouched_preserved_record_is_verified() {
+        let store = setup();
+        add_preserved(&store, "ordinary-record");
+        let preview = block_on(store.preview_reset(&scope(), &repo())).expect("preview");
+        assert_eq!(preview.preservation_inventory.records.len(), 1);
+        let applied = block_on(store.apply_reset(approved(&store, journal(preview))))
+            .expect("preserved record verified");
+        assert!(
+            applied
+                .checkpoints
+                .iter()
+                .any(|item| item == "preservation-verified")
+        );
+    }
+
+    #[test]
+    fn durable_contributor_set_is_previewed_and_drift_is_rejected() {
+        let file = tempfile::NamedTempFile::new().expect("database file");
+        let store = file_backed_store(&file);
+        let preview = block_on(store.preview_reset(&scope(), &repo())).expect("preview");
+        assert_eq!(
+            preview.targets[0].lineage.contributors,
+            vec!["src/lib.rs", "src/mod.rs"]
+        );
+        let value = approved(&store, journal(preview));
+        let substituted = serde_json::to_string(&CodeLineage {
+            repo_id: repo(),
+            generation_id: generation().id,
+            source_path: "src/lib.rs".into(),
+            contributors: vec!["substituted-contributor".into(), "src/mod.rs".into()],
+            span: None,
+        })
+        .expect("lineage json");
+        rusqlite::Connection::open(file.path())
+            .expect("database")
+            .execute(
+                "UPDATE code_stage_lineage SET record_json=?1 WHERE scope_key=?2 AND record_id=?3",
+                rusqlite::params![
+                    substituted,
+                    serde_json::to_string(&scope()).expect("scope key"),
+                    "target-a"
+                ],
+            )
+            .expect("durable contributor substitution");
+        let error = block_on(store.apply_reset(value)).expect_err("stale contributor denial");
+        assert!(format!("{error:?}").contains("ResetPreviewStale"));
     }
 
     #[test]

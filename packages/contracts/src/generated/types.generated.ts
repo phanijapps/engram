@@ -105,6 +105,7 @@ export type Verdict = "asserted_by_agent" | "grounded_in_source" | "derived";
 
 export interface EngramV1Types {
   Actor: Actor;
+  AmbiguousOwnership: AmbiguousOwnership;
   CanonicalSpan: CanonicalSpan;
   CodeAttempt: CodeAttempt;
   CodeBinding: CodeBinding;
@@ -115,6 +116,7 @@ export interface EngramV1Types {
   CodeLineage: CodeLineage;
   CodeResetJournal: CodeResetJournal;
   CodeResetPreview: CodeResetPreview;
+  CodeResetTarget: CodeResetTarget;
   ConceptRef: ConceptRef;
   ContextBudget: ContextBudget;
   ContextPayload: ContextPayload;
@@ -153,6 +155,8 @@ export interface EngramV1Types {
   OperatorProposal: OperatorProposal;
   OperatorProposalStatus: OperatorProposalStatus;
   Policy: Policy;
+  PreservationEntry: PreservationEntry;
+  PreservationInventory: PreservationInventory;
   ProposalMemoryWrite: ProposalMemoryWrite;
   Provenance: Provenance;
   QueryFilter: QueryFilter;
@@ -190,6 +194,10 @@ export interface Actor {
 }
 export interface Metadata {
   [k: string]: unknown;
+}
+export interface AmbiguousOwnership {
+  reason: string;
+  recordId: string;
 }
 export interface CanonicalSpan {
   endLine: number;
@@ -267,17 +275,46 @@ export interface CodeLineage {
   span?: CanonicalSpan | null;
 }
 export interface CodeResetJournal {
+  authorizingDecisions?: string[];
   checkpoints: string[];
   preservationDigests: string[];
   preview: CodeResetPreview;
+  previewHash?: string;
+  resetId?: string;
+  targetFingerprints?: [unknown, unknown][];
 }
 export interface CodeResetPreview {
+  ambiguity?: AmbiguousOwnership[];
   binding: CodeBinding;
+  bindingVersions?: [unknown, unknown][];
+  codeEpoch?: number;
+  preservationDigests?: string[];
+  preservationInventory?: PreservationInventory;
   previewHash: string;
   /**
    * @minItems 1
    */
   targetIds: [string, ...string[]];
+  targets?: CodeResetTarget[];
+}
+export interface PreservationInventory {
+  digest: string;
+  records: PreservationEntry[];
+}
+export interface PreservationEntry {
+  contentDigest: string;
+  contributorDigest: string;
+  recordId: string;
+}
+export interface CodeResetTarget {
+  bindingVersion: number;
+  codeEpoch: number;
+  fingerprint: string;
+  lineage: CodeLineage;
+  recordId: string;
+  scanMetadataKeys: string[];
+  snapshotRef: string;
+  storeId: string;
 }
 export interface ConceptRef {
   id?: Identifier;

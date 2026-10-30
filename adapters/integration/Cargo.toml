@@ -35,4 +35,5 @@ default = []
 fastembed = ["engram-integration/fastembed"]
 
 [dev-dependencies]
+rusqlite.workspace = true
 tempfile = "3"

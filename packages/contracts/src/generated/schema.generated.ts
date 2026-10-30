@@ -30,6 +30,24 @@ export const engramV1Schema = {
       ],
       "type": "object"
     },
+    "AmbiguousOwnership": {
+      "additionalProperties": false,
+      "properties": {
+        "reason": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "recordId": {
+          "minLength": 1,
+          "type": "string"
+        }
+      },
+      "required": [
+        "recordId",
+        "reason"
+      ],
+      "type": "object"
+    },
     "CanonicalSpan": {
       "additionalProperties": false,
       "properties": {
@@ -312,6 +330,13 @@ export const engramV1Schema = {
     "CodeResetJournal": {
       "additionalProperties": false,
       "properties": {
+        "authorizingDecisions": {
+          "items": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "type": "array"
+        },
         "checkpoints": {
           "items": {
             "type": "string"
@@ -327,6 +352,32 @@ export const engramV1Schema = {
         },
         "preview": {
           "$ref": "#/$defs/CodeResetPreview"
+        },
+        "previewHash": {
+          "pattern": "^[a-fA-F0-9]{64}$",
+          "type": "string"
+        },
+        "resetId": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "targetFingerprints": {
+          "items": {
+            "maxItems": 2,
+            "minItems": 2,
+            "prefixItems": [
+              {
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "minLength": 1,
+                "type": "string"
+              }
+            ],
+            "type": "array"
+          },
+          "type": "array"
         }
       },
       "required": [
@@ -339,8 +390,46 @@ export const engramV1Schema = {
     "CodeResetPreview": {
       "additionalProperties": false,
       "properties": {
+        "ambiguity": {
+          "items": {
+            "$ref": "#/$defs/AmbiguousOwnership"
+          },
+          "type": "array"
+        },
         "binding": {
           "$ref": "#/$defs/CodeBinding"
+        },
+        "bindingVersions": {
+          "items": {
+            "maxItems": 2,
+            "minItems": 2,
+            "prefixItems": [
+              {
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "minimum": 0,
+                "type": "integer"
+              }
+            ],
+            "type": "array"
+          },
+          "type": "array"
+        },
+        "codeEpoch": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "preservationDigests": {
+          "items": {
+            "pattern": "^[a-fA-F0-9]{64}$",
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "preservationInventory": {
+          "$ref": "#/$defs/PreservationInventory"
         },
         "previewHash": {
           "pattern": "^[a-fA-F0-9]{64}$",
@@ -353,12 +442,67 @@ export const engramV1Schema = {
           },
           "minItems": 1,
           "type": "array"
+        },
+        "targets": {
+          "items": {
+            "$ref": "#/$defs/CodeResetTarget"
+          },
+          "type": "array"
         }
       },
       "required": [
         "binding",
         "previewHash",
         "targetIds"
+      ],
+      "type": "object"
+    },
+    "CodeResetTarget": {
+      "additionalProperties": false,
+      "properties": {
+        "bindingVersion": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "codeEpoch": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "fingerprint": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "lineage": {
+          "$ref": "#/$defs/CodeLineage"
+        },
+        "recordId": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "scanMetadataKeys": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "snapshotRef": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "storeId": {
+          "minLength": 1,
+          "type": "string"
+        }
+      },
+      "required": [
+        "recordId",
+        "storeId",
+        "fingerprint",
+        "lineage",
+        "snapshotRef",
+        "scanMetadataKeys",
+        "bindingVersion",
+        "codeEpoch"
       ],
       "type": "object"
     },
@@ -1549,6 +1693,49 @@ export const engramV1Schema = {
       "required": [
         "visibility",
         "retention"
+      ],
+      "type": "object"
+    },
+    "PreservationEntry": {
+      "additionalProperties": false,
+      "properties": {
+        "contentDigest": {
+          "pattern": "^[a-fA-F0-9]{64}$",
+          "type": "string"
+        },
+        "contributorDigest": {
+          "pattern": "^[a-fA-F0-9]{64}$",
+          "type": "string"
+        },
+        "recordId": {
+          "minLength": 1,
+          "type": "string"
+        }
+      },
+      "required": [
+        "recordId",
+        "contentDigest",
+        "contributorDigest"
+      ],
+      "type": "object"
+    },
+    "PreservationInventory": {
+      "additionalProperties": false,
+      "properties": {
+        "digest": {
+          "pattern": "^[a-fA-F0-9]{64}$",
+          "type": "string"
+        },
+        "records": {
+          "items": {
+            "$ref": "#/$defs/PreservationEntry"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "records",
+        "digest"
       ],
       "type": "object"
     },

@@ -1,6 +1,7 @@
 use engram_domain::{
     CodeAttempt, CodeAttemptState, CodeBinding, CodeBindingError, CodeGeneration, CodeLineage,
-    CodeReceiptKind, CodeResetJournal, CodeResetPreview, IndexedSource, RepoId, Scope,
+    CodeReceiptKind, CodeResetJournal, CodeResetPreview, IndexedSource, PreservationInventory,
+    RepoId, Scope,
 };
 use serde::{Serialize, de::DeserializeOwned};
 
@@ -83,7 +84,8 @@ mod task_001 {
             target_ids: vec!["target".into()],
             targets: vec![],
             ambiguity: vec![],
-            preservation_digests: vec![],
+            preservation_digests: vec![PreservationInventory::default().digest.clone()],
+            preservation_inventory: PreservationInventory::default(),
             binding_versions: vec![],
             code_epoch: 0,
         };
@@ -152,6 +154,12 @@ mod task_001 {
             binding: binding(),
             preview_hash: "bad".into(),
             target_ids: vec!["x".into()],
+            targets: vec![],
+            ambiguity: vec![],
+            preservation_digests: vec![PreservationInventory::default().digest.clone()],
+            preservation_inventory: PreservationInventory::default(),
+            binding_versions: vec![],
+            code_epoch: 0,
         };
         assert_eq!(p.validate(), Err(CodeBindingError::InvalidResetPreview));
         p.preview_hash = "d".repeat(64);
@@ -197,7 +205,8 @@ mod task_001 {
                 target_ids: vec!["x".into()],
                 targets: vec![],
                 ambiguity: vec![],
-                preservation_digests: vec![],
+                preservation_digests: vec![PreservationInventory::default().digest.clone()],
+                preservation_inventory: PreservationInventory::default(),
                 binding_versions: vec![],
                 code_epoch: 0,
             },
@@ -250,7 +259,8 @@ mod task_002 {
             target_ids: vec!["target".into()],
             targets: vec![],
             ambiguity: vec![],
-            preservation_digests: vec![],
+            preservation_digests: vec![PreservationInventory::default().digest.clone()],
+            preservation_inventory: PreservationInventory::default(),
             binding_versions: vec![],
             code_epoch: 0,
         };

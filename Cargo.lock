@@ -1015,6 +1015,7 @@ dependencies = [
  "engram-store-lexical",
  "engram-store-sqlite",
  "futures",
+ "rusqlite",
  "serde",
  "serde_json",
  "tempfile",

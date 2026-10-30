@@ -148,6 +148,52 @@ pub trait CodeBindingRepository: crate::CodeReadLeases + Send + Sync {
     /// whole scope's lineage per record. Store-backed implementors MUST
     /// override this with a keyed read; the compatibility default falls
     /// back to [`Self::target_lineage`] and scans the result.
+    /// Builds the durable inventory of ordinary records that a reset of
+    /// `target_repo` must leave untouched.
+    async fn preservation_inventory(
+        &self,
+        scope: &Scope,
+        target_repo: &engram_domain::RepoId,
+    ) -> CoreResult<engram_domain::PreservationInventory> {
+        let mut records = self
+            .target_lineage(scope)
+            .await?
+            .into_iter()
+            .filter(|entry| entry.repo_id != target_repo.0)
+            .map(|entry| {
+                let content = serde_json::to_vec(&entry).map_err(|_| CoreError::Adapter {
+                    adapter: "engram-code-binding".into(),
+                    message: "cannot hash durable preservation record".into(),
+                })?;
+                let contributors =
+                    serde_json::to_vec(&entry.contributors).map_err(|_| CoreError::Adapter {
+                        adapter: "engram-code-binding".into(),
+                        message: "cannot hash durable preservation contributors".into(),
+                    })?;
+                Ok(engram_domain::PreservationRecord {
+                    record_id: entry.record_id,
+                    content_digest: Sha256::digest(content)
+                        .iter()
+                        .map(|byte| format!("{byte:02x}"))
+                        .collect(),
+                    contributor_digest: Sha256::digest(contributors)
+                        .iter()
+                        .map(|byte| format!("{byte:02x}"))
+                        .collect(),
+                })
+            })
+            .collect::<CoreResult<Vec<_>>>()?;
+        records.sort_by(|left, right| left.record_id.cmp(&right.record_id));
+        let mut inventory = engram_domain::PreservationInventory {
+            records,
+            digest: String::new(),
+        };
+        inventory.digest = inventory.content_hash().map_err(|_| CoreError::Adapter {
+            adapter: "engram-code-binding".into(),
+            message: "cannot hash preservation inventory".into(),
+        })?;
+        Ok(inventory)
+    }
     async fn record_lineage(
         &self,
         scope: &Scope,
@@ -305,14 +351,14 @@ pub trait CodeBindingRepository: crate::CodeReadLeases + Send + Sync {
                         .into(),
             });
         }
-        let scope = &journal.preview.binding.scope;
-        let repo = &journal.preview.binding.repo_id;
-        let binding = self
-            .get_binding(scope, repo)
-            .await?
-            .ok_or_else(|| CoreError::Conflict {
-                reason: "ResetPreviewStale: binding no longer exists".into(),
-            })?;
+        let scope = journal.preview.binding.scope.clone();
+        let repo = journal.preview.binding.repo_id.clone();
+        let binding =
+            self.get_binding(&scope, &repo)
+                .await?
+                .ok_or_else(|| CoreError::Conflict {
+                    reason: "ResetPreviewStale: binding no longer exists".into(),
+                })?;
         let completed: std::collections::BTreeSet<String> = journal
             .checkpoints
             .iter()
@@ -331,7 +377,7 @@ pub trait CodeBindingRepository: crate::CodeReadLeases + Send + Sync {
         // lineage and generation before the first mutation.
         for target in &remaining {
             let lineage = self
-                .record_lineage(scope, &target.record_id)
+                .record_lineage(&scope, &target.record_id)
                 .await?
                 .ok_or_else(|| CoreError::Conflict {
                     reason: "ResetTargetSubstituted: target is absent".into(),
@@ -345,7 +391,7 @@ pub trait CodeBindingRepository: crate::CodeReadLeases + Send + Sync {
                 });
             }
             let generation = self
-                .get_generation(scope, repo, &lineage.generation_id)
+                .get_generation(&scope, &repo, &lineage.generation_id)
                 .await?
                 .ok_or_else(|| CoreError::Conflict {
                     reason: "ResetTargetSubstituted: generation is absent".into(),
@@ -354,7 +400,7 @@ pub trait CodeBindingRepository: crate::CodeReadLeases + Send + Sync {
                 repo_id: repo.clone(),
                 generation_id: lineage.generation_id,
                 source_path: lineage.source_path,
-                contributors: target.lineage.contributors.clone(),
+                contributors: lineage.contributors,
                 span: lineage.span,
             };
             let material = serde_json::to_vec(&(
@@ -409,7 +455,7 @@ pub trait CodeBindingRepository: crate::CodeReadLeases + Send + Sync {
                 record_id: target.record_id.clone(),
             })
             .collect::<Vec<_>>();
-        self.retire_lineage_targets(scope, &[(repo.clone(), expected_epoch)], &targets)
+        self.retire_lineage_targets(&scope, &[(repo.clone(), expected_epoch)], &targets)
             .await?;
         for target in remaining {
             journal
@@ -417,12 +463,12 @@ pub trait CodeBindingRepository: crate::CodeReadLeases + Send + Sync {
                 .push(format!("completed:{}", target.record_id));
         }
         journal = self.save_reset_journal(journal).await?;
-        // The preview's ordinary-data digest is deliberately stable over the
-        // exact preservation set.  It is rechecked after retirement rather
-        // than treating target deletion as permission to alter ordinary data.
-        if journal.preservation_digests != journal.preview.preservation_digests {
+        // Re-read the durable ordinary-record inventory after mutation.
+        // This is intentionally independent of the owner-approved preview.
+        let durable_inventory = self.preservation_inventory(&scope, &repo).await?;
+        if durable_inventory != journal.preview.preservation_inventory {
             return Err(CoreError::Conflict {
-                reason: "ResetPreservationFailed: ordinary preservation digest changed".into(),
+                reason: "ResetPreservationFailed: ordinary preservation inventory changed".into(),
             });
         }
         journal.checkpoints.push("preservation-verified".into());
@@ -456,6 +502,9 @@ pub struct TargetLineage {
     /// span.
     #[serde(default)]
     pub span: Option<engram_domain::CanonicalSpan>,
+    /// Source-role contributor ids read from the durable lineage manifest.
+    #[serde(default)]
+    pub contributors: Vec<String>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]

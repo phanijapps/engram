@@ -2,7 +2,7 @@
 use crate::connection::{runtime, PgConnection};
 use engram_domain::{
     CodeAttempt, CodeBinding, CodeBindingError, CodeGeneration, CodeLineage, CodeResetJournal,
-    CodeResetPreview, IndexedSource, RepoId, Scope,
+    CodeResetPreview, IndexedSource, PreservationInventory, RepoId, Scope,
 };
 use engram_knowledge::{AcquisitionMode, CodeEligibility, RepositoryRegistration, StageReceipt};
 use tokio_postgres::IsolationLevel;
@@ -254,7 +254,8 @@ impl PgCodeBindingStore {
             target_ids: targets,
             targets: Vec::new(),
             ambiguity: Vec::new(),
-            preservation_digests: Vec::new(),
+            preservation_digests: vec![PreservationInventory::default().digest.clone()],
+            preservation_inventory: PreservationInventory::default(),
             binding_versions: vec![(repo.clone(), binding.version)],
             code_epoch: binding.epoch,
         };

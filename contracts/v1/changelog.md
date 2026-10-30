@@ -1,5 +1,9 @@
 # v1 Changelog
 
+## 2026-10-30 (reset preservation inventory)
+
+- Added optional `CodeResetPreview.preservationInventory`, `PreservationInventory`, and `PreservationEntry` definitions for preserved ordinary-record IDs, per-record content and contributor digests, and the aggregate inventory digest that is rechecked after reset retirement. Additive/compatible: existing data validates unchanged; consumers that do not read the optional field are unaffected.
+
 ## 2026-10-30 (project-bound code indexing activation)
 
 - Behavioral tightening / BREAKING for code callers: code selection and bound-code operations now require a durable, explicitly authorized binding. This is not a v1 schema change. Implementations do not infer a binding from a checkout, path, `HEAD`, or legacy record, and they do not automatically migrate legacy unbound code.

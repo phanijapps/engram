@@ -2349,6 +2349,160 @@
             "minLength": 1
           },
           "minItems": 1
+        },
+        "preservationInventory": {
+          "$ref": "#/$defs/PreservationInventory"
+        },
+        "targets": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/CodeResetTarget"
+          }
+        },
+        "ambiguity": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/AmbiguousOwnership"
+          }
+        },
+        "preservationDigests": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^[a-fA-F0-9]{64}$"
+          }
+        },
+        "bindingVersions": {
+          "type": "array",
+          "items": {
+            "type": "array",
+            "prefixItems": [
+              {
+                "type": "string",
+                "minLength": 1
+              },
+              {
+                "type": "integer",
+                "minimum": 0
+              }
+            ],
+            "minItems": 2,
+            "maxItems": 2
+          }
+        },
+        "codeEpoch": {
+          "type": "integer",
+          "minimum": 0
+        }
+      },
+      "additionalProperties": false
+    },
+    "CodeResetTarget": {
+      "type": "object",
+      "required": [
+        "recordId",
+        "storeId",
+        "fingerprint",
+        "lineage",
+        "snapshotRef",
+        "scanMetadataKeys",
+        "bindingVersion",
+        "codeEpoch"
+      ],
+      "properties": {
+        "recordId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "storeId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "fingerprint": {
+          "type": "string",
+          "minLength": 1
+        },
+        "lineage": {
+          "$ref": "#/$defs/CodeLineage"
+        },
+        "snapshotRef": {
+          "type": "string",
+          "minLength": 1
+        },
+        "scanMetadataKeys": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "bindingVersion": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "codeEpoch": {
+          "type": "integer",
+          "minimum": 0
+        }
+      },
+      "additionalProperties": false
+    },
+    "AmbiguousOwnership": {
+      "type": "object",
+      "required": [
+        "recordId",
+        "reason"
+      ],
+      "properties": {
+        "recordId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "reason": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "additionalProperties": false
+    },
+    "PreservationInventory": {
+      "type": "object",
+      "required": [
+        "records",
+        "digest"
+      ],
+      "properties": {
+        "records": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/PreservationEntry"
+          }
+        },
+        "digest": {
+          "type": "string",
+          "pattern": "^[a-fA-F0-9]{64}$"
+        }
+      },
+      "additionalProperties": false
+    },
+    "PreservationEntry": {
+      "type": "object",
+      "required": [
+        "recordId",
+        "contentDigest",
+        "contributorDigest"
+      ],
+      "properties": {
+        "recordId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "contentDigest": {
+          "type": "string",
+          "pattern": "^[a-fA-F0-9]{64}$"
+        },
+        "contributorDigest": {
+          "type": "string",
+          "pattern": "^[a-fA-F0-9]{64}$"
         }
       },
       "additionalProperties": false
@@ -2361,8 +2515,41 @@
         "preservationDigests"
       ],
       "properties": {
+        "resetId": {
+          "type": "string",
+          "minLength": 1
+        },
         "preview": {
           "$ref": "#/$defs/CodeResetPreview"
+        },
+        "previewHash": {
+          "type": "string",
+          "pattern": "^[a-fA-F0-9]{64}$"
+        },
+        "targetFingerprints": {
+          "type": "array",
+          "items": {
+            "type": "array",
+            "prefixItems": [
+              {
+                "type": "string",
+                "minLength": 1
+              },
+              {
+                "type": "string",
+                "minLength": 1
+              }
+            ],
+            "minItems": 2,
+            "maxItems": 2
+          }
+        },
+        "authorizingDecisions": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
         },
         "checkpoints": {
           "type": "array",

@@ -1,5 +1,6 @@
 //! Portable contracts for project-bound code indexing.
 use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(transparent)]
@@ -123,6 +124,62 @@ pub struct AmbiguousOwnership {
 /// This document names exact records and makes no cross-store atomicity claim.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct PreservationRecord {
+    pub record_id: String,
+    pub content_digest: String,
+    /// This digest binds the contributors that a surviving source shares with
+    /// this preserved record.
+    pub contributor_digest: String,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PreservationInventory {
+    pub records: Vec<PreservationRecord>,
+    pub digest: String,
+}
+
+impl Default for PreservationInventory {
+    fn default() -> Self {
+        let mut inventory = Self {
+            records: Vec::new(),
+            digest: String::new(),
+        };
+        inventory.digest = inventory
+            .content_hash()
+            .expect("empty inventory serializes");
+        inventory
+    }
+}
+
+impl PreservationInventory {
+    pub fn content_hash(&self) -> Result<String, CodeBindingError> {
+        let bytes =
+            serde_json::to_vec(&self.records).map_err(|_| CodeBindingError::InvalidResetPreview)?;
+        Ok(Sha256::digest(bytes)
+            .iter()
+            .map(|byte| format!("{byte:02x}"))
+            .collect())
+    }
+
+    pub fn validate(&self) -> Result<(), CodeBindingError> {
+        if self.digest.len() != 64
+            || !self.digest.bytes().all(|b| b.is_ascii_hexdigit())
+            || self.records.iter().any(|record| {
+                record.record_id.trim().is_empty()
+                    || record.content_digest.len() != 64
+                    || record.contributor_digest.len() != 64
+            })
+            || self.content_hash()? != self.digest
+        {
+            return Err(CodeBindingError::InvalidResetPreview);
+        }
+        Ok(())
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct CodeResetPreview {
     pub binding: CodeBinding,
     pub preview_hash: String,
@@ -134,6 +191,9 @@ pub struct CodeResetPreview {
     pub ambiguity: Vec<AmbiguousOwnership>,
     #[serde(default)]
     pub preservation_digests: Vec<String>,
+    /// Durable ordinary-record inventory that must survive this reset.
+    #[serde(default)]
+    pub preservation_inventory: PreservationInventory,
     #[serde(default)]
     pub binding_versions: Vec<(RepoId, u64)>,
     #[serde(default)]
@@ -321,6 +381,8 @@ impl CodeResetPreview {
                         .map(|target| &target.record_id)
                         .collect::<Vec<_>>()
                         != self.target_ids.iter().collect::<Vec<_>>()))
+            || self.preservation_inventory.validate().is_err()
+            || self.preservation_digests != vec![self.preservation_inventory.digest.clone()]
             || (!self.targets.is_empty() && self.content_hash()? != self.preview_hash)
         {
             return Err(CodeBindingError::InvalidResetPreview);

@@ -11,9 +11,7 @@ use engram_domain::{
 };
 use engram_integration::code_binding::ScopeSetAuthorizer;
 use engram_integration::{CapabilityPolicy, EmbeddingProviderConfig, EngramConfig, MigrationMode};
-use engram_knowledge::{
-    CodeBindingRepository, CodeReadLease, CodeReadLeases, RepositoryRegistration,
-};
+use engram_knowledge::{CodeReadLease, RepositoryRegistration, RetirementTarget};
 use engram_runtime::CoreError;
 use futures::executor::block_on;
 
@@ -188,12 +186,21 @@ mod task_023 {
             block_on(coordinator.journal_reset(&actor(), replay, "fixture-approved".into()))
                 .is_err()
         );
-        let mut ambiguous = preview;
-        ambiguous.targets[0].lineage.source_path.clear();
-        assert!(
-            ambiguous.validate().is_err(),
-            "ambiguous ownership cannot authorize deletion"
-        );
+        block_on(coordinator.store().put_lineage(
+            &scope,
+            "ambiguous-row",
+            CodeLineage {
+                repo_id: repo.clone(),
+                generation_id: "missing-durable-generation".into(),
+                source_path: "src/ambiguous.rs".into(),
+                contributors: vec!["unknown-owner".into()],
+                span: None,
+            },
+        ))
+        .expect("persist ambiguous Pg-cell lineage through the staging API");
+        let error = block_on(coordinator.preview_reset(&actor(), &scope, &repo))
+            .expect_err("stored ambiguous Pg-cell lineage blocks preview");
+        assert!(format!("{error:?}").contains("AmbiguousOwnership: ambiguous-row"));
     }
 
     #[test]
@@ -255,7 +262,7 @@ mod task_024 {
             applied
                 .checkpoints
                 .iter()
-                .any(|item| item == "reset-lane:source:done")
+                .any(|item| item == "reset-lane:source:not-required")
         );
         assert!(
             applied
@@ -267,6 +274,58 @@ mod task_024 {
         let resumed =
             block_on(coordinator.apply_reset(&actor(), approved)).expect("durable resume");
         assert_eq!(resumed.checkpoints, applied.checkpoints);
+    }
+
+    #[test]
+    #[ignore = "requires marked disposable PostgreSQL fixture"]
+    fn retirement_commit_carries_checkpoint_across_pg_recipe_reopen() {
+        let (coordinator, scope, repo, id) = seeded();
+        let preview =
+            block_on(coordinator.preview_reset(&actor(), &scope, &repo)).expect("preview");
+        let expected_epoch = preview.code_epoch;
+        let approved = block_on(coordinator.journal_reset(
+            &actor(),
+            journal(preview, &id),
+            "fixture-approved".into(),
+        ))
+        .expect("approve");
+        let lineage = block_on(coordinator.store().record_lineage(&scope, "target-a"))
+            .expect("target lineage")
+            .expect("target stored");
+        block_on(
+            coordinator
+                .store()
+                .retire_lineage_targets_with_reset_progress(
+                    &scope,
+                    &[(repo.clone(), expected_epoch)],
+                    &[RetirementTarget {
+                        repo_id: repo.0.clone(),
+                        generation_id: lineage.generation_id,
+                        record_id: "target-a".into(),
+                    }],
+                    Some((&approved.reset_id, &["target-a".into()])),
+                ),
+        )
+        .expect("commit retirement and reset checkpoint in the real Pg cell");
+        drop(coordinator);
+
+        let reopened_dir = tempfile::tempdir().expect("reopened recipe storage");
+        std::fs::create_dir_all(reopened_dir.path().join("storage")).expect("storage");
+        let reopened = engram_backend_pgvector::open(&config(reopened_dir.path()))
+            .expect("reopen real pg recipe")
+            .code_bindings()
+            .expect("reopened binding coordinator")
+            .with_authorizer(std::sync::Arc::new(ScopeSetAuthorizer::new(vec![
+                scope.clone(),
+            ])));
+        let recovered = block_on(reopened.apply_reset(&actor(), approved))
+            .expect("reopened coordinator recovers durable Pg checkpoint");
+        assert!(
+            recovered
+                .checkpoints
+                .iter()
+                .any(|checkpoint| checkpoint == "completed:target-a")
+        );
     }
 
     #[test]

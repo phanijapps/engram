@@ -1,7 +1,8 @@
 use async_trait::async_trait;
 use engram_domain::{
-    CodeAttempt, CodeAttemptState, CodeBinding, CodeGeneration, CodeLineage, CodeReceiptKind,
-    CodeResetJournal, RepoId, Scope,
+    AllowedUse, CodeAttempt, CodeAttemptState, CodeBinding, CodeGeneration, CodeLineage,
+    CodeReceiptKind, CodeResetJournal, Id, KnowledgeSource, Policy, Provenance, RepoId, Retention,
+    Scope, SourceDocument, SourceDocumentKind, SourceKind, Visibility,
 };
 use engram_integration::LexicalFeed;
 use engram_integration::code_binding::{
@@ -9,9 +10,10 @@ use engram_integration::code_binding::{
     ResetLaneLifecycle, ResetLaneOutcome, ScopeSetAuthorizer,
 };
 use engram_knowledge::{
-    CodeBindingRepository, CodeReadLease, CodeReadLeases, RepositoryRegistration, RetirementTarget,
+    CodeBindingRepository, CodeReadLease, CodeReadLeases, KnowledgeRepository,
+    RepositoryRegistration, RetirementTarget,
 };
-use engram_store_sqlite::knowledge::SqlCodeBindingRepository;
+use engram_store_sqlite::{SqlKnowledgeStore, knowledge::SqlCodeBindingRepository};
 use futures::executor::block_on;
 use std::sync::{Arc, Mutex};
 
@@ -256,16 +258,29 @@ mod task_023 {
         assert!(block_on(store.journal_reset(value)).is_err());
     }
     #[test]
-    fn ambiguous_lineage_blocks_preview() {
+    fn stored_ambiguous_lineage_blocks_preview_without_deletion_list() {
         let store = setup();
-        let mut preview = block_on(store.preview_reset(&scope(), &repo())).expect("preview");
-        preview.ambiguity.push(engram_domain::AmbiguousOwnership {
-            record_id: "legacy-row".into(),
-            reason: "record-level code ownership cannot be proven".into(),
-        });
+        block_on(store.put_lineage(
+            &scope(),
+            "ambiguous-row",
+            CodeLineage {
+                repo_id: repo(),
+                generation_id: "missing-durable-generation".into(),
+                source_path: "src/ambiguous.rs".into(),
+                contributors: vec!["unknown-owner".into()],
+                span: None,
+            },
+        ))
+        .expect("persist ambiguous lineage through the real staging API");
+        let error = block_on(store.preview_reset(&scope(), &repo()))
+            .expect_err("stored ambiguous lineage blocks preview");
+        assert!(format!("{error:?}").contains("AmbiguousOwnership: ambiguous-row"));
         assert!(
-            preview.validate().is_err(),
-            "an ambiguity report cannot carry a deletion list"
+            !block_on(store.record_lineage(&scope(), "target-a"))
+                .expect("target lineage")
+                .expect("target stored")
+                .retired,
+            "a blocked preview does not emit or execute a deletion list"
         );
     }
     #[test]
@@ -417,6 +432,87 @@ mod task_024 {
         )
         .with_reset_lanes(lanes)
         .with_preservation_source(source)
+    }
+
+    fn ordinary_source() -> KnowledgeSource {
+        KnowledgeSource {
+            id: Id::from("ordinary-preservation-source"),
+            kind: SourceKind::Filesystem,
+            scope: scope(),
+            name: "ordinary preservation fixture".into(),
+            uri: None,
+            version: None,
+            repository_key: None,
+            git_ref: None,
+            policy: Policy {
+                visibility: Visibility::Workspace,
+                retention: Retention::Durable,
+                sensitivity: None,
+                allowed_uses: vec![AllowedUse::Retrieval],
+                expires_at: None,
+                delete_mode: None,
+            },
+            provenance: Provenance {
+                source: "code-reset-recovery".into(),
+                actor: actor(),
+                observed_at: chrono::Utc::now(),
+                evidence: vec![],
+                derivations: vec![],
+                confidence: Some(1.0),
+                method: Some("test".into()),
+            },
+            created_at: chrono::Utc::now(),
+            updated_at: None,
+            metadata: None,
+        }
+    }
+
+    fn ordinary_document(content_hash: &str) -> SourceDocument {
+        SourceDocument {
+            id: Id::from("ordinary-preservation-document"),
+            source_id: Id::from("ordinary-preservation-source"),
+            kind: SourceDocumentKind::Markdown,
+            uri: None,
+            path: Some("ordinary.md".into()),
+            title: None,
+            mime_type: None,
+            language: None,
+            version: None,
+            content_hash: content_hash.into(),
+            provenance: ordinary_source().provenance,
+            policy: ordinary_source().policy,
+            created_at: chrono::Utc::now(),
+            updated_at: None,
+            metadata: None,
+        }
+    }
+
+    fn coordinator_with_real_knowledge(
+        bindings: SqlCodeBindingRepository,
+        lanes: Arc<dyn ResetLaneLifecycle>,
+    ) -> (CodeBindingCoordinator, Arc<SqlKnowledgeStore>) {
+        let bindings = Arc::new(bindings);
+        let knowledge = Arc::new(SqlKnowledgeStore::open_in_memory().expect("knowledge store"));
+        block_on(knowledge.put_source(ordinary_source())).expect("ordinary source");
+        block_on(knowledge.put_document(ordinary_document("sha256:ordinary-original")))
+            .expect("ordinary document");
+        let source = Arc::new(
+            engram_integration::code_binding::KnowledgePreservationRecordSource::new(
+                knowledge.clone() as Arc<dyn engram_knowledge::KnowledgeRepository>,
+                knowledge.clone() as Arc<dyn engram_integration::KnowledgeQuery>,
+                bindings.clone() as Arc<dyn CodeBindingRepository>,
+            ),
+        );
+        (
+            CodeBindingCoordinator::new(
+                bindings,
+                Arc::new(ScopeSetAuthorizer::new(vec![scope()])),
+                vec![],
+            )
+            .with_reset_lanes(lanes)
+            .with_preservation_source(source),
+            knowledge,
+        )
     }
 
     fn actor() -> engram_domain::Actor {
@@ -651,6 +747,40 @@ mod task_024 {
                 .iter()
                 .any(|item| item == "preservation:verified")
         );
+    }
+
+    #[test]
+    fn real_ordinary_record_mutation_or_deletion_between_preview_and_apply_is_denied() {
+        for delete in [false, true] {
+            let (coordinator, knowledge) = coordinator_with_real_knowledge(
+                setup(),
+                Arc::new(FailingLane {
+                    fail_vector_once: Mutex::new(false),
+                    calls: Mutex::new(Vec::new()),
+                }),
+            );
+            let preview = block_on(coordinator.preview_reset(&actor(), &scope(), &repo()))
+                .expect("preview from real knowledge store");
+            let approved = block_on(coordinator.journal_reset(
+                &actor(),
+                journal(preview),
+                "approved-by-fixture".into(),
+            ))
+            .expect("approval");
+            if delete {
+                assert!(block_on(knowledge.delete_document(
+                    &Id::from("ordinary-preservation-document"),
+                    &scope(),
+                ))
+                .expect("delete ordinary document"));
+            } else {
+                block_on(knowledge.put_document(ordinary_document("sha256:ordinary-corrupted")))
+                    .expect("corrupt ordinary document content");
+            }
+            let error = block_on(coordinator.apply_reset(&actor(), approved))
+                .expect_err("ordinary store drift denies apply");
+            assert!(format!("{error:?}").contains("ResetPreservationFailed"));
+        }
     }
 
     #[test]

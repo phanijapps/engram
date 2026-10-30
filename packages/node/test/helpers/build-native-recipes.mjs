@@ -151,6 +151,26 @@ function rebuildRecipeArtifacts(artifactsRoot) {
   return { paths, digests };
 }
 
+/**
+ * Selects the requested immutable artifact by content and verifies that the
+ * loader reports that same recipe and digest.  `loadRecipe` uses this exact
+ * path; injected seams keep the controls Docker-free.
+ */
+export function resolveRecipeArtifact(recipe, expectedDigest, { inspect, rebuild, load }) {
+  let artifact = inspect(recipe);
+  if (artifact.recipe !== recipe || artifact.digest !== expectedDigest) {
+    artifact = rebuild(recipe);
+  }
+  if (artifact.recipe !== recipe || artifact.digest !== expectedDigest) {
+    throw new Error("native recipe rebuild did not produce the selected identity");
+  }
+  const loaded = load(artifact);
+  if (loaded.recipe !== recipe || loaded.digest !== expectedDigest) {
+    throw new Error("loaded native recipe identity does not match selection");
+  }
+  return loaded;
+}
+
 /** Runs a callback inside the shared-target build transaction. */
 export function withRecipeArtifacts(callback, { artifactsRoot = sharedArtifactsRoot } = {}) {
   acquireSharedTargetLock();
@@ -171,8 +191,24 @@ export function ensureRecipeArtifacts(options) {
   return withRecipeArtifacts(({ paths, digests }) => ({ ...paths, digests }), options);
 }
 
-/** Loads one recipe's addon from a fresh immutable path. */
+/** Loads one recipe's addon from the selected immutable artifact path. */
 export function loadRecipe(recipe) {
   const require = createRequire(import.meta.url);
-  return withRecipeArtifacts(({ paths }) => require(paths[recipe]));
+  return withRecipeArtifacts(({ paths, digests, rebuild }) => {
+    const artifactFor = (artifacts, selectedRecipe) => ({
+      recipe: selectedRecipe,
+      path: artifacts.paths[selectedRecipe],
+      digest: artifacts.digests[selectedRecipe],
+    });
+    const loaded = resolveRecipeArtifact(recipe, digests[recipe], {
+      inspect: (selectedRecipe) => ({
+        recipe: selectedRecipe,
+        path: paths[selectedRecipe],
+        digest: digestArtifact(paths[selectedRecipe]),
+      }),
+      rebuild: (selectedRecipe) => artifactFor(rebuild(), selectedRecipe),
+      load: (artifact) => ({ ...artifact, addon: require(artifact.path) }),
+    });
+    return loaded.addon;
+  });
 }

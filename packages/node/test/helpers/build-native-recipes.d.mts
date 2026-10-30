@@ -11,11 +11,23 @@ type Recipe = (typeof RECIPES)[number];
 type RecipePaths = Record<Recipe, string>;
 type RecipeDigests = Record<Recipe, string>;
 type ArtifactOptions = { artifactsRoot?: string };
+type RecipeArtifact = { recipe: Recipe; path: string; digest: string };
 type ArtifactTransaction = {
   paths: RecipePaths;
   digests: RecipeDigests;
   rebuild: () => { paths: RecipePaths; digests: RecipeDigests };
 };
+
+/** Selects by content identity and verifies that loading preserves that identity. */
+export declare function resolveRecipeArtifact<T>(
+  recipe: Recipe,
+  expectedDigest: string,
+  seams: {
+    inspect: (recipe: Recipe) => RecipeArtifact;
+    rebuild: (recipe: Recipe) => RecipeArtifact;
+    load: (artifact: RecipeArtifact) => RecipeArtifact & { addon: T };
+  },
+): RecipeArtifact & { addon: T };
 
 /** Runs a callback while the selected artifact set remains locked. */
 export declare function withRecipeArtifacts<T>(

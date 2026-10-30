@@ -136,30 +136,42 @@ class BoundCodeMatrixControls(unittest.TestCase):
             self.assertEqual(receipt["executed_tests"], 0)
             self.assertIn("selected suite executed zero tests", receipt["output"])
 
-    def test_stale_artifact_invalidation_and_loaded_recipe_selection_are_synthetic(self):
-        calls = []
-        stale = matrix.NativeRecipeArtifact("sqlite", "/artifacts/sqlite.node", "old-content")
-        rebuilt = matrix.NativeRecipeArtifact("sqlite", "/artifacts/sqlite.node", "new-content")
-        loaded = matrix.NativeRecipeArtifact("sqlite", "/artifacts/sqlite.node", "new-content")
-        selected = matrix.resolve_native_recipe_artifact(
-            "sqlite",
-            "new-content",
-            lambda recipe: stale,
-            lambda recipe: calls.append(recipe) or rebuilt,
-            lambda path: loaded,
+    def test_helper_real_path_invalidates_stale_content_and_rejects_wrong_loaded_identity(self):
+        helper = matrix.ROOT / "packages/node/test/helpers/build-native-recipes.mjs"
+        program = """
+            const { resolveRecipeArtifact } = await import(process.argv[1]);
+            const stale = { recipe: "sqlite", path: "/artifacts/sqlite.node", digest: "old-content" };
+            const rebuilt = { recipe: "sqlite", path: "/artifacts/sqlite.node", digest: "new-content" };
+            const calls = [];
+            const selected = resolveRecipeArtifact("sqlite", "new-content", {
+              inspect: () => stale,
+              rebuild: (recipe) => { calls.push(recipe); return rebuilt; },
+              load: (artifact) => ({ ...artifact, addon: "loaded" }),
+            });
+            let wrongLoadedRejected = false;
+            try {
+              resolveRecipeArtifact("sqlite", "new-content", {
+                inspect: () => rebuilt,
+                rebuild: () => { throw new Error("fresh artifact must not rebuild"); },
+                load: (artifact) => ({ ...artifact, recipe: "pgvector", addon: "wrong" }),
+              });
+            } catch (error) {
+              wrongLoadedRejected = /loaded native recipe identity/.test(error.message);
+            }
+            process.stdout.write(JSON.stringify({ calls, selected, wrongLoadedRejected }));
+        """
+        result = subprocess.run(
+            ["node", "--input-type=module", "--eval", program, str(helper)],
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            check=True,
         )
-        self.assertEqual(calls, ["sqlite"], "content drift rebuilds despite an unchanged path")
-        self.assertEqual(selected, loaded)
-
-        wrong_loaded = matrix.NativeRecipeArtifact("pgvector", "/artifacts/sqlite.node", "new-content")
-        with self.assertRaisesRegex(ValueError, "loaded native recipe identity"):
-            matrix.resolve_native_recipe_artifact(
-                "sqlite",
-                "new-content",
-                lambda recipe: rebuilt,
-                lambda recipe: self.fail("fresh artifact must not rebuild"),
-                lambda path: wrong_loaded,
-            )
+        control = json.loads(result.stdout)
+        self.assertEqual(control["calls"], ["sqlite"], "content drift rebuilds despite an unchanged path and timestamp")
+        self.assertEqual(control["selected"]["recipe"], "sqlite")
+        self.assertEqual(control["selected"]["digest"], "new-content")
+        self.assertTrue(control["wrongLoadedRejected"], "the real helper path rejects a loaded recipe identity mismatch")
 
     def test_helper_argument_assembles_selected_recipe_only(self):
         argv = matrix.native_helper_argv("pgvector")

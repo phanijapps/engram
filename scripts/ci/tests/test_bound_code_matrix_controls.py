@@ -90,7 +90,7 @@ class BoundCodeMatrixControls(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "custody"):
                 matrix.load_private_pg_env(str(fixture), "ENGRAM_TEST_PG_URL")
 
-    def test_row_aware_mcp_mapping_and_reset_gap_are_explicit(self):
+    def test_row_aware_mcp_mapping_uses_transport_receipts(self):
         root = Path("/tmp/matrix-control")
         stdio = matrix.default_command(matrix.Row("binding", "sqlite", "mcp-stdio", True), root, "ENGRAM_TEST_PG_URL")
         oneshot = matrix.default_command(matrix.Row("backfill", "pgvector", "mcp-oneshot", True), root, "ENGRAM_TEST_PG_URL")
@@ -99,8 +99,8 @@ class BoundCodeMatrixControls(unittest.TestCase):
         self.assertEqual(stdio.marker, "stdio_dispatch_parity")
         self.assertIn("task_022::backfill_not_rescan", oneshot.argv)
         self.assertEqual(oneshot.marker, "backfill_not_rescan")
-        self.assertEqual(reset.surface, "coordinator-equivalent")
-        self.assertEqual(reset.transport_surface, "pending-r5")
+        self.assertEqual(reset.surface, "transport")
+        self.assertIsNone(reset.transport_surface)
 
     def test_stale_artifact_invalidation_and_loaded_recipe_selection_are_synthetic(self):
         root = Path("/tmp/matrix-control")

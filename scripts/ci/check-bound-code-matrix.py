@@ -130,7 +130,7 @@ def cargo_spec(package: str, target: str, filter_name: str, marker: str, backend
     argv = ["cargo", "test", "-p", package]
     if backend == "sqlite" and package == "engram-backend-sqlite":
         argv.extend(["--no-default-features"])
-    if backend == "pgvector":
+    if backend == "pgvector" and package in {"engram-mcp", "engram-backend-pgvector"}:
         argv.extend(["--features", "pgvector"])
     argv.extend(["--test", target, filter_name, "--", "--test-threads=1"])
     return CommandSpec(argv, marker)

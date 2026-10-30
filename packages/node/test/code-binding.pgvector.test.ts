@@ -21,14 +21,14 @@ import {
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 let pgvectorAddon: any;
 
-beforeAll(
-  () => {
-    pgvectorAddon = loadRecipe("pgvector");
-  },
-  15 * 60 * 1000
-);
+describe.skipIf(!process.env.ENGRAM_TEST_PG_URL)("task_020 pgvector recipe", () => {
+  beforeAll(
+    () => {
+      pgvectorAddon = loadRecipe("pgvector");
+    },
+    15 * 60 * 1000
+  );
 
-describe("task_020 pgvector recipe", () => {
   describeCodeBindingCases(() => pgvectorAddon, "pgvector");
 
   it("pgvector: sqlite_fallback_fails_durable_pg_assertion", () => {
@@ -48,11 +48,7 @@ describe("task_020 pgvector recipe", () => {
   });
 
   it("pgvector: real_disposable_pg_matrix", () => {
-    const url = process.env.ENGRAM_TEST_PG_URL;
-    if (!url) {
-      console.warn("[task_020] ENGRAM_TEST_PG_URL absent — real-Pg matrix skipped");
-      return;
-    }
+    const url = process.env.ENGRAM_TEST_PG_URL!;
     const base = mkdtempSync(join(tmpdir(), "task020-realpg-"));
     const unique = `${process.pid}-${Date.now()}`;
     const scope = { tenant: "task-020", workspace: "realpg" };

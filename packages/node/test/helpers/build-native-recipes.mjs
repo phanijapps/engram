@@ -240,3 +240,10 @@ export function loadRecipe(recipe) {
     return loaded.addon;
   });
 }
+
+if (process.argv[1] === fileURLToPath(import.meta.url)) {
+  const { digests } = ensureRecipeArtifacts();
+  for (const recipe of RECIPES) {
+    console.log(`[task_020 helper] built ${recipe} artifact digest: ${digests[recipe]}`);
+  }
+}

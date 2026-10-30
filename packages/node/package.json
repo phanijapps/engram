@@ -23,7 +23,7 @@
   "scripts": {
     "build": "tsup",
     "build:native": "node scripts/build-native.mjs",
-    "test": "vitest run",
+    "test": "node test/helpers/build-native-recipes.mjs && vitest run",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {

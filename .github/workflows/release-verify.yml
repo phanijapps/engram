@@ -42,9 +42,9 @@ jobs:
       - name: Test
         run: cargo test --workspace
       - name: Check vector FastEmbed feature tests
-        run: cargo check -p engram-store-vector --features fastembed-tests --tests
+        run: cargo check -p engram-store-sqlite --features fastembed-tests --tests
       - name: Clippy vector FastEmbed feature tests
-        run: cargo clippy -p engram-store-vector --features fastembed-tests --tests -- -D warnings
+        run: cargo clippy -p engram-store-sqlite --features fastembed-tests --tests -- -D warnings
 
   docs:
     name: Documentation

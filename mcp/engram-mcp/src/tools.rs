@@ -2607,11 +2607,15 @@ pub fn code_repo_register(app: &App, args: &Value) -> Result<Value, ToolError> {
         .filter(|path| !path.is_empty())
         .ok_or_else(|| invalid("missing required string arg 'path' (the authorized locator)"))?;
     let coordinator = app.provider.code_bindings().map_err(code_authority_error)?;
-    let registration = block_on(coordinator.store().register(RepositoryRegistration {
-        repo_id: repo.clone(),
-        locator_id: path.to_owned(),
-        acquisition: mode,
-    }))
+    let registration = block_on(coordinator.register(
+        &system_actor(),
+        &app.scope,
+        RepositoryRegistration {
+            repo_id: repo.clone(),
+            locator_id: path.to_owned(),
+            acquisition: mode,
+        },
+    ))
     .map_err(code_authority_error)?;
     Ok(protocol::text_content(format!(
         "REGISTERED {} (mode {}, locator on record — display URLs are never identity)",

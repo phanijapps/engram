@@ -117,15 +117,12 @@ pub struct CodeBindingCoordinator {
     clock: Arc<dyn engram_runtime::Clock>,
 }
 
-/// The recipe default authorizer (TASK-019): recipes are scope-agnostic —
-/// they serve whatever (actor, scope) a host presents — so this authorizer
-/// records authority by ACCEPTING recipe-level calls and defers deny
-/// decisions to the caller-authorization seams that DO have policy context:
-/// the retrieval-side `AuthorizedKnowledgeQuery`/`CodeEligibilityGate` seam
-/// (scope resolution) and host-injected authorizers (a host with a real
-/// deny policy constructs its own coordinator). It is not a bypass of
-/// those seams; it is the neutral no-policy default the plan's recipe
-/// matrix injects.
+/// The recipe default authorizer fails closed until a host injects policy.
+///
+/// Recipes do not own an actor-to-scope policy, so accepting a synthetic
+/// transport actor here would turn missing host policy into authorization.
+/// Hosts that expose code operations MUST construct the coordinator with an
+/// explicit [`CodeBindingAuthorizer`].
 pub struct RecipeDefaultAuthorizer;
 #[async_trait]
 impl CodeBindingAuthorizer for RecipeDefaultAuthorizer {
@@ -136,7 +133,9 @@ impl CodeBindingAuthorizer for RecipeDefaultAuthorizer {
         _repo: &RepoId,
         _action: CodeAuthorityAction,
     ) -> CoreResult<()> {
-        Ok(())
+        Err(engram_runtime::CoreError::PolicyDenied {
+            reason: "CodeAuthorizationRequired: inject a host CodeBindingAuthorizer".into(),
+        })
     }
 }
 impl CodeBindingCoordinator {

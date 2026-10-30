@@ -384,6 +384,9 @@ pub static DEFAULT_TOOLS: &[&str] = &[
     "code_bind",
     "code_status",
     "code_refresh",
+    "code_reset_preview",
+    "code_reset_apply",
+    "code_reset_resume",
     // Inspectable typed diagnostics — the capability report is part of the
     // default surface (TASK-021).
     "capability_report",

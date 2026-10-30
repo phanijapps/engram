@@ -2571,15 +2571,41 @@ impl Store {
 // `CapabilityUnsupported`, …) so transports can branch without parsing
 // prose.
 
-use engram_domain::RepoId;
+use engram_domain::{CodeResetJournal, RepoId, Scope};
 use engram_integration::code_binding::CodeBindingStatus;
 use engram_knowledge::{AcquisitionMode, RepositoryRegistration};
+use serde::Deserialize;
 
 /// Maps a coordinator/provider failure onto the typed tool-error envelope:
 /// the message carries the CoreError's own text (which begins with the
 /// stable typed reason) under the internal-error code.
 fn code_authority_error(error: engram_knowledge::CoreError) -> ToolError {
     internal(error.to_string())
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct CodeResetPreviewRequest {
+    scope: Scope,
+    repo: RepoId,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct CodeResetApplyRequest {
+    journal: CodeResetJournal,
+    decision: String,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct CodeResetResumeRequest {
+    journal: CodeResetJournal,
+}
+
+fn reset_request<T: serde::de::DeserializeOwned>(args: &Value) -> Result<T, ToolError> {
+    serde_json::from_value(args.clone())
+        .map_err(|error| invalid(format!("invalid reset request: {error}")))
 }
 
 fn req_repo(args: &Value) -> Result<RepoId, ToolError> {
@@ -2628,6 +2654,43 @@ pub fn code_repo_register(app: &App, args: &Value) -> Result<Value, ToolError> {
             AcquisitionMode::ConfiguredRemote => "configured-remote",
         },
     )))
+}
+
+/// `code_reset_preview`: create the exact reset proposal through the reset-authorized coordinator seam.
+pub fn code_reset_preview(app: &App, args: &Value) -> Result<Value, ToolError> {
+    let request: CodeResetPreviewRequest = reset_request(args)?;
+    let coordinator = app.provider.code_bindings().map_err(code_authority_error)?;
+    let preview =
+        block_on(coordinator.preview_reset(&system_actor(), &request.scope, &request.repo))
+            .map_err(code_authority_error)?;
+    Ok(protocol::text_content(
+        serde_json::to_string(&preview).expect("reset preview serializes"),
+    ))
+}
+
+/// `code_reset_apply`: persist the owner-approved journal and execute its reset state machine.
+pub fn code_reset_apply(app: &App, args: &Value) -> Result<Value, ToolError> {
+    let request: CodeResetApplyRequest = reset_request(args)?;
+    let coordinator = app.provider.code_bindings().map_err(code_authority_error)?;
+    let journal =
+        block_on(coordinator.journal_reset(&system_actor(), request.journal, request.decision))
+            .map_err(code_authority_error)?;
+    let applied = block_on(coordinator.apply_reset(&system_actor(), journal))
+        .map_err(code_authority_error)?;
+    Ok(protocol::text_content(
+        serde_json::to_string(&applied).expect("reset journal serializes"),
+    ))
+}
+
+/// `code_reset_resume`: retry pending or failed lanes from the immutable durable journal.
+pub fn code_reset_resume(app: &App, args: &Value) -> Result<Value, ToolError> {
+    let request: CodeResetResumeRequest = reset_request(args)?;
+    let coordinator = app.provider.code_bindings().map_err(code_authority_error)?;
+    let resumed = block_on(coordinator.apply_reset(&system_actor(), request.journal))
+        .map_err(code_authority_error)?;
+    Ok(protocol::text_content(
+        serde_json::to_string(&resumed).expect("reset journal serializes"),
+    ))
 }
 
 /// `code_bind`: bind a repository's branch for the launch scope.
@@ -2766,6 +2829,24 @@ pub fn register_code_tools(registry: &mut crate::registry::ToolRegistry<App>) {
             "required": ["repo", "path"]
         }),
         handler: code_repo_register,
+    });
+    registry.register(ToolRecord {
+        name: "code_reset_preview",
+        description: "Create an exact reset preview for one bound repository through the reset-authorized coordinator.",
+        input_schema: json!({"type":"object", "properties":{"scope":{"type":"object"}, "repo":{"type":"string"}}, "required":["scope", "repo"]}),
+        handler: code_reset_preview,
+    });
+    registry.register(ToolRecord {
+        name: "code_reset_apply",
+        description: "Persist an owner-approved reset journal and apply its durable reset state machine.",
+        input_schema: json!({"type":"object", "properties":{"journal":{"type":"object"}, "decision":{"type":"string"}}, "required":["journal", "decision"]}),
+        handler: code_reset_apply,
+    });
+    registry.register(ToolRecord {
+        name: "code_reset_resume",
+        description: "Resume pending or failed lanes from an immutable owner-approved reset journal.",
+        input_schema: json!({"type":"object", "properties":{"journal":{"type":"object"}}, "required":["journal"]}),
+        handler: code_reset_resume,
     });
     registry.register(ToolRecord {
         name: "code_bind",

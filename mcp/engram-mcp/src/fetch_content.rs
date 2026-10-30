@@ -851,6 +851,7 @@ mod tests {
                         start_line: *start_line,
                         end_line: *end_line,
                     }),
+                    contributors: Vec::new(),
                 });
             }
         }
@@ -873,6 +874,7 @@ mod tests {
                         start_line,
                         end_line,
                     }),
+                    contributors: Vec::new(),
                 });
             }
         }
@@ -890,6 +892,7 @@ mod tests {
                     retired: true,
                     source_path: "src/bound.py".to_owned(),
                     span: None,
+                    contributors: Vec::new(),
                 });
             }
         }
@@ -1065,6 +1068,7 @@ mod tests {
                 retired: false,
                 source_path: "src/bound.py".to_owned(),
                 span: *self.default_span.lock().expect("default span lock"),
+                contributors: Vec::new(),
             }];
             lineage.extend(self.extra_lineage.lock().expect("lineage lock").clone());
             Ok(lineage)

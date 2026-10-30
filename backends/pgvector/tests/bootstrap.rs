@@ -11,9 +11,49 @@
 
 use engram_backend_pgvector::open;
 use engram_domain::ScopeMappingStrategy;
-use engram_integration::{CapabilityPolicy, EmbeddingProviderConfig, EngramConfig, MigrationMode};
+use engram_integration::{
+    CapabilityPolicy, EmbeddingProviderConfig, EngramConfig, EngramProvider, MigrationMode,
+};
+use engram_store_pgvector::PgConnection;
 use futures::executor::block_on;
 use std::path::PathBuf;
+
+/// Run-unique scopes and identifiers prevent durable shared-fixture state from
+/// changing any bootstrap assertion on a later invocation.
+fn unique_suffix() -> String {
+    let nanos = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|duration| duration.as_nanos())
+        .unwrap_or(0);
+    format!("{}-{nanos}", std::process::id())
+}
+
+fn test_scope(workspace: &str) -> engram_domain::Scope {
+    engram_domain::Scope {
+        tenant: format!("pgvector-test-{}", unique_suffix()),
+        subject: None,
+        workspace: Some(workspace.to_owned()),
+        session: None,
+        environment: Some("test".to_owned()),
+    }
+}
+
+fn pg_url() -> String {
+    std::env::var("ENGRAM_TEST_PG_URL")
+        .unwrap_or_else(|_| "postgres://engram:engram@localhost:5432/engram".to_owned())
+}
+
+/// Drop the vector data and its durable embedding-space identity before every
+/// recipe open, so prior ignored tests cannot constrain this test's model or
+/// vector dimensions.
+fn reset_vector_store() {
+    let connection = PgConnection::connect(&pg_url()).expect("connect to reset vector store");
+    connection
+        .block_on(connection.client.batch_execute(
+            "DROP TABLE IF EXISTS vectors; DROP TABLE IF EXISTS vector_embedding_space;",
+        ))
+        .expect("reset vectors and vector_embedding_space tables");
+}
 
 fn pg_config() -> EngramConfig {
     EngramConfig::new(
@@ -31,7 +71,12 @@ fn pg_config() -> EngramConfig {
         MigrationMode::DryRun,
         CapabilityPolicy::FailClosed,
     )
-    .with_pgvector("postgres://engram:engram@localhost:5432/engram")
+    .with_pgvector(pg_url())
+}
+
+fn open_bootstrap_recipe() -> EngramProvider {
+    reset_vector_store();
+    open(&pg_config()).expect("recipe opens against reset Docker pgvector")
 }
 
 #[test]
@@ -39,8 +84,7 @@ fn pg_config() -> EngramConfig {
 fn pg_recipe_opens_and_reports_capabilities() {
     use engram_domain::CapabilityState;
 
-    let config = pg_config();
-    let provider = open(&config).expect("recipe opens against Docker pgvector");
+    let provider = open_bootstrap_recipe();
 
     // Hot-path capabilities must be wired.
     let caps = provider.capabilities();
@@ -65,19 +109,13 @@ fn pg_recipe_opens_and_reports_capabilities() {
 fn pg_recipe_knowledge_write_read_round_trip() {
     use engram_domain::*;
 
-    let config = pg_config();
-    let provider = open(&config).expect("recipe opens");
+    let provider = open_bootstrap_recipe();
     let repo = provider.require_knowledge().expect("knowledge handle");
 
-    let scope = Scope {
-        tenant: "pgvector-test".to_owned(),
-        subject: None,
-        workspace: Some("test".to_owned()),
-        session: None,
-        environment: Some("test".to_owned()),
-    };
+    let scope = test_scope("entity-round-trip");
+    let entity_id = Id::from(format!("pg-rt-entity-{}", unique_suffix()));
     let entity = KnowledgeEntity {
-        id: Id::from("pg-rt-entity"),
+        id: entity_id.clone(),
         graph_id: None,
         kind: EntityKind::Concept,
         name: "pgvector-round-trip".to_owned(),
@@ -113,8 +151,7 @@ fn pg_recipe_knowledge_write_read_round_trip() {
 
     // Read back — proves the entity persisted (get_entity now works after the
     // trait-default fix).
-    let read_back =
-        block_on(repo.get_entity(&Id::from("pg-rt-entity"), &scope)).expect("get_entity");
+    let read_back = block_on(repo.get_entity(&entity_id, &scope)).expect("get_entity");
     assert!(read_back.is_some(), "entity must persist after put_entity");
     assert_eq!(
         read_back.unwrap().name,
@@ -122,7 +159,7 @@ fn pg_recipe_knowledge_write_read_round_trip() {
         "read-back entity matches"
     );
 
-    block_on(repo.delete_entity(&Id::from("pg-rt-entity"), &scope)).expect("delete_entity");
+    block_on(repo.delete_entity(&entity_id, &scope)).expect("delete_entity");
 
     println!("pgvector recipe knowledge round-trip: put → delete ✓");
 }
@@ -132,22 +169,19 @@ fn pg_recipe_knowledge_write_read_round_trip() {
 fn pg_recipe_relationship_round_trip() {
     use engram_domain::*;
 
-    let config = pg_config();
-    let provider = open(&config).expect("recipe opens");
+    let provider = open_bootstrap_recipe();
     let repo = provider.require_knowledge().expect("knowledge handle");
 
-    let scope = Scope {
-        tenant: "pgvector-test".to_owned(),
-        subject: None,
-        workspace: Some("test".to_owned()),
-        session: None,
-        environment: Some("test".to_owned()),
-    };
+    let scope = test_scope("relationship-round-trip");
+    let suffix = unique_suffix();
+    let relationship_id = Id::from(format!("pg-rt-rel-{suffix}"));
+    let source_id = Id::from(format!("pg-rt-src-{suffix}"));
+    let destination_id = Id::from(format!("pg-rt-dst-{suffix}"));
     let rel = KnowledgeRelationship {
-        id: Id::from("pg-rt-rel"),
+        id: relationship_id.clone(),
         graph_id: None,
         subject: EntityRef {
-            id: Some(Id::from("pg-rt-src")),
+            id: Some(source_id),
             kind: None,
             name: None,
             aliases: Vec::new(),
@@ -155,7 +189,7 @@ fn pg_recipe_relationship_round_trip() {
         predicate: "depends_on".to_owned(),
         code_resolution: None,
         object: EntityRef {
-            id: Some(Id::from("pg-rt-dst")),
+            id: Some(destination_id),
             kind: None,
             name: None,
             aliases: Vec::new(),
@@ -184,11 +218,9 @@ fn pg_recipe_relationship_round_trip() {
     };
 
     block_on(repo.put_relationship(rel)).expect("put_relationship");
-    let read =
-        block_on(repo.get_relationship(&Id::from("pg-rt-rel"), &scope)).expect("get_relationship");
+    let read = block_on(repo.get_relationship(&relationship_id, &scope)).expect("get_relationship");
     assert!(read.is_some(), "relationship must persist after put");
-    block_on(repo.delete_relationship(&Id::from("pg-rt-rel"), &scope))
-        .expect("delete_relationship");
+    block_on(repo.delete_relationship(&relationship_id, &scope)).expect("delete_relationship");
 
     println!("pgvector recipe relationship round-trip: put → get → delete ✓");
 }
@@ -203,22 +235,19 @@ fn pg_recipe_relationship_round_trip() {
 fn pg_recipe_knowledge_query_lists_scope() {
     use engram_domain::*;
 
-    let config = pg_config();
-    let provider = open(&config).expect("recipe opens");
+    let provider = open_bootstrap_recipe();
     let repo = provider.require_knowledge().expect("knowledge handle");
     let query = provider
         .require_knowledge_query()
         .expect("knowledge_query handle wired (PS1)");
 
-    let scope = Scope {
-        tenant: "pgvector-test".to_owned(),
-        subject: None,
-        workspace: Some("query-test".to_owned()),
-        session: None,
-        environment: None,
-    };
+    let scope = test_scope("query-surface");
+    let suffix = unique_suffix();
+    let entity_id = Id::from(format!("pg-q-entity-{suffix}"));
+    let relationship_id = Id::from(format!("pg-q-rel-{suffix}"));
+    let target_id = Id::from(format!("pg-q-entity-2-{suffix}"));
     let entity = KnowledgeEntity {
-        id: Id::from("pg-q-entity"),
+        id: entity_id.clone(),
         graph_id: None,
         kind: EntityKind::Concept,
         name: "query-surface-probe".to_owned(),
@@ -249,7 +278,7 @@ fn pg_recipe_knowledge_query_lists_scope() {
         archived_at: None,
     };
     let rel = KnowledgeRelationship {
-        id: Id::from("pg-q-rel"),
+        id: relationship_id.clone(),
         graph_id: None,
         subject: EntityRef {
             id: Some(entity.id.clone()),
@@ -260,7 +289,7 @@ fn pg_recipe_knowledge_query_lists_scope() {
         predicate: "calls".to_owned(),
         code_resolution: None,
         object: EntityRef {
-            id: Some(Id::from("pg-q-entity-2")),
+            id: Some(target_id),
             kind: None,
             name: Some("callee-probe".to_owned()),
             aliases: Vec::new(),
@@ -303,8 +332,8 @@ fn pg_recipe_knowledge_query_lists_scope() {
     );
 
     // Cleanup so the test is re-runnable.
-    block_on(repo.delete_relationship(&Id::from("pg-q-rel"), &scope)).expect("delete_relationship");
-    block_on(repo.delete_entity(&Id::from("pg-q-entity"), &scope)).expect("delete_entity");
+    block_on(repo.delete_relationship(&relationship_id, &scope)).expect("delete_relationship");
+    block_on(repo.delete_entity(&entity_id, &scope)).expect("delete_entity");
 
     println!(
         "pgvector recipe knowledge_query: entities + relationships listed via the query handle ✓"
@@ -327,8 +356,7 @@ fn pg_recipe_recall_fuses_vector_lane() {
     let repo_root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
     std::env::set_current_dir(&repo_root).expect("cd to repo root");
 
-    let config = pg_config();
-    let provider = open(&config).expect("recipe opens (fastembed)");
+    let provider = open_bootstrap_recipe();
 
     // The embedding provider must be wired for the vector lane to exist.
     let embedder = provider
@@ -337,19 +365,17 @@ fn pg_recipe_recall_fuses_vector_lane() {
     let vectors = provider.require_vectors().expect("vector index wired");
     let knowledge = provider.require_knowledge().expect("knowledge handle");
 
-    let scope = Scope {
-        tenant: "pgvector-test".to_owned(),
-        subject: None,
-        workspace: Some("vector-lane".to_owned()),
-        session: None,
-        environment: None,
-    };
+    let scope = test_scope("vector-lane");
+    let suffix = unique_suffix();
+    let chunk_id = Id::from(format!("pg-vec-chunk-{suffix}"));
+    let document_id = Id::from(format!("pg-vec-doc-{suffix}"));
+    let source_id = Id::from(format!("pg-vec-src-{suffix}"));
 
     // A chunk whose text shares vocabulary with the query but no exact match.
     let chunk = KnowledgeChunk {
-        id: Id::from("pg-vec-chunk-1"),
-        document_id: Id::from("pg-vec-doc-1"),
-        source_id: Id::from("pg-vec-src-1"),
+        id: chunk_id.clone(),
+        document_id: document_id.clone(),
+        source_id: source_id.clone(),
         kind: KnowledgeChunkKind::CodeBlock,
         text: "pub fn fibonacci(n: u64) -> u64 { match n { 0 => 0, 1 => 1, _ => fibonacci(n-1) + fibonacci(n-2) } }"
             .to_owned(),
@@ -387,7 +413,7 @@ fn pg_recipe_recall_fuses_vector_lane() {
     };
     // The chunks table is FK-bound: parent source + document must exist first.
     let src = KnowledgeSource {
-        id: Id::from("pg-vec-src-1"),
+        id: source_id,
         kind: SourceKind::Filesystem,
         scope: scope.clone(),
         name: "vector-lane-test".to_owned(),
@@ -400,7 +426,7 @@ fn pg_recipe_recall_fuses_vector_lane() {
         metadata: None,
     };
     let doc = SourceDocument {
-        id: Id::from("pg-vec-doc-1"),
+        id: document_id,
         source_id: src.id.clone(),
         kind: SourceDocumentKind::Code,
         uri: None,
@@ -455,7 +481,7 @@ fn pg_recipe_recall_fuses_vector_lane() {
         payload
             .items
             .iter()
-            .any(|r| r.target_id == "pg-vec-chunk-1"),
+            .any(|r| r.target_id == chunk_id.to_string()),
         "vector lane must surface the chunk: {:?}",
         payload
             .items
@@ -505,13 +531,7 @@ fn pg_recipe_sqlite_export_import_round_trip() {
         CapabilityPolicy::FailClosed,
     );
     let sqlite = EngramProvider::open(&sqlite_config).expect("sqlite provider");
-    let scope = Scope {
-        tenant: "default".to_owned(),
-        subject: None,
-        workspace: Some("migration-demo".to_owned()),
-        session: None,
-        environment: None,
-    };
+    let scope = test_scope("migration-demo");
     let now = chrono::Utc::now();
     let policy = Policy {
         visibility: Visibility::Workspace,
@@ -578,8 +598,7 @@ fn pg_recipe_sqlite_export_import_round_trip() {
 
     // ---- 3. Import into Postgres through the recipe's ports (typed records
     //      rebuilt from the export's JSON strings — same domain contracts).
-    let config = pg_config();
-    let pg = open(&config).expect("recipe opens");
+    let pg = open_bootstrap_recipe();
     let pg_memory = pg.require_memory().expect("pg memory");
     for record in &data.memories {
         // The import-record shape is the flattened export (text + scope JSON +

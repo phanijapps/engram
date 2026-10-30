@@ -799,6 +799,8 @@ mod a5_collector {
         /// participation (live segments > 1), five-key multiplicity, the
         /// excluded-only-token isolation, duplicate/tie determinism and the
         /// zero-limit contract.
+        // clippy roll 2026-10: matrix assertion signature mirrors independent dimensions.
+        #[allow(clippy::too_many_arguments)]
         fn assert_matrix(
             handle: &LexicalIndex,
             label: &str,

@@ -18,8 +18,8 @@ use std::sync::{Arc, Mutex};
 use async_trait::async_trait;
 use chrono::Utc;
 use engram_domain::{
-    Actor, ActorKind, EntityKind, EntityRef, Id, KnowledgeEntity, KnowledgeRelationship, Policy,
-    Provenance, Requester, RetrievalRequest, RetrievalTargetType, Scope, Visibility,
+    Actor, ActorKind, EntityKind, EntityRef, Id, KnowledgeEntity, KnowledgeRelationship,
+    Provenance, Requester, RetrievalRequest, RetrievalTargetType, Scope,
 };
 use engram_retrieval::{
     BoundBinding, BoundCodeEligibility, CodeEligibilityResolver, DurableLineage,
@@ -185,24 +185,6 @@ fn provenance() -> Provenance {
     }
 }
 
-fn policy() -> Policy {
-    Policy {
-        visibility: Visibility::Workspace,
-        ..policy_rest()
-    }
-}
-
-fn policy_rest() -> Policy {
-    Policy {
-        visibility: Visibility::Workspace,
-        retention: engram_domain::Retention::Durable,
-        sensitivity: None,
-        allowed_uses: vec![engram_domain::AllowedUse::Retrieval],
-        expires_at: None,
-        delete_mode: None,
-    }
-}
-
 fn entity(id: &str, name: &str, kind: EntityKind) -> KnowledgeEntity {
     KnowledgeEntity {
         id: Id::from(id),
@@ -327,7 +309,7 @@ fn empty_filter_with_keys(keys: Vec<String>) -> engram_domain::QueryFilter {
 }
 
 /// The store KEEPS serving every record; only eligibility flips.
-
+///
 /// Like [`entity`] but carrying metadata stamps — FORGED/null/foreign
 /// variations used to prove stamps are never classification authority.
 fn stamped_entity(

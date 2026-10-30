@@ -446,7 +446,7 @@ mod task_019 {
             block_on(coordinator.journal_reset(&actor(), journal, "recipe-test-approved".into()))
                 .expect("journal");
         let applied = block_on(coordinator.apply_reset(&actor(), approved)).expect("apply");
-        for lane in ["lexical", "vector", "associative", "community", "source"] {
+        for lane in ["lexical", "vector", "associative", "community"] {
             assert!(
                 applied
                     .checkpoints
@@ -454,6 +454,13 @@ mod task_019 {
                     .any(|checkpoint| checkpoint == &format!("reset-lane:{lane}:done"))
             );
         }
+        assert!(
+            applied
+                .checkpoints
+                .iter()
+                .any(|checkpoint| checkpoint == "reset-lane:source:not-required"),
+            "r5 retains immutable snapshots as durable history rather than falsely marking release done"
+        );
     }
 
     /// unavailable_optional_capabilities: optional lanes the recipe did NOT

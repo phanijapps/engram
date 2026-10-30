@@ -38,6 +38,10 @@ pub trait LexicalFeed: Send + Sync {
     /// `doc` contribution, a surviving generation) keep their tokens.
     async fn retire_generation(&self, generation_id: &str) -> CoreResult<usize>;
 
+    /// Removes only this target's contribution from the retired generation.
+    /// Other contributor documents for the target remain searchable.
+    async fn retire_code_target(&self, target_id: &str, generation_id: &str) -> CoreResult<usize>;
+
     /// Removes every contributor document for one target id (task_014
     /// target-ID deletion).
     async fn delete_target(&self, target_id: &str) -> CoreResult<()>;

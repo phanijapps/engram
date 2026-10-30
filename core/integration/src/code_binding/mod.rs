@@ -17,7 +17,7 @@ use engram_knowledge::{CodeBindingRepository, CoreResult, StageReceipt};
 pub use ingestion::{CodeIngestionLanes, IngestedGeneration};
 pub use preservation::{KnowledgePreservationRecordSource, PreservationRecordSource};
 pub use publication::CodeRebuildRequest;
-pub use reset::{RecipeResetLaneLifecycle, ResetLane, ResetLaneLifecycle};
+pub use reset::{RecipeResetLaneLifecycle, ResetLane, ResetLaneLifecycle, ResetLaneOutcome};
 pub use source::{BoundParticipant, ExactReadCandidate, ParticipantExactSource};
 pub use status::{
     CheckpointGeneration, CodeBindingCheckpoint, CodeBindingStatus, CodeFreshnessState,

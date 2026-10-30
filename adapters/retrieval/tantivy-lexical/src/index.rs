@@ -13,7 +13,7 @@ use tantivy::{
     collector::TopDocs,
     directory::MmapDirectory,
     doc,
-    query::QueryParser,
+    query::{BooleanQuery, Occur, QueryParser, TermQuery},
     schema::{Field, STORED, STRING, Schema, TEXT, Value},
 };
 
@@ -370,6 +370,48 @@ impl LexicalIndex {
             .unwrap_or(0);
         let mut writer = self.writer.lock().expect("lexical writer lock poisoned");
         writer.delete_term(term);
+        writer.commit()?;
+        Ok(retired)
+    }
+
+    /// Removes the one `(target, contributor)` document without touching the
+    /// target's ordinary or surviving-generation contributions.
+    pub fn retire_target_contributor(
+        &self,
+        target_id: &str,
+        contributor_key: &str,
+    ) -> tantivy::Result<usize> {
+        if target_id.trim().is_empty() || contributor_key.trim().is_empty() {
+            return Err(tantivy::TantivyError::InvalidArgument(
+                "lexical target and contributor keys must not be empty".to_owned(),
+            ));
+        }
+        self.reader.reload()?;
+        let target = Term::from_field_text(self.target_id_field, target_id);
+        let contributor = Term::from_field_text(self.eligibility_field, contributor_key);
+        let query = BooleanQuery::new(vec![
+            (
+                Occur::Must,
+                Box::new(TermQuery::new(
+                    target.clone(),
+                    tantivy::schema::IndexRecordOption::Basic,
+                )),
+            ),
+            (
+                Occur::Must,
+                Box::new(TermQuery::new(
+                    contributor.clone(),
+                    tantivy::schema::IndexRecordOption::Basic,
+                )),
+            ),
+        ]);
+        let retired = self
+            .reader
+            .searcher()
+            .search(&query, &tantivy::collector::Count)
+            .unwrap_or(0);
+        let mut writer = self.writer.lock().expect("lexical writer lock poisoned");
+        writer.delete_query(Box::new(query))?;
         writer.commit()?;
         Ok(retired)
     }

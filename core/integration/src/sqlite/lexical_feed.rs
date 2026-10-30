@@ -75,6 +75,15 @@ impl LexicalFeed for SqlLexicalFeed {
             })
     }
 
+    async fn retire_code_target(&self, target_id: &str, generation_id: &str) -> CoreResult<usize> {
+        self.index
+            .retire_target_contributor(target_id, &code_contributor_key(generation_id))
+            .map_err(|e| CoreError::Adapter {
+                adapter: "lexical".to_string(),
+                message: e.to_string(),
+            })
+    }
+
     async fn delete_target(&self, target_id: &str) -> CoreResult<()> {
         self.index
             .delete(target_id)

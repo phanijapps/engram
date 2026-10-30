@@ -11,7 +11,6 @@ use engram_domain::{
     Actor, CodeResetJournal, CodeResetPreview, CodeResetTarget, PreservationRecord, RepoId, Scope,
 };
 use engram_runtime::{CoreError, CoreResult};
-use std::collections::BTreeSet;
 use std::sync::Arc;
 
 /// One integration lane participating in reset cleanup and rebuild.
@@ -25,6 +24,13 @@ pub enum ResetLane {
     Community,
     Source,
 }
+/// The durable result of one lane attempt.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ResetLaneOutcome {
+    Completed,
+    NotRequired,
+}
+
 impl ResetLane {
     const ALL: [Self; 5] = [
         Self::Lexical,
@@ -54,7 +60,7 @@ pub trait ResetLaneLifecycle: Send + Sync {
         scope: &Scope,
         retired: &[CodeResetTarget],
         preserved: &[PreservationRecord],
-    ) -> CoreResult<()>;
+    ) -> CoreResult<ResetLaneOutcome>;
 }
 
 /// Compatibility construction is intentionally inert; a recipe that exposes
@@ -68,8 +74,8 @@ impl ResetLaneLifecycle for NoopResetLaneLifecycle {
         _scope: &Scope,
         _retired: &[CodeResetTarget],
         _preserved: &[PreservationRecord],
-    ) -> CoreResult<()> {
-        Ok(())
+    ) -> CoreResult<ResetLaneOutcome> {
+        Ok(ResetLaneOutcome::Completed)
     }
 }
 
@@ -102,17 +108,15 @@ impl ResetLaneLifecycle for RecipeResetLaneLifecycle {
         lane: ResetLane,
         scope: &Scope,
         retired: &[CodeResetTarget],
-        _preserved: &[PreservationRecord],
-    ) -> CoreResult<()> {
+        preserved: &[PreservationRecord],
+    ) -> CoreResult<ResetLaneOutcome> {
         match lane {
             ResetLane::Lexical => {
                 if let Some(lexical) = &self.lexical {
-                    let generations: BTreeSet<_> = retired
-                        .iter()
-                        .map(|target| target.lineage.generation_id.as_str())
-                        .collect();
-                    for generation in generations {
-                        lexical.retire_generation(generation).await?;
+                    for target in retired {
+                        lexical
+                            .retire_code_target(&target.record_id, &target.lineage.generation_id)
+                            .await?;
                     }
                 }
             }
@@ -125,27 +129,37 @@ impl ResetLaneLifecycle for RecipeResetLaneLifecycle {
                     }
                 }
             }
-            // These lanes derive their candidate structures from the shared graph snapshot.
-            // Invalidate after durable retirement so the next read recomputes from preserved records.
+            // r5's derived graph records recompute lazily at the next serving read.
+            // This is the same cache that the SQLite serving lanes use, so its
+            // invalidation makes every preserved contributor re-enter the r5
+            // eligibility-aware recomputation and removes records with none.
             ResetLane::Associative | ResetLane::Community => {
-                self.graph_cache.invalidate(scope).await
+                let _surviving_records = preserved
+                    .iter()
+                    .filter(|record| {
+                        !retired
+                            .iter()
+                            .any(|target| target.record_id == record.record_id)
+                    })
+                    .count();
+                self.graph_cache.invalidate(scope).await;
             }
-            // Retained source reads are guarded by the durable eligibility/binding view.
-            // Snapshots can be shared by immutable commits, so reset never removes a blob by path.
-            ResetLane::Source => {}
+            // r5 retains immutable snapshots as durable history, including the
+            // last-good generation; no release seam exists in this architecture.
+            ResetLane::Source => return Ok(ResetLaneOutcome::NotRequired),
         }
-        Ok(())
+        Ok(ResetLaneOutcome::Completed)
     }
 }
 
 fn state_prefix(lane: ResetLane) -> String {
     format!("reset-lane:{}:", lane.name())
 }
-fn is_done(journal: &CodeResetJournal, lane: ResetLane) -> bool {
-    journal
-        .checkpoints
-        .iter()
-        .any(|c| c == &format!("{}done", state_prefix(lane)))
+fn is_terminal(journal: &CodeResetJournal, lane: ResetLane) -> bool {
+    let prefix = state_prefix(lane);
+    journal.checkpoints.iter().any(|checkpoint| {
+        checkpoint == &format!("{prefix}done") || checkpoint == &format!("{prefix}not-required")
+    })
 }
 fn replace_state(journal: &mut CodeResetJournal, lane: ResetLane, state: &str) {
     let prefix = state_prefix(lane);
@@ -227,7 +241,7 @@ impl CodeBindingCoordinator {
         let preserved = durable.preview.preservation_inventory.records.clone();
         let mut failed = false;
         for lane in ResetLane::ALL {
-            if is_done(&durable, lane) {
+            if is_terminal(&durable, lane) {
                 continue;
             }
             replace_state(&mut durable, lane, "pending");
@@ -237,7 +251,10 @@ impl CodeBindingCoordinator {
                 .cleanup_and_rebuild(lane, &scope, &retired, &preserved)
                 .await
             {
-                Ok(()) => replace_state(&mut durable, lane, "done"),
+                Ok(ResetLaneOutcome::Completed) => replace_state(&mut durable, lane, "done"),
+                Ok(ResetLaneOutcome::NotRequired) => {
+                    replace_state(&mut durable, lane, "not-required")
+                }
                 Err(_error) => {
                     // Keep errors non-secret and durable; the lane is retried on resume.
                     replace_state(&mut durable, lane, "failed");

@@ -6,7 +6,7 @@ use engram_domain::{
 use engram_integration::LexicalFeed;
 use engram_integration::code_binding::{
     CodeBindingCoordinator, PreservationRecordSource, RecipeResetLaneLifecycle, ResetLane,
-    ResetLaneLifecycle, ScopeSetAuthorizer,
+    ResetLaneLifecycle, ResetLaneOutcome, ScopeSetAuthorizer,
 };
 use engram_knowledge::{
     CodeBindingRepository, CodeReadLease, CodeReadLeases, RepositoryRegistration, RetirementTarget,
@@ -343,6 +343,22 @@ mod task_024 {
                     message: error.to_string(),
                 })
         }
+        async fn retire_code_target(
+            &self,
+            target_id: &str,
+            generation_id: &str,
+        ) -> engram_runtime::CoreResult<usize> {
+            self.0
+                .retire_target_contributor(
+                    target_id,
+                    &engram_store_lexical::code_contributor_key(generation_id),
+                )
+                .map_err(|error| engram_runtime::CoreError::Adapter {
+                    adapter: "test-lexical".into(),
+                    message: error.to_string(),
+                })
+        }
+
         async fn delete_target(&self, target_id: &str) -> engram_runtime::CoreResult<()> {
             self.0
                 .delete(target_id)
@@ -365,7 +381,7 @@ mod task_024 {
             _scope: &Scope,
             _retired: &[engram_domain::CodeResetTarget],
             _preserved: &[engram_domain::PreservationRecord],
-        ) -> engram_runtime::CoreResult<()> {
+        ) -> engram_runtime::CoreResult<ResetLaneOutcome> {
             self.calls.lock().expect("calls").push(lane);
             if lane == ResetLane::Vector && *self.fail_vector_once.lock().expect("failure") {
                 *self.fail_vector_once.lock().expect("failure") = false;
@@ -374,7 +390,11 @@ mod task_024 {
                     message: "forced vector failure".into(),
                 });
             }
-            Ok(())
+            Ok(if lane == ResetLane::Source {
+                ResetLaneOutcome::NotRequired
+            } else {
+                ResetLaneOutcome::Completed
+            })
         }
     }
 
@@ -416,6 +436,9 @@ mod task_024 {
             .upsert_stamped("target-a", "retired signal", "code:reset-generation")
             .expect("retired code");
         index
+            .upsert_stamped("target-a", "surviving signal", "code:surviving-generation")
+            .expect("surviving code contribution");
+        index
             .upsert("ordinary-record", "preserved signal")
             .expect("ordinary record");
         let lanes = Arc::new(RecipeResetLaneLifecycle::new(
@@ -447,6 +470,11 @@ mod task_024 {
         assert_eq!(
             index.search("preserved", 10).expect("search")[0].0,
             "ordinary-record"
+        );
+        assert_eq!(
+            index.search("surviving", 10).expect("search")[0].0,
+            "target-a",
+            "targeted retirement keeps a shared target's surviving contributor document"
         );
     }
 
@@ -829,6 +857,13 @@ mod task_024 {
                 .checkpoints
                 .iter()
                 .all(|item| !item.ends_with(":failed"))
+        );
+        assert!(
+            resumed
+                .checkpoints
+                .iter()
+                .any(|item| item == "reset-lane:source:not-required"),
+            "immutable retained snapshots are explicitly not-required, never falsely done"
         );
         assert!(
             lanes

@@ -11,6 +11,8 @@ use std::sync::Arc;
 ///
 /// It deliberately belongs to the coordinator rather than the binding cell because
 /// the binding cell has no ownership of the knowledge store.
+// clippy roll 2026-10: async_trait generates redundant must_use futures.
+#[allow(clippy::double_must_use)]
 #[async_trait]
 pub trait PreservationRecordSource: Send + Sync {
     async fn inventory(&self, scope: &Scope) -> CoreResult<PreservationInventory>;

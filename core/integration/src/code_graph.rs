@@ -269,6 +269,8 @@ impl EngramProvider {
     /// repository-qualified labels, and node/edge budgets apply ONLY to the
     /// authorized graph.
     #[allow(clippy::double_must_use)]
+    // clippy roll 2026-10: public API parameters preserve the bound-graph contract.
+    #[allow(clippy::too_many_arguments)]
     pub async fn code_graph_explore_bound(
         &self,
         actor: &Actor,

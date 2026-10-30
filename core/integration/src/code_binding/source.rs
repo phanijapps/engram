@@ -46,6 +46,8 @@ pub struct ExactReadCandidate {
 /// caller never receives partial state: `Unbound` means the caller's
 /// ordinary paths apply, `Denied` is terminal (bound code NEVER falls back
 /// to verbatim/stitching), `Served` is the validated whole answer.
+// clippy roll 2026-10: boxing this transport enum changes the public value contract.
+#[allow(clippy::large_enum_variant)]
 #[derive(Debug)]
 pub enum ParticipantExactSource {
     /// No matched record carries durable lineage: not a bound path.
@@ -103,6 +105,8 @@ pub struct BoundParticipant {
 /// path/span copied from the pinned window's view (final r5 finding 2) —
 /// participation is authenticated by comparing the two, never by trusting
 /// the claim.
+// clippy roll 2026-10: retained descriptor fields are part of the exact-source record shape.
+#[allow(dead_code)]
 #[derive(Debug, Clone)]
 struct ParticipantDescriptor {
     record_id: String,
@@ -720,6 +724,8 @@ impl CodeBindingCoordinator {
     /// 5. the ADAPTER reader validates custody and the durable descriptor
     ///    digest before bytes are declared exact (finding 7).
     #[allow(clippy::double_must_use)]
+    // clippy roll 2026-10: public API parameters preserve the bound-read contract.
+    #[allow(clippy::too_many_arguments)]
     pub async fn exact_source(
         &self,
         actor: &Actor,
@@ -884,6 +890,8 @@ impl crate::EngramProvider {
     /// durable canonical lease that pins it.  The active generation needs no
     /// historical token, while a generation id alone is deliberately denied.
     #[allow(clippy::double_must_use)]
+    // clippy roll 2026-10: public API parameters preserve the bound-read contract.
+    #[allow(clippy::too_many_arguments)]
     pub async fn code_fetch_exact_at_with_lease(
         &self,
         actor: &Actor,

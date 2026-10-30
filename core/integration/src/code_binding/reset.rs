@@ -52,6 +52,8 @@ impl ResetLane {
 
 /// Bundle injected by a recipe after it composes its lexical targeted-delete,
 /// vector cleanup, associative/community recompute, and retained-snapshot seams.
+// clippy roll 2026-10: async_trait generates redundant must_use futures.
+#[allow(clippy::double_must_use)]
 #[async_trait]
 pub trait ResetLaneLifecycle: Send + Sync {
     async fn cleanup_and_rebuild(

@@ -491,8 +491,17 @@ mod task_024 {
                 record_id: "target-a".into(),
             }],
         ))
-        .expect("advance epoch");
-        assert!(block_on(store.apply_reset(value)).is_err());
+        .expect("unrelated retirement");
+        let durable = block_on(store.load_reset_journal("reset-1")).expect("journal");
+        assert!(
+            !durable
+                .checkpoints
+                .iter()
+                .any(|checkpoint| checkpoint == "completed:target-a"),
+            "retirement without reset context must not create trusted progress"
+        );
+        let error = block_on(store.apply_reset(value)).expect_err("stale retirement denial");
+        assert!(format!("{error:?}").contains("ResetTargetSubstituted"));
     }
 
     #[test]
@@ -673,6 +682,55 @@ mod task_024 {
             .expect("durable contributor substitution");
         let error = block_on(store.apply_reset(value)).expect_err("stale contributor denial");
         assert!(format!("{error:?}").contains("ResetPreviewStale"));
+    }
+
+    #[test]
+    fn retirement_commit_carries_checkpoint_across_crash_before_return() {
+        let file = tempfile::NamedTempFile::new().expect("database file");
+        let store = file_backed_store(&file);
+        let preview = block_on(store.preview_reset(&scope(), &repo())).expect("preview");
+        let approved_journal = approved(&store, journal(preview));
+        block_on(store.retire_lineage_targets_with_reset_progress(
+            &scope(),
+            &[(repo(), 0)],
+            &[RetirementTarget {
+                repo_id: repo().0,
+                generation_id: generation().id,
+                record_id: "target-a".into(),
+            }],
+            Some((&approved_journal.reset_id, &["target-a".into()])),
+        ))
+        .expect("atomic retirement and checkpoint commit");
+        drop(store);
+
+        // Model termination after the store transaction committed and before
+        // its caller received a response or saved any coordinator lane state.
+        let recovered_store = file_backed_store(&file);
+        let recovered = block_on(
+            coordinator(
+                recovered_store,
+                Arc::new(FailingLane {
+                    fail_vector_once: Mutex::new(false),
+                    calls: Mutex::new(Vec::new()),
+                }),
+            )
+            .apply_reset(
+                &engram_domain::Actor {
+                    id: "reset-owner".into(),
+                    kind: engram_domain::ActorKind::Agent,
+                    display_name: None,
+                    metadata: None,
+                },
+                approved_journal,
+            ),
+        )
+        .expect("recovery uses committed completion checkpoint");
+        assert!(
+            recovered
+                .checkpoints
+                .iter()
+                .any(|checkpoint| checkpoint == "completed:target-a")
+        );
     }
 
     #[test]

@@ -253,6 +253,20 @@ pub trait CodeBindingRepository: crate::CodeReadLeases + Send + Sync {
             reason: "this cell does not expose fenced maintenance retirement".into(),
         })
     }
+    /// Retires fenced lineage and, when supplied, atomically records the
+    /// reset-owned completion rows for exactly these targets. The default
+    /// preserves retirement-only callers and cells that do not persist reset
+    /// journals.
+    async fn retire_lineage_targets_with_reset_progress(
+        &self,
+        scope: &Scope,
+        expected_binding_epochs: &[(engram_domain::RepoId, u64)],
+        targets: &[crate::RetirementTarget],
+        _reset_progress: Option<(&str, &[String])>,
+    ) -> CoreResult<()> {
+        self.retire_lineage_targets(scope, expected_binding_epochs, targets)
+            .await
+    }
     async fn put_source_descriptor(
         &self,
         scope: &Scope,
@@ -466,14 +480,25 @@ pub trait CodeBindingRepository: crate::CodeReadLeases + Send + Sync {
             })
             .collect::<Vec<_>>();
         if !targets.is_empty() {
-            self.retire_lineage_targets(&scope, &[(repo.clone(), expected_epoch)], &targets)
-                .await?;
-            for target in remaining {
-                journal
-                    .checkpoints
-                    .push(format!("completed:{}", target.record_id));
-            }
-            journal = self.save_reset_journal(journal).await?;
+            let completed_ids = remaining
+                .iter()
+                .map(|target| target.record_id.clone())
+                .collect::<Vec<_>>();
+            self.retire_lineage_targets_with_reset_progress(
+                &scope,
+                &[(repo.clone(), expected_epoch)],
+                &targets,
+                Some((&journal.reset_id, &completed_ids)),
+            )
+            .await?;
+            // The cell committed these rows with retirement. Keep this local
+            // response current without a second progress commit; recovery
+            // reloads the same rows from the durable journal-progress table.
+            journal.checkpoints.extend(
+                completed_ids
+                    .iter()
+                    .map(|record_id| format!("completed:{record_id}")),
+            );
         }
         // Re-read the durable ordinary-record inventory after mutation.
         // This is intentionally independent of the owner-approved preview.

@@ -30,7 +30,7 @@ impl SqlCodeBindingStore {
     pub fn open(path: impl AsRef<Path>) -> rusqlite::Result<Self> {
         let connection = Connection::open(path)?;
         connection.busy_timeout(std::time::Duration::from_secs(5))?;
-        connection.execute_batch("PRAGMA foreign_keys=ON; PRAGMA journal_mode=WAL; CREATE TABLE IF NOT EXISTS code_repo_bindings (tenant TEXT NOT NULL, scope_key TEXT NOT NULL, repo_id TEXT NOT NULL, branch_ref TEXT NOT NULL, version INTEGER NOT NULL, active_generation TEXT, epoch INTEGER NOT NULL, record_json TEXT NOT NULL, PRIMARY KEY(tenant,scope_key,repo_id)); CREATE TABLE IF NOT EXISTS code_generations (generation_id TEXT PRIMARY KEY, record_json TEXT NOT NULL); CREATE TABLE IF NOT EXISTS code_attempts (attempt_id TEXT PRIMARY KEY, tenant TEXT NOT NULL, scope_key TEXT NOT NULL, repo_id TEXT NOT NULL, generation_id TEXT NOT NULL, binding_version INTEGER NOT NULL, expected_epoch INTEGER NOT NULL, expected_active_generation TEXT, fence INTEGER NOT NULL, idempotency_key TEXT NOT NULL, state TEXT NOT NULL, receipts_json TEXT NOT NULL DEFAULT '[]', record_json TEXT NOT NULL, UNIQUE(tenant,scope_key,repo_id,idempotency_key)); CREATE TABLE IF NOT EXISTS code_lineage (record_id TEXT PRIMARY KEY, repo_id TEXT NOT NULL, generation_id TEXT NOT NULL, lineage_json TEXT NOT NULL); CREATE TABLE IF NOT EXISTS code_reset_journals (preview_hash TEXT PRIMARY KEY, journal_json TEXT NOT NULL, checkpoint TEXT NOT NULL); CREATE TABLE IF NOT EXISTS code_attempt_receipts(attempt_id TEXT NOT NULL,lane TEXT NOT NULL,digest TEXT NOT NULL,PRIMARY KEY(attempt_id,lane));")?;
+        connection.execute_batch("PRAGMA foreign_keys=ON; PRAGMA journal_mode=WAL; CREATE TABLE IF NOT EXISTS code_repo_bindings (tenant TEXT NOT NULL, scope_key TEXT NOT NULL, repo_id TEXT NOT NULL, branch_ref TEXT NOT NULL, version INTEGER NOT NULL, active_generation TEXT, epoch INTEGER NOT NULL, record_json TEXT NOT NULL, PRIMARY KEY(tenant,scope_key,repo_id)); CREATE TABLE IF NOT EXISTS code_generations (generation_id TEXT PRIMARY KEY, record_json TEXT NOT NULL); CREATE TABLE IF NOT EXISTS code_attempts (attempt_id TEXT PRIMARY KEY, tenant TEXT NOT NULL, scope_key TEXT NOT NULL, repo_id TEXT NOT NULL, generation_id TEXT NOT NULL, binding_version INTEGER NOT NULL, expected_epoch INTEGER NOT NULL, expected_active_generation TEXT, fence INTEGER NOT NULL, idempotency_key TEXT NOT NULL, state TEXT NOT NULL, receipts_json TEXT NOT NULL DEFAULT '[]', record_json TEXT NOT NULL, UNIQUE(tenant,scope_key,repo_id,idempotency_key)); CREATE TABLE IF NOT EXISTS code_lineage (record_id TEXT PRIMARY KEY, repo_id TEXT NOT NULL, generation_id TEXT NOT NULL, lineage_json TEXT NOT NULL); CREATE TABLE IF NOT EXISTS code_reset_journals (preview_hash TEXT PRIMARY KEY, journal_json TEXT NOT NULL, checkpoint TEXT NOT NULL); CREATE TABLE IF NOT EXISTS code_reset_journal_progress (reset_id TEXT NOT NULL, record_id TEXT NOT NULL, checkpoint TEXT NOT NULL, PRIMARY KEY(reset_id,record_id)); CREATE TABLE IF NOT EXISTS code_attempt_receipts(attempt_id TEXT NOT NULL,lane TEXT NOT NULL,digest TEXT NOT NULL,PRIMARY KEY(attempt_id,lane));")?;
         connection.execute_batch("CREATE TABLE IF NOT EXISTS code_scope_epochs(scope_key TEXT PRIMARY KEY,epoch INTEGER NOT NULL); CREATE TABLE IF NOT EXISTS code_read_leases(lease_id TEXT PRIMARY KEY,scope_key TEXT NOT NULL,fence INTEGER NOT NULL,expires_ms INTEGER NOT NULL,record_json TEXT NOT NULL); CREATE TABLE IF NOT EXISTS code_read_lease_tombstones(lease_id TEXT PRIMARY KEY); CREATE TABLE IF NOT EXISTS code_ref_observations(tenant TEXT NOT NULL,scope_key TEXT NOT NULL,repo_id TEXT NOT NULL,branch_ref TEXT NOT NULL,observed_oid TEXT NOT NULL,observed_at TEXT NOT NULL,policy TEXT NOT NULL,record_json TEXT NOT NULL,PRIMARY KEY(tenant,scope_key,repo_id));")?;
         Ok(Self { connection })
     }
@@ -258,6 +258,17 @@ impl SqlCodeBindingStore {
             }
         }
         Ok(None)
+    }
+    pub fn reset_journal_progress(&self, reset_id: &str) -> Result<Vec<String>, CodeBindingError> {
+        let mut statement = self
+            .connection
+            .prepare("SELECT checkpoint FROM code_reset_journal_progress WHERE reset_id=?1 ORDER BY record_id")
+            .map_err(|_| CodeBindingError::PersistenceFailure)?;
+        statement
+            .query_map([reset_id], |row| row.get(0))
+            .map_err(|_| CodeBindingError::PersistenceFailure)?
+            .collect::<Result<Vec<String>, _>>()
+            .map_err(|_| CodeBindingError::PersistenceFailure)
     }
     pub fn update_reset_journal(
         &mut self,

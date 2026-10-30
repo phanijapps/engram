@@ -283,6 +283,21 @@ impl CodeBindingRepository for PgCodeBindingRepository {
         expected_binding_epochs: &[(RepoId, u64)],
         targets: &[engram_knowledge::RetirementTarget],
     ) -> CoreResult<()> {
+        self.retire_lineage_targets_with_reset_progress(
+            scope,
+            expected_binding_epochs,
+            targets,
+            None,
+        )
+        .await
+    }
+    async fn retire_lineage_targets_with_reset_progress(
+        &self,
+        scope: &Scope,
+        expected_binding_epochs: &[(RepoId, u64)],
+        targets: &[engram_knowledge::RetirementTarget],
+        reset_progress: Option<(&str, &[String])>,
+    ) -> CoreResult<()> {
         if expected_binding_epochs.is_empty() || targets.is_empty() {
             return Err(CoreError::InvalidRequest {
                 reason: "fenced maintenance requires explicit repos and targets".into(),
@@ -299,6 +314,18 @@ impl CodeBindingRepository for PgCodeBindingRepository {
             .map(|(_, epoch)| i64::try_from(*epoch).map_err(|_| storage_error()))
             .collect::<CoreResult<Vec<i64>>>()?;
         let targets = targets.to_vec();
+        let reset_progress =
+            reset_progress.map(|(reset_id, record_ids)| (reset_id.to_owned(), record_ids.to_vec()));
+        if let Some((_, record_ids)) = &reset_progress {
+            if record_ids
+                .iter()
+                .any(|record_id| !targets.iter().any(|target| &target.record_id == record_id))
+            {
+                return Err(CoreError::InvalidRequest {
+                    reason: "reset progress must name retired targets".into(),
+                });
+            }
+        }
         self.blocking(move |store| {
             crate::connection::runtime().block_on(async {
                 let tx = store
@@ -434,6 +461,20 @@ impl CodeBindingRepository for PgCodeBindingRepository {
                     )
                     .await
                     .map_err(|_| storage_error())?;
+                }
+                // (4) Journal progress is reset-id-scoped and commits with
+                // the retirement facts under the advisory and row-lock fence.
+                // Retirement-only callers supply None, so they cannot create
+                // trusted reset completion progress.
+                if let Some((reset_id, record_ids)) = &reset_progress {
+                    for record_id in record_ids {
+                        tx.execute(
+                            "INSERT INTO code_reset_journal_progress(reset_id,record_id,checkpoint) VALUES($1,$2,$3) ON CONFLICT(reset_id,record_id) DO NOTHING",
+                            &[reset_id, record_id, &format!("completed:{record_id}")],
+                        )
+                        .await
+                        .map_err(|_| storage_error())?;
+                    }
                 }
                 tx.execute(
                     "INSERT INTO code_epochs(tenant,scope_key,epoch) VALUES($1,$2,1) ON CONFLICT(tenant,scope_key) DO UPDATE SET epoch=code_epochs.epoch+1",

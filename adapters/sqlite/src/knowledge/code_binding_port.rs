@@ -262,6 +262,21 @@ impl CodeBindingRepository for SqlCodeBindingRepository {
         expected_binding_epochs: &[(engram_domain::RepoId, u64)],
         targets: &[engram_knowledge::RetirementTarget],
     ) -> CoreResult<()> {
+        self.retire_lineage_targets_with_reset_progress(
+            scope,
+            expected_binding_epochs,
+            targets,
+            None,
+        )
+        .await
+    }
+    async fn retire_lineage_targets_with_reset_progress(
+        &self,
+        scope: &Scope,
+        expected_binding_epochs: &[(engram_domain::RepoId, u64)],
+        targets: &[engram_knowledge::RetirementTarget],
+        reset_progress: Option<(&str, &[String])>,
+    ) -> CoreResult<()> {
         if expected_binding_epochs.is_empty() || targets.is_empty() {
             return Err(CoreError::InvalidRequest {
                 reason: "fenced maintenance requires explicit repos and targets".into(),
@@ -269,7 +284,19 @@ impl CodeBindingRepository for SqlCodeBindingRepository {
         }
         let mut store = self.lock()?;
         let key = json(scope)?;
-        store.connection.execute_batch("CREATE TABLE IF NOT EXISTS code_stage_lineage(scope_key TEXT NOT NULL,record_id TEXT NOT NULL,repo_id TEXT NOT NULL,generation_id TEXT NOT NULL,record_json TEXT NOT NULL,PRIMARY KEY(scope_key,record_id)); CREATE TABLE IF NOT EXISTS code_stage_lineage_retirements(scope_key TEXT NOT NULL,record_id TEXT NOT NULL,PRIMARY KEY(scope_key,record_id))")
+        let reset_progress =
+            reset_progress.map(|(reset_id, record_ids)| (reset_id.to_owned(), record_ids.to_vec()));
+        if let Some((_, record_ids)) = &reset_progress {
+            if record_ids
+                .iter()
+                .any(|record_id| !targets.iter().any(|target| &target.record_id == record_id))
+            {
+                return Err(CoreError::InvalidRequest {
+                    reason: "reset progress must name retired targets".into(),
+                });
+            }
+        }
+        store.connection.execute_batch("CREATE TABLE IF NOT EXISTS code_stage_lineage(scope_key TEXT NOT NULL,record_id TEXT NOT NULL,repo_id TEXT NOT NULL,generation_id TEXT NOT NULL,record_json TEXT NOT NULL,PRIMARY KEY(scope_key,record_id)); CREATE TABLE IF NOT EXISTS code_stage_lineage_retirements(scope_key TEXT NOT NULL,record_id TEXT NOT NULL,PRIMARY KEY(scope_key,record_id)); CREATE TABLE IF NOT EXISTS code_reset_journal_progress(reset_id TEXT NOT NULL,record_id TEXT NOT NULL,checkpoint TEXT NOT NULL,PRIMARY KEY(reset_id,record_id))")
             .map_err(|_| storage_error())?;
         // (0) Whole-set validation BEFORE any mutation (read pass): every
         // binding epoch and every typed association, and which targets
@@ -388,7 +415,19 @@ impl CodeBindingRepository for SqlCodeBindingRepository {
             )
             .map_err(|_| storage_error())?;
         }
-        // (4) Scope-epoch advance: pinned read views revalidate.
+        // (4) The reset-owned completion facts share this IMMEDIATE
+        // transaction with retirement. Retirement-only callers provide None,
+        // so unrelated retirement cannot manufacture reset progress.
+        if let Some((reset_id, record_ids)) = &reset_progress {
+            for record_id in record_ids {
+                tx.execute(
+                    "INSERT OR IGNORE INTO code_reset_journal_progress(reset_id,record_id,checkpoint) VALUES(?1,?2,?3)",
+                    params![reset_id, record_id, format!("completed:{record_id}")],
+                )
+                .map_err(|_| storage_error())?;
+            }
+        }
+        // (5) Scope-epoch advance: pinned read views revalidate.
         tx.execute(
             "INSERT INTO code_scope_epochs(scope_key,epoch) VALUES(?1,1) ON CONFLICT(scope_key) DO UPDATE SET epoch=epoch+1",
             [&key],
@@ -803,13 +842,20 @@ impl CodeBindingRepository for SqlCodeBindingRepository {
         Ok(journal)
     }
     async fn load_reset_journal(&self, reset_id: &str) -> CoreResult<CodeResetJournal> {
-        self.lock()?
+        let store = self.lock()?;
+        let mut journal = store
             .reset_journal(reset_id)
             .map_err(error)?
             .ok_or_else(|| CoreError::Conflict {
                 reason: "ResetJournalUnauthorized: no owner-approved journal exists for reset id"
                     .into(),
-            })
+            })?;
+        for checkpoint in store.reset_journal_progress(reset_id).map_err(error)? {
+            if !journal.checkpoints.contains(&checkpoint) {
+                journal.checkpoints.push(checkpoint);
+            }
+        }
+        Ok(journal)
     }
     async fn save_reset_journal(&self, journal: CodeResetJournal) -> CoreResult<CodeResetJournal> {
         journal.validate().map_err(error)?;

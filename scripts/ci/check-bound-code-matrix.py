@@ -169,7 +169,8 @@ def default_command(row: Row, sqlite_root: Path, pg_url_name: str) -> CommandSpe
             test_file = f"code-binding.{row.backend}.test.ts"
             return CommandSpec(["pnpm", "--filter", "@engram/node", "exec", "vitest", "run", test_file, "-t", native[row.operation], "--reporter", "verbose"], native[row.operation])
         package, target, filter_name, marker = rust[row.operation]
-        return CommandSpec(cargo_spec(package, target, filter_name, marker, row.backend).argv, marker, "coordinator-equivalent", "pending-r5")
+        transport_gap = "pending-r5" if row.operation in {"retrieval", "graph", "reset"} or (row.operation == "backfill" and row.backend == "pgvector") else None
+        return CommandSpec(cargo_spec(package, target, filter_name, marker, row.backend).argv, marker, "coordinator-equivalent", transport_gap)
     mcp = {
         "binding": "task_021::stdio_dispatch_parity" if row.transport == "mcp-stdio" else "task_022::oneshot_dispatch_parity",
         "backfill": "task_022::backfill_not_rescan",
@@ -178,7 +179,8 @@ def default_command(row: Row, sqlite_root: Path, pg_url_name: str) -> CommandSpe
         marker = mcp[row.operation].split("::")[-1]
         return CommandSpec(cargo_spec("engram-mcp", "bound_transports", mcp[row.operation], marker, row.backend).argv, marker)
     package, target, filter_name, marker = rust[row.operation]
-    return CommandSpec(cargo_spec(package, target, filter_name, marker, row.backend).argv, marker, "coordinator-equivalent", "pending-r5")
+    transport_gap = "pending-r5" if row.operation in {"retrieval", "graph", "reset"} else None
+    return CommandSpec(cargo_spec(package, target, filter_name, marker, row.backend).argv, marker, "coordinator-equivalent", transport_gap)
 
 
 class MatrixRunner:

@@ -43,16 +43,45 @@ fn pg_url() -> String {
         .unwrap_or_else(|_| "postgres://engram:engram@localhost:5432/engram".to_owned())
 }
 
+const DISPOSABLE_FIXTURE_MARKER: &str =
+    "engram.factory.job=010-project-bound-branch-indexing; disposable=true";
+
+#[derive(Debug)]
+enum ResetVectorStoreRefusal {
+    ConnectionUnavailable,
+    MarkerQueryFailed,
+    DisposableMarkerMismatch,
+    ResetFailed,
+}
+
 /// Drop the vector data and its durable embedding-space identity before every
 /// recipe open, so prior ignored tests cannot constrain this test's model or
 /// vector dimensions.
-fn reset_vector_store() {
-    let connection = PgConnection::connect(&pg_url()).expect("connect to reset vector store");
+///
+/// The exact database marker is checked before any destructive SQL executes.
+fn reset_vector_store() -> Result<(), ResetVectorStoreRefusal> {
+    let connection = PgConnection::connect(&pg_url())
+        .map_err(|_| ResetVectorStoreRefusal::ConnectionUnavailable)?;
+    let marker = connection
+        .block_on(async {
+            connection
+                .client
+                .query_one(
+                    "SELECT shobj_description(oid,'pg_database') FROM pg_database WHERE datname=current_database()",
+                    &[],
+                )
+                .await
+        })
+        .map_err(|_| ResetVectorStoreRefusal::MarkerQueryFailed)?
+        .get::<_, Option<String>>(0);
+    if marker.as_deref() != Some(DISPOSABLE_FIXTURE_MARKER) {
+        return Err(ResetVectorStoreRefusal::DisposableMarkerMismatch);
+    }
     connection
         .block_on(connection.client.batch_execute(
             "DROP TABLE IF EXISTS vectors; DROP TABLE IF EXISTS vector_embedding_space;",
         ))
-        .expect("reset vectors and vector_embedding_space tables");
+        .map_err(|_| ResetVectorStoreRefusal::ResetFailed)
 }
 
 fn pg_config() -> EngramConfig {
@@ -75,7 +104,7 @@ fn pg_config() -> EngramConfig {
 }
 
 fn open_bootstrap_recipe() -> EngramProvider {
-    reset_vector_store();
+    reset_vector_store().expect("typed refusal protects unmarked databases from vector reset");
     open(&pg_config()).expect("recipe opens against reset Docker pgvector")
 }
 

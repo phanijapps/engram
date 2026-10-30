@@ -271,7 +271,7 @@ export function describeCodeBindingCases(getAddon, recipe) {
     provider.codeBindJson(JSON.stringify({ scope: caseScope, repo, branchRef: "refs/heads/main" }));
     provider.scanRepositoryJson(JSON.stringify({ scope: caseScope, repo }));
     const foreign = new (getAddon().NativeProvider)(authorizedRecipeConfig(recipe, base, {}, caseForeignScope));
-    const foreignRepo = `repo-${recipe}-retrieval-ineligible`;
+    const foreignRepo = `${fixture.repo}-foreign-retrieval`;
     foreign.codeRegisterJson(JSON.stringify({ scope: caseForeignScope, repo: foreignRepo, path: ineligible.path }));
     foreign.codeBindJson(JSON.stringify({ scope: caseForeignScope, repo: foreignRepo, branchRef: "refs/heads/main" }));
     foreign.scanRepositoryJson(JSON.stringify({ scope: caseForeignScope, repo: foreignRepo }));
@@ -316,7 +316,7 @@ export function describeCodeBindingCases(getAddon, recipe) {
     provider.codeBindJson(JSON.stringify({ scope: caseScope, repo, branchRef: "refs/heads/main" }));
     provider.scanRepositoryJson(JSON.stringify({ scope: caseScope, repo }));
     const foreign = new (getAddon().NativeProvider)(authorizedRecipeConfig(recipe, base, {}, caseForeignScope));
-    const foreignRepo = `repo-${recipe}-graph-ineligible`;
+    const foreignRepo = `${fixture.repo}-foreign-graph`;
     foreign.codeRegisterJson(JSON.stringify({ scope: caseForeignScope, repo: foreignRepo, path: ineligible.path }));
     foreign.codeBindJson(JSON.stringify({ scope: caseForeignScope, repo: foreignRepo, branchRef: "refs/heads/main" }));
     foreign.scanRepositoryJson(JSON.stringify({ scope: caseForeignScope, repo: foreignRepo }));
@@ -347,7 +347,7 @@ export function describeCodeBindingCases(getAddon, recipe) {
     const preview = JSON.parse(provider.codeResetPreviewJson(JSON.stringify({ scope: caseScope, repo })));
     expect(preview.previewHash).toHaveLength(64);
     const journal = {
-      resetId: `native-reset-${recipe}`,
+      resetId: `${fixture.repo}-reset`, 
       preview,
       previewHash: preview.previewHash,
       targetFingerprints: preview.targets.map((target) => [target.recordId, target.fingerprint]),

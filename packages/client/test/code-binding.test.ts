@@ -11,7 +11,7 @@ import {
   createEngramClient,
   EngramCodeBindingUnsupportedError,
   isBindingDenied,
-  type CodeBindingStatusResult,
+  type CodeBindingStatus,
   type EngramTransport
 } from "../src/index.js";
 import type { CanonicalSpan, CodeBinding, CodeGeneration, IndexedSource } from "@engram/contracts";
@@ -89,7 +89,7 @@ const workingTransport: EngramTransport = {
         codeEpoch: 1,
         generation: null
       }
-    } satisfies CodeBindingStatusResult),
+    } satisfies CodeBindingStatus),
   codeRefresh: () =>
     Promise.resolve({
       branchRef: "refs/heads/main",

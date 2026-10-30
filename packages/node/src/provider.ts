@@ -1,7 +1,10 @@
 import { createNativeEmbeddingProviderTransport, type NativeEmbeddingProviderTransport } from "./embedding-provider.js";
 import type {
+  CodeBinding,
+  CodeGeneration,
   ContextPayload,
   RetrievalRequest,
+  Scope,
   WriteMemoryRequest,
   WriteMemoryResponse
 } from "@engram/contracts";
@@ -82,6 +85,59 @@ export interface ScopeCounts {
   hierarchyRelations: number;
 }
 
+/** One on-request ref observation as the Rust coordinator serializes it
+ *  (policy `on_request`; r6 finding 6: carried with GENERATED contract types,
+ *  never `unknown`). */
+export interface CodeRefObservation {
+  branchRef: string;
+  observedOid: string;
+  observedAt: string;
+  policy: "on_request";
+}
+
+/** Truthful freshness classification (never checkout-HEAD-derived):
+ *  the serde externally-tagged shape — `"unknown"` (unit variant) or
+ *  `{ observed: { matchesIndexed } }`. */
+export type CodeFreshnessState = "unknown" | { observed: { matchesIndexed: boolean | null } };
+
+/** Binding-keyed freshness facts. */
+export interface CodeRefFreshness {
+  branchRef: string;
+  policy: "on_request";
+  observedOid: string | null;
+  observedAt: string | null;
+  state: CodeFreshnessState;
+}
+
+/** The binding-keyed checkpoint pointer (RepoId-keyed, never basename-keyed);
+ *  its generation facts are the GENERATED `CodeGeneration` contract. */
+export interface CodeBindingCheckpoint {
+  repoId: string;
+  branchRef: string;
+  bindingVersion: number;
+  codeEpoch: number;
+  generation: CodeGeneration | null;
+}
+
+/** Serialized `CodeBindingStatus` — binding carried as the GENERATED
+ *  `CodeBinding` contract. */
+export interface CodeBindingStatus {
+  binding: CodeBinding;
+  attempt: unknown;
+  codeEpoch: number;
+  indexedCommitOid: string | null;
+  freshness: CodeRefFreshness;
+  checkpoint: CodeBindingCheckpoint;
+}
+
+/** Acquisition locator registration (`local_only`/`configured_remote` are
+ *  the Rust port's snake_case serialization). */
+export interface RepositoryRegistration {
+  repoId: string;
+  locatorId: string;
+  acquisition: "local_only" | "configured_remote";
+}
+
 /** The typed transport over the native binding — every route in the TS MCP
  *  server dispatches through one of these methods. */
 export interface NativeProviderTransport {
@@ -108,24 +164,24 @@ export interface NativeProviderTransport {
   }): Promise<unknown>;
   /** Bind a repository branch (TASK-020): same-ref idempotent, other branch
    *  BindingConflict. */
-  codeBind(request: { scope: unknown; repo: string; branchRef: string }): Promise<unknown>;
+  codeBind(request: { scope: Scope; repo: string; branchRef: string }): Promise<CodeBinding>;
   /** Register a repository's acquisition locator (r6 finding 5): the SAME
    *  shared seam as stdio/one-shot — `mode` is `local-only` (default) or
    *  `configured-remote`. */
   codeRegister(request: {
-    scope: unknown;
+    scope: Scope;
     repo: string;
     path: string;
     mode?: "local-only" | "configured-remote";
-  }): Promise<unknown>;
+  }): Promise<RepositoryRegistration>;
   /** Binding-keyed status: indexed OID, on-request ref freshness (unknown
    *  until an explicit observation — never checkout-HEAD-derived), and the
    *  binding-keyed checkpoint. */
-  codeStatus(request: { scope: unknown; repo: string }): Promise<unknown>;
+  codeStatus(request: { scope: Scope; repo: string }): Promise<CodeBindingStatus>;
   /** ONE on-request refresh of the bound branch ref, resolved from the
    *  REGISTERED locator's local git (r6 finding 5) — the caller never
    *  supplies an OID; the former codeObserveRef surface is gone. */
-  codeRefresh(request: { scope: unknown; repo: string }): Promise<unknown>;
+  codeRefresh(request: { scope: Scope; repo: string }): Promise<CodeRefObservation>;
   /** Run a consolidation cycle (reflection + decay). A system requester is
    *  injected; callers pass only `scope` + optional `dryRun` / `since` / `until`. */
   consolidate(request: {
@@ -278,29 +334,25 @@ class JsonNativeProviderTransport implements NativeProviderTransport {
     return decode(this.provider.scanRepositoryJson(encode(request)));
   }
 
-  async codeBind(request: {
-    scope: unknown;
-    repo: string;
-    branchRef: string;
-  }): Promise<unknown> {
-    return decode(this.provider.codeBindJson(encode(request)));
+  async codeBind(request: { scope: Scope; repo: string; branchRef: string }): Promise<CodeBinding> {
+    return decode<CodeBinding>(this.provider.codeBindJson(encode(request)));
   }
 
-  async codeStatus(request: { scope: unknown; repo: string }): Promise<unknown> {
-    return decode(this.provider.codeStatusJson(encode(request)));
+  async codeStatus(request: { scope: Scope; repo: string }): Promise<CodeBindingStatus> {
+    return decode<CodeBindingStatus>(this.provider.codeStatusJson(encode(request)));
   }
 
   async codeRegister(request: {
-    scope: unknown;
+    scope: Scope;
     repo: string;
     path: string;
     mode?: "local-only" | "configured-remote";
-  }): Promise<unknown> {
-    return decode(this.provider.codeRegisterJson(encode(request)));
+  }): Promise<RepositoryRegistration> {
+    return decode<RepositoryRegistration>(this.provider.codeRegisterJson(encode(request)));
   }
 
-  async codeRefresh(request: { scope: unknown; repo: string }): Promise<unknown> {
-    return decode(this.provider.codeRefreshJson(encode(request)));
+  async codeRefresh(request: { scope: Scope; repo: string }): Promise<CodeRefObservation> {
+    return decode<CodeRefObservation>(this.provider.codeRefreshJson(encode(request)));
   }
 
   async consolidate(request: {

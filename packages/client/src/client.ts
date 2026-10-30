@@ -8,11 +8,12 @@ import type {
 } from "@engram/contracts";
 
 import type { EngramTransport } from "./transport.js";
+import type { CodeStatusRequest } from "./code-binding.js";
+import type { CodeBinding } from "@engram/contracts";
+import type { CodeBindingStatus } from "@engram/node";
 import {
   EngramCodeBindingUnsupportedError,
   type CodeBindRequest,
-  type CodeBindingRecord,
-  type CodeBindingStatusResult,
   type CodeRefreshRequest,
   type CodeRegisterRequest,
   type CodeRefObservation,
@@ -66,16 +67,16 @@ export function createEngramClient(options: EngramClientOptions): EngramClient {
 function codeTransport(
   transport: EngramTransport
 ): {
-  codeBind(request: CodeBindRequest): Promise<CodeBindingRecord>;
+  codeBind(request: CodeBindRequest): Promise<CodeBinding>;
   codeRegister(request: CodeRegisterRequest): Promise<unknown>;
-  codeStatus(request: { scope: unknown; repo: string }): Promise<CodeBindingStatusResult>;
+  codeStatus(request: CodeStatusRequest): Promise<CodeBindingStatus>;
   codeRefresh(request: CodeRefreshRequest): Promise<CodeRefObservation>;
   scanCode(request: CodeScanRequest): Promise<unknown>;
 } {
   const candidate = transport as {
-    codeBind?: (request: CodeBindRequest) => Promise<CodeBindingRecord>;
+    codeBind?: (request: CodeBindRequest) => Promise<CodeBinding>;
     codeRegister?: (request: CodeRegisterRequest) => Promise<unknown>;
-    codeStatus?: (request: { scope: unknown; repo: string }) => Promise<CodeBindingStatusResult>;
+    codeStatus?: (request: CodeStatusRequest) => Promise<CodeBindingStatus>;
     codeRefresh?: (request: CodeRefreshRequest) => Promise<CodeRefObservation>;
     scanCode?: (request: CodeScanRequest) => Promise<unknown>;
   };
@@ -101,13 +102,13 @@ export class EngramCodeBindingClient {
   }
 
   /** Binds a repository branch (same-ref idempotent; other branch
-   *  `BindingConflict`). */
-  codeBind(request: CodeBindRequest): Promise<CodeBindingRecord> {
+   *  `BindingConflict`). Returns the GENERATED `CodeBinding` contract. */
+  codeBind(request: CodeBindRequest): Promise<CodeBinding> {
     return this.#transport.codeBind(request);
   }
 
   /** Binding-keyed status: indexed OID, on-request freshness, checkpoint. */
-  codeStatus(request: { scope: unknown; repo: string }): Promise<CodeBindingStatusResult> {
+  codeStatus(request: CodeStatusRequest): Promise<CodeBindingStatus> {
     return this.#transport.codeStatus(request);
   }
 

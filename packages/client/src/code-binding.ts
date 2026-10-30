@@ -1,92 +1,52 @@
 /**
- * Bound code-binding surface for `@engram/client` (TASK-020).
+ * Bound code-binding surface for `@engram/client` (TASK-020; r6 finding 6:
+ * generated-contract truth).
  *
- * The client is a typed facade: these types mirror the Rust coordinator's
- * serialized (camelCase) shapes — the same values `@engram/node`'s native
- * transport returns — and every method is a thin delegate. Denial parity:
- * the Rust surfaces reject unbound code calls with `BindingRequired` /
- * `BindingConflict` messages; [`isBindingDenied`] recognizes that exact
- * envelope so callers can branch on it without string-matching internals.
+ * The client is a typed facade: the RESULT types (`CodeBinding`,
+ * `CodeBindingStatus`, `CodeRefObservation`, …) are the GENERATED
+ * `@engram/contracts` shapes and the `@engram/node` transport types built on
+ * them — no independently maintained duplicate record, no weakened `unknown`
+ * scope. Every method is a thin delegate. Denial parity: the Rust surfaces
+ * reject unbound code calls with `BindingRequired` / `BindingConflict`
+ * messages; [`isBindingDenied`] recognizes that exact envelope so callers can
+ * branch on it without string-matching internals.
  */
+import type { CodeBinding, Scope } from "@engram/contracts";
+import type {
+  CodeBindingCheckpoint,
+  CodeBindingStatus,
+  CodeFreshnessState,
+  CodeRefFreshness,
+  CodeRefObservation
+} from "@engram/node";
 
-/** Serialized `CodeBinding` (matches `@engram/contracts` `CodeBinding`). */
-export interface CodeBindingRecord {
-  scope: unknown;
-  repoId: string;
-  branchRef: string;
-  version: number;
-  activeGeneration: string | null;
-  epoch: number;
-}
-
-/** One on-request ref observation (policy `on_request`). */
-export interface CodeRefObservation {
-  branchRef: string;
-  observedOid: string;
-  observedAt: string;
-  policy: "on_request";
-}
-
-/** Truthful freshness classification (never checkout-HEAD-derived):
- *  the serde externally-tagged shape — `"unknown"` (unit variant) or
- *  `{ observed: { matchesIndexed } }`. */
-export type CodeFreshnessState =
-  | "unknown"
-  | { observed: { matchesIndexed: boolean | null } };
-
-/** Binding-keyed freshness facts. */
-export interface CodeRefFreshness {
-  branchRef: string;
-  policy: "on_request";
-  observedOid: string | null;
-  observedAt: string | null;
-  state: CodeFreshnessState;
-}
-
-/** The immutable generation facts a checkpoint points at. */
-export interface CheckpointGeneration {
-  id: string;
-  commitOid: string;
-  snapshotDigest: string;
-  parserFingerprint: string;
-  filterFingerprint: string;
-}
-
-/** The binding-keyed checkpoint pointer (RepoId-keyed, never basename-keyed). */
-export interface CodeBindingCheckpoint {
-  repoId: string;
-  branchRef: string;
-  bindingVersion: number;
-  codeEpoch: number;
-  generation: CheckpointGeneration | null;
-}
-
-/** Serialized `CodeBindingStatus`. */
-export interface CodeBindingStatusResult {
-  binding: CodeBindingRecord;
-  attempt: unknown;
-  codeEpoch: number;
-  indexedCommitOid: string | null;
-  freshness: CodeRefFreshness;
-  checkpoint: CodeBindingCheckpoint;
-}
+// The Rust-serialized result shapes (single definition in `@engram/node`,
+// built on the generated contracts) re-exported for transport implementors.
+export type {
+  CodeBindingCheckpoint,
+  CodeBindingStatus,
+  CodeFreshnessState,
+  CodeRefFreshness,
+  CodeRefObservation
+};
+export type { CodeBinding, Scope };
 
 /** Bind request (`{ scope, repo, branchRef }`). */
 export interface CodeBindRequest {
-  scope: unknown;
+  scope: Scope;
   repo: string;
   branchRef: string;
 }
 
 /** Status request (`{ scope, repo }`). */
 export interface CodeStatusRequest {
-  scope: unknown;
+  scope: Scope;
   repo: string;
 }
 
 /** Registration request (`{ scope, repo, path, mode? }`). */
 export interface CodeRegisterRequest {
-  scope: unknown;
+  scope: Scope;
   repo: string;
   path: string;
   mode?: "local-only" | "configured-remote";
@@ -94,14 +54,14 @@ export interface CodeRegisterRequest {
 
 /** Refresh request (`{ scope, repo }`) — the registered-locator refresh. */
 export interface CodeRefreshRequest {
-  scope: unknown;
+  scope: Scope;
   repo: string;
 }
 
 /** Bound code-scan request (persisted binding mandatory). */
 export interface CodeScanRequest {
   path: string;
-  scope: unknown;
+  scope: Scope;
   repo: string;
   branchRef?: string;
   scanFilter?: unknown;

@@ -67,6 +67,12 @@ export {
   type MemoryPage,
   type NativeProviderTransport,
   type NativeProviderTransportOptions,
+  type CodeBindingStatus,
+  type CodeBindingCheckpoint,
+  type CodeFreshnessState,
+  type CodeRefFreshness,
+  type CodeRefObservation,
+  type RepositoryRegistration,
   type RecordCounts,
   type ScopeCounts
 } from "./provider.js";

@@ -6,14 +6,15 @@ export {
   EngramCodeBindingUnsupportedError,
   isBindingDenied,
   type CodeBindRequest,
+  type CodeBinding,
   type CodeBindingCheckpoint,
-  type CodeBindingRecord,
-  type CodeBindingStatusResult,
+  type CodeBindingStatus,
   type CodeFreshnessState,
   type CodeRefreshRequest,
   type CodeRegisterRequest,
   type CodeRefFreshness,
   type CodeRefObservation,
   type CodeScanRequest,
-  type CheckpointGeneration
+  type CodeStatusRequest,
+  type Scope
 } from "./code-binding.js";

@@ -332,6 +332,16 @@ mod task_021 {
                 rebuilt.get("error").is_none() && rebuilt_text.contains("generationId"),
                 "{backend} registered-locator rebuild publishes: {rebuilt}"
             );
+            let recalled = server.tool(
+                60,
+                "recall",
+                json!({ "query": "fixture", "include_code_artifacts": true }),
+            );
+            let recalled_text = Server::text_of(&recalled);
+            assert!(
+                recalled.get("error").is_none() && recalled_text.contains("fixture"),
+                "{backend} bound eligible result served: {recalled}"
+            );
             let source = server.tool(61, "fetch_content", json!({ "path": "lib.rs" }));
             let source_text = Server::text_of(&source);
             assert!(
@@ -700,6 +710,20 @@ mod task_022 {
             assert!(
                 text.contains("generationId"),
                 "{backend} rebuild publishes: {text}"
+            );
+
+            let mut recall_args = oneshot_args(&storage, &format!("oneshot-{tag}"), &extra);
+            recall_args.insert(0, "recall".into());
+            recall_args.extend(
+                ["--query", "fixture", "--include-code-artifacts", "--json"]
+                    .iter()
+                    .map(|s| (*s).to_owned()),
+            );
+            let (code, text) = oneshot(&oneshot_refs(&recall_args), &envs);
+            assert_eq!(code, 0, "{backend} one-shot recall: {text}");
+            assert!(
+                text.contains("\"ok\":true") && text.contains("fixture"),
+                "{backend} bound result envelope: {text}"
             );
 
             let mut source_args = oneshot_args(&storage, &format!("oneshot-{tag}"), &extra);

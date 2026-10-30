@@ -14,7 +14,11 @@ use std::process::Command;
 use std::sync::Arc;
 
 use engram_domain::types::ScopeMappingStrategy;
-use engram_domain::{Actor, ActorKind, Id, RepoId, Requester, RetrievalRequest, Scope};
+use engram_domain::{
+    Actor, ActorKind, AllowedUse, CodeResetJournal, Id, KnowledgeChunk, KnowledgeChunkKind,
+    KnowledgeSource, Policy, Provenance, RepoId, Requester, Retention, RetrievalRequest, Scope,
+    Sensitivity, SourceDocument, SourceDocumentKind, SourceKind, Visibility,
+};
 use engram_integration::{CapabilityPolicy, EmbeddingProviderConfig, EngramConfig, MigrationMode};
 use engram_runtime::CoreError;
 use futures::executor::block_on;
@@ -194,6 +198,91 @@ fn requester() -> Requester {
         permissions: Vec::new(),
         on_behalf_of: None,
     }
+}
+
+fn timestamp() -> engram_domain::Timestamp {
+    "2026-10-30T00:00:00Z"
+        .parse()
+        .expect("RFC3339 fixture timestamp")
+}
+
+fn seed_ordinary_record(
+    lanes: &engram_integration::code_binding::CodeIngestionLanes,
+    scope: &Scope,
+    id: &str,
+    token: &str,
+) {
+    let provenance = Provenance {
+        source: "bound-recipe-serving".into(),
+        actor: actor(),
+        observed_at: timestamp(),
+        evidence: Vec::new(),
+        derivations: Vec::new(),
+        confidence: Some(1.0),
+        method: None,
+    };
+    let policy = Policy {
+        visibility: Visibility::Workspace,
+        retention: Retention::Durable,
+        sensitivity: Some(Sensitivity::Medium),
+        allowed_uses: vec![AllowedUse::Retrieval],
+        expires_at: None,
+        delete_mode: None,
+    };
+    let source = KnowledgeSource {
+        id: Id::from(format!("recipe-serving-ordinary-source-{id}")),
+        kind: SourceKind::Filesystem,
+        scope: scope.clone(),
+        name: "recipe-serving-ordinary".into(),
+        uri: None,
+        version: None,
+        repository_key: None,
+        git_ref: None,
+        policy: policy.clone(),
+        provenance: provenance.clone(),
+        created_at: timestamp(),
+        updated_at: None,
+        metadata: None,
+    };
+    let document = SourceDocument {
+        id: Id::from(format!("recipe-serving-ordinary-document-{id}")),
+        source_id: source.id.clone(),
+        kind: SourceDocumentKind::Markdown,
+        uri: None,
+        path: Some("ordinary.md".into()),
+        title: None,
+        mime_type: None,
+        language: None,
+        version: None,
+        content_hash: format!("recipe-serving-ordinary-content-{id}"),
+        provenance: provenance.clone(),
+        policy: policy.clone(),
+        created_at: timestamp(),
+        updated_at: None,
+        metadata: None,
+    };
+    let chunk = KnowledgeChunk {
+        id: Id::from(format!("recipe-serving-ordinary-chunk-{id}")),
+        document_id: document.id.clone(),
+        source_id: source.id.clone(),
+        kind: KnowledgeChunkKind::Paragraph,
+        text: token.into(),
+        summary: None,
+        location: None,
+        entities: Vec::new(),
+        concepts: Vec::new(),
+        embedding_refs: Vec::new(),
+        content_hash: format!("recipe-serving-ordinary-chunk-content-{id}"),
+        provenance,
+        policy,
+        created_at: timestamp(),
+        updated_at: None,
+        metadata: None,
+    };
+    block_on(lanes.knowledge.put_source(source)).expect("seed ordinary source through recipe lane");
+    block_on(lanes.knowledge.put_document(document))
+        .expect("seed ordinary document through recipe lane");
+    block_on(lanes.knowledge.put_chunk(chunk)).expect("seed ordinary chunk through recipe lane");
 }
 
 mod task_019 {
@@ -524,6 +613,177 @@ mod task_019 {
             "real_pg_source_exact_bytes_and_span {}",
             whole.served_digest
         );
+    }
+
+    /// recipe_serving_excludes_retired_code_and_preserves_live_records:
+    /// warm the opened Pg recipe's recall and bound graph paths, reset one
+    /// bound generation, and use those same paths to prove the live durable
+    /// eligibility resolver removes retired code without hiding ordinary or
+    /// preserved records.
+    #[test]
+    #[ignore = "requires sourced ENGRAM_TEST_PG_URL"]
+    fn recipe_serving_excludes_retired_code_and_preserves_live_records() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let id = unique_suffix().replace('-', "_");
+        let make_repository = |name: &str, symbol: &str| {
+            let repository = dir.path().join(name);
+            std::fs::create_dir_all(&repository).expect("mkdir repository");
+            let git = |args: &[&str]| {
+                let status = Command::new("git")
+                    .args(args)
+                    .current_dir(&repository)
+                    .env("GIT_CONFIG_GLOBAL", "/dev/null")
+                    .env("GIT_CONFIG_SYSTEM", "/dev/null")
+                    .status()
+                    .expect("run git");
+                assert!(status.success(), "git {args:?}");
+            };
+            git(&["init", "--initial-branch=main", "."]);
+            git(&["config", "user.email", "recipe@example.test"]);
+            git(&["config", "user.name", "recipe"]);
+            std::fs::write(
+                repository.join("lib.rs"),
+                format!("pub fn {symbol}() -> u32 {{ 1 }}\\n"),
+            )
+            .expect("write fixture");
+            git(&["add", "."]);
+            git(&["commit", "--no-gpg-sign", "-m", "fixture"]);
+            repository
+        };
+        let retired_token = format!("pg_retired_serving_{id}");
+        let preserved_token = format!("pg_preserved_serving_{id}");
+        let ordinary_token = format!("pg_ordinary_serving_{id}");
+        let retired_repository = make_repository("retired", &retired_token);
+        let preserved_repository = make_repository("preserved", &preserved_token);
+        std::fs::create_dir_all(dir.path().join("storage")).expect("mkdir storage");
+        let mut cfg = config(dir.path());
+        cfg.migration_mode = MigrationMode::Apply;
+        let serving_scope = Scope {
+            tenant: format!("recipe-serving-pg-{id}"),
+            subject: None,
+            workspace: Some("recipe-serving".into()),
+            session: None,
+            environment: None,
+        };
+        let provider = engram_backend_pgvector::open(&cfg)
+            .expect("open recipe")
+            .with_code_authorizer(Arc::new(
+                engram_integration::code_binding::ScopeSetAuthorizer::new(vec![
+                    serving_scope.clone(),
+                ]),
+            ))
+            .expect("inject serving host policy");
+        let coordinator = provider.code_bindings().expect("binding handle");
+        let lanes = provider.code_ingestion().expect("recipe ingestion lanes");
+        let retired_repo = RepoId(format!("recipe-serving-retired-{id}"));
+        let preserved_repo = RepoId(format!("recipe-serving-preserved-{id}"));
+        for (repo, repository) in [
+            (&retired_repo, &retired_repository),
+            (&preserved_repo, &preserved_repository),
+        ] {
+            block_on(coordinator.register(
+                &actor(),
+                &serving_scope,
+                engram_knowledge::RepositoryRegistration {
+                    repo_id: repo.clone(),
+                    locator_id: repository.to_string_lossy().to_string(),
+                    acquisition: engram_knowledge::AcquisitionMode::LocalOnly,
+                },
+            ))
+            .expect("register bound fixture");
+            block_on(coordinator.bind(&actor(), &serving_scope, repo, "refs/heads/main"))
+                .expect("bind fixture");
+            block_on(coordinator.ingest_registered(
+                &actor(),
+                &serving_scope,
+                repo,
+                None,
+                None,
+                lanes,
+            ))
+            .expect("publish through recipe ingestion");
+        }
+        seed_ordinary_record(lanes, &serving_scope, &id, &ordinary_token);
+        let recall = |query: &str| {
+            block_on(
+                provider
+                    .require_recall()
+                    .expect("recall")
+                    .recall(RetrievalRequest {
+                        query: query.into(),
+                        scope: serving_scope.clone(),
+                        requester: requester(),
+                        modes: vec![engram_domain::RetrievalMode::Graph],
+                        filters: None,
+                        cues: Vec::new(),
+                        limit: None,
+                        budget: None,
+                        include_explanations: Some(true),
+                    }),
+            )
+            .expect("serve recall")
+        };
+        let explore = |symbol: &str| {
+            block_on(provider.code_graph_explore_bound(
+                &actor(),
+                &serving_scope,
+                symbol,
+                Some(2),
+                Some(24),
+                Some(64),
+                true,
+            ))
+            .expect("serve graph")
+        };
+        let warm_recall = recall(&retired_token);
+        let warm_graph = explore(&retired_token);
+        assert!(format!("{warm_recall:?}").contains(&retired_token));
+        assert!(format!("{warm_graph:?}").contains(&retired_token));
+        let preview = block_on(coordinator.preview_reset(&actor(), &serving_scope, &retired_repo))
+            .expect("authorized reset preview");
+        let journal = CodeResetJournal {
+            reset_id: format!("recipe-serving-reset-{id}"),
+            preview_hash: preview.preview_hash.clone(),
+            target_fingerprints: preview
+                .targets
+                .iter()
+                .map(|target| (target.record_id.clone(), target.fingerprint.clone()))
+                .collect(),
+            authorizing_decisions: vec!["recipe-serving-approved".into()],
+            checkpoints: vec!["authorized".into()],
+            preservation_digests: preview.preservation_digests.clone(),
+            preview,
+        };
+        let approved = block_on(coordinator.journal_reset(
+            &actor(),
+            journal,
+            "recipe-serving-approved".into(),
+        ))
+        .expect("journal reset");
+        block_on(coordinator.apply_reset(&actor(), approved)).expect("apply reset");
+        let after_recall = recall(&retired_token);
+        let after_graph = explore(&retired_token);
+        assert!(
+            !format!("{after_recall:?}").contains(&retired_token),
+            "retired code must not remain in recall: {after_recall:?}"
+        );
+        assert!(
+            !format!("{after_graph:?}").contains(&retired_token),
+            "retired code must not remain in graph answers: {after_graph:?}"
+        );
+        assert_ne!(
+            format!("{warm_recall:?}"),
+            format!("{after_recall:?}"),
+            "post-reset recall must differ from warm serving output"
+        );
+        assert!(
+            format!("{:?}", recall(&ordinary_token)).contains(&ordinary_token),
+            "ordinary recipe record must remain served"
+        );
+        let preserved_recall = recall(&preserved_token);
+        let preserved_graph = explore(&preserved_token);
+        assert!(format!("{preserved_recall:?}").contains(&preserved_token));
+        assert!(format!("{preserved_graph:?}").contains(&preserved_token));
     }
 
     /// unavailable_optional_capabilities (pgvector): optional absent lanes

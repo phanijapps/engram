@@ -634,6 +634,7 @@ mod authority_tests {
         KnowledgeEntity, KnowledgeSource, MemoryContent, MemoryKind, MemoryRecord, MemoryStatus,
         Policy, Provenance, Requester, Retention, Sensitivity, SourceKind, Visibility,
     };
+    use engram_knowledge::CodeBindingRepository;
     use engram_retrieval::{CandidateEvidence, CandidateEvidenceResolver, VectorIndex};
     use engram_store_pgvector::{
         PgBeliefStore, PgCodeBindingRepository, PgConnection, PgKnowledgeStore,

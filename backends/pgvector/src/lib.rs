@@ -135,13 +135,25 @@ pub fn open(config: &EngramConfig) -> CoreResult<EngramProvider> {
     // graph lane); the reset seam rides the coordinator's durable
     // repository ports (`preview_reset`/`journal_reset`; the exact-preview
     // implementation lands with TASK-023/TASK-024).
+    let reset_graph_cache: Arc<dyn engram_retrieval::GraphCache> =
+        Arc::new(engram_retrieval::InMemoryGraphCache::new());
+    let reset_lanes = Arc::new(
+        engram_integration::code_binding::RecipeResetLaneLifecycle::new(
+            None,
+            vectors
+                .clone()
+                .map(|vector| vector as Arc<dyn engram_retrieval::VectorIndex>),
+            reset_graph_cache.clone(),
+        ),
+    );
     let code_coordinator = Arc::new(
         engram_integration::code_binding::CodeBindingCoordinator::new(
             Arc::new(PgCodeBindingRepository::new(mk_conn()?)?)
                 as Arc<dyn engram_knowledge::CodeBindingRepository>,
             Arc::new(engram_integration::code_binding::RecipeDefaultAuthorizer),
             Vec::new(),
-        ),
+        )
+        .with_reset_lanes(reset_lanes),
     );
     let code_source: Arc<dyn engram_knowledge::RetainedSourceReader> =
         Arc::new(engram_ingest::git_source::RetainedSnapshotReader::new(
@@ -196,7 +208,8 @@ pub fn open(config: &EngramConfig) -> CoreResult<EngramProvider> {
         .hierarchy(hierarchy)
         .procedures(procedures)
         .knowledge_query(knowledge_query)
-        .recall(recall);
+        .recall(recall)
+        .graph_cache(reset_graph_cache);
     if let Some(vectors) = vectors {
         provider_builder = provider_builder.vectors(vectors);
     }

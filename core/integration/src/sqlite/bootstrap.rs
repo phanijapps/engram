@@ -725,11 +725,17 @@ pub(crate) fn bootstrap_sqlite(config: &EngramConfig) -> CoreResult<EngramProvid
         if let Ok(bindings) =
             engram_store_sqlite::knowledge::SqlCodeBindingRepository::open(&paths.code_bindings)
         {
+            let reset_lanes = Arc::new(crate::code_binding::RecipeResetLaneLifecycle::new(
+                lexical_feed.clone(),
+                vectors.clone(),
+                graph_cache.clone(),
+            ));
             let coordinator = crate::code_binding::CodeBindingCoordinator::new(
                 Arc::new(bindings),
                 Arc::new(crate::code_binding::RecipeDefaultAuthorizer),
                 Vec::new(),
-            );
+            )
+            .with_reset_lanes(reset_lanes);
             let retained_root = config.storage_path.join("retained");
             code_source = Some(Arc::new(
                 engram_ingest::git_source::RetainedSnapshotReader::new(retained_root.clone()),

@@ -1,12 +1,19 @@
+use async_trait::async_trait;
 use engram_domain::{
     CodeAttempt, CodeAttemptState, CodeBinding, CodeGeneration, CodeLineage, CodeReceiptKind,
     CodeResetJournal, RepoId, Scope,
+};
+use engram_integration::LexicalFeed;
+use engram_integration::code_binding::{
+    CodeBindingCoordinator, RecipeResetLaneLifecycle, ResetLane, ResetLaneLifecycle,
+    ScopeSetAuthorizer,
 };
 use engram_knowledge::{
     CodeBindingRepository, CodeReadLease, CodeReadLeases, RepositoryRegistration, RetirementTarget,
 };
 use engram_store_sqlite::knowledge::SqlCodeBindingRepository;
 use futures::executor::block_on;
+use std::sync::{Arc, Mutex};
 
 fn scope() -> Scope {
     Scope {
@@ -253,6 +260,143 @@ mod task_023 {
 
 mod task_024 {
     use super::*;
+
+    struct RealLexicalLane(Arc<engram_store_lexical::LexicalIndex>);
+    #[async_trait]
+    impl LexicalFeed for RealLexicalLane {
+        async fn upsert(&self, target_id: &str, text: &str) -> engram_runtime::CoreResult<()> {
+            self.0
+                .upsert(target_id, text)
+                .map_err(|error| engram_runtime::CoreError::Adapter {
+                    adapter: "test-lexical".into(),
+                    message: error.to_string(),
+                })
+        }
+        async fn upsert_batch(
+            &self,
+            entries: &[(String, String)],
+        ) -> engram_runtime::CoreResult<()> {
+            self.0
+                .upsert_batch(entries)
+                .map_err(|error| engram_runtime::CoreError::Adapter {
+                    adapter: "test-lexical".into(),
+                    message: error.to_string(),
+                })
+        }
+        async fn upsert_code_target(
+            &self,
+            target_id: &str,
+            text: &str,
+            generation: &str,
+        ) -> engram_runtime::CoreResult<()> {
+            self.0
+                .upsert_stamped(
+                    target_id,
+                    text,
+                    &engram_store_lexical::code_contributor_key(generation),
+                )
+                .map_err(|error| engram_runtime::CoreError::Adapter {
+                    adapter: "test-lexical".into(),
+                    message: error.to_string(),
+                })
+        }
+        async fn retire_generation(&self, generation: &str) -> engram_runtime::CoreResult<usize> {
+            self.0
+                .retire_contributor(&engram_store_lexical::code_contributor_key(generation))
+                .map_err(|error| engram_runtime::CoreError::Adapter {
+                    adapter: "test-lexical".into(),
+                    message: error.to_string(),
+                })
+        }
+        async fn delete_target(&self, target_id: &str) -> engram_runtime::CoreResult<()> {
+            self.0
+                .delete(target_id)
+                .map_err(|error| engram_runtime::CoreError::Adapter {
+                    adapter: "test-lexical".into(),
+                    message: error.to_string(),
+                })
+        }
+    }
+
+    struct FailingLane {
+        fail_vector_once: Mutex<bool>,
+        calls: Mutex<Vec<ResetLane>>,
+    }
+    #[async_trait]
+    impl ResetLaneLifecycle for FailingLane {
+        async fn cleanup_and_rebuild(
+            &self,
+            lane: ResetLane,
+            _scope: &Scope,
+            _retired: &[engram_domain::CodeResetTarget],
+            _preserved: &[engram_domain::PreservationRecord],
+        ) -> engram_runtime::CoreResult<()> {
+            self.calls.lock().expect("calls").push(lane);
+            if lane == ResetLane::Vector && *self.fail_vector_once.lock().expect("failure") {
+                *self.fail_vector_once.lock().expect("failure") = false;
+                return Err(engram_runtime::CoreError::Adapter {
+                    adapter: "failing-lane-double".into(),
+                    message: "forced vector failure".into(),
+                });
+            }
+            Ok(())
+        }
+    }
+
+    fn coordinator(
+        store: SqlCodeBindingRepository,
+        lanes: Arc<dyn ResetLaneLifecycle>,
+    ) -> CodeBindingCoordinator {
+        CodeBindingCoordinator::new(
+            Arc::new(store),
+            Arc::new(ScopeSetAuthorizer::new(vec![scope()])),
+            vec![],
+        )
+        .with_reset_lanes(lanes)
+    }
+
+    #[test]
+    fn real_recipe_bundle_retires_code_and_preserves_ordinary_lexical_records() {
+        let store = setup();
+        let index = Arc::new(engram_store_lexical::LexicalIndex::new().expect("index"));
+        index
+            .upsert_stamped("target-a", "retired signal", "code:reset-generation")
+            .expect("retired code");
+        index
+            .upsert("ordinary-record", "preserved signal")
+            .expect("ordinary record");
+        let lanes = Arc::new(RecipeResetLaneLifecycle::new(
+            Some(Arc::new(RealLexicalLane(index.clone()))),
+            None,
+            Arc::new(engram_retrieval::InMemoryGraphCache::new()),
+        ));
+        let preview = block_on(store.preview_reset(&scope(), &repo())).expect("preview");
+        let approved_journal = approved(&store, journal(preview));
+        let applied = block_on(coordinator(store, lanes).apply_reset(
+            &engram_domain::Actor {
+                id: "reset-owner".into(),
+                kind: engram_domain::ActorKind::Agent,
+                display_name: None,
+                metadata: None,
+            },
+            approved_journal,
+        ))
+        .expect("real composed reset");
+        assert!(
+            applied
+                .checkpoints
+                .iter()
+                .any(|item| item == "reset-lane:lexical:done")
+        );
+        assert!(
+            index.search("retired", 10).expect("search").is_empty(),
+            "retired code must not serve"
+        );
+        assert_eq!(
+            index.search("preserved", 10).expect("search")[0].0,
+            "ordinary-record"
+        );
+    }
 
     #[test]
     fn interrupted_journal_resumes_exact_ids() {
@@ -507,17 +651,59 @@ mod task_024 {
 
     #[test]
     fn cross_store_failure_is_best_effort_surfaced() {
-        // Completed IDs are durable-resume evidence, not a cross-store ACID
-        // rollback claim; a later cell failure resumes from this checkpoint.
         let store = setup();
         let preview = block_on(store.preview_reset(&scope(), &repo())).expect("preview");
-        let applied =
-            block_on(store.apply_reset(approved(&store, journal(preview)))).expect("local apply");
+        let approved_journal = approved(&store, journal(preview));
+        let lanes = Arc::new(FailingLane {
+            fail_vector_once: Mutex::new(true),
+            calls: Mutex::new(Vec::new()),
+        });
+        let coordinator = coordinator(store, lanes.clone());
+        let actor = engram_domain::Actor {
+            id: "reset-owner".into(),
+            kind: engram_domain::ActorKind::Agent,
+            display_name: None,
+            metadata: None,
+        };
+        let partial = block_on(coordinator.apply_reset(&actor, approved_journal.clone()))
+            .expect("best effort result");
         assert!(
-            applied
+            partial
                 .checkpoints
                 .iter()
                 .any(|item| item == "completed:target-a")
+        );
+        assert!(
+            partial
+                .checkpoints
+                .iter()
+                .any(|item| item == "reset-lane:lexical:done")
+        );
+        assert!(
+            partial
+                .checkpoints
+                .iter()
+                .any(|item| item == "reset-lane:vector:failed")
+        );
+        let resumed = block_on(coordinator.apply_reset(&actor, approved_journal)).expect("resume");
+        assert!(
+            resumed
+                .checkpoints
+                .iter()
+                .any(|item| item == "reset-lane:vector:done")
+        );
+        assert!(
+            resumed
+                .checkpoints
+                .iter()
+                .all(|item| !item.ends_with(":failed"))
+        );
+        assert!(
+            lanes
+                .calls
+                .lock()
+                .expect("calls")
+                .contains(&ResetLane::Vector)
         );
     }
 }

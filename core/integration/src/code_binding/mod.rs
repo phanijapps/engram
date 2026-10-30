@@ -15,6 +15,7 @@ use engram_knowledge::{CodeBindingRepository, CoreResult, StageReceipt};
 #[cfg(feature = "code-lanes")]
 pub use ingestion::{CodeIngestionLanes, IngestedGeneration};
 pub use publication::CodeRebuildRequest;
+pub use reset::{RecipeResetLaneLifecycle, ResetLane, ResetLaneLifecycle};
 pub use source::{BoundParticipant, ExactReadCandidate, ParticipantExactSource};
 pub use status::{
     CheckpointGeneration, CodeBindingCheckpoint, CodeBindingStatus, CodeFreshnessState,
@@ -119,6 +120,7 @@ pub struct CodeBindingCoordinator {
     store: Arc<dyn CodeBindingRepository>,
     authorizer: Arc<dyn CodeBindingAuthorizer>,
     required_lanes: Vec<CodeReceiptKind>,
+    reset_lanes: Arc<dyn reset::ResetLaneLifecycle>,
     clock: Arc<dyn engram_runtime::Clock>,
 }
 
@@ -196,6 +198,7 @@ impl CodeBindingCoordinator {
             store,
             authorizer,
             required_lanes,
+            reset_lanes: Arc::new(reset::NoopResetLaneLifecycle),
             clock: Arc::new(UtcClock),
         }
     }
@@ -222,8 +225,15 @@ impl CodeBindingCoordinator {
             store: Arc::clone(&self.store),
             authorizer,
             required_lanes: self.required_lanes.clone(),
+            reset_lanes: Arc::clone(&self.reset_lanes),
             clock: Arc::clone(&self.clock),
         }
+    }
+
+    /// Injects the integration-owned cleanup/rebuild bundle for the shipped reset surface.
+    pub fn with_reset_lanes(mut self, lanes: Arc<dyn reset::ResetLaneLifecycle>) -> Self {
+        self.reset_lanes = lanes;
+        self
     }
 
     /// Shared caller-authority check for code operations (corrective r2,

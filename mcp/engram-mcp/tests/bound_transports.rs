@@ -214,7 +214,15 @@ fn select_backends(pg_required: bool, pg_url: bool) -> Vec<(&'static str, &'stat
 
 // The recipe set under test.
 fn backends() -> Vec<(&'static str, &'static str)> {
-    select_backends(pg_required(), pg_available())
+    let backends = select_backends(pg_required(), pg_available());
+    if cfg!(feature = "pgvector") {
+        backends
+    } else {
+        backends
+            .into_iter()
+            .filter(|(backend, _)| *backend == "sqlite")
+            .collect()
+    }
 }
 
 #[test]
@@ -607,7 +615,7 @@ mod task_021 {
             let text = String::from_utf8_lossy(&output.stderr).to_string()
                 + &String::from_utf8_lossy(&output.stdout);
             assert!(
-                text.contains("pgvector feature"),
+                text.contains("requires a build with") && text.contains("--features pgvector"),
                 "featureless refusal must be typed: {text}"
             );
         }

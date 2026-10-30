@@ -26,8 +26,10 @@ import type {
   LegacyDocumentScanResult
 } from "@engram/node";
 
-// The Rust-serialized result shapes (single definition in `@engram/node`,
-// built on the generated contracts) re-exported for transport implementors.
+/**
+ * Rust-serialized binding result shapes re-exported for transport implementors.
+ * Their single definition is in `@engram/node` and generated contracts.
+ */
 export type {
   CodeBindingCheckpoint,
   CodeBindingStatus,
@@ -38,6 +40,7 @@ export type {
   BoundCodeScanResult,
   LegacyDocumentScanResult
 };
+/** Generated portable binding and scope contract shapes. */
 export type { CodeBinding, Scope };
 
 /** Bind request (`{ scope, repo, branchRef }`). */

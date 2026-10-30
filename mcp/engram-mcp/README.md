@@ -39,7 +39,26 @@ Every tool routes through `EngramProvider` (`engram-integration`); the server
 never calls an LLM — extraction is the calling agent's job (see the
 `engram-distill` skill in `skills/`).
 
+## Bound code operations
+
+The granular MCP surface exposes `code_repo_register`, `code_bind`, `code_status`, and `code_refresh`.
+Register an approved locator, bind one full `refs/heads/...` ref, then use the bound ingestion surface.
+The server does not treat a caller path, checkout `HEAD`, or caller-supplied OID as code authority.
+`code_refresh` records an on-request observation from the registered locator without fetching or changing a checkout.
+`code_status` keeps that observation separate from the indexed generation OID.
+
+The same operations are available without an MCP handshake through `engram-mcp code --op register|bind|status|refresh`.
+`engram-mcp backfill-embeddings` drains unembedded document chunks and never rescans or rebuilds bound code.
+The ambiguous one-shot `reindex` alias exits with a deprecation diagnostic rather than choosing either operation.
+
+Bound code operations are deny-by-default in native and TypeScript hosts.
+Inject the allowed scopes through `codeAuthority.launchScopes` when constructing the provider.
+The legacy native `codeBindJson` entry point is removed for callers and returns the typed `LegacyCodeBindUnsupported` denial.
+Use the provider path with host authority injection instead.
+
+See [`HOW-TO.md`](HOW-TO.md#bound-code-operation-flow) for tool arguments and [`docs/operator-bound-code-runbook.md`](../../docs/operator-bound-code-runbook.md) for reset and matrix operations.
+
 ## Status
 
-Phase 1 (this crate) is `Implementing` under `docs/specs/engram-mcp-core/`. The
-SurrealDB backend is out of scope (SQLite adapter only).
+The MCP server ships generic memory, knowledge graph, document ingestion, and bound-code transport operations.
+SQLite and pgvector recipes expose the supported capability set; unavailable optional lanes report their capability state rather than falling back.

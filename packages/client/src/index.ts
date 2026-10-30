@@ -1,7 +1,11 @@
+/** Main client factory, client class, options, and bound-code client exports. */
 export { createEngramClient, EngramClient, type EngramClientOptions, EngramCodeBindingClient } from "./client.js";
+/** Native-provider client factory. */
 export { createNativeEngramClient } from "./native.js";
 
+/** Transport abstraction for custom client transports. */
 export type { EngramTransport } from "./transport.js";
+/** Bound-code errors, helpers, requests, results, and generated contract types. */
 export {
   EngramCodeBindingUnsupportedError,
   isBindingDenied,

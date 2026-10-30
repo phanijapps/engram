@@ -97,6 +97,8 @@ USAGE
                                          code operations (same handlers as stdio)
   engram-mcp backfill-embeddings [...]   one-shot embedding backfill (document
                                          chunks; NEVER a code rescan/rebuild)
+  engram-mcp reindex [...]               deprecated ambiguous alias; exits with
+                                         guidance and never selects a code rebuild
 
 LAUNCH FLAGS
   --storage <path>            Store directory (required; env ENGRAM_STORAGE)

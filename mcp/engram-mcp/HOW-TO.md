@@ -324,6 +324,42 @@ configs at `<storage>/packs/launch/<workspace>/{ontology,taxonomy}.json`;
 the server to activate); `pack status` prints cache entries with hashes,
 launch-config file hashes, and sliced-vs-available counts.
 
+### Bound code operation flow
+
+Bound code uses a registered locator rather than an arbitrary checkout path.
+The required flow is `code_repo_register`, `code_bind`, then the bound scan or rebuild surface.
+Use a full `refs/heads/...` ref in `code_bind`.
+A same-ref bind retry is idempotent and a different ref returns `BindingConflict`.
+`code_status` reports the configured ref, indexed OID, checkpoint, and last on-request observation.
+`code_refresh` observes the configured ref from the registered locator without fetching, reading checkout `HEAD`, or mutating a checkout.
+
+For MCP stdio, call these tools with the launch scope:
+
+```json
+{"name":"code_repo_register","arguments":{"repo":"payments","mode":"local-only","path":"/approved/repos/payments"}}
+{"name":"code_bind","arguments":{"repo":"payments","branchRef":"refs/heads/main"}}
+{"name":"code_status","arguments":{"repo":"payments"}}
+{"name":"code_refresh","arguments":{"repo":"payments"}}
+```
+
+For one-shot operation, use the same handlers and arguments:
+
+```bash
+engram-mcp code --op register --repo payments --path /approved/repos/payments --storage ~/.engram/payments --project payments
+engram-mcp code --op bind --repo payments --branch-ref refs/heads/main --storage ~/.engram/payments --project payments
+engram-mcp code --op status --repo payments --storage ~/.engram/payments --project payments
+engram-mcp code --op refresh --repo payments --storage ~/.engram/payments --project payments
+```
+
+`backfill-embeddings` is a document-chunk embedding backfill and never a bound-code rescan or branch rebuild.
+The one-shot `reindex` alias is deprecated and exits with a diagnostic that directs callers to either `backfill-embeddings` or the explicit bound-code operation.
+`scan_repo` remains available for unbound scopes, but a scope with published bound code rejects arbitrary-path code scans; use `documentOnly=true` only for the explicitly labeled document lane.
+
+Native and TypeScript hosts deny code operations unless the host injects `codeAuthority.launchScopes` into `NativeProvider` configuration.
+For example, use `{"codeAuthority":{"launchScopes":[{"tenant":"acme","workspace":"payments"}]}}` with the provider configuration.
+The legacy native `codeBindJson` path returns `LegacyCodeBindUnsupported`; use `NativeProvider` or the TypeScript provider/client path with host authority injection.
+See [`docs/operator-bound-code-runbook.md`](../../docs/operator-bound-code-runbook.md) for reset, matrix, and fixture custody.
+
 ### Version identity
 
 Every release binary self-reports the git tag it was built from (CI
@@ -375,6 +411,7 @@ decision-value × non-redundancy):
 | Procedures | `procedure_put`, `procedure_list` |
 | Lifecycle / health | `forget`, `graph_health` |
 | Source | `fetch_content` |
+| Bound code | `code_repo_register`, `code_bind`, `code_status`, `code_refresh` |
 
 Larger surfaces: `--tools full` (28 — adds maintenance tools) and
 `--tools all` (the complete granular set, including `graph_neighbors`,

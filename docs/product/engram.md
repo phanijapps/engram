@@ -70,6 +70,17 @@ Re-ingest **converges** the graph (retraction, ledger rows included).
 **Cross-repo linkage** via stable source keys + shared OpenAPI
 contract nodes. *Specs: knowledge-ingestion, knowledge-graph-extractor, ast-symbol-extraction, scale-repo-ingestion, background-repo-indexer, structured-repo-identity, contract-first-ingestion, knowledge-graph-retraction, engram-code.*
 
+### Project-bound code indexes ✅
+A code index can bind one authorized scope and opaque `RepoId` to one exact `refs/heads/...` ref.
+Registration records an approved locator, binding is idempotent for the same ref, and a different ref denies with `BindingConflict`.
+Bound ingestion retains immutable source snapshots and does not use caller checkout paths or `HEAD` as authority.
+Generation publication is receipt-gated and fenced; status keeps the indexed OID separate from an explicit on-request ref observation.
+Code reads, retrieval, graph operations, and targeted reset use the same binding authority.
+Reset follows preview → owner gate → apply/resume with an exact durable journal, preservation digests, and ambiguous-ownership denial.
+MCP stdio and one-shot, Rust, N-API, and TypeScript hosts expose the scoped registration, bind, status, and refresh operations.
+Hosts inject `codeAuthority.launchScopes`; recipe defaults deny code operations and the legacy native bind path directs callers to the provider path.
+The matrix runner records disposable SQLite/pgvector and native/MCP receipts; see [`docs/operator-bound-code-runbook.md`](../operator-bound-code-runbook.md).
+
 ### Taxonomy & ontology ✅
 A governed, evolving concept vocabulary (SKOS-aligned) and a typed ontology
 (classes / properties / axioms) as first-class layers — turning a bag of
@@ -199,6 +210,7 @@ engram-demo-app, enterprise-3d-graph, graph-explorer, demo-ui-shell.*
 | Consolidation (reflection + decay) | ✅ shipped |
 | Governance (policy · provenance · scope) | ✅ shipped (cross-cutting) |
 | Codegraph layer | ✅ shipped |
+| Project-bound code indexes | ✅ shipped |
 | Storage — SQLite (reference) | ✅ shipped |
 | Storage — SurrealDB (2nd engine) | 🚧 draft |
 | Rust SDK + host-SDK (S1–S7) | ✅ shipped |

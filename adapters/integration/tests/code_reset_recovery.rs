@@ -1,10 +1,12 @@
 use async_trait::async_trait;
 use engram_domain::{
     AllowedUse, CodeAttempt, CodeAttemptState, CodeBinding, CodeGeneration, CodeLineage,
-    CodeReceiptKind, CodeResetJournal, Id, KnowledgeSource, Policy, Provenance, RepoId, Retention,
-    Scope, SourceDocument, SourceDocumentKind, SourceKind, Visibility,
+    CodeReceiptKind, CodeResetJournal, EntityKind, EntityRef, Id, KnowledgeChunk,
+    KnowledgeChunkKind, KnowledgeEntity, KnowledgeGraph, KnowledgeRelationship, KnowledgeSource,
+    Policy, Provenance, RepoId, Retention, Scope, SourceDocument, SourceDocumentKind, SourceKind,
+    Visibility,
 };
-use engram_integration::LexicalFeed;
+use engram_integration::{KnowledgeQuery, LexicalFeed};
 use engram_integration::code_binding::{
     CodeBindingCoordinator, PreservationRecordSource, RecipeResetLaneLifecycle, ResetLane,
     ResetLaneLifecycle, ResetLaneOutcome, ScopeSetAuthorizer,
@@ -487,6 +489,44 @@ mod task_024 {
         }
     }
 
+    fn foreign_source() -> KnowledgeSource {
+        KnowledgeSource {
+            id: Id::from("foreign-preservation-source"),
+            kind: SourceKind::GitRepository,
+            scope: scope(),
+            name: "foreign preservation fixture".into(),
+            uri: None,
+            version: None,
+            repository_key: Some("foreign-preservation-repository".into()),
+            git_ref: Some("refs/heads/main".into()),
+            policy: ordinary_source().policy,
+            provenance: ordinary_source().provenance,
+            created_at: chrono::Utc::now(),
+            updated_at: None,
+            metadata: None,
+        }
+    }
+
+    fn foreign_document(content_hash: &str) -> SourceDocument {
+        SourceDocument {
+            id: Id::from("foreign-preservation-document"),
+            source_id: Id::from("foreign-preservation-source"),
+            kind: SourceDocumentKind::Code,
+            uri: None,
+            path: Some("src/foreign.rs".into()),
+            title: None,
+            mime_type: None,
+            language: Some("rust".into()),
+            version: None,
+            content_hash: content_hash.into(),
+            provenance: foreign_source().provenance,
+            policy: foreign_source().policy,
+            created_at: chrono::Utc::now(),
+            updated_at: None,
+            metadata: None,
+        }
+    }
+
     fn coordinator_with_real_knowledge(
         bindings: SqlCodeBindingRepository,
         lanes: Arc<dyn ResetLaneLifecycle>,
@@ -781,6 +821,56 @@ mod task_024 {
                 .expect_err("ordinary store drift denies apply");
             assert!(format!("{error:?}").contains("ResetPreservationFailed"));
         }
+    }
+
+    #[test]
+    fn real_foreign_repository_content_mutation_between_preview_and_apply_is_denied() {
+        let bindings = setup();
+        block_on(bindings.put_lineage(
+            &scope(),
+            "foreign-preservation-document",
+            CodeLineage {
+                repo_id: RepoId("foreign-preservation-repository".into()),
+                generation_id: "foreign-generation".into(),
+                source_path: "src/foreign.rs".into(),
+                contributors: vec!["src/foreign.rs".into()],
+                span: None,
+            },
+        ))
+        .expect("foreign lineage");
+        let (coordinator, knowledge) = coordinator_with_real_knowledge(
+            bindings,
+            Arc::new(FailingLane {
+                fail_vector_once: Mutex::new(false),
+                calls: Mutex::new(Vec::new()),
+            }),
+        );
+        block_on(knowledge.put_source(foreign_source())).expect("foreign source");
+        block_on(knowledge.put_document(foreign_document("sha256:foreign-original")))
+            .expect("foreign document");
+        let preview = block_on(coordinator.preview_reset(&actor(), &scope(), &repo()))
+            .expect("preview includes foreign store content");
+        let approved = block_on(coordinator.journal_reset(
+            &actor(),
+            journal(preview),
+            "approved-by-fixture".into(),
+        ))
+        .expect("approval");
+        block_on(knowledge.put_document(foreign_document("sha256:foreign-mutated")))
+            .expect("mutate actual foreign store content");
+        let foreign_lineage = block_on(
+            coordinator
+                .store()
+                .record_lineage(&scope(), "foreign-preservation-document"),
+        )
+        .expect("foreign lineage read")
+        .expect("foreign lineage remains stored");
+        assert_eq!(foreign_lineage.repo_id, "foreign-preservation-repository");
+        assert_eq!(foreign_lineage.generation_id, "foreign-generation");
+        assert!(!foreign_lineage.retired, "the non-target lineage is unchanged");
+        let error = block_on(coordinator.apply_reset(&actor(), approved))
+            .expect_err("foreign content drift denies apply");
+        assert!(format!("{error:?}").contains("ResetPreservationFailed"));
     }
 
     #[test]

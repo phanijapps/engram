@@ -2267,15 +2267,31 @@ pub(crate) mod tests {
             "artifacts suppressed by default: {body}"
         );
 
-        // Exact suppressed-name search: SUCCESS-empty + actionable hint.
+        // `main` has a real Function in this fixture, so exact-name injection
+        // must return that eligible symbol without re-admitting an artifact.
         let res = crate::codegraph::search(&app, &json!({ "query": "main" })).unwrap();
         let body = res["content"][0]["text"].as_str().unwrap();
-        if !body.contains("charge_card") {
-            assert!(
-                body.contains("include_code_artifacts: true"),
-                "empty packet must carry the opt-in hint: {body}"
-            );
-        }
+        assert!(
+            body.contains("main — engram-mcp-scan, src/main.rs"),
+            "the eligible fn main remains searchable: {body}"
+        );
+        assert!(
+            !body.contains("(Module)") && !body.contains("(File)"),
+            "the exact-name injection must not re-admit an artifact: {body}"
+        );
+
+        // The module name has no ordinary symbol counterpart, so its default
+        // search is SUCCESS-empty and gives the actionable opt-in hint.
+        let res = crate::codegraph::search(&app, &json!({ "query": "engram-mcp-scan" })).unwrap();
+        let body = res["content"][0]["text"].as_str().unwrap();
+        assert!(
+            body.contains("No results"),
+            "artifact-only match must be success-empty: {body}"
+        );
+        assert!(
+            body.contains("include_code_artifacts: true"),
+            "artifact-only match must carry the opt-in hint: {body}"
+        );
 
         // File-as-query: a PATH-SHAPED query auto-includes artifacts — the
         // reproduced regression (source-of-symbol accuracy 100% -> 0% under

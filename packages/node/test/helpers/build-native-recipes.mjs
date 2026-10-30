@@ -28,7 +28,7 @@
  */
 import { execFileSync } from "node:child_process";
 import { createHash, randomUUID } from "node:crypto";
-import { closeSync, constants, copyFileSync, existsSync, mkdirSync, openSync, readFileSync, rmSync, statSync, utimesSync, writeSync } from "node:fs";
+import { closeSync, constants, copyFileSync, existsSync, mkdirSync, openSync, readFileSync, readdirSync, rmSync, statSync, utimesSync, writeSync } from "node:fs";
 import { createRequire } from "node:module";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -219,26 +219,38 @@ export function ensureRecipeArtifacts(options) {
   return withRecipeArtifacts(({ paths, digests }) => ({ ...paths, digests }), options);
 }
 
-/** Loads one recipe's addon from the selected immutable artifact path. */
+/** Returns the newest valid immutable artifact that the warm build published. */
+function publishedRecipeArtifact(recipe, artifactsRoot = sharedArtifactsRoot) {
+  const directory = join(artifactsRoot, recipe);
+  if (!existsSync(directory)) {
+    return undefined;
+  }
+  const candidates = readdirSync(directory)
+    .filter((entry) => entry.endsWith(".node"))
+    .map((entry) => join(directory, entry))
+    .sort((left, right) => statSync(right).mtimeMs - statSync(left).mtimeMs);
+  for (const path of candidates) {
+    try {
+      validateArtifact(path, recipe);
+      const digest = digestArtifact(path);
+      if (path.includes(`.${digest.slice(0, 16)}.`)) {
+        return { path, digest };
+      }
+    } catch {
+      // A concurrent publisher may leave an incomplete candidate visible.
+    }
+  }
+  return undefined;
+}
+
+/** Loads the warm-build artifact, or builds one when no valid artifact exists. */
 export function loadRecipe(recipe) {
   const require = createRequire(import.meta.url);
-  return withRecipeArtifacts(({ paths, digests, rebuild }) => {
-    const artifactFor = (artifacts, selectedRecipe) => ({
-      recipe: selectedRecipe,
-      path: artifacts.paths[selectedRecipe],
-      digest: artifacts.digests[selectedRecipe],
-    });
-    const loaded = resolveRecipeArtifact(recipe, digests[recipe], {
-      inspect: (selectedRecipe) => ({
-        recipe: selectedRecipe,
-        path: paths[selectedRecipe],
-        digest: digestArtifact(paths[selectedRecipe]),
-      }),
-      rebuild: (selectedRecipe) => artifactFor(rebuild(), selectedRecipe),
-      load: (artifact) => ({ ...artifact, addon: require(artifact.path) }),
-    });
-    return loaded.addon;
-  });
+  const artifact = publishedRecipeArtifact(recipe);
+  if (artifact) {
+    return require(artifact.path);
+  }
+  return withRecipeArtifacts(({ paths }) => require(paths[recipe]));
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {

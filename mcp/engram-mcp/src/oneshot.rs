@@ -435,6 +435,7 @@ fn run_code(argv: &[String]) -> i32 {
     let mut repo = None;
     let mut branch_ref = None;
     let mut path = None;
+    let mut request_id = None;
     let mut journal = None;
     let mut decision = None;
     let mut json_out = false;
@@ -452,6 +453,7 @@ fn run_code(argv: &[String]) -> i32 {
             "--repo" => repo = it.next().cloned(),
             "--branch-ref" | "--branchRef" => branch_ref = it.next().cloned(),
             "--path" => path = it.next().cloned(),
+            "--request-id" | "--requestId" => request_id = it.next().cloned(),
             "--journal" => journal = it.next().cloned(),
             "--decision" => decision = it.next().cloned(),
             "--json" => json_out = true,
@@ -460,7 +462,7 @@ fn run_code(argv: &[String]) -> i32 {
     }
     let Some(op) = op.as_deref() else {
         eprintln!(
-            "engram-mcp code: --op <register|bind|status|refresh|reset-preview|reset-apply|reset-resume> is required"
+            "engram-mcp code: --op <register|bind|status|refresh|rebuild|reset-preview|reset-apply|reset-resume> is required"
         );
         return 2;
     };
@@ -481,6 +483,9 @@ fn run_code(argv: &[String]) -> i32 {
     if let Some(path) = path.clone() {
         args.insert("path".to_owned(), json!(path));
     }
+    if let Some(request_id) = request_id {
+        args.insert("requestId".to_owned(), json!(request_id));
+    }
     if let Some(journal) = journal {
         match serde_json::from_str::<Value>(&journal) {
             Ok(value) => {
@@ -495,18 +500,25 @@ fn run_code(argv: &[String]) -> i32 {
     if let Some(decision) = decision {
         args.insert("decision".to_owned(), json!(decision));
     }
+    if op == "reset-preview" {
+        args.insert(
+            "scope".to_owned(),
+            serde_json::to_value(&app.scope).expect("scope serializes"),
+        );
+    }
     let arguments = Value::Object(args);
     let outcome = match op {
         "register" => crate::tools::code_repo_register(&app, &arguments),
         "bind" => crate::tools::code_bind(&app, &arguments),
         "status" => crate::tools::code_status(&app, &arguments),
         "refresh" => crate::tools::code_refresh(&app, &arguments),
+        "rebuild" => crate::tools::code_rebuild(&app, &arguments),
         "reset-preview" => crate::tools::code_reset_preview(&app, &arguments),
         "reset-apply" => crate::tools::code_reset_apply(&app, &arguments),
         "reset-resume" => crate::tools::code_reset_resume(&app, &arguments),
         other => {
             eprintln!(
-                "engram-mcp code: unknown op {other:?} (register|bind|status|refresh|reset-preview|reset-apply|reset-resume)"
+                "engram-mcp code: unknown op {other:?} (register|bind|status|refresh|rebuild|reset-preview|reset-apply|reset-resume)"
             );
             return 2;
         }

@@ -179,6 +179,21 @@ fn pg_required() -> bool {
     std::env::var("ENGRAM_TEST_REQUIRE_PG").map_or(false, |value| value == "1")
 }
 
+/// Convert the real preview document into the exact owner-approved journal
+/// accepted by the public reset handler.
+fn approved_journal(preview: Value, reset_id: &str, decision: &str) -> Value {
+    let targets = preview["targets"].as_array().expect("preview targets");
+    json!({
+        "resetId": reset_id,
+        "preview": preview.clone(),
+        "previewHash": preview["previewHash"],
+        "targetFingerprints": targets.iter().map(|target| json!([target["recordId"], target["fingerprint"]])).collect::<Vec<_>>(),
+        "authorizingDecisions": [decision],
+        "checkpoints": [],
+        "preservationDigests": preview["preservationDigests"],
+    })
+}
+
 /// The pure recipe-selection rule (review r6 finding 8): `pgvector` when the
 /// URL is present AND the binary was built with the feature (a build without
 /// the feature refuses the backend with its typed error — asserted in the
@@ -240,6 +255,23 @@ mod task_021 {
                 init["result"]["serverInfo"]["name"] == "engram-mcp",
                 "{backend} init"
             );
+            let listed = server.call(99, "tools/list", json!({}));
+            let names = listed["result"]["tools"]
+                .as_array()
+                .expect("tool list")
+                .iter()
+                .filter_map(|tool| tool["name"].as_str())
+                .collect::<Vec<_>>();
+            for reset_tool in [
+                "code_reset_preview",
+                "code_reset_apply",
+                "code_reset_resume",
+            ] {
+                assert!(
+                    names.contains(&reset_tool),
+                    "{backend} missing {reset_tool}"
+                );
+            }
 
             // register → bind → status(unknown) → refresh → status(observed)
             server.tool(
@@ -290,8 +322,54 @@ mod task_021 {
                 "{backend} refresh observes the real ref: {refreshed}"
             );
 
-            let after = server.tool(
+            let rebuilt = server.tool(
                 6,
+                "code_rebuild",
+                json!({ "repo": format!("repo-{tag}-{run}"), "requestId": format!("rebuild-{run}") }),
+            );
+            let rebuilt_text = Server::text_of(&rebuilt);
+            assert!(
+                rebuilt.get("error").is_none() && rebuilt_text.contains("generationId"),
+                "{backend} registered-locator rebuild publishes: {rebuilt}"
+            );
+            let preview_response = server.tool(
+                7,
+                "code_reset_preview",
+                json!({ "scope": { "tenant": "task-transports", "workspace": format!("parity-{tag}") }, "repo": format!("repo-{tag}-{run}") }),
+            );
+            let preview: Value = serde_json::from_str(&Server::text_of(&preview_response))
+                .unwrap_or_else(|error| {
+                    panic!("{backend} reset preview: {error}: {preview_response}")
+                });
+            assert!(
+                preview["targets"]
+                    .as_array()
+                    .is_some_and(|targets| !targets.is_empty()),
+                "{backend} preview targets: {preview}"
+            );
+            assert!(
+                preview["ambiguity"].is_array() && preview["preservationDigests"].is_array(),
+                "{backend} preview inventories: {preview}"
+            );
+            let decision = format!("owner-approved-{run}");
+            let journal = approved_journal(preview, &format!("reset-{run}"), &decision);
+            let applied = server.tool(
+                8,
+                "code_reset_apply",
+                json!({ "journal": journal.clone(), "decision": decision }),
+            );
+            assert!(
+                applied.get("error").is_none() && Server::text_of(&applied).contains("completed:"),
+                "{backend} reset apply: {applied}"
+            );
+            let resumed = server.tool(9, "code_reset_resume", json!({ "journal": journal }));
+            assert!(
+                resumed.get("error").is_none() && Server::text_of(&resumed).contains("completed:"),
+                "{backend} reset resume: {resumed}"
+            );
+
+            let after = server.tool(
+                10,
                 "code_status",
                 json!({ "repo": format!("repo-{tag}-{run}") }),
             );
@@ -329,6 +407,32 @@ mod task_021 {
                 "{backend} typed denial: {message}"
             );
 
+            let unbound_preview = server.tool(
+                20,
+                "code_reset_preview",
+                json!({ "scope": { "tenant": "task-transports", "workspace": format!("typed-{tag}") }, "repo": format!("never-{tag}") }),
+            );
+            assert!(
+                unbound_preview["error"]["message"]
+                    .as_str()
+                    .is_some_and(|message| message.contains("BindingRequired")),
+                "{backend} unbound reset preview denial: {unbound_preview}"
+            );
+
+            let unapproved_apply = server.tool(
+                21,
+                "code_reset_apply",
+                json!({ "journal": {}, "decision": "" }),
+            );
+            assert!(
+                unapproved_apply["error"]["message"]
+                    .as_str()
+                    .is_some_and(|message| message.contains("InvalidResetPreview")
+                        || message.contains("ResetApprovalRequired")
+                        || message.contains("invalid reset request")),
+                "{backend} unapproved reset denial: {unapproved_apply}"
+            );
+
             // Refresh without a registration: typed, and distinct from the
             // unbound-binding denial.
             let unregistered =
@@ -353,6 +457,17 @@ mod task_021 {
                 5,
                 "code_bind",
                 json!({ "repo": format!("typed-{tag}-{run}"), "branchRef": "refs/heads/main" }),
+            );
+            let foreign_path = server.tool(
+                60,
+                "code_rebuild",
+                json!({ "repo": format!("typed-{tag}-{run}"), "requestId": format!("foreign-{run}"), "path": "/foreign/repository" }),
+            );
+            assert!(
+                foreign_path["error"]["message"]
+                    .as_str()
+                    .is_some_and(|message| message.contains("path is not an input")),
+                "{backend} rebuild foreign path denial: {foreign_path}"
             );
             let conflict = server.tool(
                 6,
@@ -546,6 +661,118 @@ mod task_022 {
             assert!(
                 text.contains(&head_oid),
                 "{backend} one-shot refresh observes the real ref: {text}"
+            );
+
+            // Public registered-locator rebuild publishes before reset. The caller
+            // supplies a retry correlation key, never a path or checkout.
+            let mut args = base.clone();
+            args.extend(
+                [
+                    "--op",
+                    "rebuild",
+                    "--repo",
+                    &format!("repo-{tag}-{run}"),
+                    "--request-id",
+                    &format!("rebuild-{run}"),
+                ]
+                .iter()
+                .map(|s| (*s).to_owned()),
+            );
+            let (code, text) = oneshot(&oneshot_refs(&args), &envs);
+            assert_eq!(code, 0, "{backend} rebuild: {text}");
+            assert!(
+                text.contains("generationId"),
+                "{backend} rebuild publishes: {text}"
+            );
+
+            let mut args = base.clone();
+            args.extend(
+                [
+                    "--op",
+                    "reset-preview",
+                    "--repo",
+                    &format!("repo-{tag}-{run}"),
+                ]
+                .iter()
+                .map(|s| (*s).to_owned()),
+            );
+            let (code, text) = oneshot(&oneshot_refs(&args), &envs);
+            assert_eq!(code, 0, "{backend} reset preview: {text}");
+            let preview_line = text
+                .lines()
+                .find(|line| line.starts_with('{'))
+                .expect("one-shot preview JSON line");
+            let preview: Value = serde_json::from_str(preview_line)
+                .unwrap_or_else(|error| panic!("{backend} reset preview JSON: {error}: {text}"));
+            assert!(
+                preview["targets"]
+                    .as_array()
+                    .is_some_and(|targets| !targets.is_empty()),
+                "{backend} preview targets: {preview}"
+            );
+            assert!(
+                preview["ambiguity"].is_array() && preview["preservationDigests"].is_array(),
+                "{backend} preview inventories: {preview}"
+            );
+            let decision = format!("owner-approved-{run}");
+            let journal = approved_journal(preview, &format!("oneshot-reset-{run}"), &decision);
+            let journal_text = serde_json::to_string(&journal).expect("journal JSON");
+            let mut args = base.clone();
+            args.extend(
+                [
+                    "--op",
+                    "reset-apply",
+                    "--journal",
+                    &journal_text,
+                    "--decision",
+                    &decision,
+                ]
+                .iter()
+                .map(|s| (*s).to_owned()),
+            );
+            let (code, text) = oneshot(&oneshot_refs(&args), &envs);
+            assert_eq!(code, 0, "{backend} reset apply: {text}");
+            assert!(
+                text.contains("completed:"),
+                "{backend} reset apply lanes: {text}"
+            );
+            let mut args = base.clone();
+            args.extend(
+                ["--op", "reset-resume", "--journal", &journal_text]
+                    .iter()
+                    .map(|s| (*s).to_owned()),
+            );
+            let (code, text) = oneshot(&oneshot_refs(&args), &envs);
+            assert_eq!(code, 0, "{backend} reset resume: {text}");
+            assert!(
+                text.contains("completed:"),
+                "{backend} reset resume idempotency: {text}"
+            );
+
+            // Unbound preview and unapproved apply remain nonzero typed denials.
+            let mut args = base.clone();
+            args.extend(
+                ["--op", "reset-preview", "--repo", "never-bound"]
+                    .iter()
+                    .map(|s| (*s).to_owned()),
+            );
+            let (code, text) = oneshot(&oneshot_refs(&args), &envs);
+            assert_ne!(code, 0, "{backend} unbound preview must fail: {text}");
+            assert!(
+                text.contains("BindingRequired"),
+                "{backend} typed unbound preview: {text}"
+            );
+            let mut args = base.clone();
+            args.extend(
+                ["--op", "reset-apply", "--journal", "{}", "--decision", ""]
+                    .iter()
+                    .map(|s| (*s).to_owned()),
+            );
+            let (code, text) = oneshot(&oneshot_refs(&args), &envs);
+            assert_ne!(code, 0, "{backend} unapproved apply must fail: {text}");
+            assert!(
+                text.contains("invalid reset request") || text.contains("ResetApprovalRequired"),
+                "{backend} unapproved apply denial: {text}"
             );
 
             // Same status facts as stdio afterward (observed at HEAD).

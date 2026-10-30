@@ -41,7 +41,7 @@ never calls an LLM — extraction is the calling agent's job (see the
 
 ## Bound code operations
 
-The granular MCP surface exposes `code_repo_register`, `code_bind`, `code_status`, and `code_refresh`.
+The granular MCP surface exposes `code_repo_register`, `code_bind`, `code_rebuild`, `code_status`, and `code_refresh`.
 Register an approved locator, bind one full `refs/heads/...` ref, then use the bound ingestion surface.
 The server does not treat a caller path, checkout `HEAD`, or caller-supplied OID as code authority.
 `code_refresh` records an on-request observation from the registered locator without fetching or changing a checkout.

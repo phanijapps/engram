@@ -3302,6 +3302,7 @@ pub fn capability_report(app: &App, _args: &Value) -> Result<Value, ToolError> {
             "code_source",
             app.provider.capabilities().code_source.is_supported(),
         ),
+        ("code_rebuild", app.provider.code_ingestion().is_ok()),
         (
             "code_reset",
             app.provider.capabilities().code_reset.is_supported(),

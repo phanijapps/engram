@@ -20,6 +20,7 @@ A same-ref bind retry is idempotent.
 A different ref for an existing binding returns `BindingConflict` and is not a branch-switch workflow.
 `code_status` reports the indexed OID separately from the last observed ref OID.
 `code_refresh` observes the configured ref from the registered locator and does not fetch or change a checkout.
+Run `code_rebuild` with a unique request ID after registration and binding to publish the bound branch from its registered locator without accepting a caller path.
 
 ## Host authorization
 

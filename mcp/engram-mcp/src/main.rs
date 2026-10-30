@@ -384,6 +384,7 @@ pub static DEFAULT_TOOLS: &[&str] = &[
     "code_bind",
     "code_status",
     "code_refresh",
+    "code_rebuild",
     "code_reset_preview",
     "code_reset_apply",
     "code_reset_resume",

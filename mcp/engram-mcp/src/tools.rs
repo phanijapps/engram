@@ -2592,6 +2592,17 @@ struct CodeResetPreviewRequest {
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
+struct CodeRebuildRequest {
+    repo: RepoId,
+    request_id: String,
+    #[serde(default)]
+    branch_ref: Option<String>,
+    #[serde(default)]
+    path: Option<String>,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
 struct CodeResetApplyRequest {
     journal: CodeResetJournal,
     decision: String,
@@ -2654,6 +2665,38 @@ pub fn code_repo_register(app: &App, args: &Value) -> Result<Value, ToolError> {
             AcquisitionMode::ConfiguredRemote => "configured-remote",
         },
     )))
+}
+
+/// `code_rebuild`: ingest the bound branch from its registered locator and publish it.
+/// A request ID is required for operator retry correlation; coordinator generation identity
+/// makes a repeat at the same pinned commit idempotent without accepting a caller path.
+pub fn code_rebuild(app: &App, args: &Value) -> Result<Value, ToolError> {
+    let request: CodeRebuildRequest = reset_request(args)?;
+    if request.request_id.trim().is_empty() {
+        return Err(invalid("missing required string arg 'requestId'"));
+    }
+    if request.path.is_some() {
+        return Err(invalid(
+            "path is not an input to bound code ingestion — use the registered locator",
+        ));
+    }
+    let coordinator = app.provider.code_bindings().map_err(code_authority_error)?;
+    let lanes = app
+        .provider
+        .code_ingestion()
+        .map_err(code_authority_error)?;
+    let ingested = block_on(coordinator.ingest_registered(
+        &system_actor(),
+        &app.scope,
+        &request.repo,
+        request.branch_ref.as_deref(),
+        None,
+        lanes,
+    ))
+    .map_err(code_authority_error)?;
+    Ok(protocol::text_content(
+        serde_json::to_string(&ingested).expect("bound rebuild serializes"),
+    ))
 }
 
 /// `code_reset_preview`: create the exact reset proposal through the reset-authorized coordinator seam.
@@ -2829,6 +2872,12 @@ pub fn register_code_tools(registry: &mut crate::registry::ToolRegistry<App>) {
             "required": ["repo", "path"]
         }),
         handler: code_repo_register,
+    });
+    registry.register(ToolRecord {
+        name: "code_rebuild",
+        description: "Publish bound code from the registered locator only. requestId correlates retries; a caller path is never accepted.",
+        input_schema: json!({"type":"object", "properties":{"repo":{"type":"string"}, "requestId":{"type":"string"}, "branchRef":{"type":"string"}}, "required":["repo", "requestId"]}),
+        handler: code_rebuild,
     });
     registry.register(ToolRecord {
         name: "code_reset_preview",

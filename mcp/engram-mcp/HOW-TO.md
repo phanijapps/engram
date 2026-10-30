@@ -338,6 +338,7 @@ For MCP stdio, call these tools with the launch scope:
 ```json
 {"name":"code_repo_register","arguments":{"repo":"payments","mode":"local-only","path":"/approved/repos/payments"}}
 {"name":"code_bind","arguments":{"repo":"payments","branchRef":"refs/heads/main"}}
+{"name":"code_rebuild","arguments":{"repo":"payments","requestId":"payments-rebuild-001"}}
 {"name":"code_status","arguments":{"repo":"payments"}}
 {"name":"code_refresh","arguments":{"repo":"payments"}}
 ```
@@ -347,6 +348,7 @@ For one-shot operation, use the same handlers and arguments:
 ```bash
 engram-mcp code --op register --repo payments --path /approved/repos/payments --storage ~/.engram/payments --project payments
 engram-mcp code --op bind --repo payments --branch-ref refs/heads/main --storage ~/.engram/payments --project payments
+engram-mcp code --op rebuild --repo payments --request-id payments-rebuild-001 --storage ~/.engram/payments --project payments
 engram-mcp code --op status --repo payments --storage ~/.engram/payments --project payments
 engram-mcp code --op refresh --repo payments --storage ~/.engram/payments --project payments
 ```

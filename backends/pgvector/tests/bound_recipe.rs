@@ -10,11 +10,12 @@
 //! the cases). The SQLite twin lives in `backends/sqlite/tests/bound_recipe.rs`.
 
 use std::path::Path;
+use std::process::Command;
+use std::sync::Arc;
 
 use engram_domain::types::ScopeMappingStrategy;
-use engram_domain::{Actor, ActorKind, Id, RepoId, Scope};
+use engram_domain::{Actor, ActorKind, Id, RepoId, Requester, RetrievalRequest, Scope};
 use engram_integration::{CapabilityPolicy, EmbeddingProviderConfig, EngramConfig, MigrationMode};
-use engram_knowledge::CodeBindingRepository;
 use engram_runtime::CoreError;
 use futures::executor::block_on;
 
@@ -103,6 +104,96 @@ fn host_policy() -> std::sync::Arc<engram_integration::code_binding::ScopeSetAut
     std::sync::Arc::new(engram_integration::code_binding::ScopeSetAuthorizer::new(
         vec![scope(), foreign_scope()],
     ))
+}
+
+/// Builds one committed local repository and drives the opened Pg recipe through
+/// register → bind → registered acquisition → staged rebuild/publish.
+fn published_fixture(
+    operation: &str,
+    token: &str,
+) -> (
+    tempfile::TempDir,
+    engram_integration::EngramProvider,
+    Scope,
+    RepoId,
+) {
+    let dir = tempfile::tempdir().expect("tempdir");
+    let checkout = dir.path().join("checkout");
+    std::fs::create_dir_all(&checkout).expect("mkdir checkout");
+    std::fs::write(
+        checkout.join("lib.rs"),
+        format!("pub fn {token}() -> u32 {{ 1 }}\n"),
+    )
+    .expect("write fixture");
+    for args in [
+        ["init", "--initial-branch=main", "."].as_slice(),
+        ["config", "user.email", "task019@engram.test"].as_slice(),
+        ["config", "user.name", "task019"].as_slice(),
+        ["add", "."].as_slice(),
+        ["commit", "--no-gpg-sign", "-m", "fixture"].as_slice(),
+    ] {
+        assert!(
+            Command::new("git")
+                .args(args)
+                .current_dir(&checkout)
+                .status()
+                .expect("git executable")
+                .success(),
+            "git fixture command failed"
+        );
+    }
+    let suffix = unique_suffix();
+    let scope = Scope {
+        tenant: "task-019-pg-operation".to_owned(),
+        subject: None,
+        workspace: Some(format!("{operation}-{suffix}")),
+        session: None,
+        environment: None,
+    };
+    let repo = RepoId(format!("repo-{operation}-{suffix}"));
+    let mut cfg = config(dir.path());
+    cfg.migration_mode = MigrationMode::Apply;
+    let provider = engram_backend_pgvector::open(&cfg)
+        .expect("open real Pg recipe")
+        .with_code_authorizer(Arc::new(
+            engram_integration::code_binding::ScopeSetAuthorizer::new(vec![scope.clone()]),
+        ))
+        .expect("inject host policy");
+    let coordinator = provider.code_bindings().expect("binding handle");
+    block_on(coordinator.register(
+        &actor(),
+        &scope,
+        engram_knowledge::RepositoryRegistration {
+            repo_id: repo.clone(),
+            locator_id: checkout.to_string_lossy().to_string(),
+            acquisition: engram_knowledge::AcquisitionMode::LocalOnly,
+        },
+    ))
+    .expect("register");
+    block_on(coordinator.bind(&actor(), &scope, &repo, "refs/heads/main")).expect("bind");
+    let ingested = block_on(coordinator.ingest_registered(
+        &actor(),
+        &scope,
+        &repo,
+        None,
+        None,
+        provider.code_ingestion().expect("ingestion lanes"),
+    ))
+    .expect("rebuild and publish");
+    assert!(
+        !ingested.idempotent && ingested.documents > 0 && ingested.entities > 0,
+        "published fixture must contain staged code content"
+    );
+    (dir, provider, scope, repo)
+}
+
+fn requester() -> Requester {
+    Requester {
+        actor: actor(),
+        roles: Vec::new(),
+        permissions: Vec::new(),
+        on_behalf_of: None,
+    }
 }
 
 mod task_019 {
@@ -285,6 +376,154 @@ mod task_019 {
         );
         assert!(report.code_source.is_supported(), "code_source capability");
         assert!(report.code_reset.is_supported(), "code_reset capability");
+    }
+
+    /// real_pg_scan_publish_content: the real Pg recipe registers, binds, and
+    /// publishes a committed fixture, then proves scan/rebuild output carries
+    /// expected code symbols while a separate run-unique repository cannot
+    /// appear in this scope.
+    #[test]
+    #[ignore = "requires sourced ENGRAM_TEST_PG_URL"]
+    fn real_pg_scan_publish_content() {
+        let (_dir, provider, scope, repo) = published_fixture("scan", "pg_scan_expected_symbol");
+        let chunks = block_on(
+            provider
+                .require_knowledge_query()
+                .expect("query")
+                .list_chunks(&scope),
+        )
+        .expect("list published chunks");
+        let text = format!("{chunks:?}");
+        assert!(
+            text.contains("pg_scan_expected_symbol"),
+            "published Pg scan must retain expected symbol: {text}"
+        );
+        let foreign = Scope {
+            workspace: Some(format!("foreign-{}", unique_suffix())),
+            ..scope.clone()
+        };
+        let foreign_chunks = block_on(
+            provider
+                .require_knowledge_query()
+                .expect("query")
+                .list_chunks(&foreign),
+        )
+        .expect("list foreign scope");
+        assert!(
+            foreign_chunks.is_empty(),
+            "foreign scope must exclude this published content"
+        );
+        println!("real_pg_scan_publish_content {}", repo.0);
+    }
+
+    /// real_pg_retrieval_eligible_content: recall over the real Pg recipe
+    /// returns the published bound token and excludes a token that exists only
+    /// in another run-unique bound scope.
+    #[test]
+    #[ignore = "requires sourced ENGRAM_TEST_PG_URL"]
+    fn real_pg_retrieval_eligible_content() {
+        let (_dir, provider, scope, _repo) =
+            published_fixture("retrieval", "pg_retrieval_expected_token");
+        let (_foreign_dir, _foreign_provider, _foreign_scope, _foreign_repo) =
+            published_fixture("retrieval-control", "pg_retrieval_ineligible_token");
+        let payload = block_on(provider.require_recall().expect("recall").recall(
+            RetrievalRequest {
+                query: "pg_retrieval_expected_token".to_owned(),
+                scope,
+                requester: requester(),
+                modes: vec![engram_domain::RetrievalMode::Graph],
+                filters: None,
+                cues: Vec::new(),
+                limit: None,
+                budget: None,
+                include_explanations: Some(true),
+            },
+        ))
+        .expect("recall bound Pg content");
+        let text = format!("{payload:?}");
+        assert!(
+            text.contains("pg_retrieval_expected_token"),
+            "recall must serve eligible bound content: {text}"
+        );
+        assert!(
+            !text.contains("pg_retrieval_ineligible_token"),
+            "recall must exclude foreign bound control: {text}"
+        );
+        println!("real_pg_retrieval_eligible_content {}", payload.items.len());
+    }
+
+    /// real_pg_graph_bound_answer: traversal through the real Pg recipe finds
+    /// the published symbol context and excludes the foreign control symbol.
+    #[test]
+    #[ignore = "requires sourced ENGRAM_TEST_PG_URL"]
+    fn real_pg_graph_bound_answer() {
+        let (_dir, provider, scope, _repo) = published_fixture("graph", "pg_graph_expected_symbol");
+        let (_foreign_dir, _foreign_provider, _foreign_scope, _foreign_repo) =
+            published_fixture("graph-control", "pg_graph_ineligible_symbol");
+        let nodes = block_on(provider.code_graph_explore_bound(
+            &actor(),
+            &scope,
+            "pg_graph_expected_symbol",
+            Some(2),
+            Some(24),
+            Some(64),
+            true,
+        ))
+        .expect("traverse bound Pg graph");
+        let text = format!("{nodes:?}");
+        assert!(
+            text.contains("pg_graph_expected_symbol"),
+            "graph must answer with bound symbol context: {text}"
+        );
+        assert!(
+            !text.contains("pg_graph_ineligible_symbol"),
+            "graph must exclude foreign symbol: {text}"
+        );
+        println!("real_pg_graph_bound_answer {}", nodes.len());
+    }
+
+    /// real_pg_source_exact_bytes_and_span: exact source fetch through the
+    /// real Pg recipe returns the retained bytes and correct subspan, while a
+    /// foreign scope cannot use this bound repository.
+    #[test]
+    #[ignore = "requires sourced ENGRAM_TEST_PG_URL"]
+    fn real_pg_source_exact_bytes_and_span() {
+        let (_dir, provider, scope, repo) =
+            published_fixture("source", "pg_source_expected_symbol");
+        let whole = block_on(provider.code_fetch_exact(&actor(), &scope, &repo.0, "lib.rs", None))
+            .expect("fetch retained bytes");
+        let expected = b"pub fn pg_source_expected_symbol() -> u32 { 1 }\n";
+        assert_eq!(
+            whole.bytes, expected,
+            "exact fetch must return retained bytes"
+        );
+        let span = 7..32;
+        let sliced = block_on(provider.code_fetch_exact(
+            &actor(),
+            &scope,
+            &repo.0,
+            "lib.rs",
+            Some(span.clone()),
+        ))
+        .expect("fetch retained span");
+        assert_eq!(
+            sliced.bytes,
+            expected[span].to_vec(),
+            "span fetch must return exact retained range"
+        );
+        let foreign = Scope {
+            workspace: Some(format!("foreign-{}", unique_suffix())),
+            ..scope.clone()
+        };
+        assert!(
+            block_on(provider.code_fetch_exact(&actor(), &foreign, &repo.0, "lib.rs", None))
+                .is_err(),
+            "foreign scope must not fetch bound bytes"
+        );
+        println!(
+            "real_pg_source_exact_bytes_and_span {}",
+            whole.served_digest
+        );
     }
 
     /// unavailable_optional_capabilities (pgvector): optional absent lanes

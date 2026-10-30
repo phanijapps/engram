@@ -74,11 +74,18 @@ impl NativeKnowledgeEngine {
         .map_err(|e| Error::from_reason(e.to_string()))?;
         let bindings_path =
             path.map(|path| std::path::PathBuf::from(path).with_extension("code-bindings.sqlite"));
-        let bindings = match bindings_path {
-            Some(path) => engram_store_sqlite::knowledge::SqlCodeBindingRepository::open(path),
-            None => engram_store_sqlite::knowledge::SqlCodeBindingRepository::open(":memory:"),
-        }
-        .map_err(|e| Error::from_reason(e.to_string()))?;
+        // Review r6 finding 10: the bridge holds the NEUTRAL binding
+        // repository port — the concrete SQLite cell is constructed HERE (at
+        // composition) and injected, never named in operation signatures.
+        let bindings: std::sync::Arc<dyn engram_knowledge::CodeBindingRepository> =
+            match bindings_path {
+                Some(path) => engram_store_sqlite::knowledge::SqlCodeBindingRepository::open(path)
+                    .map(std::sync::Arc::new)
+                    .map_err(|e| Error::from_reason(e.to_string()))?,
+                None => engram_store_sqlite::knowledge::SqlCodeBindingRepository::open(":memory:")
+                    .map(std::sync::Arc::new)
+                    .map_err(|e| Error::from_reason(e.to_string()))?,
+            };
         Ok(Self {
             store: Arc::new(store),
             bindings: crate::ingest_ops::BindingCell::new(bindings),

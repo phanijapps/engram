@@ -7,13 +7,12 @@ use engram_ingest::{
     CodeSymbolChunker, DocumentIngestRequest, GraphExtractor, KnowledgeIngestor, PlainTextChunker,
     PlainTextChunkerOptions, ScanOptions, scan_repository,
 };
-use engram_knowledge::CodeBindingRepository as _;
 use engram_store_sqlite::SqlKnowledgeStore;
-use engram_store_sqlite::knowledge::SqlCodeBindingRepository;
 use futures::executor::block_on;
 use napi::bindgen_prelude::*;
 use serde::Serialize;
 use std::path::PathBuf;
+use std::sync::Arc;
 
 use crate::{decode, encode, scope_field, to_napi_error};
 
@@ -54,19 +53,19 @@ struct IngestExtractResponse {
 }
 
 /// Shared handle to the durable binding cell for engines that hold it by
-/// value (TASK-020): `Arc`-wraps the cell so sibling engines (knowledge)
-/// can read eligibility without owning a second connection.
+/// value (TASK-020, review r6 finding 10): `Arc`-wraps the NEUTRAL
+/// `CodeBindingRepository` port so sibling engines (knowledge) can read
+/// eligibility without owning a second connection — and without naming a
+/// concrete engine type in the bridge.
 pub struct BindingCell {
-    inner: std::sync::Arc<SqlCodeBindingRepository>,
+    inner: Arc<dyn engram_knowledge::CodeBindingRepository>,
 }
 
 impl BindingCell {
-    pub fn new(cell: SqlCodeBindingRepository) -> Self {
-        Self {
-            inner: std::sync::Arc::new(cell),
-        }
+    pub fn new(cell: Arc<dyn engram_knowledge::CodeBindingRepository>) -> Self {
+        Self { inner: cell }
     }
-    pub fn cell(&self) -> &SqlCodeBindingRepository {
+    pub fn cell(&self) -> &Arc<dyn engram_knowledge::CodeBindingRepository> {
         &self.inner
     }
 }
@@ -74,16 +73,22 @@ impl BindingCell {
 /// Provides ingest operations for the Node-API bridge.
 pub struct IngestOps {
     store: SqlKnowledgeStore,
-    /// The durable code-binding cell (TASK-020): code scans require a
-    /// persisted binding — the legacy engine consults the same durable
-    /// authority as the provider path, never a checkout-derived binding.
-    bindings: SqlCodeBindingRepository,
+    /// The durable code-binding cell (TASK-020, review r6 finding 10): the
+    /// NEUTRAL repository port — no concrete engine type in the bridge, so
+    /// the cell can be swapped by composition without rewriting these
+    /// helpers. Code scans require a persisted binding — the legacy engine
+    /// consults the same durable authority as the provider path, never a
+    /// checkout-derived binding.
+    bindings: Arc<dyn engram_knowledge::CodeBindingRepository>,
     jobs: std::sync::Arc<std::sync::Mutex<std::collections::HashMap<String, ScanJobState>>>,
     job_counter: std::sync::atomic::AtomicU64,
 }
 
 impl IngestOps {
-    pub fn new(store: SqlKnowledgeStore, bindings: SqlCodeBindingRepository) -> Self {
+    pub fn new(
+        store: SqlKnowledgeStore,
+        bindings: Arc<dyn engram_knowledge::CodeBindingRepository>,
+    ) -> Self {
         Self {
             store,
             bindings,

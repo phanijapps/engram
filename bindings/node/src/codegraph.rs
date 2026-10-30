@@ -10,9 +10,7 @@ use std::sync::Arc;
 
 use engram_codegraph_queries as cgq;
 use engram_domain::{KnowledgeRelationship, Scope};
-use engram_knowledge::CodeBindingRepository as _;
 use engram_store_sqlite::SqlKnowledgeStore;
-use engram_store_sqlite::knowledge::SqlCodeBindingRepository;
 use futures::executor::block_on;
 use napi::bindgen_prelude::*;
 use serde_json::Value;
@@ -31,7 +29,10 @@ fn scope_of(value: &Value) -> Result<Scope> {
 /// bound code. A scope without a published code generation denies with a
 /// typed code-lane error — legacy unbound code is never served through this
 /// seam, and no checkout-derived eligibility exists.
-fn require_published_code(bindings: &SqlCodeBindingRepository, scope: &Scope) -> Result<()> {
+fn require_published_code(
+    bindings: &Arc<dyn engram_knowledge::CodeBindingRepository>,
+    scope: &Scope,
+) -> Result<()> {
     let eligibility = block_on(bindings.eligibility(scope)).map_err(to_napi_error)?;
     if eligibility.generations.is_empty() {
         return Err(Error::from_reason(
@@ -51,7 +52,7 @@ fn relationships_for(
 /// `{scope}` -> dead-code symbol keys (sorted). Mirrors memtrace `find_dead_code`.
 pub fn dead_code_json(
     store: &Arc<SqlKnowledgeStore>,
-    bindings: &SqlCodeBindingRepository,
+    bindings: &Arc<dyn engram_knowledge::CodeBindingRepository>,
     request_json: String,
 ) -> Result<String> {
     let value: Value = serde_json::from_str(&request_json).map_err(json_error)?;
@@ -66,7 +67,7 @@ pub fn dead_code_json(
 /// `{scope, target, depth?}` -> transitive caller keys (blast radius).
 pub fn blast_radius_json(
     store: &Arc<SqlKnowledgeStore>,
-    bindings: &SqlCodeBindingRepository,
+    bindings: &Arc<dyn engram_knowledge::CodeBindingRepository>,
     request_json: String,
 ) -> Result<String> {
     let value: Value = serde_json::from_str(&request_json).map_err(json_error)?;
@@ -85,7 +86,7 @@ pub fn blast_radius_json(
 /// `{scope, from, to}` -> shortest call path (`[symbol, ...]`) or `null`.
 pub fn dependency_path_json(
     store: &Arc<SqlKnowledgeStore>,
-    bindings: &SqlCodeBindingRepository,
+    bindings: &Arc<dyn engram_knowledge::CodeBindingRepository>,
     request_json: String,
 ) -> Result<String> {
     let value: Value = serde_json::from_str(&request_json).map_err(json_error)?;
@@ -100,7 +101,7 @@ pub fn dependency_path_json(
 /// `{scope, limit?}` -> `[[symbol, score], ...]` ranked by PageRank centrality.
 pub fn central_symbols_json(
     store: &Arc<SqlKnowledgeStore>,
-    bindings: &SqlCodeBindingRepository,
+    bindings: &Arc<dyn engram_knowledge::CodeBindingRepository>,
     request_json: String,
 ) -> Result<String> {
     let value: Value = serde_json::from_str(&request_json).map_err(json_error)?;
@@ -117,7 +118,7 @@ pub fn central_symbols_json(
 /// `{scope, limit?}` -> `[[symbol, score], ...]` ranked by betweenness (bridges).
 pub fn bridge_symbols_json(
     store: &Arc<SqlKnowledgeStore>,
-    bindings: &SqlCodeBindingRepository,
+    bindings: &Arc<dyn engram_knowledge::CodeBindingRepository>,
     request_json: String,
 ) -> Result<String> {
     let value: Value = serde_json::from_str(&request_json).map_err(json_error)?;
@@ -134,7 +135,7 @@ pub fn bridge_symbols_json(
 /// `{scope, maxPasses?}` -> `{symbol: label}` Louvain communities.
 pub fn call_communities_json(
     store: &Arc<SqlKnowledgeStore>,
-    bindings: &SqlCodeBindingRepository,
+    bindings: &Arc<dyn engram_knowledge::CodeBindingRepository>,
     request_json: String,
 ) -> Result<String> {
     let value: Value = serde_json::from_str(&request_json).map_err(json_error)?;
@@ -179,7 +180,7 @@ pub fn find_entry_points_json(request_json: String) -> Result<String> {
 /// `{scope, entryPoint, maxDepth?}` -> `[symbol, ...]` execution flow.
 pub fn process_flow_json(
     store: &Arc<SqlKnowledgeStore>,
-    bindings: &SqlCodeBindingRepository,
+    bindings: &Arc<dyn engram_knowledge::CodeBindingRepository>,
     request_json: String,
 ) -> Result<String> {
     let value: Value = serde_json::from_str(&request_json).map_err(json_error)?;
@@ -204,7 +205,7 @@ pub fn match_api_topology_json(request_json: String) -> Result<String> {
 /// module paths, resolved to defining files by stem suffix.
 pub fn file_dependencies_json(
     store: &Arc<SqlKnowledgeStore>,
-    bindings: &SqlCodeBindingRepository,
+    bindings: &Arc<dyn engram_knowledge::CodeBindingRepository>,
     request_json: String,
 ) -> Result<String> {
     let value: Value = serde_json::from_str(&request_json).map_err(json_error)?;
@@ -224,7 +225,7 @@ pub fn file_dependencies_json(
 /// subgraph (RFC-0020 Phase 2 explore).
 pub fn explore_json(
     store: &Arc<SqlKnowledgeStore>,
-    bindings: &SqlCodeBindingRepository,
+    bindings: &Arc<dyn engram_knowledge::CodeBindingRepository>,
     request_json: String,
 ) -> Result<String> {
     let value: Value = serde_json::from_str(&request_json).map_err(json_error)?;

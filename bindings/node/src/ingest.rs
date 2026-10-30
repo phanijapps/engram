@@ -39,11 +39,18 @@ impl NativeIngestEngine {
         .map_err(|e| Error::from_reason(e.to_string()))?;
         let bindings_path =
             path.map(|path| std::path::PathBuf::from(path).with_extension("code-bindings.sqlite"));
-        let bindings = match bindings_path {
-            Some(path) => SqlCodeBindingRepository::open(path),
-            None => SqlCodeBindingRepository::open(":memory:"),
-        }
-        .map_err(|e| Error::from_reason(e.to_string()))?;
+        let bindings: std::sync::Arc<dyn engram_knowledge::CodeBindingRepository> =
+            match bindings_path {
+                Some(path) => SqlCodeBindingRepository::open(path).map(|cell| {
+                    std::sync::Arc::new(cell)
+                        as std::sync::Arc<dyn engram_knowledge::CodeBindingRepository>
+                }),
+                None => SqlCodeBindingRepository::open(":memory:").map(|cell| {
+                    std::sync::Arc::new(cell)
+                        as std::sync::Arc<dyn engram_knowledge::CodeBindingRepository>
+                }),
+            }
+            .map_err(|e| Error::from_reason(e.to_string()))?;
         Ok(Self {
             ops: IngestOps::new(store, bindings),
         })

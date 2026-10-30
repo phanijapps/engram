@@ -56,6 +56,13 @@ jobs:
         with:
           components: rustfmt, clippy
       - uses: Swatinem/rust-cache@v2
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Enable pnpm
+        run: corepack enable
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
       - name: Format
         run: cargo fmt --all --check
       # Clippy --all-targets compiles the whole workspace incl. tests, which
@@ -104,8 +111,15 @@ jobs:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
+      - name: Mark service database disposable (job-010 fixture contract)
+        run: |
+          docker exec $(docker ps -q --filter ancestor=pgvector/pgvector:pg17) psql -U engram -d engram -c "COMMENT ON DATABASE engram IS 'engram.factory.job=010-project-bound-branch-indexing; disposable=true'"
+        # NOTE: the marker marks the EPHEMERAL CI service disposable so the
+        # branch's fail-closed fixture guards accept it; it is recreated per run.
       - name: pgvector recipe conformance (live Postgres service)
         run: cargo test -p engram-backend-pgvector -- --ignored --test-threads=1
+        env:
+          ENGRAM_TEST_PG_URL: postgres://engram:engram@localhost:5432/engram
 
   docs:
     name: Documentation

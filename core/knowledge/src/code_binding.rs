@@ -259,15 +259,52 @@ pub trait CodeBindingRepository: crate::CodeReadLeases + Send + Sync {
         repo_id: &engram_domain::RepoId,
     ) -> CoreResult<CodeResetPreview>;
     async fn journal_reset(&self, journal: CodeResetJournal) -> CoreResult<CodeResetJournal>;
+    /// Loads the immutable owner-approved reset journal by reset identifier.
+    async fn load_reset_journal(&self, _reset_id: &str) -> CoreResult<CodeResetJournal> {
+        Err(CoreError::CapabilityUnsupported {
+            capability: "code-reset-journal-load".into(),
+            reason: "this cell does not expose durable reset journals".into(),
+        })
+    }
+    /// Persists durable reset progress after a completed local mutation.
+    async fn save_reset_journal(&self, _journal: CodeResetJournal) -> CoreResult<CodeResetJournal> {
+        Err(CoreError::CapabilityUnsupported {
+            capability: "code-reset-journal-progress".into(),
+            reason: "this cell does not persist reset progress".into(),
+        })
+    }
     /// Applies only the journal's unfinished exact targets.
     /// Each cell inherits this neutral, fenced operation and supplies the
     /// durable retirement and lease primitives behind it.
     /// Successful local-store work is never rolled back when a later store
     /// reports an error; callers receive the returned checkpoints to resume.
-    async fn apply_reset(&self, mut journal: CodeResetJournal) -> CoreResult<CodeResetJournal> {
-        journal.validate().map_err(|_| CoreError::InvalidRequest {
+    async fn apply_reset(&self, supplied: CodeResetJournal) -> CoreResult<CodeResetJournal> {
+        supplied.validate().map_err(|_| CoreError::InvalidRequest {
             reason: "InvalidResetPreview: journal does not bind the complete preview".into(),
         })?;
+        if supplied
+            .checkpoints
+            .iter()
+            .any(|checkpoint| checkpoint.starts_with("completed:"))
+        {
+            return Err(CoreError::InvalidRequest {
+                reason: "ResetProgressSupplied: completion checkpoints are durable-store owned"
+                    .into(),
+            });
+        }
+        let mut journal = self.load_reset_journal(&supplied.reset_id).await?;
+        if journal.preview_hash != supplied.preview_hash
+            || journal.preview != supplied.preview
+            || journal.target_fingerprints != supplied.target_fingerprints
+            || journal.authorizing_decisions != supplied.authorizing_decisions
+            || journal.preservation_digests != supplied.preservation_digests
+        {
+            return Err(CoreError::Conflict {
+                reason:
+                    "ResetJournalUnauthorized: request does not match the owner-approved journal"
+                        .into(),
+            });
+        }
         let scope = &journal.preview.binding.scope;
         let repo = &journal.preview.binding.repo_id;
         let binding = self
@@ -342,18 +379,22 @@ pub trait CodeBindingRepository: crate::CodeReadLeases + Send + Sync {
                 });
             }
         }
-        let leased = self.leased_generations(scope, chrono::Utc::now()).await?;
-        if remaining
+        // Only durable checkpoints written by this reset journal establish
+        // completed work. A retired lineage without its checkpoint is stale.
+        let completed: std::collections::BTreeSet<String> = journal
+            .checkpoints
             .iter()
-            .any(|target| leased.contains(&target.lineage.generation_id))
-        {
-            return Err(CoreError::Conflict {
-                reason: "ResetLeaseActive: a live read lease protects a target snapshot".into(),
-            });
+            .filter_map(|checkpoint| checkpoint.strip_prefix("completed:").map(str::to_owned))
+            .collect();
+        let remaining: Vec<_> = journal
+            .preview
+            .targets
+            .iter()
+            .filter(|target| !completed.contains(&target.record_id))
+            .collect();
+        if remaining.is_empty() {
+            return Ok(journal);
         }
-        // A partial journal necessarily advanced the fencing epoch.  It may
-        // resume only from its own durable completed checkpoints; a fresh
-        // journal must still match its preview epoch exactly.
         if completed.is_empty() && binding.epoch != journal.preview.code_epoch {
             return Err(CoreError::Conflict {
                 reason: "ResetPreviewStale: code epoch changed".into(),
@@ -375,6 +416,7 @@ pub trait CodeBindingRepository: crate::CodeReadLeases + Send + Sync {
                 .checkpoints
                 .push(format!("completed:{}", target.record_id));
         }
+        journal = self.save_reset_journal(journal).await?;
         // The preview's ordinary-data digest is deliberately stable over the
         // exact preservation set.  It is rechecked after retirement rather
         // than treating target deletion as permission to alter ordinary data.
@@ -384,7 +426,7 @@ pub trait CodeBindingRepository: crate::CodeReadLeases + Send + Sync {
             });
         }
         journal.checkpoints.push("preservation-verified".into());
-        Ok(journal)
+        self.save_reset_journal(journal).await
     }
 }
 

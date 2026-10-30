@@ -792,6 +792,22 @@ impl CodeBindingRepository for PgCodeBindingRepository {
         self.blocking(move |store| store.journal_reset(&journal, "authorized").map_err(error))
             .await
     }
+    async fn load_reset_journal(&self, reset_id: &str) -> CoreResult<CodeResetJournal> {
+        let reset_id = reset_id.to_owned();
+        self.blocking(move |store| store.load_reset_journal(&reset_id).map_err(error))
+            .await?
+            .ok_or_else(|| CoreError::Conflict {
+                reason: "ResetJournalUnauthorized: no owner-approved journal exists for reset id"
+                    .into(),
+            })
+    }
+    async fn save_reset_journal(&self, journal: CodeResetJournal) -> CoreResult<CodeResetJournal> {
+        journal.validate().map_err(error)?;
+        let saved = journal.clone();
+        self.blocking(move |store| store.save_reset_journal(&saved).map_err(error))
+            .await?;
+        Ok(journal)
+    }
 }
 
 /// Shared scoped authorization for explicit code target ids, wildcard listing

@@ -207,6 +207,34 @@ impl PgCodeBindingStore {
         let key = scope_key(&j.preview.binding.scope)?;
         runtime().block_on(async{db(self.connection.client.execute("INSERT INTO code_reset_journals(preview_hash,tenant,scope_key,repo_id,journal_json,checkpoint) VALUES($1,$2,$3,$4,$5,$6) ON CONFLICT(preview_hash) DO NOTHING",&[&j.preview.preview_hash,&j.preview.binding.scope.tenant,&key,&j.preview.binding.repo_id.0,&v,&checkpoint]).await)?;let row=db(self.connection.client.query_one("SELECT journal_json,checkpoint FROM code_reset_journals WHERE preview_hash=$1",&[&j.preview.preview_hash]).await)?;if row.get::<_,serde_json::Value>(0)!=v||row.get::<_,String>(1)!=checkpoint{return Err(CodeBindingError::InvalidResetPreview)}Ok(j.clone())})
     }
+    pub fn load_reset_journal(
+        &self,
+        reset_id: &str,
+    ) -> Result<Option<CodeResetJournal>, CodeBindingError> {
+        runtime().block_on(async {
+            let rows = db(self
+                .connection
+                .client
+                .query("SELECT journal_json FROM code_reset_journals", &[])
+                .await)?;
+            for row in rows {
+                let journal: CodeResetJournal = serde_json::from_value(row.get(0))
+                    .map_err(|_| CodeBindingError::PersistenceFailure)?;
+                if journal.reset_id == reset_id {
+                    return Ok(Some(journal));
+                }
+            }
+            Ok(None)
+        })
+    }
+    pub fn save_reset_journal(&self, journal: &CodeResetJournal) -> Result<(), CodeBindingError> {
+        let value = json(journal)?;
+        runtime().block_on(async {
+            let changed = db(self.connection.client.execute("UPDATE code_reset_journals SET journal_json=$1, checkpoint='progress' WHERE preview_hash=$2", &[&value, &journal.preview.preview_hash]).await)?;
+            if changed != 1 { return Err(CodeBindingError::InvalidResetPreview); }
+            Ok(())
+        })
+    }
     pub fn reset_preview(
         &self,
         scope: &Scope,

@@ -106,6 +106,14 @@ fn journal(preview: engram_domain::CodeResetPreview) -> CodeResetJournal {
         preview,
     }
 }
+fn approved(store: &SqlCodeBindingRepository, value: CodeResetJournal) -> CodeResetJournal {
+    block_on(store.journal_reset(value.clone())).expect("owner-approved journal");
+    value
+}
+fn rehash(value: &mut CodeResetJournal) {
+    value.preview.preview_hash = value.preview.content_hash().expect("preview hash");
+    value.preview_hash = value.preview.preview_hash.clone();
+}
 fn add_target(store: &SqlCodeBindingRepository, id: &str) {
     block_on(store.put_lineage(
         &scope(),
@@ -189,40 +197,30 @@ mod task_024 {
         let store = setup();
         add_target(&store, "target-b");
         let preview = block_on(store.preview_reset(&scope(), &repo())).expect("preview");
-        let mut value = journal(preview);
-        block_on(store.retire_lineage_targets(
-            &scope(),
-            &[(repo(), 0)],
-            &[RetirementTarget {
-                repo_id: repo().0,
-                generation_id: generation().id,
-                record_id: "target-a".into(),
-            }],
-        ))
-        .expect("first target");
-        value.checkpoints.push("completed:target-a".into());
-        let resumed = block_on(store.apply_reset(value)).expect("resume");
+        let value = approved(&store, journal(preview));
+        let applied = block_on(store.apply_reset(value.clone())).expect("first apply");
         assert!(
-            resumed
+            applied
+                .checkpoints
+                .iter()
+                .any(|item| item == "completed:target-a")
+        );
+        assert!(
+            applied
                 .checkpoints
                 .iter()
                 .any(|item| item == "completed:target-b")
         );
-        assert_eq!(
-            resumed
-                .checkpoints
-                .iter()
-                .filter(|item| *item == "completed:target-a")
-                .count(),
-            1
-        );
+        let resumed = block_on(store.apply_reset(value)).expect("resume from durable checkpoints");
+        assert_eq!(resumed.checkpoints, applied.checkpoints);
     }
 
     #[test]
     fn unrelated_records_preserved() {
         let store = setup();
         let preview = block_on(store.preview_reset(&scope(), &repo())).expect("preview");
-        let result = block_on(store.apply_reset(journal(preview))).expect("apply");
+        let result =
+            block_on(store.apply_reset(approved(&store, journal(preview)))).expect("apply");
         assert!(
             result
                 .checkpoints
@@ -253,7 +251,8 @@ mod task_024 {
         ))
         .expect("lease");
         let preview = block_on(store.preview_reset(&scope(), &repo())).expect("preview");
-        let error = block_on(store.apply_reset(journal(preview))).expect_err("lease denial");
+        let error = block_on(store.apply_reset(approved(&store, journal(preview))))
+            .expect_err("lease denial");
         assert!(format!("{error:?}").contains("ResetLeaseActive"));
     }
 
@@ -261,6 +260,7 @@ mod task_024 {
     fn stale_preview_rejected_at_apply() {
         let store = setup();
         let preview = block_on(store.preview_reset(&scope(), &repo())).expect("preview");
+        let value = approved(&store, journal(preview));
         block_on(store.retire_lineage_targets(
             &scope(),
             &[(repo(), 0)],
@@ -271,7 +271,7 @@ mod task_024 {
             }],
         ))
         .expect("advance epoch");
-        assert!(block_on(store.apply_reset(journal(preview))).is_err());
+        assert!(block_on(store.apply_reset(value)).is_err());
     }
 
     #[test]
@@ -284,10 +284,57 @@ mod task_024 {
     }
 
     #[test]
+    fn unapproved_journal_subset_rejected_without_mutation() {
+        let store = setup();
+        add_target(&store, "target-b");
+        let preview = block_on(store.preview_reset(&scope(), &repo())).expect("preview");
+        let approved_value = approved(&store, journal(preview));
+        let mut supplied = approved_value.clone();
+        supplied.preview.target_ids.truncate(1);
+        supplied.preview.targets.truncate(1);
+        supplied.target_fingerprints.truncate(1);
+        rehash(&mut supplied);
+        let error = block_on(store.apply_reset(supplied)).expect_err("subset denial");
+        assert!(format!("{error:?}").contains("ResetJournalUnauthorized"));
+        assert!(
+            !block_on(store.record_lineage(&scope(), "target-a"))
+                .expect("target a")
+                .expect("lineage a")
+                .retired
+        );
+        assert!(
+            !block_on(store.record_lineage(&scope(), "target-b"))
+                .expect("target b")
+                .expect("lineage b")
+                .retired
+        );
+    }
+
+    #[test]
+    fn invented_decision_rejected_without_mutation() {
+        let store = setup();
+        let preview = block_on(store.preview_reset(&scope(), &repo())).expect("preview");
+        let approved_value = approved(&store, journal(preview));
+        let mut supplied = approved_value.clone();
+        supplied
+            .authorizing_decisions
+            .push("invented-decision".into());
+        let error = block_on(store.apply_reset(supplied)).expect_err("decision denial");
+        assert!(format!("{error:?}").contains("ResetJournalUnauthorized"));
+        assert!(
+            !block_on(store.record_lineage(&scope(), "target-a"))
+                .expect("target")
+                .expect("lineage")
+                .retired
+        );
+    }
+
+    #[test]
     fn preservation_digests_revalidated_after_apply() {
         let store = setup();
         let preview = block_on(store.preview_reset(&scope(), &repo())).expect("preview");
-        let applied = block_on(store.apply_reset(journal(preview))).expect("apply");
+        let applied =
+            block_on(store.apply_reset(approved(&store, journal(preview)))).expect("apply");
         assert!(
             applied
                 .checkpoints
@@ -302,7 +349,8 @@ mod task_024 {
         // rollback claim; a later cell failure resumes from this checkpoint.
         let store = setup();
         let preview = block_on(store.preview_reset(&scope(), &repo())).expect("preview");
-        let applied = block_on(store.apply_reset(journal(preview))).expect("local apply");
+        let applied =
+            block_on(store.apply_reset(approved(&store, journal(preview)))).expect("local apply");
         assert!(
             applied
                 .checkpoints

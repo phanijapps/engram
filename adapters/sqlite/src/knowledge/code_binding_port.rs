@@ -307,6 +307,34 @@ impl CodeBindingRepository for SqlCodeBindingRepository {
             tx.commit().map_err(|_| storage_error())?;
             return Ok(());
         }
+        // A lease can be acquired after the caller's read validation. Check
+        // it while this IMMEDIATE transaction owns the same mutation fence.
+        let mut leases = tx
+            .prepare(
+                "SELECT record_json FROM code_read_leases WHERE scope_key=?1 AND expires_ms>?2",
+            )
+            .map_err(|_| storage_error())?;
+        let rows = leases
+            .query_map(params![key, chrono::Utc::now().timestamp_millis()], |row| {
+                row.get::<_, String>(0)
+            })
+            .map_err(|_| storage_error())?;
+        for row in rows {
+            let lease: engram_knowledge::CodeReadLease =
+                serde_json::from_str(&row.map_err(|_| storage_error())?)
+                    .map_err(|_| storage_error())?;
+            if targets.iter().any(|target| {
+                lease
+                    .eligibility
+                    .generations
+                    .contains(&target.generation_id)
+            }) {
+                return Err(CoreError::Conflict {
+                    reason: "ResetLeaseActive: a live read lease protects a target snapshot".into(),
+                });
+            }
+        }
+        drop(leases);
         // (2) FIRST SIDE EFFECT: advance every involved binding's epoch
         // inside the same transaction so a racing publication CAS fails
         // against the mutated state.
@@ -759,6 +787,20 @@ impl CodeBindingRepository for SqlCodeBindingRepository {
         self.lock()?
             .put_reset_journal(&journal, "authorized")
             .map_err(error)?;
+        Ok(journal)
+    }
+    async fn load_reset_journal(&self, reset_id: &str) -> CoreResult<CodeResetJournal> {
+        self.lock()?
+            .reset_journal(reset_id)
+            .map_err(error)?
+            .ok_or_else(|| CoreError::Conflict {
+                reason: "ResetJournalUnauthorized: no owner-approved journal exists for reset id"
+                    .into(),
+            })
+    }
+    async fn save_reset_journal(&self, journal: CodeResetJournal) -> CoreResult<CodeResetJournal> {
+        journal.validate().map_err(error)?;
+        self.lock()?.update_reset_journal(&journal).map_err(error)?;
         Ok(journal)
     }
 }

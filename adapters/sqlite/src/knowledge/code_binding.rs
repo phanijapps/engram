@@ -233,6 +233,44 @@ impl SqlCodeBindingStore {
         self.connection.execute("INSERT INTO code_lineage(record_id,repo_id,generation_id,lineage_json) VALUES(?1,?2,?3,?4)",params![record_id,lineage.repo_id.0,lineage.generation_id,json]).map_err(|_|CodeBindingError::PersistenceFailure)?;
         Ok(())
     }
+    pub fn reset_journal(
+        &self,
+        reset_id: &str,
+    ) -> Result<Option<CodeResetJournal>, CodeBindingError> {
+        let mut statement = self
+            .connection
+            .prepare("SELECT journal_json FROM code_reset_journals")
+            .map_err(|_| CodeBindingError::PersistenceFailure)?;
+        let mut rows = statement
+            .query([])
+            .map_err(|_| CodeBindingError::PersistenceFailure)?;
+        while let Some(row) = rows
+            .next()
+            .map_err(|_| CodeBindingError::PersistenceFailure)?
+        {
+            let json: String = row
+                .get(0)
+                .map_err(|_| CodeBindingError::PersistenceFailure)?;
+            let journal = serde_json::from_str::<CodeResetJournal>(&json)
+                .map_err(|_| CodeBindingError::PersistenceFailure)?;
+            if journal.reset_id == reset_id {
+                return Ok(Some(journal));
+            }
+        }
+        Ok(None)
+    }
+    pub fn update_reset_journal(
+        &mut self,
+        journal: &CodeResetJournal,
+    ) -> Result<(), CodeBindingError> {
+        let json =
+            serde_json::to_string(journal).map_err(|_| CodeBindingError::PersistenceFailure)?;
+        let updated = self.connection.execute("UPDATE code_reset_journals SET journal_json=?1, checkpoint=?2 WHERE preview_hash=?3", params![json, "progress", journal.preview.preview_hash]).map_err(|_| CodeBindingError::PersistenceFailure)?;
+        if updated != 1 {
+            return Err(CodeBindingError::InvalidResetPreview);
+        }
+        Ok(())
+    }
     pub fn put_reset_journal(
         &mut self,
         journal: &CodeResetJournal,

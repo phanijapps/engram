@@ -68,6 +68,11 @@ impl BindingCell {
     pub fn cell(&self) -> &Arc<dyn engram_knowledge::CodeBindingRepository> {
         &self.inner
     }
+    /// A clone of the neutral durable-cell handle (composition builds shared
+    /// coordinators over the SAME cell).
+    pub fn handle(&self) -> Arc<dyn engram_knowledge::CodeBindingRepository> {
+        Arc::clone(&self.inner)
+    }
 }
 
 /// Provides ingest operations for the Node-API bridge.

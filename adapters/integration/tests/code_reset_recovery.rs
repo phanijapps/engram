@@ -932,7 +932,12 @@ mod task_024 {
         assert_eq!(
             classes,
             std::collections::BTreeSet::from([
-                "source", "document", "chunk", "entity", "relationship", "graph",
+                "source",
+                "document",
+                "chunk",
+                "entity",
+                "relationship",
+                "graph",
             ])
         );
         let approved = block_on(coordinator.journal_reset(
@@ -960,15 +965,30 @@ mod task_024 {
                 .len(),
             1
         );
-        assert_eq!(block_on(knowledge.list_chunks(&scope())).expect("chunks after apply").len(), 1);
-        assert_eq!(block_on(knowledge.list_entities(&scope())).expect("entities after apply").len(), 2);
+        assert_eq!(
+            block_on(knowledge.list_chunks(&scope()))
+                .expect("chunks after apply")
+                .len(),
+            1
+        );
+        assert_eq!(
+            block_on(knowledge.list_entities(&scope()))
+                .expect("entities after apply")
+                .len(),
+            2
+        );
         assert_eq!(
             block_on(knowledge.list_relationships(&scope()))
                 .expect("relationships after apply")
                 .len(),
             1
         );
-        assert_eq!(block_on(knowledge.list_graphs(&scope())).expect("graphs after apply").len(), 1);
+        assert_eq!(
+            block_on(knowledge.list_graphs(&scope()))
+                .expect("graphs after apply")
+                .len(),
+            1
+        );
         let post_apply = engram_integration::code_binding::KnowledgePreservationRecordSource::new(
             knowledge.clone() as Arc<dyn engram_knowledge::KnowledgeRepository>,
             knowledge.clone() as Arc<dyn engram_integration::KnowledgeQuery>,
@@ -1027,7 +1047,10 @@ mod task_024 {
         .expect("foreign lineage remains stored");
         assert_eq!(foreign_lineage.repo_id, "foreign-preservation-repository");
         assert_eq!(foreign_lineage.generation_id, "foreign-generation");
-        assert!(!foreign_lineage.retired, "the non-target lineage is unchanged");
+        assert!(
+            !foreign_lineage.retired,
+            "the non-target lineage is unchanged"
+        );
         let error = block_on(coordinator.apply_reset(&actor(), approved))
             .expect_err("foreign content drift denies apply");
         assert!(format!("{error:?}").contains("ResetPreservationFailed"));

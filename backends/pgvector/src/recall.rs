@@ -665,6 +665,22 @@ mod authority_tests {
         );
     }
 
+    /// Reset only vector state after verifying the exact disposable marker.
+    ///
+    /// The authority fixture owns its embedding dimensions and must not inherit
+    /// an identity written by another ignored Pg test in the shared fixture.
+    fn reset_vector_store(conn: &PgConnection) {
+        marker_assert(conn);
+        conn.block_on(async {
+            conn.client
+                .batch_execute(
+                    "DROP TABLE IF EXISTS vectors; DROP TABLE IF EXISTS vector_embedding_space;",
+                )
+                .await
+        })
+        .expect("reset disposable vector state");
+    }
+
     fn scope(run: &str) -> engram_domain::Scope {
         engram_domain::Scope {
             tenant: "factory-test".into(),
@@ -1084,7 +1100,7 @@ mod authority_tests {
     fn pg_authority_failure_preserves_ordinary_and_denies_code_dependent() {
         let run = scope_run();
         let conn = PgConnection::connect(&url()).expect("connect disposable fixture");
-        marker_assert(&conn);
+        reset_vector_store(&conn);
         conn.block_on(async {
             conn.client
                 .batch_execute(&engram_store_pgvector::schema::schema_sql(2))

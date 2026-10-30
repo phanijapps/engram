@@ -249,6 +249,21 @@ mod task_023 {
         );
     }
     #[test]
+    fn forged_progress_is_rejected_before_journal_persistence() {
+        let store = setup();
+        let preview = block_on(store.preview_reset(&scope(), &repo())).expect("preview");
+        let mut forged = journal(preview);
+        forged.checkpoints = vec![
+            "completed:target-a".into(),
+            "reset-lane:lexical:done".into(),
+            "preservation:verified".into(),
+        ];
+        let error = block_on(store.journal_reset(forged)).expect_err("forged progress denial");
+        assert!(format!("{error:?}").contains("ResetProgressSupplied"));
+        assert!(block_on(store.load_reset_journal("reset-1")).is_err());
+    }
+
+    #[test]
     fn journal_bound_to_preview_hash() {
         let store = setup();
         let preview = block_on(store.preview_reset(&scope(), &repo())).expect("preview");
@@ -575,8 +590,19 @@ mod task_024 {
                 ],
             )
             .expect("durable mutation");
-        let error = block_on(store.apply_reset(value)).expect_err("preservation drift denial");
+        let error =
+            block_on(store.apply_reset(value.clone())).expect_err("preservation drift denial");
         assert!(format!("{error:?}").contains("ResetPreservationFailed"));
+        let durable =
+            block_on(store.load_reset_journal("reset-1")).expect("failed journal persists");
+        assert!(
+            durable
+                .checkpoints
+                .iter()
+                .any(|checkpoint| checkpoint == "preservation:failed")
+        );
+        let retry = block_on(store.apply_reset(value)).expect_err("drift retry remains denied");
+        assert!(format!("{retry:?}").contains("ResetPreservationFailed"));
     }
 
     #[test]

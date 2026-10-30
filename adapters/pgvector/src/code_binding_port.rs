@@ -801,7 +801,14 @@ impl CodeBindingRepository for PgCodeBindingRepository {
         Ok(preview)
     }
 
-    async fn journal_reset(&self, journal: CodeResetJournal) -> CoreResult<CodeResetJournal> {
+    async fn journal_reset(&self, mut journal: CodeResetJournal) -> CoreResult<CodeResetJournal> {
+        if journal.has_reserved_progress() {
+            return Err(CoreError::InvalidRequest {
+                reason: "ResetProgressSupplied: journal creation accepts no store-owned progress"
+                    .into(),
+            });
+        }
+        journal.checkpoints.clear();
         journal.validate().map_err(error)?;
         let current = self
             .preview_reset(

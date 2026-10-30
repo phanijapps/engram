@@ -392,6 +392,16 @@ impl CodeResetPreview {
 }
 
 impl CodeResetJournal {
+    /// Progress is store-owned and is never part of an owner approval request.
+    pub fn has_reserved_progress(&self) -> bool {
+        self.checkpoints.iter().any(|checkpoint| {
+            checkpoint.starts_with("completed:")
+                || checkpoint.starts_with("reset-lane:")
+                || checkpoint.starts_with("preservation:")
+                || checkpoint == "preservation-verified"
+        })
+    }
+
     pub fn validate(&self) -> Result<(), CodeBindingError> {
         self.preview.validate()?;
         if self.reset_id.trim().is_empty()

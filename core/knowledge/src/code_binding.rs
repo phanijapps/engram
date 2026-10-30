@@ -370,7 +370,12 @@ pub trait CodeBindingRepository: crate::CodeReadLeases + Send + Sync {
             .iter()
             .filter(|target| !completed.contains(&target.record_id))
             .collect();
-        if remaining.is_empty() {
+        if remaining.is_empty()
+            && journal
+                .checkpoints
+                .iter()
+                .any(|checkpoint| checkpoint == "preservation:verified")
+        {
             return Ok(journal);
         }
         // Recompute the complete target fingerprint from CURRENT durable
@@ -438,7 +443,12 @@ pub trait CodeBindingRepository: crate::CodeReadLeases + Send + Sync {
             .iter()
             .filter(|target| !completed.contains(&target.record_id))
             .collect();
-        if remaining.is_empty() {
+        if remaining.is_empty()
+            && journal
+                .checkpoints
+                .iter()
+                .any(|checkpoint| checkpoint == "preservation:verified")
+        {
             return Ok(journal);
         }
         if completed.is_empty() && binding.epoch != journal.preview.code_epoch {
@@ -455,23 +465,44 @@ pub trait CodeBindingRepository: crate::CodeReadLeases + Send + Sync {
                 record_id: target.record_id.clone(),
             })
             .collect::<Vec<_>>();
-        self.retire_lineage_targets(&scope, &[(repo.clone(), expected_epoch)], &targets)
-            .await?;
-        for target in remaining {
-            journal
-                .checkpoints
-                .push(format!("completed:{}", target.record_id));
+        if !targets.is_empty() {
+            self.retire_lineage_targets(&scope, &[(repo.clone(), expected_epoch)], &targets)
+                .await?;
+            for target in remaining {
+                journal
+                    .checkpoints
+                    .push(format!("completed:{}", target.record_id));
+            }
+            journal = self.save_reset_journal(journal).await?;
         }
-        journal = self.save_reset_journal(journal).await?;
         // Re-read the durable ordinary-record inventory after mutation.
         // This is intentionally independent of the owner-approved preview.
         let durable_inventory = self.preservation_inventory(&scope, &repo).await?;
         if durable_inventory != journal.preview.preservation_inventory {
+            journal
+                .checkpoints
+                .retain(|checkpoint| checkpoint != "preservation:verified");
+            journal
+                .checkpoints
+                .retain(|checkpoint| checkpoint != "preservation:failed");
+            journal.checkpoints.push("preservation:failed".into());
+            self.save_reset_journal(journal).await?;
             return Err(CoreError::Conflict {
                 reason: "ResetPreservationFailed: ordinary preservation inventory changed".into(),
             });
         }
-        journal.checkpoints.push("preservation-verified".into());
+        journal
+            .checkpoints
+            .retain(|checkpoint| checkpoint != "preservation:failed");
+        if !journal
+            .checkpoints
+            .iter()
+            .any(|checkpoint| checkpoint == "preservation:verified")
+        {
+            journal.checkpoints.push("preservation:verified".into());
+            // Retain the published spelling for transport compatibility.
+            journal.checkpoints.push("preservation-verified".into());
+        }
         self.save_reset_journal(journal).await
     }
 }

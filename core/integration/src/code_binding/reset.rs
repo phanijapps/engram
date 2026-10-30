@@ -234,6 +234,15 @@ impl CodeBindingCoordinator {
                 reason: "ResetApprovalRequired: an authorizing decision is required".into(),
             });
         }
+        if journal.has_reserved_progress() {
+            return Err(CoreError::InvalidRequest {
+                reason: "ResetProgressSupplied: journal creation accepts no store-owned progress"
+                    .into(),
+            });
+        }
+        // Creation is the sole progress initializer.  Caller metadata never
+        // becomes durable progress, including non-reserved compatibility notes.
+        journal.checkpoints.clear();
         if !journal
             .authorizing_decisions
             .iter()

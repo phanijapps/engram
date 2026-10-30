@@ -249,7 +249,8 @@ mod task_021 {
         let run = unique_suffix();
         let mut observed: Vec<String> = Vec::new();
         for (backend, tag) in backends() {
-            let mut server = spawn_server(backend, &format!("parity-{tag}"));
+            let workspace = format!("parity-{tag}-{run}");
+            let mut server = spawn_server(backend, &workspace);
             let init = server.call(1, "initialize", json!({}));
             assert!(
                 init["result"]["serverInfo"]["name"] == "engram-mcp",
@@ -329,8 +330,13 @@ mod task_021 {
             );
             let rebuilt_text = Server::text_of(&rebuilt);
             assert!(
-                rebuilt.get("error").is_none() && rebuilt_text.contains("generationId"),
-                "{backend} registered-locator rebuild publishes: {rebuilt}"
+                rebuilt.get("error").is_none()
+                    && rebuilt_text.contains("generationId")
+                    && serde_json::from_str::<Value>(&rebuilt_text)
+                        .ok()
+                        .and_then(|generation| generation["documents"].as_u64())
+                        .is_some_and(|documents| documents > 0),
+                "{backend} registered-locator rebuild persists a non-empty generation: {rebuilt}"
             );
             let recalled = server.tool(
                 60,
@@ -362,7 +368,7 @@ mod task_021 {
             let preview_response = server.tool(
                 7,
                 "code_reset_preview",
-                json!({ "scope": { "tenant": "task-transports", "workspace": format!("parity-{tag}") }, "repo": format!("repo-{tag}-{run}") }),
+                json!({ "scope": { "tenant": "task-transports", "workspace": workspace }, "repo": format!("repo-{tag}-{run}") }),
             );
             let preview: Value = serde_json::from_str(&Server::text_of(&preview_response))
                 .unwrap_or_else(|error| {
@@ -662,7 +668,8 @@ mod task_022 {
         let (repo_path, head_oid) = git_fixture("oneshot");
         let run = unique_suffix();
         for (backend, tag) in backends() {
-            let storage = storage_for(&format!("oneshot-{tag}"));
+            let workspace = format!("oneshot-{tag}-{run}");
+            let storage = storage_for(&workspace);
             let mut envs: Vec<(&str, &str)> = Vec::new();
             let mut extra: Vec<&str> = Vec::new();
             if backend == "pgvector" {
@@ -671,7 +678,7 @@ mod task_022 {
                 extra = vec!["--backend", "pgvector"];
             }
             let base = {
-                let mut args = oneshot_args(&storage, &format!("oneshot-{tag}"), &extra);
+                let mut args = oneshot_args(&storage, &workspace, &extra);
                 args.insert(0, "code".into());
                 args
             };
@@ -760,7 +767,7 @@ mod task_022 {
                 "{backend} rebuild publishes: {text}"
             );
 
-            let mut recall_args = oneshot_args(&storage, &format!("oneshot-{tag}"), &extra);
+            let mut recall_args = oneshot_args(&storage, &workspace, &extra);
             recall_args.insert(0, "recall".into());
             recall_args.extend(
                 ["--query", "fixture", "--include-code-artifacts", "--json"]
@@ -774,7 +781,7 @@ mod task_022 {
                 "{backend} bound result envelope: {text}"
             );
 
-            let mut source_args = oneshot_args(&storage, &format!("oneshot-{tag}"), &extra);
+            let mut source_args = oneshot_args(&storage, &workspace, &extra);
             source_args.insert(0, "fetch-content".into());
             source_args.extend(["--path", "lib.rs"].iter().map(|s| (*s).to_owned()));
             let (code, text) = oneshot(&oneshot_refs(&source_args), &envs);
@@ -783,7 +790,7 @@ mod task_022 {
                 text.contains("\"ok\":true") && text.contains("pub fn fixture() -> u32 { 1 }"),
                 "{backend} bound exact-byte envelope: {text}"
             );
-            let mut graph_args = oneshot_args(&storage, &format!("oneshot-{tag}"), &extra);
+            let mut graph_args = oneshot_args(&storage, &workspace, &extra);
             graph_args.insert(0, "symbol-context".into());
             graph_args.extend(
                 ["--symbol", "fixture", "--depth", "1"]

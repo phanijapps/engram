@@ -139,6 +139,28 @@ impl CodeBindingRepository for SqlCodeBindingRepository {
         }
         Ok(registration)
     }
+    async fn get_registration(
+        &self,
+        repo_id: &RepoId,
+    ) -> CoreResult<Option<RepositoryRegistration>> {
+        let store = self.lock()?;
+        store
+            .connection
+            .execute_batch("CREATE TABLE IF NOT EXISTS code_repository_registrations(repo_id TEXT PRIMARY KEY,record_json TEXT NOT NULL)")
+            .map_err(|_| storage_error())?;
+        let saved: Option<String> = store
+            .connection
+            .query_row(
+                "SELECT record_json FROM code_repository_registrations WHERE repo_id=?1",
+                [&repo_id.0],
+                |r| r.get(0),
+            )
+            .optional()
+            .map_err(|_| storage_error())?;
+        saved
+            .map(|json| serde_json::from_str(&json).map_err(|_| storage_error()))
+            .transpose()
+    }
     async fn bind(&self, binding: CodeBinding) -> CoreResult<CodeBinding> {
         self.lock()?.bind(&binding).map_err(error)
     }

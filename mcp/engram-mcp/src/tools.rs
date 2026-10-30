@@ -2557,3 +2557,262 @@ impl Store {
         );
     }
 }
+
+// --- TASK-021: scoped bound-code operations through stdio ---------------------
+//
+// The MCP surface mirrors the Rust SDK / native N-API / TS code operations:
+// register → bind → status (binding-keyed freshness + checkpoint) → refresh
+// (on-request ref observation resolved from the REGISTERED locator, never a
+// checkout HEAD). Every failure is a TYPED, inspectable diagnosis — the
+// JSON-RPC error message begins with the stable kind (`BindingRequired`,
+// `BindingConflict`, `CapabilityUnsupported`, …) so transports can branch
+// without parsing prose.
+
+use engram_domain::RepoId;
+use engram_integration::code_binding::CodeBindingStatus;
+use engram_knowledge::{AcquisitionMode, CodeBindingRepository, RepositoryRegistration};
+
+/// Maps a coordinator/provider failure onto the typed tool-error envelope:
+/// the message carries the CoreError's own text (which begins with the
+/// stable typed reason) under the internal-error code.
+fn code_authority_error(error: engram_knowledge::CoreError) -> ToolError {
+    internal(error.to_string())
+}
+
+fn req_repo(args: &Value) -> Result<RepoId, ToolError> {
+    let repo = args["repo"]
+        .as_str()
+        .map(str::trim)
+        .filter(|repo| !repo.is_empty())
+        .ok_or_else(|| invalid("missing required string arg 'repo'"))?;
+    Ok(RepoId(repo.to_owned()))
+}
+
+/// `code_repo_register`: register a repository's acquisition locator for
+/// this scope. `{ repo, mode: "local-only" | "configured-remote", path }`.
+pub fn code_repo_register(app: &App, args: &Value) -> Result<Value, ToolError> {
+    let repo = req_repo(args)?;
+    let mode = match args["mode"].as_str().unwrap_or("local-only") {
+        "local-only" => AcquisitionMode::LocalOnly,
+        "configured-remote" => AcquisitionMode::ConfiguredRemote,
+        other => {
+            return Err(invalid(format!(
+                "unknown acquisition mode {other:?} (local-only | configured-remote)"
+            )));
+        }
+    };
+    let path = args["path"]
+        .as_str()
+        .map(str::trim)
+        .filter(|path| !path.is_empty())
+        .ok_or_else(|| invalid("missing required string arg 'path' (the authorized locator)"))?;
+    let coordinator = app.provider.code_bindings().map_err(code_authority_error)?;
+    let registration = block_on(coordinator.store().register(RepositoryRegistration {
+        repo_id: repo.clone(),
+        locator_id: path.to_owned(),
+        acquisition: mode,
+    }))
+    .map_err(code_authority_error)?;
+    Ok(protocol::text_content(format!(
+        "REGISTERED {} (mode {}, locator on record — display URLs are never identity)",
+        registration.repo_id.0,
+        match registration.acquisition {
+            AcquisitionMode::LocalOnly => "local-only",
+            AcquisitionMode::ConfiguredRemote => "configured-remote",
+        },
+    )))
+}
+
+/// `code_bind`: bind a repository's branch for the launch scope.
+/// `{ repo, branchRef }` — same-ref idempotent; another branch is a typed
+/// `BindingConflict` denial.
+pub fn code_bind(app: &App, args: &Value) -> Result<Value, ToolError> {
+    let repo = req_repo(args)?;
+    let branch_ref = args["branchRef"]
+        .as_str()
+        .map(str::trim)
+        .filter(|branch| !branch.is_empty())
+        .ok_or_else(|| {
+            invalid("missing required string arg 'branchRef' (full refs/heads/… ref)")
+        })?;
+    let coordinator = app.provider.code_bindings().map_err(code_authority_error)?;
+    let actor = system_actor();
+    let binding = block_on(coordinator.bind(&actor, &app.scope, &repo, branch_ref))
+        .map_err(code_authority_error)?;
+    Ok(protocol::text_content(format!(
+        "BOUND {} -> {} (version {}, epoch {}, active generation {})",
+        binding.repo_id.0,
+        binding.branch_ref,
+        binding.version,
+        binding.epoch,
+        binding.active_generation.as_deref().unwrap_or("none"),
+    )))
+}
+
+/// `code_status`: the binding-keyed status — configured ref, indexed OID,
+/// on-request ref freshness (unknown until an explicit observation; never
+/// checkout-HEAD-derived), and the RepoId-keyed checkpoint.
+pub fn code_status(app: &App, args: &Value) -> Result<Value, ToolError> {
+    let repo = req_repo(args)?;
+    let coordinator = app.provider.code_bindings().map_err(code_authority_error)?;
+    let actor = system_actor();
+    let status: CodeBindingStatus = block_on(coordinator.status(&actor, &app.scope, &repo, None))
+        .map_err(code_authority_error)?;
+    Ok(protocol::text_content(render_code_status(&status)))
+}
+
+/// `code_refresh`: ONE on-request observation of the bound branch ref,
+/// resolved from the REGISTERED repository locator (local git only — no
+/// fetch, no checkout mutation). The observed OID/time is recorded
+/// separately from the indexed generation OID.
+pub fn code_refresh(app: &App, args: &Value) -> Result<Value, ToolError> {
+    let repo = req_repo(args)?;
+    let coordinator = app.provider.code_bindings().map_err(code_authority_error)?;
+    let store = coordinator.store();
+    let registration = block_on(store.get_registration(&repo))
+        .map_err(code_authority_error)?
+        .ok_or_else(|| {
+            invalid("BindingRequired: no registered repository — register a locator first")
+        })?;
+    let AcquisitionMode::LocalOnly = registration.acquisition else {
+        return Err(invalid(
+            "configured-remote acquisition requires the remote refresh path (not this tool)",
+        ));
+    };
+    let binding = block_on(store.get_binding(&app.scope, &repo))
+        .map_err(code_authority_error)?
+        .ok_or_else(|| invalid("BindingRequired: bind the repository before refreshing its ref"))?;
+    let resolved = engram_ingest::git_source::resolve_local_branch(
+        std::path::Path::new(&registration.locator_id),
+        &binding.branch_ref,
+    )
+    .map_err(code_authority_error)?;
+    let actor = system_actor();
+    let observation =
+        block_on(coordinator.record_ref_observation(&actor, &app.scope, &repo, &resolved.oid))
+            .map_err(code_authority_error)?;
+    Ok(protocol::text_content(format!(
+        "OBSERVED {} {} at {} (policy {})",
+        observation.branch_ref,
+        observation.observed_oid,
+        observation.observed_at,
+        match observation.policy {
+            engram_knowledge::RefObservationPolicy::OnRequest => "on_request",
+        },
+    )))
+}
+
+/// Renders the binding-keyed status as inspectable text (stable prefixes:
+/// `FRESHNESS:`, `INDEXED:`, `CHECKPOINT:`).
+pub fn render_code_status(status: &CodeBindingStatus) -> String {
+    use engram_integration::code_binding::CodeFreshnessState;
+    let mut out = format!(
+        "BOUND {} {} (version {}, epoch {})\nINDEXED: {}",
+        status.checkpoint.repo_id.0,
+        status.freshness.branch_ref,
+        status.checkpoint.binding_version,
+        status.checkpoint.code_epoch,
+        status
+            .indexed_commit_oid
+            .as_deref()
+            .unwrap_or("none (no published generation)"),
+    );
+    match (&status.freshness.observed_oid, status.freshness.observed_at) {
+        (Some(oid), Some(at)) => {
+            out.push_str(&format!("\nFRESHNESS: observed {oid} at {at}"));
+        }
+        _ => out.push_str("\nFRESHNESS: unknown (no valid observation — refresh on request)"),
+    }
+    match status.freshness.state {
+        CodeFreshnessState::Unknown => out.push_str("\nFRESHNESS-STATE: unknown"),
+        CodeFreshnessState::Observed {
+            matches_indexed: Some(true),
+        } => out.push_str("\nFRESHNESS-STATE: at the indexed commit"),
+        CodeFreshnessState::Observed {
+            matches_indexed: Some(false),
+        } => out.push_str("\nFRESHNESS-STATE: ref moved past the indexed commit"),
+        CodeFreshnessState::Observed {
+            matches_indexed: None,
+        } => out.push_str("\nFRESHNESS-STATE: observed; indexed commit unreadable"),
+    }
+    out.push_str(&format!(
+        "\nCHECKPOINT: repo={} generation={}{}",
+        status.checkpoint.repo_id.0,
+        status
+            .checkpoint
+            .generation
+            .as_ref()
+            .map(|generation| format!(
+                " {} @ {} (parser {}, filter {})",
+                generation.id,
+                generation.commit_oid,
+                generation.parser_fingerprint,
+                generation.filter_fingerprint
+            ))
+            .unwrap_or_else(|| "none".to_owned()),
+        "",
+    ));
+    out
+}
+
+/// Registers the scoped code-operation tools (TASK-021). Called from the
+/// stdio profile wiring; every handler forwards to the SAME neutral
+/// coordinator the recipes, SDK, and native binding use.
+pub fn register_code_tools(registry: &mut crate::registry::ToolRegistry<App>) {
+    use crate::registry::ToolRecord;
+    use serde_json::json;
+    registry.register(ToolRecord {
+        name: "code_repo_register",
+        description: "Register a repository's acquisition locator for this scope (bound code \
+                      authority, TASK-021). mode: local-only | configured-remote. The locator is \
+                      a secret-free reference on record — never a checkout guess.",
+        input_schema: json!({
+            "type": "object",
+            "properties": {
+                "repo": { "type": "string", "description": "RepoId (opaque authority key)" },
+                "mode": { "type": "string", "enum": ["local-only", "configured-remote"] },
+                "path": { "type": "string", "description": "Authorized locator (local-only: the repository path)" }
+            },
+            "required": ["repo", "path"]
+        }),
+        handler: code_repo_register,
+    });
+    registry.register(ToolRecord {
+        name: "code_bind",
+        description: "Bind a repository's branch (full refs/heads/… ref) for the launch scope. \
+                      Same-ref retries are idempotent; another branch is a typed BindingConflict.",
+        input_schema: json!({
+            "type": "object",
+            "properties": {
+                "repo": { "type": "string" },
+                "branchRef": { "type": "string" }
+            },
+            "required": ["repo", "branchRef"]
+        }),
+        handler: code_bind,
+    });
+    registry.register(ToolRecord {
+        name: "code_status",
+        description: "Binding-keyed status: configured ref, indexed OID, on-request ref \
+                      freshness (unknown until an explicit refresh — never checkout-HEAD \
+                      derived), and the RepoId-keyed checkpoint.",
+        input_schema: json!({
+            "type": "object",
+            "properties": { "repo": { "type": "string" } },
+            "required": ["repo"]
+        }),
+        handler: code_status,
+    });
+    registry.register(ToolRecord {
+        name: "code_refresh",
+        description: "ONE on-request observation of the bound branch ref, resolved from the \
+                      REGISTERED locator (local git only — no fetch, no checkout change). \
+                      Recorded separately from the indexed generation OID.",
+        input_schema: json!({
+            "type": "object",
+            "properties": { "repo": { "type": "string" } },
+            "required": ["repo"]
+        }),
+        handler: code_refresh,
+    });
+}

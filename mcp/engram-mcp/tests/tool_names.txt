@@ -7,8 +7,12 @@ belief_stale_list
 build_maintenance_plan
 capability_report
 change_impact
+code_bind
 code_health
+code_refresh
+code_repo_register
 code_staleness
+code_status
 consolidate
 contradiction_list
 explore

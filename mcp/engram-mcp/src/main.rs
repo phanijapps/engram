@@ -371,6 +371,15 @@ pub static DEFAULT_TOOLS: &[&str] = &[
     // Freshness — resumable change pages + truthful staleness.
     "subscribe_changes",
     "code_staleness",
+    // TASK-021 — the scoped bound-code operations (stdio parity with the
+    // SDK + native surfaces over the same neutral coordinator).
+    "code_repo_register",
+    "code_bind",
+    "code_status",
+    "code_refresh",
+    // Inspectable typed diagnostics — the capability report is part of the
+    // default surface (TASK-021).
+    "capability_report",
     // The outcome loop — attribute task results to recalls.
     "report_outcome",
     "list_outcomes",
@@ -1149,6 +1158,9 @@ fn register_all_tools(registry: &mut ToolRegistry<App>) {
         input_schema: json!({ "type": "object", "properties": {} }),
         handler: codegraph::capability_report,
     });
+    // TASK-021: the scoped code operations (register/bind/status/refresh) —
+    // stdio parity with the SDK + native surfaces over the same coordinator.
+    tools::register_code_tools(registry);
 }
 
 fn ping(_app: &App, _args: &Value) -> Result<Value, ToolError> {

@@ -114,6 +114,29 @@ impl CodeBindingRepository for PgCodeBindingRepository {
             .await
     }
 
+    async fn get_registration(
+        &self,
+        repo_id: &RepoId,
+    ) -> CoreResult<Option<RepositoryRegistration>> {
+        let repo = repo_id.0.clone();
+        self.blocking(move |store| {
+            let registration = crate::connection::runtime().block_on(async {
+                let row = store
+                    .connection
+                    .client
+                    .query_opt(
+                        "SELECT record_json FROM code_repository_registrations WHERE repo_id=$1",
+                        &[&repo],
+                    )
+                    .await
+                    .map_err(|_| storage_error())?;
+                row.map(|row| serde_json::from_value(row.get(0)).map_err(|_| storage_error()))
+                    .transpose()
+            })?;
+            Ok(registration)
+        })
+        .await
+    }
     async fn bind(&self, binding: CodeBinding) -> CoreResult<CodeBinding> {
         self.blocking(move |store| store.bind(&binding).map_err(error))
             .await

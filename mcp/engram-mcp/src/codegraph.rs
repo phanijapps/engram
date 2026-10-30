@@ -3225,6 +3225,20 @@ pub fn capability_report(app: &App, _args: &Value) -> Result<Value, ToolError> {
         ("procedures", app.provider.procedures().is_some()),
         ("hierarchy", app.provider.hierarchy().is_some()),
         ("identity", app.provider.identity().is_some()),
+        // TASK-021: the bound-code capability states straight from the
+        // provider's CapabilityReport (inspectable typed diagnostics).
+        (
+            "code_binding",
+            app.provider.capabilities().code_binding.is_supported(),
+        ),
+        (
+            "code_source",
+            app.provider.capabilities().code_source.is_supported(),
+        ),
+        (
+            "code_reset",
+            app.provider.capabilities().code_reset.is_supported(),
+        ),
         (
             "vector",
             app.provider.embedding_provider().is_some() && app.provider.require_vectors().is_ok(),

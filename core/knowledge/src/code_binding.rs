@@ -80,6 +80,16 @@ pub trait CodeBindingRepository: crate::CodeReadLeases + Send + Sync {
         registration: RepositoryRegistration,
     ) -> CoreResult<RepositoryRegistration>;
     async fn bind(&self, binding: CodeBinding) -> CoreResult<CodeBinding>;
+    /// The durable registration for one repository (TASK-021): the
+    /// scope-authorized locator an on-request refresh resolves through.
+    /// `Ok(None)` is the honest "no registration exists" state — callers
+    /// deny typed rather than guessing a checkout. Default: none.
+    async fn get_registration(
+        &self,
+        _repo_id: &engram_domain::RepoId,
+    ) -> CoreResult<Option<RepositoryRegistration>> {
+        Ok(None)
+    }
     async fn get_binding(
         &self,
         scope: &Scope,

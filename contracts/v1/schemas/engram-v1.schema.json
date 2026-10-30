@@ -2492,6 +2492,10 @@
         "contributorDigest"
       ],
       "properties": {
+        "recordClass": {
+          "type": "string",
+          "minLength": 1
+        },
         "recordId": {
           "type": "string",
           "minLength": 1

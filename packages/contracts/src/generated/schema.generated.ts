@@ -1707,6 +1707,10 @@ export const engramV1Schema = {
           "pattern": "^[a-fA-F0-9]{64}$",
           "type": "string"
         },
+        "recordClass": {
+          "minLength": 1,
+          "type": "string"
+        },
         "recordId": {
           "minLength": 1,
           "type": "string"

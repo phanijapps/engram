@@ -1,5 +1,9 @@
 # v1 Changelog
 
+## 2026-10-30 (preservation record class)
+
+- Added optional `PreservationEntry.recordClass` for the camelCase knowledge class emitted by the Rust preservation-record serializer. Additive/compatible: the property remains optional so existing inventory payloads validate unchanged; current Rust serialization emits it for every preserved record.
+
 ## 2026-10-30 (reset preservation inventory)
 
 - Added optional `CodeResetPreview.preservationInventory`, `PreservationInventory`, and `PreservationEntry` definitions for preserved ordinary-record IDs, per-record content and contributor digests, and the aggregate inventory digest that is rechecked after reset retirement. Additive/compatible: existing data validates unchanged; consumers that do not read the optional field are unaffected.

@@ -304,6 +304,7 @@ export interface PreservationInventory {
 export interface PreservationEntry {
   contentDigest: string;
   contributorDigest: string;
+  recordClass?: string;
   recordId: string;
 }
 export interface CodeResetTarget {

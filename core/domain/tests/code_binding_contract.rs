@@ -1,7 +1,7 @@
 use engram_domain::{
     CodeAttempt, CodeAttemptState, CodeBinding, CodeBindingError, CodeGeneration, CodeLineage,
     CodeReceiptKind, CodeResetJournal, CodeResetPreview, IndexedSource, PreservationInventory,
-    RepoId, Scope,
+    PreservationRecord, RepoId, Scope,
 };
 use serde::{Serialize, de::DeserializeOwned};
 
@@ -305,6 +305,70 @@ mod task_002 {
         let wire = serde_json::to_value(binding()).unwrap();
         assert!(wire.get("repoId").is_some());
         assert!(wire.get("repo_id").is_none());
+    }
+    #[test]
+    fn nonempty_preservation_preview_and_journal_match_schema() {
+        let mut inventory = PreservationInventory {
+            records: ["source", "document", "chunk", "entity", "relationship", "graph"]
+                .into_iter()
+                .map(|record_class| PreservationRecord {
+                    record_class: record_class.into(),
+                    record_id: format!("{record_class}-1"),
+                    content_digest: "a".repeat(64),
+                    contributor_digest: "b".repeat(64),
+                })
+                .collect(),
+            digest: String::new(),
+        };
+        inventory.digest = inventory.content_hash().unwrap();
+        let preview = CodeResetPreview {
+            binding: binding(),
+            preview_hash: "d".repeat(64),
+            target_ids: vec!["target".into()],
+            targets: vec![],
+            ambiguity: vec![],
+            preservation_digests: vec![inventory.digest.clone()],
+            preservation_inventory: inventory,
+            binding_versions: vec![],
+            code_epoch: 0,
+        };
+        preview.validate().unwrap();
+        let journal = CodeResetJournal {
+            reset_id: "reset-1".into(),
+            preview_hash: preview.preview_hash.clone(),
+            target_fingerprints: vec![],
+            authorizing_decisions: vec!["fixture".into()],
+            preview: preview.clone(),
+            checkpoints: vec!["start".into()],
+            preservation_digests: vec![preview.preservation_inventory.digest.clone()],
+        };
+        for (name, value, records_path) in [
+            (
+                "CodeResetPreview",
+                serde_json::to_value(preview).unwrap(),
+                "/preservationInventory/records",
+            ),
+            (
+                "CodeResetJournal",
+                serde_json::to_value(journal).unwrap(),
+                "/preview/preservationInventory/records",
+            ),
+        ] {
+            let records = value.pointer(records_path).unwrap().as_array().unwrap();
+            assert_eq!(
+                records.len(),
+                6,
+                "{name} must serialize all six preservation classes"
+            );
+            assert!(
+                records.iter().all(|record| record.get("recordClass").is_some()),
+                "{name} must serialize recordClass in camelCase"
+            );
+            assert!(
+                jsonschema::draft202012::validate(&accepted(name), &value).is_ok(),
+                "actual nonempty {name} must match the published schema: {value}"
+            );
+        }
     }
     #[test]
     fn generated_output_reproducibility() {

@@ -26,7 +26,7 @@ describe.skipIf(!process.env.ENGRAM_TEST_PG_URL)("task_020 pgvector recipe", () 
     () => {
       pgvectorAddon = loadRecipe("pgvector");
     },
-    15 * 60 * 1000
+    30 * 60 * 1000
   );
 
   describeCodeBindingCases(() => pgvectorAddon, "pgvector");

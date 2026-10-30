@@ -28,7 +28,7 @@
  */
 import { execFileSync } from "node:child_process";
 import { createHash, randomUUID } from "node:crypto";
-import { closeSync, constants, copyFileSync, existsSync, mkdirSync, openSync, readFileSync, rmSync, statSync, utimesSync } from "node:fs";
+import { closeSync, constants, copyFileSync, existsSync, mkdirSync, openSync, readFileSync, rmSync, statSync, utimesSync, writeSync } from "node:fs";
 import { createRequire } from "node:module";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -39,7 +39,7 @@ const repoRoot = join(here, "..", "..", "..", "..");
 const pkgRoot = join(here, "..", "..");
 const sharedArtifactsRoot = join(pkgRoot, "test", "artifacts");
 const LOCK_RETRY_MS = 50;
-const LOCK_TIMEOUT_MS = 15 * 60 * 1000;
+const LOCK_TIMEOUT_MS = 30 * 60 * 1000;
 
 const artifactByPlatform = {
   linux: "libengram_node.so",
@@ -73,20 +73,48 @@ function sleep(milliseconds) {
   Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, milliseconds);
 }
 
+/** Returns whether the recorded lock holder has exited. */
+function holderHasExited(lockPath) {
+  const pid = Number.parseInt(readFileSync(lockPath, "utf8"), 10);
+  if (!Number.isSafeInteger(pid) || pid <= 0) {
+    return false;
+  }
+  try {
+    process.kill(pid, 0);
+    return false;
+  } catch (error) {
+    return error?.code === "ESRCH";
+  }
+}
+
 /** Acquires the one lock that protects every shared-target build pipeline. */
 function acquireSharedTargetLock() {
   const lockPath = sharedTargetLockPath();
   mkdirSync(dirname(lockPath), { recursive: true });
-  const deadline = Date.now() + LOCK_TIMEOUT_MS;
+  let deadline = Date.now() + LOCK_TIMEOUT_MS;
+  let reclaimed = false;
   for (;;) {
     try {
-      closeSync(openSync(lockPath, "wx"));
-      return;
+      const descriptor = openSync(lockPath, "wx");
+      try {
+        writeSync(descriptor, `${process.pid}\n`);
+      } finally {
+        closeSync(descriptor);
+      }
+      return () => rmSync(lockPath, { force: true });
     } catch (error) {
       if (error?.code !== "EEXIST") {
         throw error;
       }
       if (Date.now() >= deadline) {
+        // A waiter never steals a live build. It may reclaim only after its
+        // wait window when the lockfile PID is conclusively absent (ESRCH).
+        if (!reclaimed && holderHasExited(lockPath)) {
+          rmSync(lockPath, { force: true });
+          reclaimed = true;
+          deadline = Date.now() + LOCK_TIMEOUT_MS;
+          continue;
+        }
         throw new Error(`timed out after ${LOCK_TIMEOUT_MS}ms waiting for shared recipe build lock`);
       }
       sleep(LOCK_RETRY_MS);
@@ -173,7 +201,7 @@ export function resolveRecipeArtifact(recipe, expectedDigest, { inspect, rebuild
 
 /** Runs a callback inside the shared-target build transaction. */
 export function withRecipeArtifacts(callback, { artifactsRoot = sharedArtifactsRoot } = {}) {
-  acquireSharedTargetLock();
+  const release = acquireSharedTargetLock();
   try {
     const artifacts = rebuildRecipeArtifacts(artifactsRoot);
     return callback({
@@ -181,7 +209,7 @@ export function withRecipeArtifacts(callback, { artifactsRoot = sharedArtifactsR
       rebuild: () => rebuildRecipeArtifacts(artifactsRoot),
     });
   } finally {
-    rmSync(sharedTargetLockPath(), { force: true });
+    release();
   }
 }
 

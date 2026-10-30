@@ -50,6 +50,30 @@ export function authorizedRecipeConfig(recipe, base, extra = {}, of = scope) {
   return recipeConfig(recipe, base, { ...extra, codeAuthority: { launchScopes: [of] } });
 }
 
+/** Reads the registration written by a Pg fixture from the approved Pg database. */
+export function assertPgDurableBinding(repo) {
+  const container = process.env.PG_FIXTURE_CONTAINER_ID;
+  const url = process.env.ENGRAM_TEST_PG_URL;
+  if (!container || !url) throw new Error("approved Pg fixture identity is required for durable binding assertion");
+  const parsed = new URL(url);
+  const result = execFileSync(
+    "docker",
+    [
+      "exec",
+      container,
+      "psql",
+      "-U",
+      decodeURIComponent(parsed.username),
+      "-d",
+      decodeURIComponent(parsed.pathname.slice(1)),
+      "-tAc",
+      `SELECT repo_id FROM code_repository_registrations WHERE repo_id = '${repo.replaceAll("'", "''")}'`
+    ],
+    { encoding: "utf8" }
+  ).trim();
+  expect(result).toBe(repo);
+}
+
 /** Makes durable Pg bindings collision-free across cases and matrix invocations. */
 export function recipeCase(recipe, operation) {
   const nonce = `${process.pid}-${Date.now()}-${Math.random().toString(16).slice(2)}`;
@@ -162,6 +186,7 @@ export function describeCodeBindingCases(getAddon, recipe) {
       )
     );
     expect(providerBinding.branchRef).toBe("refs/heads/main");
+    if (recipe === "pgvector") assertPgDurableBinding(fixture.repo);
     expect(providerBinding.version).toBe(1);
     expect(providerBinding.activeGeneration).toBeNull();
 
@@ -194,6 +219,7 @@ export function describeCodeBindingCases(getAddon, recipe) {
 
     provider.codeRegisterJson(JSON.stringify({ scope: caseScope, repo, path: repoPath }));
     provider.codeBindJson(JSON.stringify({ scope: caseScope, repo, branchRef: "refs/heads/main" }));
+    if (recipe === "pgvector") assertPgDurableBinding(repo);
 
     // Supplying a path alongside repo is a typed rejection.
     expect(() =>
@@ -269,11 +295,13 @@ export function describeCodeBindingCases(getAddon, recipe) {
     const repo = fixture.repo;
     provider.codeRegisterJson(JSON.stringify({ scope: caseScope, repo, path: eligible.path }));
     provider.codeBindJson(JSON.stringify({ scope: caseScope, repo, branchRef: "refs/heads/main" }));
+    if (recipe === "pgvector") assertPgDurableBinding(repo);
     provider.scanRepositoryJson(JSON.stringify({ scope: caseScope, repo }));
     const foreign = new (getAddon().NativeProvider)(authorizedRecipeConfig(recipe, base, {}, caseForeignScope));
     const foreignRepo = `${fixture.repo}-foreign-retrieval`;
     foreign.codeRegisterJson(JSON.stringify({ scope: caseForeignScope, repo: foreignRepo, path: ineligible.path }));
     foreign.codeBindJson(JSON.stringify({ scope: caseForeignScope, repo: foreignRepo, branchRef: "refs/heads/main" }));
+    if (recipe === "pgvector") assertPgDurableBinding(foreignRepo);
     foreign.scanRepositoryJson(JSON.stringify({ scope: caseForeignScope, repo: foreignRepo }));
 
     const recalled = JSON.parse(
@@ -314,11 +342,13 @@ export function describeCodeBindingCases(getAddon, recipe) {
     const repo = fixture.repo;
     provider.codeRegisterJson(JSON.stringify({ scope: caseScope, repo, path: eligible.path }));
     provider.codeBindJson(JSON.stringify({ scope: caseScope, repo, branchRef: "refs/heads/main" }));
+    if (recipe === "pgvector") assertPgDurableBinding(repo);
     provider.scanRepositoryJson(JSON.stringify({ scope: caseScope, repo }));
     const foreign = new (getAddon().NativeProvider)(authorizedRecipeConfig(recipe, base, {}, caseForeignScope));
     const foreignRepo = `${fixture.repo}-foreign-graph`;
     foreign.codeRegisterJson(JSON.stringify({ scope: caseForeignScope, repo: foreignRepo, path: ineligible.path }));
     foreign.codeBindJson(JSON.stringify({ scope: caseForeignScope, repo: foreignRepo, branchRef: "refs/heads/main" }));
+    if (recipe === "pgvector") assertPgDurableBinding(foreignRepo);
     foreign.scanRepositoryJson(JSON.stringify({ scope: caseForeignScope, repo: foreignRepo }));
 
     const answer = JSON.parse(
@@ -342,6 +372,7 @@ export function describeCodeBindingCases(getAddon, recipe) {
     const repo = fixture.repo;
     provider.codeRegisterJson(JSON.stringify({ scope: caseScope, repo, path: repoPath }));
     provider.codeBindJson(JSON.stringify({ scope: caseScope, repo, branchRef: "refs/heads/main" }));
+    if (recipe === "pgvector") assertPgDurableBinding(repo);
     provider.scanRepositoryJson(JSON.stringify({ scope: caseScope, repo }));
 
     const preview = JSON.parse(provider.codeResetPreviewJson(JSON.stringify({ scope: caseScope, repo })));
@@ -373,6 +404,7 @@ export function describeCodeBindingCases(getAddon, recipe) {
     const repo = fixture.repo;
     provider.codeRegisterJson(JSON.stringify({ scope: caseScope, repo, path: repoPath }));
     provider.codeBindJson(JSON.stringify({ scope: caseScope, repo, branchRef: "refs/heads/main" }));
+    if (recipe === "pgvector") assertPgDurableBinding(repo);
     const before = provider.codeStatusJson(JSON.stringify({ scope: caseScope, repo }));
 
     expect(() => provider.backfillEmbeddingsJson(JSON.stringify(caseScope))).toThrow(
@@ -392,6 +424,7 @@ export function describeCodeBindingCases(getAddon, recipe) {
     const repo = fixture.repo;
     provider.codeRegisterJson(JSON.stringify({ scope: caseScope, repo, path: repoPath }));
     provider.codeBindJson(JSON.stringify({ scope: caseScope, repo, branchRef: "refs/heads/main" }));
+    if (recipe === "pgvector") assertPgDurableBinding(repo);
     provider.scanRepositoryJson(JSON.stringify({ scope: caseScope, repo }));
 
     const fetched = JSON.parse(provider.codeFetchJson(JSON.stringify({ scope: caseScope, path: "lib.rs" })));

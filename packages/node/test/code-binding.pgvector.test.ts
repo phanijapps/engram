@@ -11,7 +11,12 @@ import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { loadRecipe } from "./helpers/build-native-recipes.mjs";
-import { configJson, describeCodeBindingCases } from "./helpers/code-binding-cases.mjs";
+import {
+  assertPgDurableBinding,
+  authorizedConfig,
+  configJson,
+  describeCodeBindingCases
+} from "./helpers/code-binding-cases.mjs";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 let pgvectorAddon: any;
@@ -25,6 +30,22 @@ beforeAll(
 
 describe("task_020 pgvector recipe", () => {
   describeCodeBindingCases(() => pgvectorAddon, "pgvector");
+
+  it("pgvector: sqlite_fallback_fails_durable_pg_assertion", () => {
+    const base = mkdtempSync(join(tmpdir(), "task020-pg-fallback-"));
+    const repo = `fallback-${process.pid}-${Date.now()}`;
+    const fallback = new pgvectorAddon.NativeProvider(
+      authorizedConfig(base, {}, { tenant: "task-020", workspace: "pg-fallback" })
+    );
+    fallback.codeBindJson(
+      JSON.stringify({
+        scope: { tenant: "task-020", workspace: "pg-fallback" },
+        repo,
+        branchRef: "refs/heads/main"
+      })
+    );
+    expect(() => assertPgDurableBinding(repo)).toThrow();
+  });
 
   it("pgvector: real_disposable_pg_matrix", () => {
     const url = process.env.ENGRAM_TEST_PG_URL;

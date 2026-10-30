@@ -164,24 +164,25 @@ def default_command(row: Row, sqlite_root: Path, pg_url_name: str) -> CommandSpe
         native = {
             "binding": "deny_by_default_and_authorized_surface",
             "scan": "bound_ingestion_pipeline",
+            "retrieval": "bound_ingestion_pipeline",
+            "graph": "bound_ingestion_pipeline",
             "source": "bound_source_fetch_exact_bytes",
+            "reset": "bound_ingestion_pipeline",
+            "backfill": "bound_ingestion_pipeline",
         }
-        if row.operation in native:
-            test_file = f"code-binding.{row.backend}.test.ts"
-            return CommandSpec(["pnpm", "--filter", "@engram/node", "exec", "vitest", "run", test_file, "-t", native[row.operation], "--reporter", "verbose"], native[row.operation])
-        package, target, filter_name, marker = rust[row.operation]
-        transport_gap = "pending-r5" if row.operation in {"retrieval", "graph", "reset"} or (row.operation == "backfill" and row.backend == "pgvector") else None
-        return CommandSpec(cargo_spec(package, target, filter_name, marker, row.backend).argv, marker, "coordinator-equivalent", transport_gap)
+        test_file = f"code-binding.{row.backend}.test.ts"
+        return CommandSpec(["pnpm", "--filter", "@engram/node", "exec", "vitest", "run", test_file, "-t", native[row.operation], "--reporter", "verbose"], native[row.operation])
     mcp = {
         "binding": "task_021::stdio_dispatch_parity" if row.transport == "mcp-stdio" else "task_022::oneshot_dispatch_parity",
+        "scan": "task_021::stdio_dispatch_parity" if row.transport == "mcp-stdio" else "task_022::oneshot_dispatch_parity",
+        "retrieval": "task_021::stdio_dispatch_parity" if row.transport == "mcp-stdio" else "task_022::oneshot_dispatch_parity",
+        "graph": "task_021::stdio_dispatch_parity" if row.transport == "mcp-stdio" else "task_022::oneshot_dispatch_parity",
+        "source": "task_021::stdio_dispatch_parity" if row.transport == "mcp-stdio" else "task_022::oneshot_dispatch_parity",
+        "reset": "task_021::stdio_dispatch_parity" if row.transport == "mcp-stdio" else "task_022::oneshot_dispatch_parity",
         "backfill": "task_022::backfill_not_rescan",
     }
-    if row.operation in mcp:
-        marker = mcp[row.operation].split("::")[-1]
-        return CommandSpec(cargo_spec("engram-mcp", "bound_transports", mcp[row.operation], marker, row.backend).argv, marker)
-    package, target, filter_name, marker = rust[row.operation]
-    transport_gap = "pending-r5" if row.operation in {"retrieval", "graph", "reset"} else None
-    return CommandSpec(cargo_spec(package, target, filter_name, marker, row.backend).argv, marker, "coordinator-equivalent", transport_gap)
+    marker = mcp[row.operation].split("::")[-1]
+    return CommandSpec(cargo_spec("engram-mcp", "bound_transports", mcp[row.operation], marker, row.backend).argv, marker)
 
 
 class MatrixRunner:

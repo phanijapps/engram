@@ -31,7 +31,7 @@
  * copies are never dlopen'd into one process.
  */
 import { execFileSync } from "node:child_process";
-import { copyFileSync, existsSync, mkdirSync, rmSync, utimesSync } from "node:fs";
+import { closeSync, copyFileSync, existsSync, mkdirSync, openSync, rmSync, statSync, utimesSync } from "node:fs";
 import { createRequire } from "node:module";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -41,6 +41,9 @@ const here = dirname(fileURLToPath(import.meta.url));
 const repoRoot = join(here, "..", "..", "..", "..");
 const pkgRoot = join(here, "..", "..");
 const artifactsRoot = join(pkgRoot, "test", "artifacts");
+const lockPath = join(artifactsRoot, ".build-native-recipes.lock");
+const LOCK_RETRY_MS = 50;
+const LOCK_TIMEOUT_MS = 15 * 60 * 1000;
 
 const artifactByPlatform = {
   linux: "libengram_node.so",
@@ -70,6 +73,37 @@ function artifactPath(recipe) {
   return join(artifactsRoot, recipe, "engram_node.node");
 }
 
+function sleep(milliseconds) {
+  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, milliseconds);
+}
+
+/** Acquires the cross-process artifact-set lock with bounded retry. */
+function acquireArtifactLock() {
+  mkdirSync(artifactsRoot, { recursive: true });
+  const deadline = Date.now() + LOCK_TIMEOUT_MS;
+  for (;;) {
+    try {
+      closeSync(openSync(lockPath, "wx"));
+      return;
+    } catch (error) {
+      if (error?.code !== "EEXIST") {
+        throw error;
+      }
+      if (Date.now() >= deadline) {
+        throw new Error(`timed out after ${LOCK_TIMEOUT_MS}ms waiting for recipe artifact lock`);
+      }
+      sleep(LOCK_RETRY_MS);
+    }
+  }
+}
+
+function validateArtifact(recipe) {
+  const dest = artifactPath(recipe);
+  if (!existsSync(dest) || statSync(dest).size === 0) {
+    throw new Error(`invalid ${recipe} artifact: ${dest}`);
+  }
+}
+
 function buildRecipe(recipe) {
   // Remove the SHARED cdylib first so cargo must relink THIS recipe's
   // variant even when every object is cached — the copied artifact can then
@@ -91,18 +125,27 @@ function buildRecipe(recipe) {
   // cargo keeps the cdylib mtime from its last link; stamp the copy AFTER the
   // sources so freshness math stays monotonic.
   utimesSync(dest, new Date(), new Date());
+  validateArtifact(recipe);
   console.log(`[task_020 helper] placed ${recipe} artifact: ${dest}`);
 }
 
 /** Validates and rebuilds both recipe artifacts through Cargo. Returns the
  *  recipe-specific copies after each validated feature build. */
 export function ensureRecipeArtifacts() {
-  const paths = {};
-  for (const recipe of RECIPES) {
-    buildRecipe(recipe);
-    paths[recipe] = artifactPath(recipe);
+  acquireArtifactLock();
+  try {
+    const paths = {};
+    for (const recipe of RECIPES) {
+      buildRecipe(recipe);
+      paths[recipe] = artifactPath(recipe);
+    }
+    for (const recipe of RECIPES) {
+      validateArtifact(recipe);
+    }
+    return paths;
+  } finally {
+    rmSync(lockPath, { force: true });
   }
-  return paths;
 }
 
 /** Loads one recipe's addon (isolated path → isolated dlopen instance). */

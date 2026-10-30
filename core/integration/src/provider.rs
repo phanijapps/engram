@@ -88,6 +88,8 @@ pub struct EngramProvider {
     graph_cache: Option<Arc<dyn engram_retrieval::GraphCache>>,
     code_bindings: Option<Arc<crate::code_binding::CodeBindingCoordinator>>,
     code_source: Option<Arc<dyn engram_knowledge::RetainedSourceReader>>,
+    #[cfg(feature = "code-lanes")]
+    code_ingestion: Option<Arc<crate::code_binding::CodeIngestionLanes>>,
     schema_version: String,
     adapter_version: String,
 }
@@ -139,6 +141,21 @@ impl EngramProvider {
             .ok_or_else(|| CoreError::CapabilityUnsupported {
                 capability: "code-source".into(),
                 reason: "retained code source reader is not configured".into(),
+            })
+    }
+
+    /// The bound-code ingestion lanes (review r6 finding 2): the neutral
+    /// knowledge/graph write handles + retained-snapshot custody root that
+    /// `CodeBindingCoordinator::ingest_registered` needs. Absent lanes
+    /// produce a typed `CapabilityUnsupported` — code ingestion NEVER falls
+    /// back to a checkout scan.
+    #[cfg(feature = "code-lanes")]
+    pub fn code_ingestion(&self) -> CoreResult<&Arc<crate::code_binding::CodeIngestionLanes>> {
+        self.code_ingestion
+            .as_ref()
+            .ok_or_else(|| CoreError::CapabilityUnsupported {
+                capability: "code-ingestion".into(),
+                reason: "registered-locator code ingestion lanes are not configured".into(),
             })
     }
 
@@ -728,6 +745,8 @@ impl EngramProvider {
             graph_cache: None,
             code_bindings: None,
             code_source: None,
+            #[cfg(feature = "code-lanes")]
+            code_ingestion: None,
             schema_version: "unwired".to_string(),
             adapter_version: "unwired".to_string(),
         }
@@ -773,6 +792,8 @@ pub struct EngramProviderBuilder {
     graph_cache: Option<Arc<dyn engram_retrieval::GraphCache>>,
     code_bindings: Option<Arc<crate::code_binding::CodeBindingCoordinator>>,
     code_source: Option<Arc<dyn engram_knowledge::RetainedSourceReader>>,
+    #[cfg(feature = "code-lanes")]
+    code_ingestion: Option<Arc<crate::code_binding::CodeIngestionLanes>>,
     schema_version: String,
     adapter_version: String,
 }
@@ -812,6 +833,8 @@ impl EngramProviderBuilder {
             graph_cache: None,
             code_source: None,
             code_bindings: None,
+            #[cfg(feature = "code-lanes")]
+            code_ingestion: None,
             schema_version: "unknown".to_string(),
             adapter_version: "unknown".to_string(),
         }
@@ -1017,6 +1040,15 @@ impl EngramProviderBuilder {
         self
     }
 
+    /// Attaches the bound-code ingestion lanes (review r6 finding 2): the
+    /// neutral knowledge/graph write handles + retained-snapshot custody
+    /// root used by `CodeBindingCoordinator::ingest_registered`.
+    #[cfg(feature = "code-lanes")]
+    pub fn code_ingestion(mut self, lanes: Arc<crate::code_binding::CodeIngestionLanes>) -> Self {
+        self.code_ingestion = Some(lanes);
+        self
+    }
+
     /// Builds the provider.
     pub fn build(self) -> EngramProvider {
         EngramProvider {
@@ -1051,6 +1083,8 @@ impl EngramProviderBuilder {
             graph_cache: self.graph_cache,
             code_bindings: self.code_bindings,
             code_source: self.code_source,
+            #[cfg(feature = "code-lanes")]
+            code_ingestion: self.code_ingestion,
             schema_version: self.schema_version,
             adapter_version: self.adapter_version,
         }

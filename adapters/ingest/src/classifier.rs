@@ -38,7 +38,7 @@ const SAFE_TEMPLATES: &[&str] = &[
     ".env.defaults",
     ".env.schema",
 ];
-const CODE_NAMES: &[&str] = &[
+pub(crate) const CODE_NAMES: &[&str] = &[
     "dockerfile",
     "makefile",
     "rakefile",
@@ -46,7 +46,7 @@ const CODE_NAMES: &[&str] = &[
     "cmake",
     "justfile",
 ];
-const CODE_EXTENSIONS: &[&str] = &[
+pub(crate) const CODE_EXTENSIONS: &[&str] = &[
     "rs", "ts", "tsx", "js", "jsx", "mjs", "cjs", "py", "go", "java", "kt", "kts", "scala", "clj",
     "cljs", "ex", "exs", "erl", "hs", "ml", "mli", "lua", "php", "pl", "pm", "r", "rb", "sh",
     "bash", "zsh", "fish", "ps1", "c", "h", "cpp", "cc", "cxx", "hpp", "hxx", "cs", "swift",

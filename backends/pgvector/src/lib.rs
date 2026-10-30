@@ -147,6 +147,16 @@ pub fn open(config: &EngramConfig) -> CoreResult<EngramProvider> {
         Arc::new(engram_ingest::git_source::RetainedSnapshotReader::new(
             config.storage_path.join("retained"),
         ));
+    // Bound-code ingestion lanes (review r6 finding 2): registered-locator
+    // acquisition + generation staging/publication over the SAME knowledge
+    // and graph handles the recipe wires, with retained-snapshot custody at
+    // `<storage>/retained` (lineage/source staging and receipts ride the
+    // binding cell's own durable ports).
+    let code_ingestion = Arc::new(engram_integration::code_binding::CodeIngestionLanes {
+        knowledge: knowledge.clone() as Arc<dyn engram_knowledge::KnowledgeRepository>,
+        graph: knowledge.clone() as Arc<dyn engram_knowledge::KnowledgeGraphRepository>,
+        retained_root: config.storage_path.join("retained"),
+    });
     // Optional absent lanes stay honestly unavailable (plan matrix: "A
     // backend without a lane must report that lane unavailable"): the
     // lexical/hybrid-composition lane is a documented pgvector gap
@@ -195,7 +205,8 @@ pub fn open(config: &EngramConfig) -> CoreResult<EngramProvider> {
     }
     let provider = provider_builder
         .code_bindings(code_coordinator)
-        .code_source(code_source);
+        .code_source(code_source)
+        .code_ingestion(code_ingestion);
 
     Ok(provider.build())
 }

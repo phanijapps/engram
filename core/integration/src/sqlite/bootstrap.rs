@@ -715,6 +715,12 @@ pub(crate) fn bootstrap_sqlite(config: &EngramConfig) -> CoreResult<EngramProvid
         reason: CapabilityReason::ProviderUnavailable,
     };
     let mut code_source: Option<Arc<dyn engram_knowledge::RetainedSourceReader>> = None;
+    // Bound-code ingestion lanes (review r6 finding 2): registered-locator
+    // acquisition + generation staging/publication need the neutral
+    // knowledge/graph write handles and the retained-snapshot custody root.
+    // Wired only when BOTH the binding cell and the knowledge store are
+    // healthy — otherwise the lane stays absent (typed unavailable).
+    let mut code_ingestion: Option<Arc<crate::code_binding::CodeIngestionLanes>> = None;
     if conformance::code_binding_ok() {
         if let Ok(bindings) =
             engram_store_sqlite::knowledge::SqlCodeBindingRepository::open(&paths.code_bindings)
@@ -726,8 +732,16 @@ pub(crate) fn bootstrap_sqlite(config: &EngramConfig) -> CoreResult<EngramProvid
             );
             let retained_root = config.storage_path.join("retained");
             code_source = Some(Arc::new(
-                engram_ingest::git_source::RetainedSnapshotReader::new(retained_root),
+                engram_ingest::git_source::RetainedSnapshotReader::new(retained_root.clone()),
             ));
+            if let (Some(knowledge_handle), Some(graph_handle)) = (&knowledge_store, &graph) {
+                code_ingestion = Some(Arc::new(crate::code_binding::CodeIngestionLanes {
+                    knowledge: knowledge_handle.clone()
+                        as Arc<dyn engram_knowledge::KnowledgeRepository>,
+                    graph: Arc::clone(graph_handle),
+                    retained_root,
+                }));
+            }
             code_coordinator = Some(Arc::new(coordinator));
             code_binding_state = CapabilityState::Supported;
             code_source_state = CapabilityState::Supported;
@@ -881,6 +895,9 @@ pub(crate) fn bootstrap_sqlite(config: &EngramConfig) -> CoreResult<EngramProvid
     }
     if let Some(source) = code_source {
         builder = builder.code_source(source);
+    }
+    if let Some(lanes) = code_ingestion {
+        builder = builder.code_ingestion(lanes);
     }
     Ok(builder.build())
 }

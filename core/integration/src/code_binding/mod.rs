@@ -1,5 +1,7 @@
 //! Authorized, engine-neutral code binding and publication coordination.
 mod eligibility;
+#[cfg(feature = "code-lanes")]
+mod ingestion;
 mod publication;
 mod registration;
 mod source;
@@ -9,6 +11,8 @@ use engram_domain::{
     Actor, CodeAttempt, CodeBinding, CodeGeneration, CodeReceiptKind, RepoId, Scope,
 };
 use engram_knowledge::{CodeBindingRepository, CoreResult, StageReceipt};
+#[cfg(feature = "code-lanes")]
+pub use ingestion::{CodeIngestionLanes, IngestedGeneration};
 pub use publication::CodeRebuildRequest;
 pub use source::{BoundParticipant, ExactReadCandidate, ParticipantExactSource};
 pub use status::{
@@ -140,7 +144,6 @@ impl CodeBindingAuthorizer for RecipeDefaultAuthorizer {
         })
     }
 }
-
 /// An EXPLICIT host policy: code operations are authorized exactly for the
 /// configured scope set (review r6 finding 1 — hosts that expose code
 /// operations inject this instead of relying on the deny-by-default

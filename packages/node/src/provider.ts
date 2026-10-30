@@ -130,11 +130,11 @@ export interface CodeBindingStatus {
   checkpoint: CodeBindingCheckpoint;
 }
 
-/** Acquisition locator registration (`local_only`/`configured_remote` are
- *  the Rust port's snake_case serialization). */
+/** Acquisition locator registration — the Rust port's serialization
+ *  (snake_case fields and enum values). */
 export interface RepositoryRegistration {
-  repoId: string;
-  locatorId: string;
+  repo_id: string;
+  locator_id: string;
   acquisition: "local_only" | "configured_remote";
 }
 

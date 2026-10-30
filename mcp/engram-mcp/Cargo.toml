@@ -47,3 +47,6 @@ pgvector = ["dep:engram-backend-pgvector", "engram-backend-pgvector/fastembed"]
 
 [dev-dependencies]
 tempfile = "3"
+# Bound-code authority fixtures (r6 findings 2/4): the real SQLite binding
+# cell + knowledge store drive in-process publication and scan-gate proofs.
+engram-store-sqlite = { path = "../../adapters/sqlite", version = "0.1.0" }

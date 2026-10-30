@@ -1,6 +1,6 @@
 use super::{CodeAuthorityAction, CodeBindingCoordinator};
 use engram_domain::{Actor, CodeBinding, RepoId, Scope};
-use engram_knowledge::{CodeRefObservation, RepositoryRegistration};
+use engram_knowledge::RepositoryRegistration;
 use engram_runtime::{CoreError, CoreResult};
 
 impl CodeBindingCoordinator {
@@ -65,7 +65,7 @@ impl CodeBindingCoordinator {
         actor: &Actor,
         scope: &Scope,
         repo: &RepoId,
-    ) -> CoreResult<CodeRefObservation> {
+    ) -> CoreResult<engram_knowledge::CodeRefObservation> {
         self.authorizer
             .authorize(actor, scope, repo, CodeAuthorityAction::Inspect)
             .await?;

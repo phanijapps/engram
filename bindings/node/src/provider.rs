@@ -82,7 +82,28 @@ impl NativeProvider {
     /// `CapabilityUnsupported` when no backend feature is enabled.
     #[napi(constructor)]
     pub fn new(config_json: String) -> Result<Self> {
-        let config: EngramConfig = decode(&config_json)?;
+        // The config JSON may carry a `codeAuthority` object (review r6
+        // finding 1): the HOST's explicit code-operation policy. `launchScopes`
+        // lists the scopes whose code operations this process may perform;
+        // absent `codeAuthority`, the recipe default (deny-by-default
+        // `RecipeDefaultAuthorizer`) stays in force — every code operation
+        // denies with the typed `CodeAuthorizationRequired` envelope.
+        let value: serde_json::Value = decode(&config_json)?;
+        let launch_scopes: Option<Vec<Scope>> = value
+            .get("codeAuthority")
+            .and_then(|authority| authority.get("launchScopes"))
+            .cloned()
+            .map(|scopes| serde_json::from_value(scopes))
+            .transpose()
+            .map_err(|error| {
+                to_napi_error(engram_runtime::CoreError::InvalidRequest {
+                    reason: format!(
+                        "InvalidRequest: codeAuthority.launchScopes is malformed: {error}"
+                    ),
+                })
+            })?;
+        let config: EngramConfig =
+            serde_json::from_value(value).map_err(|error| Error::from_reason(error.to_string()))?;
         // pgvector configs route to the backends/pgvector recipe (the SDK facade's
         // open() is engine-neutral and sqlite-default). When this binding is built
         // without the `pgvector` feature, surface a clear error instead of a silent
@@ -102,6 +123,18 @@ impl NativeProvider {
             }
         } else {
             EngramProvider::open(&config).map_err(to_napi_error)?
+        };
+        // Host policy injection (review r6 finding 1): an explicit
+        // `codeAuthority.launchScopes` config replaces the deny-by-default
+        // recipe authorizer with the launch-scope policy — the native twin of
+        // the MCP server's launch-scope injection.
+        let provider = match launch_scopes {
+            Some(scopes) => provider
+                .with_code_authorizer(std::sync::Arc::new(
+                    engram_integration::code_binding::ScopeSetAuthorizer::new(scopes),
+                ))
+                .map_err(to_napi_error)?,
+            None => provider,
         };
         Ok(Self { inner: provider })
     }
@@ -241,25 +274,23 @@ impl NativeProvider {
         encode(&nodes)
     }
 
-    /// Treesitter-indexes a code repository into the project workspace through
-    /// the provider's knowledge + graph handles (no engine-store bypass). Takes a
-    /// `{ path, scope, repo, branchRef?, scanFilter? }` JSON, returns the
-    /// serialized `ScanSummary`.
-    ///
-    /// TASK-020: a persisted binding is MANDATORY for code — the request
-    /// names the bound repository (`repo`, a RepoId) and may assert the
-    /// branch (`branchRef`, equality-only). An unbound scope fails with a
-    /// `BindingRequired` denial; a mismatched branch assertion fails with
-    /// `BindingConflict`. There is no direct-ingest bypass around the
-    /// binding cell.
-    ///
-    /// Lexical-lane feeding and embed-on-scan are Module-1 concerns (Phase C);
-    /// this method writes entities/relationships/graph only.
+    /// Ingests a BOUND repository's code through the registered-locator
+    /// acquisition + generation staging/publication pipeline (review r6
+    /// finding 2): `{ scope, repo, branchRef?, scanFilter? }` → the
+    /// serialized outcome (`{ mode: "bound", …IngestedGeneration }`). The
+    /// caller NEVER supplies a path — the bytes come from the REGISTERED
+    /// locator's bound branch at its pinned commit (a dirty checkout or
+    /// another repository's directory cannot influence what is ingested).
+    /// With NO `repo` the call is the explicitly DOCUMENT-ONLY legacy scan
+    /// over `path` (`{ path, scope, scanFilter? }`) — code files are
+    /// excluded by the document-only filter; code bytes never flow through
+    /// the legacy lane. Supplying BOTH `path` and `repo` is a typed
+    /// rejection (path is not an input to bound ingestion).
     #[napi(js_name = "scanRepositoryJson")]
     pub fn scan_repository_json(&self, request_json: String) -> Result<String> {
         let request: ScanRepoRequest = decode(&request_json)?;
-        let summary = scan_via_provider(&self.inner, &request).map_err(to_napi_error)?;
-        encode(&summary)
+        let outcome = scan_via_provider(&self.inner, &request).map_err(to_napi_error)?;
+        encode(&outcome)
     }
 
     // ---- TASK-020: bound code operations (thin JSON forwards over the SAME
@@ -1720,17 +1751,17 @@ impl NativeEmbeddingProviderApi {
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct ScanRepoRequest {
-    /// Filesystem path to the repository root to scan.
-    path: String,
+    /// Filesystem path for the DOCUMENT-ONLY legacy lane (no `repo`):
+    /// documents under `path` are scanned with code files excluded. NEVER an
+    /// input to bound code ingestion (supplying both is a typed rejection).
+    #[serde(default)]
+    path: Option<String>,
     /// Scope the scanned entities/relationships/graph land in.
     scope: Scope,
-    /// The BOUND repository this scan belongs to (TASK-020): a persisted
-    /// binding is mandatory for code; the RepoId is the authority key —
-    /// never the path or its basename.
-    /// The BOUND repository this scan belongs to (TASK-020): a persisted
-    /// binding is mandatory for code; the RepoId is the authority key —
-    /// never the path or its basename. Absent `repo` denies with the SAME
-    /// typed `BindingRequired` envelope.
+    /// The BOUND repository for registered-locator code ingestion (review r6
+    /// finding 2): the RepoId is the authority key — never the path or its
+    /// basename. With `repo`, acquisition goes through the REGISTERED
+    /// locator and the generation staging/publication pipeline.
     repo: Option<engram_domain::RepoId>,
     /// Optional branch assertion: equality-only against the bound ref.
     #[serde(default)]
@@ -1780,60 +1811,95 @@ fn system_code_actor() -> Actor {
     }
 }
 
-/// Runs `scan_repository` against the held provider's knowledge + graph
-/// handles — GATED on the persisted binding (TASK-020): the durable cell,
-/// not the caller's path, is the authority for code scans.
+/// The outcome of [`scan_via_provider`]: either a published bound
+/// generation or a completed legacy document-only scan summary.
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct ScanOutcome {
+    /// `bound` (registered-locator pipeline) or `legacy-document-only`.
+    mode: &'static str,
+    #[serde(flatten)]
+    payload: ScanPayload,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(untagged)]
+enum ScanPayload {
+    Ingested(engram_integration::code_binding::IngestedGeneration),
+    Documents(ScanSummary),
+}
+
+/// The single native scan dispatcher (review r6 finding 2):
+///
+/// - `repo` present → REGISTERED-LOCATOR acquisition + generation
+///   staging/publication through the SAME authorized coordinator the recipes
+///   and MCP use. The caller's `path` (when supplied) is a typed rejection —
+///   binding-existence was never authorization, and a caller path is never
+///   an ingestion input. Requires the provider's ingestion lanes (absent
+///   lanes are a typed `CapabilityUnsupported`, never a checkout fallback).
+/// - `repo` absent, `path` present → the EXPLICITLY DOCUMENT-ONLY legacy
+///   scan: code files are excluded by the document-only filter (the response
+///   carries the `legacy-document-only` mode label); documents never need a
+///   binding.
+/// - neither → typed `InvalidRequest`.
 fn scan_via_provider(
     provider: &EngramProvider,
     request: &ScanRepoRequest,
-) -> CoreResult<ScanSummary> {
-    let coordinator = provider.code_bindings()?;
-    let repo = request
-        .repo
-        .clone()
-        .ok_or_else(|| CoreError::InvalidRequest {
-            reason:
-                "BindingRequired: code scans require a persisted binding; name the bound repository"
-                    .to_owned(),
-        })?;
-    let binding =
-        futures::executor::block_on(coordinator.store().get_binding(&request.scope, &repo))?
-            .ok_or_else(|| {
-                CoreError::InvalidRequest {
-        reason:
-            "BindingRequired: code scans require a persisted binding; bind the repository first"
+) -> CoreResult<ScanOutcome> {
+    match (&request.repo, &request.path) {
+        (Some(_repo), Some(_)) => Err(CoreError::InvalidRequest {
+            reason: "path is not an input to bound code ingestion — the registered locator \
+                     is the acquisition authority; drop `path` and register the repository"
                 .to_owned(),
+        }),
+        (Some(repo), None) => {
+            let coordinator = provider.code_bindings()?;
+            let lanes = provider.code_ingestion()?;
+            let filter = request.scan_filter.as_ref();
+            let ingested = futures::executor::block_on(coordinator.ingest_registered(
+                &system_code_actor(),
+                &request.scope,
+                repo,
+                request.branch_ref.as_deref(),
+                filter,
+                lanes,
+            ))?;
+            Ok(ScanOutcome {
+                mode: "bound",
+                payload: ScanPayload::Ingested(ingested),
+            })
+        }
+        (None, Some(path)) => {
+            let knowledge = provider.require_knowledge()?.clone();
+            let graph = provider.require_graph()?.clone();
+            let repo = KnowledgeRepoGraph::new(knowledge, graph);
+            let scan_filter = match &request.scan_filter {
+                Some(cfg) => ScanFilter::document_only_with(cfg),
+                None => ScanFilter::document_only(),
+            };
+            let opts = ScanOptions {
+                scope: request.scope.clone(),
+                policy: scan_policy(),
+                actor: scan_actor(),
+                source_name: "engram-node-legacy-docs".to_owned(),
+                max_bytes: 0,
+                manifest: std::collections::HashMap::new(),
+                scan_filter,
+            };
+            let (summary, _manifest) =
+                scan_repository(std::path::Path::new(path), &opts, &repo, |_| ())?;
+            Ok(ScanOutcome {
+                mode: "legacy-document-only",
+                payload: ScanPayload::Documents(summary),
+            })
+        }
+        (None, None) => Err(CoreError::InvalidRequest {
+            reason: "BindingRequired: code ingestion requires a persisted binding — name the \
+                     bound repository (`repo`), or pass `path` for the document-only legacy \
+                     scan"
+                .to_owned(),
+        }),
     }
-            })?;
-    if let Some(asserted) = &request.branch_ref
-        && *asserted != binding.branch_ref
-    {
-        return Err(CoreError::Conflict {
-            reason: "BindingConflict: asserted branch does not match the bound ref".to_owned(),
-        });
-    }
-    let knowledge = provider.require_knowledge()?.clone();
-    let graph = provider.require_graph()?.clone();
-    let repo = KnowledgeRepoGraph::new(knowledge, graph);
-    // No `<repo>/.engram/scan.json` discovery here — this is a library entry
-    // point, not a host. A caller that wants the repo-local filter resolves it
-    // (the MCP's `resolve_scan_filter` does) and passes `scan_filter` explicitly.
-    let scan_filter = match &request.scan_filter {
-        Some(cfg) => ScanFilter::merge(cfg),
-        None => ScanFilter::default(),
-    };
-    let opts = ScanOptions {
-        scope: request.scope.clone(),
-        policy: scan_policy(),
-        actor: scan_actor(),
-        source_name: "engram-node-scan".to_owned(),
-        max_bytes: 0,
-        manifest: std::collections::HashMap::new(),
-        scan_filter,
-    };
-    let (summary, _manifest) =
-        scan_repository(std::path::Path::new(&request.path), &opts, &repo, |_| ())?;
-    Ok(summary)
 }
 
 /// Default write policy for scanned knowledge (workspace-visible, durable).
@@ -1865,14 +1931,20 @@ mod tests {
     use engram_integration::StepOutcome;
     use engram_integration::{CapabilityPolicy, EmbeddingProviderConfig, MigrationMode};
 
+    /// Review r6 finding 2 (repairs the struct drift that left this test
+    /// uncompilable since TASK-020): the provider's path-based lane is the
+    /// DOCUMENT-ONLY legacy scan — code files are excluded; code intent
+    /// (`repo`) without a registered locator is a typed denial; supplying
+    /// BOTH path and repo is rejected.
     #[test]
-    fn scan_via_provider_writes_entities() {
+    fn scan_via_provider_document_only_lane() {
         let dir =
             std::env::temp_dir().join(format!("engram-node-scan-test-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
-        // A fixture source file with a parseable symbol.
+        // One code file (must be EXCLUDED) and one document (must land).
         std::fs::write(dir.join("fixture.rs"), "pub fn hello() {}\n").unwrap();
+        std::fs::write(dir.join("notes.md"), "# Notes\nlegacy lane text\n").unwrap();
 
         let config = EngramConfig::new(
             dir.join("store"),
@@ -1898,20 +1970,68 @@ mod tests {
             session: None,
             environment: None,
         };
-        let request = ScanRepoRequest {
-            path: dir.to_string_lossy().to_string(),
-            scope: scope.clone(),
-            scan_filter: None,
+        // Neither lane selected: typed guidance.
+        let neither = scan_via_provider(
+            &provider,
+            &ScanRepoRequest {
+                path: None,
+                scope: scope.clone(),
+                repo: None,
+                branch_ref: None,
+                scan_filter: None,
+            },
+        );
+        assert!(
+            matches!(&neither, Err(CoreError::InvalidRequest { reason }) if reason.contains("BindingRequired")),
+            "neither lane selected must deny typed, got {neither:?}"
+        );
+        // Code intent without a registration: the pipeline's typed denial.
+        let unregistered = scan_via_provider(
+            &provider,
+            &ScanRepoRequest {
+                path: None,
+                scope: scope.clone(),
+                repo: Some(engram_domain::RepoId("repo-unregistered".to_owned())),
+                branch_ref: None,
+                scan_filter: None,
+            },
+        );
+        assert!(
+            matches!(&unregistered, Err(CoreError::InvalidRequest { reason }) if reason.contains("no registered repository")),
+            "code ingestion without a locator must deny typed, got {unregistered:?}"
+        );
+        // Both path and repo: rejected — path is never an ingestion input.
+        let both = scan_via_provider(
+            &provider,
+            &ScanRepoRequest {
+                path: Some(dir.to_string_lossy().to_string()),
+                scope: scope.clone(),
+                repo: Some(engram_domain::RepoId("repo-both".to_owned())),
+                branch_ref: None,
+                scan_filter: None,
+            },
+        );
+        assert!(
+            matches!(&both, Err(CoreError::InvalidRequest { reason }) if reason.contains("path is not an input")),
+            "path + repo must be rejected, got {both:?}"
+        );
+        // Document-only lane over the path: documents land, code is excluded.
+        let outcome = scan_via_provider(
+            &provider,
+            &ScanRepoRequest {
+                path: Some(dir.to_string_lossy().to_string()),
+                scope: scope.clone(),
+                repo: None,
+                branch_ref: None,
+                scan_filter: None,
+            },
+        )
+        .expect("document-only scan runs");
+        assert_eq!(outcome.mode, "legacy-document-only");
+        let ScanPayload::Documents(summary) = outcome.payload else {
+            panic!("document lane returns a summary");
         };
-        let summary = scan_via_provider(&provider, &request).expect("scan runs");
-        assert!(
-            summary.scanned >= 1,
-            "fixture should be scanned: {summary:?}"
-        );
-        assert!(
-            summary.entities >= 1,
-            "fixture symbol should extract to an entity: {summary:?}"
-        );
+        assert!(summary.scanned >= 1, "fixture scanned: {summary:?}");
 
         let entities = block_on(
             provider
@@ -1922,7 +2042,13 @@ mod tests {
         .expect("list entities");
         assert!(
             !entities.is_empty(),
-            "scanned entities should persist in the knowledge store"
+            "the document's entities persist in the knowledge store"
+        );
+        assert!(
+            entities
+                .iter()
+                .all(|entity| entity.kind != engram_domain::EntityKind::Function),
+            "the document-only lane never ingests code entities"
         );
 
         let _ = std::fs::remove_dir_all(&dir);

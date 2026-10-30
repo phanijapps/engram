@@ -560,11 +560,41 @@ pub(crate) fn reindex_outcome(
 /// `scan_repo`: treesitter-index a code repository into the project workspace,
 /// routed through the provider via the fan-in adapter. Feeds code-symbol names
 /// to the lexical lane so `search`/`recall` find them.
+///
+/// Review r6 finding 2: when the scope has PUBLISHED bound code, arbitrary
+/// `path` scanning for CODE is DENIED — code bytes flow exclusively through
+/// the bound registered-locator pipeline (register + bind + ingest). The
+/// explicit `documentOnly: true` lane always scans documents only (code files
+/// excluded by the document-only filter) and labels its result as the legacy
+/// document-only lane. A scope with no published code keeps the historical
+/// legacy scanner (the unbound pre-binding lane).
 pub fn scan_repo(app: &App, args: &Value) -> Result<Value, ToolError> {
     let path = req_str(args, "path")?;
     let knowledge = app.provider.require_knowledge().map_err(internal)?.clone();
     let graph = app.provider.require_graph().map_err(internal)?.clone();
     let repo = KnowledgeRepoGraph::new(knowledge, graph);
+
+    // Bound-code gate (review r6 finding 2): published bound code in this
+    // scope closes the arbitrary-path code lane.
+    let document_only = args["documentOnly"].as_bool().unwrap_or(false);
+    let bound_code_published = app
+        .provider
+        .code_bindings()
+        .ok()
+        .and_then(|coordinator| {
+            block_on(coordinator.store().eligibility(&app.scope))
+                .ok()
+                .map(|eligibility| !eligibility.repository_ids.is_empty())
+        })
+        .unwrap_or(false);
+    if bound_code_published && !document_only {
+        return Err(invalid(
+            "BoundCodeScanDenied: this scope has published bound code — code bytes are \
+             ingested only through the registered-locator pipeline (code_repo_register + \
+             code_bind, then the bound ingestion surface); pass documentOnly=true for the \
+             explicitly labeled document-only legacy scan",
+        ));
+    }
 
     // scan-manifest-persistence: load the prior manifest for this root so the
     // scanner skips unchanged files (the N-API `manifestPath` pattern — the
@@ -584,6 +614,18 @@ pub fn scan_repo(app: &App, args: &Value) -> Result<Value, ToolError> {
     };
 
     let (scan_filter, filter_note) = resolve_scan_filter(path, args);
+    // Document-only lane (review r6 finding 2): code files are excluded by
+    // the document-only filter. A discovered/explicit scan config may only
+    // NARROW further (its denials are additive), so the lane uses the
+    // document-only base directly and says so.
+    let (scan_filter, filter_note) = if document_only {
+        (
+            engram_ingest::ScanFilter::document_only(),
+            "document-only (code files excluded)".to_owned(),
+        )
+    } else {
+        (scan_filter, filter_note)
+    };
     let opts = ScanOptions {
         scope: app.scope.clone(),
         policy: policy(),
@@ -707,9 +749,16 @@ pub fn scan_repo(app: &App, args: &Value) -> Result<Value, ToolError> {
     } else {
         format!("\nembedded {embedded} chunks")
     };
+    // Explicit lane label (review r6 finding 2): the document-only result
+    // identifies itself; the unbound legacy lane keeps its historical shape.
+    let mode_note = if document_only {
+        "\nMODE: legacy document-only scan (code files excluded — code ingests only \\\n             through the bound registered-locator pipeline)"
+    } else {
+        ""
+    };
     eprintln!("engram-mcp: embed done ({embedded} embedded, {pending_after_cap} pending)");
     Ok(protocol::text_content(format!(
-        "{summary:?}\n{filter_note}{embed_note}"
+        "{summary:?}\n{filter_note}{embed_note}{mode_note}"
     )))
 }
 
@@ -5605,6 +5654,9 @@ mod phase2_tool_tests {
     }
 }
 
+#[cfg(test)]
+#[path = "bound_code_authority_tests.rs"]
+mod bound_code_authority_tests;
 #[cfg(test)]
 #[path = "codegraph_reindex_tests.rs"]
 mod reindex_tests;

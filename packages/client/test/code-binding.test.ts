@@ -58,8 +58,8 @@ const workingTransport: EngramTransport = {
     }),
   codeRegister: (request) =>
     Promise.resolve({
-      repoId: request.repo,
-      locatorId: request.path,
+      repo_id: request.repo,
+      locator_id: request.path,
       acquisition: request.mode === "configured-remote" ? "configured_remote" : "local_only"
     }),
   codeStatus: () =>
@@ -122,7 +122,7 @@ describe("task_020", () => {
       path: "/repos/repo-client",
       mode: "local-only"
     });
-    expect(registration).toMatchObject({ repoId: "repo-client" });
+    expect(registration).toMatchObject({ repo_id: "repo-client" });
 
     const observed = await code.codeRefresh({ scope, repo: "repo-client" });
     expect(observed.observedOid).toBe("c".repeat(40));

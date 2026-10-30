@@ -124,34 +124,20 @@ impl IngestOps {
         encode(&bound)
     }
 
-    /// TASK-020 binding gate: the durable cell, not the caller's path, is
-    /// the authority for code scans. Returns the bound ref on success.
-    fn require_bound_ref(
-        &self,
-        scope: &Scope,
-        repo: &str,
-        asserted_branch: Option<&str>,
-    ) -> Result<String> {
-        let binding = block_on(self.bindings.get_binding(scope, &engram_domain::RepoId(repo.to_owned())))
-            .map_err(to_napi_error)?
-            .ok_or_else(|| {
-                Error::from_reason(
-                    "BindingRequired: code scans require a persisted binding; bind the repository first",
-                )
-            })?;
-        if let Some(asserted) = asserted_branch
-            && asserted != binding.branch_ref
-        {
-            return Err(Error::from_reason(
-                "BindingConflict: asserted branch does not match the bound ref",
-            ));
-        }
-        Ok(binding.branch_ref)
-    }
+    /// TASK-020 binding gate REMOVED (review r6 finding 2): binding-existence
+    /// was never authorization for ingesting code bytes, and the legacy
+    /// engine no longer ingests code at all — see [`Self::start_scan_job_json`].
 
     /// Starts a background repository scan; returns `{ jobId }` immediately.
     /// Progress is read via `getScanJobJson`. The request carries
-    /// `{ root, scope, policy, actor, sourceName, maxBytes, manifestPath }`.
+    /// `{ root, scope, documentOnly, policy, actor, sourceName, maxBytes, manifestPath }`.
+    ///
+    /// Review r6 finding 2: the legacy engine NEVER ingests code bytes.
+    /// Naming `repo` (code intent) is a typed denial directing to the bound
+    /// registered-locator pipeline — binding-existence is not authorization
+    /// and a checkout was never an acquisition authority. The explicit
+    /// `documentOnly: true` lane scans documents only (code files excluded
+    /// by the document-only filter); it needs no binding.
     pub fn start_scan_job_json(&mut self, request_json: String) -> Result<String> {
         let value = decode::<serde_json::Value>(&request_json)?;
         let root = value
@@ -159,11 +145,10 @@ impl IngestOps {
             .and_then(|v| v.as_str())
             .ok_or_else(|| Error::from_reason("missing 'root'"))?
             .to_owned();
-        let source_name = value
-            .get("sourceName")
-            .and_then(|v| v.as_str())
-            .unwrap_or("scan")
-            .to_owned();
+        // `sourceName` is no longer honored: the document-only lane stamps a
+        // stable legacy-docs source name (callers reach code ingestion through
+        // the bound pipeline, which derives its own generation namespaced
+        // source).
         let max_bytes = value.get("maxBytes").and_then(|v| v.as_u64()).unwrap_or(0);
         let manifest_path = value
             .get("manifestPath")
@@ -181,18 +166,32 @@ impl IngestOps {
                 .map_err(|error| Error::from_reason(format!("InvalidActor: {error}")))?,
         };
 
-        // TASK-020: persisted binding is mandatory for code scans.
-        let repo = value
+        // Review r6 finding 2: code intent (a named repository) is DENIED on
+        // the legacy engine — code flows exclusively through the provider's
+        // registered-locator ingestion pipeline. Documents need no binding.
+        let document_only = value
+            .get("documentOnly")
+            .and_then(|v| v.as_bool())
+            .unwrap_or(false);
+        let has_repo = value
             .get("repo")
-            .and_then(|field| field.as_str())
-            .ok_or_else(|| {
-                Error::from_reason(
-                    "BindingRequired: code scans require a persisted binding; bind the repository first",
-                )
-            })?
-            .to_owned();
-        let asserted_branch = value.get("branchRef").and_then(|field| field.as_str());
-        self.require_bound_ref(&scope, &repo, asserted_branch)?;
+            .map(|field| !field.is_null())
+            .unwrap_or(false);
+        match (has_repo, document_only) {
+            (true, _) => {
+                return Err(Error::from_reason(
+                    "LegacyCodeScanDenied: the legacy engine never ingests code — use the \
+                     bound code pipeline (register + bind + scan with `repo`) instead",
+                ));
+            }
+            (false, true) => {}
+            (false, false) => {
+                return Err(Error::from_reason(
+                    "BindingRequired: code scans require the bound registered-locator \
+                     pipeline; pass documentOnly=true for the document-only legacy scan",
+                ));
+            }
+        }
 
         // Load the prior manifest (incremental resume). Skip when force=true so
         // every file is re-ingested (e.g. after an extractor change).
@@ -229,14 +228,16 @@ impl IngestOps {
         // polls via getScanJobJson.
         let job_id_for_thread = job_id.clone();
         std::thread::spawn(move || {
+            // Document-only lane (review r6 finding 2): code files are
+            // excluded; the source name labels the legacy-docs lane.
             let opts = ScanOptions {
                 scope,
                 policy,
                 actor,
-                source_name: source_name.clone(),
+                source_name: "engram-node-legacy-docs".to_owned(),
                 max_bytes,
                 manifest: prior,
-                scan_filter: engram_ingest::ScanFilter::default(),
+                scan_filter: engram_ingest::ScanFilter::document_only(),
             };
             let progress = |p: engram_ingest::ScanProgress| {
                 if let Ok(mut jobs) = jobs.lock() {

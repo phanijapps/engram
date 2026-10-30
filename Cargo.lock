@@ -1229,6 +1229,7 @@ dependencies = [
  "engram-knowledge",
  "engram-packs",
  "engram-retrieval",
+ "engram-store-sqlite",
  "futures",
  "regex",
  "reqwest 0.12.28",

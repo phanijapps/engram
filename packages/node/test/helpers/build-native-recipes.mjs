@@ -15,16 +15,23 @@
  *
  * Freshness: every invocation asks Cargo to validate the complete workspace
  * dependency graph for each recipe before copying its artifact. Cargo shares
- * `target/debug` between the feature invocations, so the helper copies each
- * validated result immediately into its recipe-specific destination.
+ * `target/debug` between the feature invocations, so the helper removes the
+ * shared cdylib before each recipe build — cargo then ALWAYS relinks that
+ * recipe's variant (cached objects, fresh link) and the copy below is
+ * guaranteed to be THIS recipe's binary. Without the removal, a no-op build
+ * after the OTHER recipe's link would copy the wrong variant into this
+ * recipe's slot (two dlopen copies of the same featured binary then
+ * segfault on napi static-state interposition — observed at r6a-fix 57bde08).
  *
  * Selection honesty: tests assert the SELECTED recipe through the addon's own
  * behavior (the sqlite artifact refuses a pgvector config with the exact
  * "requires the `pgvector` feature" message; the pgvector artifact gets PAST
- * that gate), never by trusting the directory name.
+ * that gate), never by trusting the directory name. One recipe addon loads
+ * per test FILE: vitest isolates files in separate processes, so the two
+ * copies are never dlopen'd into one process.
  */
 import { execFileSync } from "node:child_process";
-import { copyFileSync, existsSync, mkdirSync, utimesSync } from "node:fs";
+import { copyFileSync, existsSync, mkdirSync, rmSync, utimesSync } from "node:fs";
 import { createRequire } from "node:module";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -64,6 +71,13 @@ function artifactPath(recipe) {
 }
 
 function buildRecipe(recipe) {
+  // Remove the SHARED cdylib first so cargo must relink THIS recipe's
+  // variant even when every object is cached — the copied artifact can then
+  // never alias the other recipe's last link (r6a-fix2 finding 7 repair).
+  const sharedCdylib = join(repoRoot, "target", "debug", cdylib);
+  if (existsSync(sharedCdylib)) {
+    rmSync(sharedCdylib, { force: true });
+  }
   const argv = ["build", "-p", "engram-node", ...featuresFor(recipe)];
   console.log(`[task_020 helper] cargo ${argv.join(" ")}`);
   execFileSync("cargo", argv, { stdio: "inherit", cwd: repoRoot });

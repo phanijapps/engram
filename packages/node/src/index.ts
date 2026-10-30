@@ -77,6 +77,8 @@ export {
   type BoundCodeScanRequest,
   type LegacyDocumentScanRequest,
   type CodeScanResult,
+  type CodeFetchRequest,
+  type CodeFetchResult,
   type BoundCodeScanResult,
   type LegacyDocumentScanResult,
   type RepositoryRegistration,

@@ -209,6 +209,26 @@ export interface LegacyDocumentScanResult {
 /** Typed outcome of either native scan lane. */
 export type CodeScanResult = BoundCodeScanResult | LegacyDocumentScanResult;
 
+/** Request for digest-validated retained bytes from a published bound generation. */
+export interface CodeFetchRequest {
+  scope: Scope;
+  path: string;
+  symbol?: string;
+}
+
+/** Exact retained-source response. `bytes` preserves non-UTF-8 source without lossy decoding. */
+export interface CodeFetchResult {
+  repoId: string;
+  generationId: string;
+  bytes: number[];
+  fullContentDigest: string;
+  servedDigest: string;
+  commitOid: string;
+  path: string;
+  span: [number, number] | null;
+  participants: Array<{ recordId: string; startLine: number; endLine: number; byteSpan: [number, number] }>;
+}
+
 /** The typed transport over the native binding — every route in the TS MCP
  *  server dispatches through one of these methods. */
 export interface NativeProviderTransport {
@@ -244,6 +264,8 @@ export interface NativeProviderTransport {
    *  REGISTERED locator's local git (r6 finding 5) — the caller never
    *  supplies an OID; the former codeObserveRef surface is gone. */
   codeRefresh(request: { scope: Scope; repo: string }): Promise<CodeRefObservation>;
+  /** Exact bytes from the active bound generation's retained source. */
+  codeFetch(request: CodeFetchRequest): Promise<CodeFetchResult>;
   codeResetPreview(request: { scope: Scope; repo: string }): Promise<CodeResetPreview>;
   codeResetApply(request: { journal: CodeResetJournal; decision: string }): Promise<CodeResetJournal>;
   codeResetResume(request: { journal: CodeResetJournal }): Promise<CodeResetJournal>;
@@ -412,6 +434,10 @@ class JsonNativeProviderTransport implements NativeProviderTransport {
 
   async codeRefresh(request: { scope: Scope; repo: string }): Promise<CodeRefObservation> {
     return decode<CodeRefObservation>(this.provider.codeRefreshJson(encode(request)));
+  }
+
+  async codeFetch(request: CodeFetchRequest): Promise<CodeFetchResult> {
+    return decode<CodeFetchResult>(this.provider.codeFetchJson(encode(request)));
   }
 
   async codeResetPreview(request: { scope: Scope; repo: string }): Promise<CodeResetPreview> {

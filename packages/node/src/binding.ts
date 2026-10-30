@@ -274,6 +274,8 @@ export interface NativeProviderBinding {
   codeStatusJson(requestJson: string): string;
   codeRegisterJson(requestJson: string): string;
   codeRefreshJson(requestJson: string): string;
+  /** Digest-validated exact retained bytes for a published bound code path. */
+  codeFetchJson(requestJson: string): string;
   codeResetPreviewJson(requestJson: string): string;
   codeResetApplyJson(requestJson: string): string;
   codeResetResumeJson(requestJson: string): string;

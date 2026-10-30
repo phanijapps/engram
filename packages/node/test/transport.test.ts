@@ -64,6 +64,7 @@ class StubNativeProvider {
   codeStatusJson(): string { return "{}"; }
   codeRegisterJson(): string { return "{}"; }
   codeRefreshJson(): string { return "{}"; }
+  codeFetchJson(): string { return "{}"; }
   codeResetPreviewJson(): string { return "{}"; }
   codeResetApplyJson(): string { return "{}"; }
   codeResetResumeJson(): string { return "{}"; }

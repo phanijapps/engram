@@ -27,6 +27,7 @@ function mockProvider(): {
     codeStatusJson: capture("codeStatus"),
     codeRegisterJson: capture("codeRegister"),
     codeRefreshJson: capture("codeRefresh"),
+    codeFetchJson: capture("codeFetch"),
     codeResetPreviewJson: capture("codeResetPreview"),
     codeResetApplyJson: capture("codeResetApply"),
     codeResetResumeJson: capture("codeResetResume"),
@@ -121,6 +122,17 @@ describe("NativeProviderTransport", () => {
     await transport.batchIngest({ writes: [] });
     expect(recorded("batchIngest")).toHaveLength(1);
     expect(recorded("batchIngest")[0]).toMatchObject({ writes: [] });
+  });
+
+  it("forwards the typed bound-source fetch envelope", async () => {
+    const { provider, recorded } = mockProvider();
+    const transport = createNativeProviderTransport({ provider });
+    await transport.codeFetch({ scope: { tenant: "t" }, path: "src/lib.rs", symbol: "fixture" });
+    expect(recorded("codeFetch")[0]).toEqual({
+      scope: { tenant: "t" },
+      path: "src/lib.rs",
+      symbol: "fixture"
+    });
   });
 
   it("forwards typed reset preview, apply, and resume envelopes", async () => {

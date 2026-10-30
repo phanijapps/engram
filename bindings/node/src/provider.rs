@@ -92,6 +92,51 @@ struct CodeResetResumeRequest {
     journal: engram_domain::CodeResetJournal,
 }
 
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct CodeFetchRequest {
+    scope: Scope,
+    path: String,
+    symbol: Option<String>,
+}
+
+fn exact_read_candidates(
+    chunks: &[engram_domain::KnowledgeChunk],
+    path: &str,
+) -> Vec<engram_integration::code_binding::ExactReadCandidate> {
+    chunks
+        .iter()
+        .filter(|chunk| {
+            chunk
+                .location
+                .as_ref()
+                .and_then(|location| location.path.as_deref())
+                .is_some_and(|chunk_path| {
+                    chunk_path.trim_start_matches("./").trim_end_matches('/')
+                        == path.trim_start_matches("./").trim_end_matches('/')
+                })
+        })
+        .map(|chunk| {
+            let location = chunk.location.as_ref();
+            let mut names = chunk
+                .entities
+                .iter()
+                .filter_map(|entity| entity.name.clone())
+                .collect::<Vec<_>>();
+            if let Some(anchor) = location.and_then(|location| location.anchor.as_deref()) {
+                names.push(anchor.to_owned());
+            }
+            engram_integration::code_binding::ExactReadCandidate {
+                record_id: chunk.id.to_string(),
+                start_line: location.and_then(|location| location.start_line),
+                end_line: location.and_then(|location| location.end_line),
+                names,
+                text_head: chunk.text.lines().next().unwrap_or("").to_owned(),
+            }
+        })
+        .collect()
+}
+
 #[napi]
 impl NativeProvider {
     /// Opens a provider from an `EngramConfig` JSON string.
@@ -402,6 +447,58 @@ impl NativeProvider {
         ))
         .map_err(to_napi_error)?;
         encode(&observation)
+    }
+
+    /// Reads digest-validated retained bytes for a published bound code path.
+    #[napi(js_name = "codeFetchJson")]
+    pub fn code_fetch_json(&self, request_json: String) -> Result<String> {
+        let request: CodeFetchRequest = decode(&request_json)?;
+        let query = self
+            .inner
+            .require_knowledge_query()
+            .map_err(to_napi_error)?;
+        let chunks = block_on(query.list_chunks(&request.scope)).map_err(to_napi_error)?;
+        let candidates = exact_read_candidates(&chunks, &request.path);
+        let outcome = block_on(self.inner.code_fetch_exact_participants(
+            &system_code_actor(),
+            &request.scope,
+            &request.path,
+            &candidates,
+            request.symbol.as_deref(),
+        ))
+        .map_err(to_napi_error)?;
+        match outcome {
+            engram_integration::code_binding::ParticipantExactSource::Served {
+                repo_id,
+                generation_id,
+                view,
+                span,
+                participants,
+            } => encode(&serde_json::json!({
+                "repoId": repo_id,
+                "generationId": generation_id,
+                "bytes": view.bytes,
+                "fullContentDigest": view.full_content_digest,
+                "servedDigest": view.served_digest,
+                "commitOid": view.commit_oid,
+                "path": view.path,
+                "span": span,
+                "participants": participants.iter().map(|participant| serde_json::json!({
+                    "recordId": participant.record_id,
+                    "startLine": participant.start_line,
+                    "endLine": participant.end_line,
+                    "byteSpan": participant.byte_span,
+                })).collect::<Vec<_>>(),
+            })),
+            engram_integration::code_binding::ParticipantExactSource::Denied { reason, .. } => {
+                Err(to_napi_error(CoreError::InvalidRequest { reason }))
+            }
+            engram_integration::code_binding::ParticipantExactSource::Unbound => {
+                Err(to_napi_error(CoreError::InvalidRequest {
+                    reason: "no bound source participants for requested path".to_owned(),
+                }))
+            }
+        }
     }
 
     /// Creates an exact reset preview through the reset-authorized coordinator.

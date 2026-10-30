@@ -208,6 +208,23 @@ export function describeCodeBindingCases(getAddon, recipe) {
     expect(readdirSync(retained).sort()).not.toEqual(beforeDenied);
   });
 
+  it(`${recipe}: bound_source_fetch_exact_bytes`, () => {
+    const { path: repoPath } = gitFixture(`${recipe}-source`);
+    const base = mkdtempSync(join(tmpdir(), `task020-${recipe}-source-`));
+    const provider = new (getAddon().NativeProvider)(authorizedConfig(base));
+    const repo = `repo-${recipe}-source`;
+    provider.codeRegisterJson(JSON.stringify({ scope, repo, path: repoPath }));
+    provider.codeBindJson(JSON.stringify({ scope, repo, branchRef: "refs/heads/main" }));
+    provider.scanRepositoryJson(JSON.stringify({ scope, repo }));
+
+    const fetched = JSON.parse(provider.codeFetchJson(JSON.stringify({ scope, path: "lib.rs" })));
+    expect(fetched.repoId).toBe(repo);
+    expect(fetched.generationId).toMatch(/^gen-/);
+    expect(Buffer.from(fetched.bytes)).toEqual(Buffer.from("pub fn fixture() -> u32 { 1 }\n"));
+    expect(fetched.servedDigest).toHaveLength(64);
+    expect(fetched.participants).not.toHaveLength(0);
+  });
+
   it(`${recipe}: legacy_lanes_never_ingest_code`, () => {
     const base = mkdtempSync(join(tmpdir(), `task020-${recipe}-legacy-`));
     const provider = new (getAddon().NativeProvider)(authorizedConfig(base));

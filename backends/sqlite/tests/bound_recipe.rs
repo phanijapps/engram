@@ -10,11 +10,15 @@
 use std::path::Path;
 
 use engram_domain::types::ScopeMappingStrategy;
-use engram_domain::{Actor, ActorKind, CodeResetJournal, Id, RepoId, Scope};
+use engram_domain::{
+    Actor, ActorKind, AllowedUse, CodeResetJournal, Id, KnowledgeChunk, KnowledgeChunkKind,
+    KnowledgeSource, Policy, Provenance, RepoId, Requester, Retention, RetrievalRequest, Scope,
+    Sensitivity, SourceDocument, SourceDocumentKind, SourceKind, Visibility,
+};
 use engram_integration::{
     CapabilityPolicy, EmbeddingProviderConfig, EngramConfig, EngramProvider, MigrationMode,
 };
-use engram_knowledge::CodeBindingRepository;
+use engram_knowledge::{CodeBindingRepository, KnowledgeRepository};
 use engram_runtime::CoreError;
 use futures::executor::block_on;
 
@@ -77,6 +81,99 @@ fn host_policy() -> std::sync::Arc<engram_integration::code_binding::ScopeSetAut
     std::sync::Arc::new(engram_integration::code_binding::ScopeSetAuthorizer::new(
         vec![scope(), foreign_scope()],
     ))
+}
+
+fn timestamp() -> engram_domain::Timestamp {
+    "2026-10-30T00:00:00Z"
+        .parse()
+        .expect("RFC3339 fixture timestamp")
+}
+
+fn requester() -> Requester {
+    Requester {
+        actor: actor(),
+        roles: Vec::new(),
+        permissions: Vec::new(),
+        on_behalf_of: None,
+    }
+}
+
+fn seed_ordinary_record(
+    lanes: &engram_integration::code_binding::CodeIngestionLanes,
+    scope: &Scope,
+    token: &str,
+) {
+    let provenance = Provenance {
+        source: "bound-recipe-serving".into(),
+        actor: actor(),
+        observed_at: timestamp(),
+        evidence: Vec::new(),
+        derivations: Vec::new(),
+        confidence: Some(1.0),
+        method: None,
+    };
+    let policy = Policy {
+        visibility: Visibility::Workspace,
+        retention: Retention::Durable,
+        sensitivity: Some(Sensitivity::Medium),
+        allowed_uses: vec![AllowedUse::Retrieval],
+        expires_at: None,
+        delete_mode: None,
+    };
+    let source = KnowledgeSource {
+        id: Id::from("recipe-serving-ordinary-source"),
+        kind: SourceKind::Filesystem,
+        scope: scope.clone(),
+        name: "recipe-serving-ordinary".into(),
+        uri: None,
+        version: None,
+        repository_key: None,
+        git_ref: None,
+        policy: policy.clone(),
+        provenance: provenance.clone(),
+        created_at: timestamp(),
+        updated_at: None,
+        metadata: None,
+    };
+    let document = SourceDocument {
+        id: Id::from("recipe-serving-ordinary-document"),
+        source_id: source.id.clone(),
+        kind: SourceDocumentKind::Markdown,
+        uri: None,
+        path: Some("ordinary.md".into()),
+        title: None,
+        mime_type: None,
+        language: None,
+        version: None,
+        content_hash: "recipe-serving-ordinary-content".into(),
+        provenance: provenance.clone(),
+        policy: policy.clone(),
+        created_at: timestamp(),
+        updated_at: None,
+        metadata: None,
+    };
+    let chunk = KnowledgeChunk {
+        id: Id::from("recipe-serving-ordinary-chunk"),
+        document_id: document.id.clone(),
+        source_id: source.id.clone(),
+        kind: KnowledgeChunkKind::Paragraph,
+        text: token.into(),
+        summary: None,
+        location: None,
+        entities: Vec::new(),
+        concepts: Vec::new(),
+        embedding_refs: Vec::new(),
+        content_hash: "recipe-serving-ordinary-chunk-content".into(),
+        provenance,
+        policy,
+        created_at: timestamp(),
+        updated_at: None,
+        metadata: None,
+    };
+    block_on(lanes.knowledge.put_source(source)).expect("seed ordinary source through recipe lane");
+    block_on(lanes.knowledge.put_document(document))
+        .expect("seed ordinary document through recipe lane");
+    block_on(lanes.knowledge.put_chunk(chunk)).expect("seed ordinary chunk through recipe lane");
 }
 
 mod task_019 {
@@ -461,6 +558,153 @@ mod task_019 {
                 .any(|checkpoint| checkpoint == "reset-lane:source:not-required"),
             "r5 retains immutable snapshots as durable history rather than falsely marking release done"
         );
+    }
+
+    /// recipe_serving_excludes_retired_code_and_preserves_live_records:
+    /// warm the opened SQLite recipe's recall and bound graph paths, reset one
+    /// bound generation, and use those same paths to prove cache invalidation
+    /// excludes retired code while an ordinary record and another code record
+    /// remain eligible.
+    #[test]
+    fn recipe_serving_excludes_retired_code_and_preserves_live_records() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let make_repository = |name: &str, symbol: &str| {
+            let repository = dir.path().join(name);
+            std::fs::create_dir_all(&repository).expect("mkdir repository");
+            let git = |args: &[&str]| {
+                let status = std::process::Command::new("git")
+                    .args(args)
+                    .current_dir(&repository)
+                    .env("GIT_CONFIG_GLOBAL", "/dev/null")
+                    .env("GIT_CONFIG_SYSTEM", "/dev/null")
+                    .status()
+                    .expect("run git");
+                assert!(status.success(), "git {args:?}");
+            };
+            git(&["init", "--initial-branch=main", "."]);
+            git(&["config", "user.email", "recipe@example.test"]);
+            git(&["config", "user.name", "recipe"]);
+            std::fs::write(
+                repository.join("lib.rs"),
+                format!("pub fn {symbol}() -> u32 {{ 1 }}\\n"),
+            )
+            .expect("write fixture");
+            git(&["add", "."]);
+            git(&["commit", "--no-gpg-sign", "-m", "fixture"]);
+            repository
+        };
+        let retired_repository = make_repository("retired", "sqlite_retired_serving_token");
+        let preserved_repository = make_repository("preserved", "sqlite_preserved_serving_token");
+        std::fs::create_dir_all(dir.path().join("storage")).expect("mkdir storage");
+        let provider = engram_backend_sqlite::open(&config(dir.path()))
+            .expect("open recipe")
+            .with_code_authorizer(host_policy())
+            .expect("inject serving host policy");
+        let coordinator = provider.code_bindings().expect("binding handle");
+        let lanes = provider.code_ingestion().expect("recipe ingestion lanes");
+        let retired_repo = RepoId("recipe-serving-retired".into());
+        let preserved_repo = RepoId("recipe-serving-preserved".into());
+        for (repo, repository) in [
+            (&retired_repo, &retired_repository),
+            (&preserved_repo, &preserved_repository),
+        ] {
+            block_on(coordinator.register(
+                &actor(),
+                &scope(),
+                engram_knowledge::RepositoryRegistration {
+                    repo_id: repo.clone(),
+                    locator_id: repository.to_string_lossy().to_string(),
+                    acquisition: engram_knowledge::AcquisitionMode::LocalOnly,
+                },
+            ))
+            .expect("register bound fixture");
+            block_on(coordinator.bind(&actor(), &scope(), repo, "refs/heads/main"))
+                .expect("bind fixture");
+            block_on(coordinator.ingest_registered(&actor(), &scope(), repo, None, None, lanes))
+                .expect("publish through recipe ingestion");
+        }
+        seed_ordinary_record(lanes, &scope(), "sqlite_ordinary_serving_token");
+        let recall = |query: &str| {
+            block_on(
+                provider
+                    .require_recall()
+                    .expect("recall")
+                    .recall(RetrievalRequest {
+                        query: query.into(),
+                        scope: scope(),
+                        requester: requester(),
+                        modes: vec![engram_domain::RetrievalMode::Graph],
+                        filters: None,
+                        cues: Vec::new(),
+                        limit: None,
+                        budget: None,
+                        include_explanations: Some(true),
+                    }),
+            )
+            .expect("serve recall")
+        };
+        let explore = |symbol: &str| {
+            block_on(provider.code_graph_explore_bound(
+                &actor(),
+                &scope(),
+                symbol,
+                Some(2),
+                Some(24),
+                Some(64),
+                true,
+            ))
+            .expect("serve graph")
+        };
+        let warm_recall = recall("sqlite_retired_serving_token");
+        let warm_graph = explore("sqlite_retired_serving_token");
+        assert!(format!("{warm_recall:?}").contains("sqlite_retired_serving_token"));
+        assert!(format!("{warm_graph:?}").contains("sqlite_retired_serving_token"));
+        let preview = block_on(coordinator.preview_reset(&actor(), &scope(), &retired_repo))
+            .expect("authorized reset preview");
+        let journal = CodeResetJournal {
+            reset_id: "recipe-serving-reset".into(),
+            preview_hash: preview.preview_hash.clone(),
+            target_fingerprints: preview
+                .targets
+                .iter()
+                .map(|target| (target.record_id.clone(), target.fingerprint.clone()))
+                .collect(),
+            authorizing_decisions: vec!["recipe-serving-approved".into()],
+            checkpoints: vec!["authorized".into()],
+            preservation_digests: preview.preservation_digests.clone(),
+            preview,
+        };
+        let approved = block_on(coordinator.journal_reset(
+            &actor(),
+            journal,
+            "recipe-serving-approved".into(),
+        ))
+        .expect("journal reset");
+        block_on(coordinator.apply_reset(&actor(), approved)).expect("apply reset");
+        let after_recall = recall("sqlite_retired_serving_token");
+        let after_graph = explore("sqlite_retired_serving_token");
+        assert!(
+            !format!("{after_recall:?}").contains("sqlite_retired_serving_token"),
+            "retired code must not remain in recall: {after_recall:?}"
+        );
+        assert!(
+            !format!("{after_graph:?}").contains("sqlite_retired_serving_token"),
+            "retired code must not remain in graph answers: {after_graph:?}"
+        );
+        assert_ne!(
+            format!("{warm_recall:?}"),
+            format!("{after_recall:?}"),
+            "post-reset recall must differ from warm serving output"
+        );
+        assert!(
+            format!("{:?}", recall("sqlite_ordinary_serving_token"))
+                .contains("sqlite_ordinary_serving_token"),
+            "ordinary recipe record must remain served"
+        );
+        let preserved_recall = recall("sqlite_preserved_serving_token");
+        let preserved_graph = explore("sqlite_preserved_serving_token");
+        assert!(format!("{preserved_recall:?}").contains("sqlite_preserved_serving_token"));
+        assert!(format!("{preserved_graph:?}").contains("sqlite_preserved_serving_token"));
     }
 
     /// unavailable_optional_capabilities: optional lanes the recipe did NOT

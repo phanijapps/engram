@@ -540,6 +540,19 @@ pub(crate) fn bootstrap_sqlite(config: &EngramConfig) -> CoreResult<EngramProvid
                 .and_then(|c| c.rerank.as_ref()),
             embedding_provider.as_ref(),
         );
+        // Unified recall resolves code eligibility per request from the same
+        // durable binding cell that reset mutates below.  It must open before
+        // the coordinator because recall is assembled first, but it reads the
+        // live cell rather than retaining a published-generation snapshot.
+        let recall_bindings = if conformance::code_binding_ok() {
+            engram_store_sqlite::knowledge::SqlCodeBindingRepository::open(&paths.code_bindings)
+                .ok()
+                .map(|bindings| {
+                    Arc::new(bindings) as Arc<dyn engram_knowledge::CodeBindingRepository>
+                })
+        } else {
+            None
+        };
         let unified = SqlUnifiedRecall::with_reranker(
             memory_handle.clone(),
             retrieval_lanes,
@@ -547,6 +560,12 @@ pub(crate) fn bootstrap_sqlite(config: &EngramConfig) -> CoreResult<EngramProvid
             fusion,
             reranker,
         );
+        let unified = match &recall_bindings {
+            Some(bindings) => unified.with_code_eligibility(Arc::new(
+                crate::code_binding::RepositoryEligibilitySource::new(bindings.clone()),
+            )),
+            None => unified,
+        };
         let unified = match &knowledge_store {
             Some(knowledge_handle) => unified.with_candidate_evidence(Arc::new(
                 crate::candidate_evidence::RepositoryCandidateEvidence::new(
@@ -554,7 +573,7 @@ pub(crate) fn bootstrap_sqlite(config: &EngramConfig) -> CoreResult<EngramProvid
                     belief_handle.clone() as Arc<dyn engram_belief::BeliefRepository>,
                     knowledge_handle.clone() as Arc<dyn engram_knowledge::KnowledgeRepository>,
                     memory_handle.retrieval_authorizer(),
-                    None,
+                    recall_bindings,
                     Some(knowledge_handle.clone()
                         as Arc<dyn engram_knowledge::KnowledgeGraphRepository>),
                 ),

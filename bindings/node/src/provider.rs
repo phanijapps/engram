@@ -47,7 +47,7 @@ use engram_procedures::ProcedureRepository;
 use engram_proposals::ProposalService;
 use engram_retrieval::OutcomeLedger;
 use engram_retrieval::{RetrievalIndex, VectorIndex};
-use engram_runtime::CoreResult;
+use engram_runtime::{CoreError, CoreResult};
 use futures::executor::block_on;
 use napi::bindgen_prelude::*;
 use napi_derive::napi;
@@ -72,6 +72,71 @@ pub struct NativeProvider {
     inner: EngramProvider,
 }
 
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct CodeResetPreviewRequest {
+    scope: Scope,
+    repo: engram_domain::RepoId,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct CodeResetApplyRequest {
+    journal: engram_domain::CodeResetJournal,
+    decision: String,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct CodeResetResumeRequest {
+    journal: engram_domain::CodeResetJournal,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct CodeFetchRequest {
+    scope: Scope,
+    path: String,
+    symbol: Option<String>,
+}
+
+fn exact_read_candidates(
+    chunks: &[engram_domain::KnowledgeChunk],
+    path: &str,
+) -> Vec<engram_integration::code_binding::ExactReadCandidate> {
+    chunks
+        .iter()
+        .filter(|chunk| {
+            chunk
+                .location
+                .as_ref()
+                .and_then(|location| location.path.as_deref())
+                .is_some_and(|chunk_path| {
+                    chunk_path.trim_start_matches("./").trim_end_matches('/')
+                        == path.trim_start_matches("./").trim_end_matches('/')
+                })
+        })
+        .map(|chunk| {
+            let location = chunk.location.as_ref();
+            let mut names = chunk
+                .entities
+                .iter()
+                .filter_map(|entity| entity.name.clone())
+                .collect::<Vec<_>>();
+            if let Some(anchor) = location.and_then(|location| location.anchor.as_deref()) {
+                names.push(anchor.to_owned());
+            }
+            engram_integration::code_binding::ExactReadCandidate {
+                record_id: chunk.id.to_string(),
+                start_line: location.and_then(|location| location.start_line),
+                end_line: location.and_then(|location| location.end_line),
+                names,
+                text_head: chunk.text.lines().next().unwrap_or("").to_owned(),
+            }
+        })
+        .collect()
+}
+
 #[napi]
 impl NativeProvider {
     /// Opens a provider from an `EngramConfig` JSON string.
@@ -82,7 +147,28 @@ impl NativeProvider {
     /// `CapabilityUnsupported` when no backend feature is enabled.
     #[napi(constructor)]
     pub fn new(config_json: String) -> Result<Self> {
-        let config: EngramConfig = decode(&config_json)?;
+        // The config JSON may carry a `codeAuthority` object (review r6
+        // finding 1): the HOST's explicit code-operation policy. `launchScopes`
+        // lists the scopes whose code operations this process may perform;
+        // absent `codeAuthority`, the recipe default (deny-by-default
+        // `RecipeDefaultAuthorizer`) stays in force — every code operation
+        // denies with the typed `CodeAuthorizationRequired` envelope.
+        let value: serde_json::Value = decode(&config_json)?;
+        let launch_scopes: Option<Vec<Scope>> = value
+            .get("codeAuthority")
+            .and_then(|authority| authority.get("launchScopes"))
+            .cloned()
+            .map(serde_json::from_value)
+            .transpose()
+            .map_err(|error| {
+                to_napi_error(engram_runtime::CoreError::InvalidRequest {
+                    reason: format!(
+                        "InvalidRequest: codeAuthority.launchScopes is malformed: {error}"
+                    ),
+                })
+            })?;
+        let config: EngramConfig =
+            serde_json::from_value(value).map_err(|error| Error::from_reason(error.to_string()))?;
         // pgvector configs route to the backends/pgvector recipe (the SDK facade's
         // open() is engine-neutral and sqlite-default). When this binding is built
         // without the `pgvector` feature, surface a clear error instead of a silent
@@ -102,6 +188,18 @@ impl NativeProvider {
             }
         } else {
             EngramProvider::open(&config).map_err(to_napi_error)?
+        };
+        // Host policy injection (review r6 finding 1): an explicit
+        // `codeAuthority.launchScopes` config replaces the deny-by-default
+        // recipe authorizer with the launch-scope policy — the native twin of
+        // the MCP server's launch-scope injection.
+        let provider = match launch_scopes {
+            Some(scopes) => provider
+                .with_code_authorizer(std::sync::Arc::new(
+                    engram_integration::code_binding::ScopeSetAuthorizer::new(scopes),
+                ))
+                .map_err(to_napi_error)?,
+            None => provider,
         };
         Ok(Self { inner: provider })
     }
@@ -241,17 +339,230 @@ impl NativeProvider {
         encode(&nodes)
     }
 
-    /// Treesitter-indexes a code repository into the project workspace through
-    /// the provider's knowledge + graph handles (no engine-store bypass). Takes a
-    /// `{ path, scope, scanFilter? }` JSON, returns the serialized `ScanSummary`.
-    ///
-    /// Lexical-lane feeding and embed-on-scan are Module-1 concerns (Phase C);
-    /// this method writes entities/relationships/graph only.
+    /// Ingests a BOUND repository's code through the registered-locator
+    /// acquisition + generation staging/publication pipeline (review r6
+    /// finding 2): `{ scope, repo, branchRef?, scanFilter? }` → the
+    /// serialized outcome (`{ mode: "bound", …IngestedGeneration }`). The
+    /// caller NEVER supplies a path — the bytes come from the REGISTERED
+    /// locator's bound branch at its pinned commit (a dirty checkout or
+    /// another repository's directory cannot influence what is ingested).
+    /// With NO `repo` the call is the explicitly DOCUMENT-ONLY legacy scan
+    /// over `path` (`{ path, scope, scanFilter? }`) — code files are
+    /// excluded by the document-only filter; code bytes never flow through
+    /// the legacy lane. Supplying BOTH `path` and `repo` is a typed
+    /// rejection (path is not an input to bound ingestion).
     #[napi(js_name = "scanRepositoryJson")]
     pub fn scan_repository_json(&self, request_json: String) -> Result<String> {
         let request: ScanRepoRequest = decode(&request_json)?;
-        let summary = scan_via_provider(&self.inner, &request).map_err(to_napi_error)?;
-        encode(&summary)
+        let outcome = scan_via_provider(&self.inner, &request).map_err(to_napi_error)?;
+        encode(&outcome)
+    }
+
+    // ---- TASK-020: bound code operations (thin JSON forwards over the SAME
+    // neutral coordinator the recipes and MCP use — no independent binding
+    // derivation in the binding layer) ----
+
+    /// Binds a repository's branch for a scope: `{ scope, repo, branchRef }`
+    /// → serialized `CodeBinding`. Same-ref retries are idempotent; another
+    /// branch is a `BindingConflict` denial.
+    #[napi(js_name = "codeBindJson")]
+    pub fn code_bind_json(&self, request_json: String) -> Result<String> {
+        let request: CodeBindRequest = decode(&request_json)?;
+        let coordinator = self.inner.code_bindings().map_err(to_napi_error)?.clone();
+        let binding = futures::executor::block_on(coordinator.bind(
+            &system_code_actor(),
+            &request.scope,
+            &request.repo,
+            &request.branch_ref,
+        ))
+        .map_err(to_napi_error)?;
+        encode(&binding)
+    }
+
+    /// Binding-keyed status for one repository: `{ scope, repo }` → the
+    /// serialized status (binding, indexed OID, on-request ref freshness,
+    /// binding-keyed checkpoint). Freshness is `unknown` until an explicit
+    /// observation — never derived from a checkout HEAD.
+    #[napi(js_name = "codeStatusJson")]
+    pub fn code_status_json(&self, request_json: String) -> Result<String> {
+        let request: CodeStatusRequest = decode(&request_json)?;
+        let coordinator = self.inner.code_bindings().map_err(to_napi_error)?.clone();
+        let status = futures::executor::block_on(coordinator.status(
+            &system_code_actor(),
+            &request.scope,
+            &request.repo,
+            None,
+        ))
+        .map_err(to_napi_error)?;
+        encode(&status)
+    }
+
+    /// Registers a repository's acquisition locator: `{ scope, repo, path,
+    /// mode? }` → the serialized registration. `mode` is `local-only` (the
+    /// default) or `configured-remote`; an unknown mode is a typed
+    /// `InvalidRequest`. The SAME shared coordinator seam the MCP and
+    /// one-shot surfaces use (authorize before store).
+    #[napi(js_name = "codeRegisterJson")]
+    pub fn code_register_json(&self, request_json: String) -> Result<String> {
+        let request: CodeRegisterRequest = decode(&request_json)?;
+        let acquisition = match request.mode.as_deref() {
+            None | Some("local-only") => engram_knowledge::AcquisitionMode::LocalOnly,
+            Some("configured-remote") => engram_knowledge::AcquisitionMode::ConfiguredRemote,
+            Some(other) => {
+                return Err(to_napi_error(engram_runtime::CoreError::InvalidRequest {
+                    reason: format!(
+                        "unknown acquisition mode {other:?} (local-only | configured-remote)"
+                    ),
+                }));
+            }
+        };
+        let coordinator = self.inner.code_bindings().map_err(to_napi_error)?.clone();
+        let registration = futures::executor::block_on(coordinator.register(
+            &system_code_actor(),
+            &request.scope,
+            engram_knowledge::RepositoryRegistration {
+                repo_id: request.repo.clone(),
+                locator_id: request.path,
+                acquisition,
+            },
+        ))
+        .map_err(to_napi_error)?;
+        encode(&registration)
+    }
+
+    /// ONE on-request refresh of the bound branch ref: `{ scope, repo }` →
+    /// the serialized observation. Delegates to the SAME shared
+    /// registered-locator refresh as stdio/one-shot — the OID is resolved
+    /// from the REGISTERED locator's local git, never supplied by the caller
+    /// (the former `codeObserveRefJson` accepted arbitrary syntactically
+    /// valid OIDs; review r6 finding 5 removed it).
+    #[napi(js_name = "codeRefreshJson")]
+    pub fn code_refresh_json(&self, request_json: String) -> Result<String> {
+        let request: CodeStatusRequest = decode(&request_json)?;
+        let coordinator = self.inner.code_bindings().map_err(to_napi_error)?.clone();
+        let observation = futures::executor::block_on(coordinator.refresh_from_registration(
+            &system_code_actor(),
+            &request.scope,
+            &request.repo,
+        ))
+        .map_err(to_napi_error)?;
+        encode(&observation)
+    }
+
+    /// Reads digest-validated retained bytes for a published bound code path.
+    #[napi(js_name = "codeFetchJson")]
+    pub fn code_fetch_json(&self, request_json: String) -> Result<String> {
+        let request: CodeFetchRequest = decode(&request_json)?;
+        let query = self
+            .inner
+            .require_knowledge_query()
+            .map_err(to_napi_error)?;
+        let chunks = block_on(query.list_chunks(&request.scope)).map_err(to_napi_error)?;
+        let candidates = exact_read_candidates(&chunks, &request.path);
+        let outcome = block_on(self.inner.code_fetch_exact_participants(
+            &system_code_actor(),
+            &request.scope,
+            &request.path,
+            &candidates,
+            request.symbol.as_deref(),
+        ))
+        .map_err(to_napi_error)?;
+        match outcome {
+            engram_integration::code_binding::ParticipantExactSource::Served {
+                repo_id,
+                generation_id,
+                view,
+                span,
+                participants,
+            } => encode(&serde_json::json!({
+                "repoId": repo_id,
+                "generationId": generation_id,
+                "bytes": view.bytes,
+                "fullContentDigest": view.full_content_digest,
+                "servedDigest": view.served_digest,
+                "commitOid": view.commit_oid,
+                "path": view.path,
+                "span": span,
+                "participants": participants.iter().map(|participant| serde_json::json!({
+                    "recordId": participant.record_id,
+                    "startLine": participant.start_line,
+                    "endLine": participant.end_line,
+                    "byteSpan": participant.byte_span,
+                })).collect::<Vec<_>>(),
+            })),
+            engram_integration::code_binding::ParticipantExactSource::Denied { reason, .. } => {
+                Err(to_napi_error(CoreError::InvalidRequest { reason }))
+            }
+            engram_integration::code_binding::ParticipantExactSource::Unbound => {
+                Err(to_napi_error(CoreError::InvalidRequest {
+                    reason: "no bound source participants for requested path".to_owned(),
+                }))
+            }
+        }
+    }
+
+    /// Creates an exact reset preview through the reset-authorized coordinator.
+    #[napi(js_name = "codeResetPreviewJson")]
+    pub fn code_reset_preview_json(&self, request_json: String) -> Result<String> {
+        let request: CodeResetPreviewRequest = decode(&request_json)?;
+        let coordinator = self.inner.code_bindings().map_err(to_napi_error)?.clone();
+        let preview = futures::executor::block_on(coordinator.preview_reset(
+            &system_code_actor(),
+            &request.scope,
+            &request.repo,
+        ))
+        .map_err(to_napi_error)?;
+        encode(&preview)
+    }
+
+    /// Persists an owner-approved reset journal and applies its durable state machine.
+    #[napi(js_name = "codeResetApplyJson")]
+    pub fn code_reset_apply_json(&self, request_json: String) -> Result<String> {
+        let request: CodeResetApplyRequest = decode(&request_json)?;
+        let coordinator = self.inner.code_bindings().map_err(to_napi_error)?.clone();
+        let journal = futures::executor::block_on(coordinator.journal_reset(
+            &system_code_actor(),
+            request.journal,
+            request.decision,
+        ))
+        .map_err(to_napi_error)?;
+        let applied =
+            futures::executor::block_on(coordinator.apply_reset(&system_code_actor(), journal))
+                .map_err(to_napi_error)?;
+        encode(&applied)
+    }
+
+    /// Resumes pending or failed reset lanes from an immutable approved journal.
+    #[napi(js_name = "codeResetResumeJson")]
+    pub fn code_reset_resume_json(&self, request_json: String) -> Result<String> {
+        let request: CodeResetResumeRequest = decode(&request_json)?;
+        let coordinator = self.inner.code_bindings().map_err(to_napi_error)?.clone();
+        let resumed = futures::executor::block_on(
+            coordinator.apply_reset(&system_code_actor(), request.journal),
+        )
+        .map_err(to_napi_error)?;
+        encode(&resumed)
+    }
+
+    /// Explicit embedding backfill remains distinct from code scan and rebuild.
+    ///
+    /// The MCP `backfill-embeddings` operation uses the same provider-backed
+    /// embedding lane.  A configured native provider without that lane reports
+    /// the identical typed diagnosis rather than mutating a code binding.
+    #[napi(js_name = "backfillEmbeddingsJson")]
+    pub fn backfill_embeddings_json(&self, request_json: String) -> Result<String> {
+        let scope: Scope = decode(&request_json)?;
+        let _ = scope;
+        let _embedding = self.inner.require_embedding_provider().map_err(|_| {
+            to_napi_error(CoreError::CapabilityUnsupported {
+                capability: "embedding-backfill".into(),
+                reason: "reindex: no embedding provider wired. Run without --slim/--no-vector and check embedding setup. If the space changed, use the documented vector-only rebuild. Backlog not assessed.".into(),
+            })
+        })?;
+        Err(to_napi_error(CoreError::CapabilityUnsupported {
+            capability: "embedding-backfill".into(),
+            reason: "EmbeddingBackfillUnsupported: native embedding backfill requires the shared MCP embedding-backfill core".into(),
+        }))
     }
 
     /// Returns an export-import handle, or throws if not wired.
@@ -1621,44 +1932,157 @@ impl NativeEmbeddingProviderApi {
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct ScanRepoRequest {
-    /// Filesystem path to the repository root to scan.
-    path: String,
+    /// Filesystem path for the DOCUMENT-ONLY legacy lane (no `repo`):
+    /// documents under `path` are scanned with code files excluded. NEVER an
+    /// input to bound code ingestion (supplying both is a typed rejection).
+    #[serde(default)]
+    path: Option<String>,
     /// Scope the scanned entities/relationships/graph land in.
     scope: Scope,
+    /// The BOUND repository for registered-locator code ingestion (review r6
+    /// finding 2): the RepoId is the authority key — never the path or its
+    /// basename. With `repo`, acquisition goes through the REGISTERED
+    /// locator and the generation staging/publication pipeline.
+    repo: Option<engram_domain::RepoId>,
+    /// Optional branch assertion: equality-only against the bound ref.
+    #[serde(default)]
+    branch_ref: Option<String>,
     /// Optional scan-filter config merged over the builtin defaults.
     #[serde(default)]
     scan_filter: Option<ScanFilterConfig>,
 }
 
-/// Runs `scan_repository` against the held provider's knowledge + graph handles.
+/// `{ scope, repo, branch_ref }` for [`NativeProvider::code_bind_json`].
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct CodeBindRequest {
+    scope: Scope,
+    repo: engram_domain::RepoId,
+    branch_ref: String,
+}
+
+/// `{ scope, repo }` for [`NativeProvider::code_status_json`] and
+/// [`NativeProvider::code_refresh_json`].
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct CodeStatusRequest {
+    scope: Scope,
+    repo: engram_domain::RepoId,
+}
+
+/// `{ scope, repo, path, mode? }` for
+/// [`NativeProvider::code_register_json`].
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct CodeRegisterRequest {
+    scope: Scope,
+    repo: engram_domain::RepoId,
+    path: String,
+    mode: Option<String>,
+}
+
+/// System actor attributed to bound code operations performed through the
+/// binding layer (same identity discipline as `scan_actor`).
+fn system_code_actor() -> Actor {
+    Actor {
+        id: Id::from("engram-node-code"),
+        kind: ActorKind::Agent,
+        display_name: None,
+        metadata: None,
+    }
+}
+
+/// The outcome of [`scan_via_provider`]: either a published bound
+/// generation or a completed legacy document-only scan summary.
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct ScanOutcome {
+    /// `bound` (registered-locator pipeline) or `legacy-document-only`.
+    mode: &'static str,
+    #[serde(flatten)]
+    payload: ScanPayload,
+}
+
+// clippy roll 2026-10: boxing this native payload changes the scan result contract.
+#[allow(clippy::large_enum_variant)]
+#[derive(Debug, Serialize)]
+#[serde(untagged)]
+enum ScanPayload {
+    Ingested(engram_integration::code_binding::IngestedGeneration),
+    Documents(ScanSummary),
+}
+
+/// The single native scan dispatcher (review r6 finding 2):
 ///
-/// Extracted from the napi method so it is unit-testable without the napi wrapper.
+/// - `repo` present → REGISTERED-LOCATOR acquisition + generation
+///   staging/publication through the SAME authorized coordinator the recipes
+///   and MCP use. The caller's `path` (when supplied) is a typed rejection —
+///   binding-existence was never authorization, and a caller path is never
+///   an ingestion input. Requires the provider's ingestion lanes (absent
+///   lanes are a typed `CapabilityUnsupported`, never a checkout fallback).
+/// - `repo` absent, `path` present → the EXPLICITLY DOCUMENT-ONLY legacy
+///   scan: code files are excluded by the document-only filter (the response
+///   carries the `legacy-document-only` mode label); documents never need a
+///   binding.
+/// - neither → typed `InvalidRequest`.
 fn scan_via_provider(
     provider: &EngramProvider,
     request: &ScanRepoRequest,
-) -> CoreResult<ScanSummary> {
-    let knowledge = provider.require_knowledge()?.clone();
-    let graph = provider.require_graph()?.clone();
-    let repo = KnowledgeRepoGraph::new(knowledge, graph);
-    // No `<repo>/.engram/scan.json` discovery here — this is a library entry
-    // point, not a host. A caller that wants the repo-local filter resolves it
-    // (the MCP's `resolve_scan_filter` does) and passes `scan_filter` explicitly.
-    let scan_filter = match &request.scan_filter {
-        Some(cfg) => ScanFilter::merge(cfg),
-        None => ScanFilter::default(),
-    };
-    let opts = ScanOptions {
-        scope: request.scope.clone(),
-        policy: scan_policy(),
-        actor: scan_actor(),
-        source_name: "engram-node-scan".to_owned(),
-        max_bytes: 0,
-        manifest: std::collections::HashMap::new(),
-        scan_filter,
-    };
-    let (summary, _manifest) =
-        scan_repository(std::path::Path::new(&request.path), &opts, &repo, |_| ())?;
-    Ok(summary)
+) -> CoreResult<ScanOutcome> {
+    match (&request.repo, &request.path) {
+        (Some(_repo), Some(_)) => Err(CoreError::InvalidRequest {
+            reason: "path is not an input to bound code ingestion — the registered locator \
+                     is the acquisition authority; drop `path` and register the repository"
+                .to_owned(),
+        }),
+        (Some(repo), None) => {
+            let coordinator = provider.code_bindings()?;
+            let lanes = provider.code_ingestion()?;
+            let filter = request.scan_filter.as_ref();
+            let ingested = futures::executor::block_on(coordinator.ingest_registered(
+                &system_code_actor(),
+                &request.scope,
+                repo,
+                request.branch_ref.as_deref(),
+                filter,
+                lanes,
+            ))?;
+            Ok(ScanOutcome {
+                mode: "bound",
+                payload: ScanPayload::Ingested(ingested),
+            })
+        }
+        (None, Some(path)) => {
+            let knowledge = provider.require_knowledge()?.clone();
+            let graph = provider.require_graph()?.clone();
+            let repo = KnowledgeRepoGraph::new(knowledge, graph);
+            let scan_filter = match &request.scan_filter {
+                Some(cfg) => ScanFilter::document_only_with(cfg),
+                None => ScanFilter::document_only(),
+            };
+            let opts = ScanOptions {
+                scope: request.scope.clone(),
+                policy: scan_policy(),
+                actor: scan_actor(),
+                source_name: "engram-node-legacy-docs".to_owned(),
+                max_bytes: 0,
+                manifest: std::collections::HashMap::new(),
+                scan_filter,
+            };
+            let (summary, _manifest) =
+                scan_repository(std::path::Path::new(path), &opts, &repo, |_| ())?;
+            Ok(ScanOutcome {
+                mode: "legacy-document-only",
+                payload: ScanPayload::Documents(summary),
+            })
+        }
+        (None, None) => Err(CoreError::InvalidRequest {
+            reason: "BindingRequired: code ingestion requires a persisted binding — name the \
+                     bound repository (`repo`), or pass `path` for the document-only legacy \
+                     scan"
+                .to_owned(),
+        }),
+    }
 }
 
 /// Default write policy for scanned knowledge (workspace-visible, durable).
@@ -1690,14 +2114,20 @@ mod tests {
     use engram_integration::StepOutcome;
     use engram_integration::{CapabilityPolicy, EmbeddingProviderConfig, MigrationMode};
 
+    /// Review r6 finding 2 (repairs the struct drift that left this test
+    /// uncompilable since TASK-020): the provider's path-based lane is the
+    /// DOCUMENT-ONLY legacy scan — code files are excluded; code intent
+    /// (`repo`) without a registered locator is a typed denial; supplying
+    /// BOTH path and repo is rejected.
     #[test]
-    fn scan_via_provider_writes_entities() {
+    fn scan_via_provider_document_only_lane() {
         let dir =
             std::env::temp_dir().join(format!("engram-node-scan-test-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
-        // A fixture source file with a parseable symbol.
+        // One code file (must be EXCLUDED) and one document (must land).
         std::fs::write(dir.join("fixture.rs"), "pub fn hello() {}\n").unwrap();
+        std::fs::write(dir.join("notes.md"), "# Notes\nlegacy lane text\n").unwrap();
 
         let config = EngramConfig::new(
             dir.join("store"),
@@ -1723,20 +2153,88 @@ mod tests {
             session: None,
             environment: None,
         };
-        let request = ScanRepoRequest {
-            path: dir.to_string_lossy().to_string(),
-            scope: scope.clone(),
-            scan_filter: None,
+        // Neither lane selected: typed guidance.
+        let neither = scan_via_provider(
+            &provider,
+            &ScanRepoRequest {
+                path: None,
+                scope: scope.clone(),
+                repo: None,
+                branch_ref: None,
+                scan_filter: None,
+            },
+        );
+        assert!(
+            matches!(&neither, Err(CoreError::InvalidRequest { reason }) if reason.contains("BindingRequired")),
+            "neither lane selected must deny typed, got {neither:?}"
+        );
+        // Code intent defaults to a typed host-authority denial.
+        let unauthorized = scan_via_provider(
+            &provider,
+            &ScanRepoRequest {
+                path: None,
+                scope: scope.clone(),
+                repo: Some(engram_domain::RepoId("repo-unregistered".to_owned())),
+                branch_ref: None,
+                scan_filter: None,
+            },
+        );
+        assert!(
+            matches!(&unauthorized, Err(CoreError::PolicyDenied { reason }) if reason.contains("CodeAuthorizationRequired")),
+            "code ingestion defaults to typed host-authority denial, got {unauthorized:?}"
+        );
+        let provider = provider
+            .with_code_authorizer(std::sync::Arc::new(
+                engram_integration::code_binding::ScopeSetAuthorizer::new(vec![scope.clone()]),
+            ))
+            .expect("host authorizer installs");
+        // An authorized code request without a registration reaches the pipeline's typed denial.
+        let unregistered = scan_via_provider(
+            &provider,
+            &ScanRepoRequest {
+                path: None,
+                scope: scope.clone(),
+                repo: Some(engram_domain::RepoId("repo-unregistered".to_owned())),
+                branch_ref: None,
+                scan_filter: None,
+            },
+        );
+        assert!(
+            matches!(&unregistered, Err(CoreError::InvalidRequest { reason }) if reason.contains("no registered repository")),
+            "code ingestion without a locator must deny typed, got {unregistered:?}"
+        );
+        // Both path and repo: rejected — path is never an ingestion input.
+        let both = scan_via_provider(
+            &provider,
+            &ScanRepoRequest {
+                path: Some(dir.to_string_lossy().to_string()),
+                scope: scope.clone(),
+                repo: Some(engram_domain::RepoId("repo-both".to_owned())),
+                branch_ref: None,
+                scan_filter: None,
+            },
+        );
+        assert!(
+            matches!(&both, Err(CoreError::InvalidRequest { reason }) if reason.contains("path is not an input")),
+            "path + repo must be rejected, got {both:?}"
+        );
+        // Document-only lane over the path: documents land, code is excluded.
+        let outcome = scan_via_provider(
+            &provider,
+            &ScanRepoRequest {
+                path: Some(dir.to_string_lossy().to_string()),
+                scope: scope.clone(),
+                repo: None,
+                branch_ref: None,
+                scan_filter: None,
+            },
+        )
+        .expect("document-only scan runs");
+        assert_eq!(outcome.mode, "legacy-document-only");
+        let ScanPayload::Documents(summary) = outcome.payload else {
+            panic!("document lane returns a summary");
         };
-        let summary = scan_via_provider(&provider, &request).expect("scan runs");
-        assert!(
-            summary.scanned >= 1,
-            "fixture should be scanned: {summary:?}"
-        );
-        assert!(
-            summary.entities >= 1,
-            "fixture symbol should extract to an entity: {summary:?}"
-        );
+        assert!(summary.scanned >= 1, "fixture scanned: {summary:?}");
 
         let entities = block_on(
             provider
@@ -1747,7 +2245,13 @@ mod tests {
         .expect("list entities");
         assert!(
             !entities.is_empty(),
-            "scanned entities should persist in the knowledge store"
+            "the document's entities persist in the knowledge store"
+        );
+        assert!(
+            entities
+                .iter()
+                .all(|entity| entity.kind != engram_domain::EntityKind::Function),
+            "the document-only lane never ingests code entities"
         );
 
         let _ = std::fs::remove_dir_all(&dir);

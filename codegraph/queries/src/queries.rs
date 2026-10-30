@@ -797,11 +797,11 @@ pub fn resolve_call_targets(
         if rel.predicate != "calls" || rel.object.id.is_some() {
             continue;
         }
-        if let Some(name) = &rel.object.name {
-            if let Some(id) = name_to_id.get(name) {
-                rel.object.id = Some(engram_domain::Id::from(id.clone()));
-                resolved += 1;
-            }
+        if let Some(name) = &rel.object.name
+            && let Some(id) = name_to_id.get(name)
+        {
+            rel.object.id = Some(engram_domain::Id::from(id.clone()));
+            resolved += 1;
         }
     }
     resolved

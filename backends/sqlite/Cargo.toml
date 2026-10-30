@@ -8,3 +8,10 @@ rust-version.workspace = true
 [dependencies]
 engram-integration = { path = "../../core/integration", version = "0.1.0", features = ["sqlite"] }
 engram-runtime = { path = "../../core/runtime", version = "0.1.0" }
+
+[dev-dependencies]
+tempfile = "3"
+futures.workspace = true
+engram-knowledge = { path = "../../core/knowledge", version = "0.1.0" }
+engram-domain = { path = "../../core/domain", version = "0.1.0" }
+engram-ingest = { path = "../../adapters/ingest", version = "0.1.0" }

@@ -17,7 +17,7 @@
     "contracts:generate": "pnpm --filter @engram/contracts generate",
     "contracts:check-generated": "pnpm run contracts:generate && git diff --exit-code -- packages/contracts/src/generated",
     "test": "pnpm -r --if-present test",
-    "typecheck": "pnpm -r --if-present typecheck"
+    "typecheck": "pnpm --filter @engram/node build && pnpm -r --if-present typecheck"
   },
   "devDependencies": {
     "@types/node": "^26.6.5",

@@ -30,6 +30,147 @@ export const engramV1Schema = {
       ],
       "type": "object"
     },
+    "AmbiguousOwnership": {
+      "additionalProperties": false,
+      "properties": {
+        "reason": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "recordId": {
+          "minLength": 1,
+          "type": "string"
+        }
+      },
+      "required": [
+        "recordId",
+        "reason"
+      ],
+      "type": "object"
+    },
+    "CanonicalSpan": {
+      "additionalProperties": false,
+      "properties": {
+        "endLine": {
+          "minimum": 1,
+          "type": "integer"
+        },
+        "startLine": {
+          "minimum": 1,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "startLine",
+        "endLine"
+      ],
+      "type": "object"
+    },
+    "CodeAttempt": {
+      "additionalProperties": false,
+      "properties": {
+        "bindingVersion": {
+          "minimum": 1,
+          "type": "integer"
+        },
+        "expectedActiveGeneration": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "expectedEpoch": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "fencingToken": {
+          "minimum": 1,
+          "type": "integer"
+        },
+        "id": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "idempotencyKey": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "receiptKinds": {
+          "items": {
+            "enum": [
+              "source",
+              "knowledge",
+              "vector",
+              "lexical",
+              "derived"
+            ]
+          },
+          "type": "array"
+        },
+        "state": {
+          "enum": [
+            "created",
+            "acquiring",
+            "staging",
+            "ready",
+            "published",
+            "failed",
+            "superseded",
+            "cleanup_pending"
+          ]
+        }
+      },
+      "required": [
+        "id",
+        "idempotencyKey",
+        "bindingVersion",
+        "expectedEpoch",
+        "expectedActiveGeneration",
+        "fencingToken",
+        "state",
+        "receiptKinds"
+      ],
+      "type": "object"
+    },
+    "CodeBinding": {
+      "additionalProperties": false,
+      "properties": {
+        "activeGeneration": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "branchRef": {
+          "pattern": "^refs/heads/(?!.*(?:\\.\\.|//|@\\{))[A-Za-z0-9._/-]+$",
+          "type": "string"
+        },
+        "epoch": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "repoId": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "scope": {
+          "$ref": "#/$defs/Scope"
+        },
+        "version": {
+          "minimum": 1,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "scope",
+        "repoId",
+        "branchRef",
+        "version",
+        "activeGeneration",
+        "epoch"
+      ],
+      "type": "object"
+    },
     "CodeEdgeKind": {
       "description": "Closed predicate vocabulary emitted by the engram-code extractor (RFC-0020 Phase 2, ADR-0028). KnowledgeRelationship.predicate stays an open string; this is the contracted code set.",
       "enum": [
@@ -59,6 +200,44 @@ export const engramV1Schema = {
       "required": [
         "tier",
         "resolvedBy"
+      ],
+      "type": "object"
+    },
+    "CodeGeneration": {
+      "additionalProperties": false,
+      "properties": {
+        "bindingVersion": {
+          "minimum": 1,
+          "type": "integer"
+        },
+        "commitOid": {
+          "pattern": "^([a-fA-F0-9]{40}|[a-fA-F0-9]{64})$",
+          "type": "string"
+        },
+        "filterFingerprint": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "id": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "parserFingerprint": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "snapshotDigest": {
+          "pattern": "^[a-fA-F0-9]{64}$",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "bindingVersion",
+        "commitOid",
+        "snapshotDigest",
+        "parserFingerprint",
+        "filterFingerprint"
       ],
       "type": "object"
     },
@@ -103,6 +282,227 @@ export const engramV1Schema = {
         "sourceKey",
         "status",
         "scanInProgress"
+      ],
+      "type": "object"
+    },
+    "CodeLineage": {
+      "additionalProperties": false,
+      "properties": {
+        "contributors": {
+          "items": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "minItems": 1,
+          "type": "array"
+        },
+        "generationId": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "repoId": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "sourcePath": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "span": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/CanonicalSpan"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "repoId",
+        "generationId",
+        "sourcePath",
+        "contributors"
+      ],
+      "type": "object"
+    },
+    "CodeResetJournal": {
+      "additionalProperties": false,
+      "properties": {
+        "authorizingDecisions": {
+          "items": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "checkpoints": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "preservationDigests": {
+          "items": {
+            "pattern": "^[a-fA-F0-9]{64}$",
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "preview": {
+          "$ref": "#/$defs/CodeResetPreview"
+        },
+        "previewHash": {
+          "pattern": "^[a-fA-F0-9]{64}$",
+          "type": "string"
+        },
+        "resetId": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "targetFingerprints": {
+          "items": {
+            "maxItems": 2,
+            "minItems": 2,
+            "prefixItems": [
+              {
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "minLength": 1,
+                "type": "string"
+              }
+            ],
+            "type": "array"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "preview",
+        "checkpoints",
+        "preservationDigests"
+      ],
+      "type": "object"
+    },
+    "CodeResetPreview": {
+      "additionalProperties": false,
+      "properties": {
+        "ambiguity": {
+          "items": {
+            "$ref": "#/$defs/AmbiguousOwnership"
+          },
+          "type": "array"
+        },
+        "binding": {
+          "$ref": "#/$defs/CodeBinding"
+        },
+        "bindingVersions": {
+          "items": {
+            "maxItems": 2,
+            "minItems": 2,
+            "prefixItems": [
+              {
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "minimum": 0,
+                "type": "integer"
+              }
+            ],
+            "type": "array"
+          },
+          "type": "array"
+        },
+        "codeEpoch": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "preservationDigests": {
+          "items": {
+            "pattern": "^[a-fA-F0-9]{64}$",
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "preservationInventory": {
+          "$ref": "#/$defs/PreservationInventory"
+        },
+        "previewHash": {
+          "pattern": "^[a-fA-F0-9]{64}$",
+          "type": "string"
+        },
+        "targetIds": {
+          "items": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "minItems": 1,
+          "type": "array"
+        },
+        "targets": {
+          "items": {
+            "$ref": "#/$defs/CodeResetTarget"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "binding",
+        "previewHash",
+        "targetIds"
+      ],
+      "type": "object"
+    },
+    "CodeResetTarget": {
+      "additionalProperties": false,
+      "properties": {
+        "bindingVersion": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "codeEpoch": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "fingerprint": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "lineage": {
+          "$ref": "#/$defs/CodeLineage"
+        },
+        "recordId": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "scanMetadataKeys": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "snapshotRef": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "storeId": {
+          "minLength": 1,
+          "type": "string"
+        }
+      },
+      "required": [
+        "recordId",
+        "storeId",
+        "fingerprint",
+        "lineage",
+        "snapshotRef",
+        "scanMetadataKeys",
+        "bindingVersion",
+        "codeEpoch"
       ],
       "type": "object"
     },
@@ -620,6 +1020,39 @@ export const engramV1Schema = {
     "Identifier": {
       "minLength": 1,
       "type": "string"
+    },
+    "IndexedSource": {
+      "additionalProperties": false,
+      "properties": {
+        "commitOid": {
+          "pattern": "^([a-fA-F0-9]{40}|[a-fA-F0-9]{64})$",
+          "type": "string"
+        },
+        "contentDigest": {
+          "pattern": "^[a-fA-F0-9]{64}$",
+          "type": "string"
+        },
+        "generationId": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "path": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "repoId": {
+          "minLength": 1,
+          "type": "string"
+        }
+      },
+      "required": [
+        "repoId",
+        "generationId",
+        "commitOid",
+        "path",
+        "contentDigest"
+      ],
+      "type": "object"
     },
     "KnowledgeChange": {
       "additionalProperties": false,
@@ -1260,6 +1693,53 @@ export const engramV1Schema = {
       "required": [
         "visibility",
         "retention"
+      ],
+      "type": "object"
+    },
+    "PreservationEntry": {
+      "additionalProperties": false,
+      "properties": {
+        "contentDigest": {
+          "pattern": "^[a-fA-F0-9]{64}$",
+          "type": "string"
+        },
+        "contributorDigest": {
+          "pattern": "^[a-fA-F0-9]{64}$",
+          "type": "string"
+        },
+        "recordClass": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "recordId": {
+          "minLength": 1,
+          "type": "string"
+        }
+      },
+      "required": [
+        "recordId",
+        "contentDigest",
+        "contributorDigest"
+      ],
+      "type": "object"
+    },
+    "PreservationInventory": {
+      "additionalProperties": false,
+      "properties": {
+        "digest": {
+          "pattern": "^[a-fA-F0-9]{64}$",
+          "type": "string"
+        },
+        "records": {
+          "items": {
+            "$ref": "#/$defs/PreservationEntry"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "records",
+        "digest"
       ],
       "type": "object"
     },

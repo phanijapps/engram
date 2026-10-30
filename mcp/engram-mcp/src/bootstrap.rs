@@ -27,6 +27,28 @@ pub fn open_provider(config: &McpConfig) -> Result<EngramProvider, String> {
         McpBackend::Pgvector => open_pgvector(config),
         McpBackend::Sqlite => open_sqlite(config),
     }
+    // Host policy injection (review r6 finding 1): the MCP server is the
+    // HOST of the code-authority lane, and the recipes it opens install the
+    // deny-by-default `RecipeDefaultAuthorizer`. This seam injects the
+    // server's EXPLICIT launch policy — code operations are authorized for
+    // the launch scope only (the same fused scope every tool already uses;
+    // `scope::resolve_scope` over the same launch config) — so code tools
+    // work for the launched project while every OTHER scope keeps the typed
+    // `CodeAuthorizationRequired` denial. All five open sites (stdio server
+    // + the one-shot commands) share this single injection.
+    .and_then(|provider| {
+        let launch_scope = crate::scope::resolve_scope(
+            config.org.as_deref(),
+            config.domain.as_deref(),
+            config.subdomain.as_deref(),
+            &config.project,
+        );
+        provider
+            .with_code_authorizer(std::sync::Arc::new(
+                engram_integration::code_binding::ScopeSetAuthorizer::new(vec![launch_scope]),
+            ))
+            .map_err(|e| format!("failed to inject launch code authority: {e}"))
+    })
 }
 
 /// PS1: open through the `backends/pgvector` recipe — Postgres holds the

@@ -122,10 +122,10 @@ pub(crate) fn source_matches_repository(source: &str, repository: &str) -> bool 
     if short.len() < 2 || short.contains('/') {
         return false;
     }
-    if let Some(label) = extract_repo_label(source) {
-        if label.rsplit('/').next() == Some(short.as_str()) {
-            return true;
-        }
+    if let Some(label) = extract_repo_label(source)
+        && label.rsplit('/').next() == Some(short.as_str())
+    {
+        return true;
     }
     let bare = source
         .split_once('[')
@@ -276,11 +276,11 @@ fn load_manifest(path: &std::path::Path) -> HashMap<String, String> {
 /// leaves either the old or the new file, never a truncated one. Write
 /// failures are non-fatal (next scan degrades to full) but surfaced.
 fn save_manifest(path: &std::path::Path, manifest: &HashMap<String, String>) {
-    if let Some(parent) = path.parent() {
-        if let Err(e) = std::fs::create_dir_all(parent) {
-            eprintln!("engram-mcp: scan manifest dir warning: {e}");
-            return;
-        }
+    if let Some(parent) = path.parent()
+        && let Err(e) = std::fs::create_dir_all(parent)
+    {
+        eprintln!("engram-mcp: scan manifest dir warning: {e}");
+        return;
     }
     let tmp = path.with_extension("json.tmp");
     match serde_json::to_string(manifest) {
@@ -405,20 +405,18 @@ fn embed_pending(
         if let Some(twin) = hash
             .strip_prefix("hash:")
             .and_then(|h| embedded_twin_by_hash.get(h))
+            && let Ok(Some(vector)) = block_on(vector_index.vector_for_target(twin))
+            && !vector.is_empty()
         {
-            if let Ok(Some(vector)) = block_on(vector_index.vector_for_target(twin)) {
-                if !vector.is_empty() {
-                    for id in &ids {
-                        if let Err(e) = block_on(vector_index.insert(id, &space, vector.clone())) {
-                            eprintln!("engram-mcp: embed reuse warning for {id}: {e}");
-                        } else {
-                            embedded += 1;
-                            reused += 1;
-                        }
-                    }
-                    continue;
+            for id in &ids {
+                if let Err(e) = block_on(vector_index.insert(id, &space, vector.clone())) {
+                    eprintln!("engram-mcp: embed reuse warning for {id}: {e}");
+                } else {
+                    embedded += 1;
+                    reused += 1;
                 }
             }
+            continue;
         }
         if let Some(text) = text_by_hash.get(&hash) {
             model_batches.push((text.clone(), ids));
@@ -500,20 +498,41 @@ fn flush_batch(
 /// matches) and for fresh stores after a backend switch (vectors start
 /// empty). Keyed on the vector index's embedded-set, not per-scan scope.
 /// Capped per call (`limit`, default 256, max 1024); re-run to continue.
+/// The typed embedding-lane-unwired message (TASK-022): the one-shot
+/// `backfill-embeddings` surfaces this as a NONZERO failure; the stdio
+/// `reindex` tool preserves its historical text envelope.
+pub(crate) const EMBEDDING_LANE_UNWIRED: &str = "reindex: no embedding provider wired. Run without --slim/--no-vector and check embedding setup. If the space changed, use the documented vector-only rebuild. Backlog not assessed.";
+
 pub fn reindex(app: &App, args: &Value) -> Result<Value, ToolError> {
     // scope defaults to the launch scope when absent (same contract as the
     // maintenance tools — the AC2 fix).
     let scope = crate::maintenance::scope_from_args(app, args)?;
     let limit = args["limit"].as_u64().unwrap_or(256).clamp(1, 1024) as usize;
+    match reindex_outcome(app, &scope, limit) {
+        Ok(text) => Ok(protocol::text_content(text)),
+        // Historical stdio envelope for the un-wired lane (unchanged).
+        Err(error) if error.message == EMBEDDING_LANE_UNWIRED => {
+            Ok(protocol::text_content(EMBEDDING_LANE_UNWIRED))
+        }
+        Err(error) => Err(error),
+    }
+}
+
+/// The embedding-backfill core (TASK-022): returns the summary text on
+/// success and a TYPED failure otherwise — the one-shot twin maps failures
+/// to a nonzero exit, the stdio tool keeps its historical envelope.
+pub(crate) fn reindex_outcome(
+    app: &App,
+    scope: &engram_domain::Scope,
+    limit: usize,
+) -> Result<String, ToolError> {
     if app.provider.embedding_provider().is_none() {
-        return Ok(protocol::text_content(
-            "reindex: no embedding provider wired. Run without --slim/--no-vector and check embedding setup. If the space changed, use the documented vector-only rebuild. Backlog not assessed.",
-        ));
+        return Err(internal(EMBEDDING_LANE_UNWIRED));
     }
     app.provider.require_vectors().map_err(internal)?;
     app.provider.require_knowledge_query().map_err(internal)?;
     let t0 = std::time::Instant::now();
-    let (embedded, remaining) = embed_pending(app, &scope, None, limit)?;
+    let (embedded, remaining) = embed_pending(app, scope, None, limit)?;
     eprintln!(
         "engram-mcp: reindex done ({embedded} embedded, {remaining} pending) in {:.1}s",
         t0.elapsed().as_secs_f32()
@@ -531,19 +550,46 @@ pub fn reindex(app: &App, args: &Value) -> Result<Value, ToolError> {
     } else {
         String::new()
     };
-    Ok(protocol::text_content(format!(
+    Ok(format!(
         "reindex: embedded {embedded} chunks (limit {limit}){dedup_note}{note}"
-    )))
+    ))
 }
 
 /// `scan_repo`: treesitter-index a code repository into the project workspace,
 /// routed through the provider via the fan-in adapter. Feeds code-symbol names
 /// to the lexical lane so `search`/`recall` find them.
+///
+/// Review r6 finding 2: when the scope has ANY bound repository, arbitrary
+/// `path` scanning for CODE is DENIED — code bytes flow exclusively through
+/// the bound registered-locator pipeline (register + bind + ingest). The
+/// explicit `documentOnly: true` lane always scans documents only (code files
+/// excluded by the document-only filter) and labels its result as the legacy
+/// document-only lane. Only a genuinely unbound scope keeps the historical
+/// legacy scanner (the unbound pre-binding lane).
 pub fn scan_repo(app: &App, args: &Value) -> Result<Value, ToolError> {
     let path = req_str(args, "path")?;
     let knowledge = app.provider.require_knowledge().map_err(internal)?.clone();
     let graph = app.provider.require_graph().map_err(internal)?.clone();
     let repo = KnowledgeRepoGraph::new(knowledge, graph);
+
+    // Bound-code gate (review r6 finding 2): binding existence, not
+    // publication eligibility, closes the arbitrary-path code lane. A failed
+    // authority lookup is a typed failure, never evidence that the scope is
+    // unbound. The document-only lane has no code-ingestion authority to
+    // resolve and remains explicitly available.
+    let document_only = args["documentOnly"].as_bool().unwrap_or(false);
+    if !document_only {
+        let coordinator = app.provider.code_bindings().map_err(internal)?;
+        let bindings = block_on(coordinator.store().bindings(&app.scope)).map_err(internal)?;
+        if !bindings.is_empty() {
+            return Err(invalid(
+                "BoundCodeScanDenied: this scope has bound code — code bytes are ingested \
+                 only through the registered-locator pipeline (code_repo_register + code_bind, \
+                 then the bound ingestion surface); pass documentOnly=true for the explicitly \
+                 labeled document-only legacy scan",
+            ));
+        }
+    }
 
     // scan-manifest-persistence: load the prior manifest for this root so the
     // scanner skips unchanged files (the N-API `manifestPath` pattern — the
@@ -563,6 +609,18 @@ pub fn scan_repo(app: &App, args: &Value) -> Result<Value, ToolError> {
     };
 
     let (scan_filter, filter_note) = resolve_scan_filter(path, args);
+    // Document-only lane (review r6 finding 2): code files are excluded by
+    // the document-only filter. A discovered/explicit scan config may only
+    // NARROW further (its denials are additive), so the lane uses the
+    // document-only base directly and says so.
+    let (scan_filter, filter_note) = if document_only {
+        (
+            engram_ingest::ScanFilter::document_only(),
+            "document-only (code files excluded)".to_owned(),
+        )
+    } else {
+        (scan_filter, filter_note)
+    };
     let opts = ScanOptions {
         scope: app.scope.clone(),
         policy: policy(),
@@ -686,9 +744,16 @@ pub fn scan_repo(app: &App, args: &Value) -> Result<Value, ToolError> {
     } else {
         format!("\nembedded {embedded} chunks")
     };
+    // Explicit lane label (review r6 finding 2): the document-only result
+    // identifies itself; the unbound legacy lane keeps its historical shape.
+    let mode_note = if document_only {
+        "\nMODE: legacy document-only scan (code files excluded — code ingests only \\\n             through the bound registered-locator pipeline)"
+    } else {
+        ""
+    };
     eprintln!("engram-mcp: embed done ({embedded} embedded, {pending_after_cap} pending)");
     Ok(protocol::text_content(format!(
-        "{summary:?}\n{filter_note}{embed_note}"
+        "{summary:?}\n{filter_note}{embed_note}{mode_note}"
     )))
 }
 
@@ -2153,7 +2218,7 @@ pub fn symbol_context(app: &App, args: &Value) -> Result<Value, ToolError> {
             .collect();
         let ctx = union_symbol_context(ctxs);
         let evidence = render_edge_evidence_with_paths(&rels, &seeds, &paths);
-        let staleness = crate::changes::staleness_note(app);
+        let staleness = crate::changes::staleness_note(app)?;
         let empty_neighborhood = ctx.ctx.callers.is_empty()
             && ctx.ctx.callees.is_empty()
             && ctx.ctx.implementers.is_empty();
@@ -2200,7 +2265,7 @@ pub fn symbol_context(app: &App, args: &Value) -> Result<Value, ToolError> {
             .collect();
         let ctx = union_symbol_context(ctxs);
         let evidence = render_edge_evidence_with_paths(&rels, &seeds, &paths);
-        let staleness = crate::changes::staleness_note(app);
+        let staleness = crate::changes::staleness_note(app)?;
         let empty = ctx.ctx.callers.is_empty()
             && ctx.ctx.callees.is_empty()
             && ctx.ctx.implementers.is_empty();
@@ -2263,19 +2328,19 @@ fn expand_type_members(
             if !is_call_family {
                 continue;
             }
-            if r.object.name.as_deref() == Some(member.as_str()) && r.object.id.is_some() {
-                if let Some(s) = r.subject.name.clone() {
-                    if !callers.contains(&s) {
-                        callers.push(s);
-                    }
-                }
+            if r.object.name.as_deref() == Some(member.as_str())
+                && r.object.id.is_some()
+                && let Some(s) = r.subject.name.clone()
+                && !callers.contains(&s)
+            {
+                callers.push(s);
             }
-            if r.subject.name.as_deref() == Some(member.as_str()) && r.object.id.is_some() {
-                if let Some(o) = r.object.name.clone() {
-                    if !callees.contains(&o) {
-                        callees.push(o);
-                    }
-                }
+            if r.subject.name.as_deref() == Some(member.as_str())
+                && r.object.id.is_some()
+                && let Some(o) = r.object.name.clone()
+                && !callees.contains(&o)
+            {
+                callees.push(o);
             }
         }
         let weight = callers.len() + callees.len();
@@ -3225,6 +3290,21 @@ pub fn capability_report(app: &App, _args: &Value) -> Result<Value, ToolError> {
         ("procedures", app.provider.procedures().is_some()),
         ("hierarchy", app.provider.hierarchy().is_some()),
         ("identity", app.provider.identity().is_some()),
+        // TASK-021: the bound-code capability states straight from the
+        // provider's CapabilityReport (inspectable typed diagnostics).
+        (
+            "code_binding",
+            app.provider.capabilities().code_binding.is_supported(),
+        ),
+        (
+            "code_source",
+            app.provider.capabilities().code_source.is_supported(),
+        ),
+        ("code_rebuild", app.provider.code_ingestion().is_ok()),
+        (
+            "code_reset",
+            app.provider.capabilities().code_reset.is_supported(),
+        ),
         (
             "vector",
             app.provider.embedding_provider().is_some() && app.provider.require_vectors().is_ok(),
@@ -5570,6 +5650,9 @@ mod phase2_tool_tests {
     }
 }
 
+#[cfg(test)]
+#[path = "../tests/bin_modules/bound_code_authority.rs"]
+mod bound_code_authority_tests;
 #[cfg(test)]
 #[path = "codegraph_reindex_tests.rs"]
 mod reindex_tests;

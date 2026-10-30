@@ -258,15 +258,14 @@ where
                         for rel in &g.relationships {
                             repo.put_relationship(rel.clone()).await?;
                         }
-                        if !g.unresolved.is_empty() {
-                            if let Err(e) = repo.put_unresolved_refs(g.unresolved.clone()).await {
+                        if !g.unresolved.is_empty()
+                            && let Err(e) = repo.put_unresolved_refs(g.unresolved.clone()).await {
                                 // Sibling pattern of the five warning-tagged
                                 // scans below: surface, never swallow.
                                 eprintln!(
                                     "[engram-ingest] warning: failed to persist ledger rows for '{rel}': {e}"
                                 );
                             }
-                        }
                         for (chunk_idx, entity_refs) in &g.chunk_entities {
                             if let Some(chunk) = ingested.chunks.get(*chunk_idx) {
                                 let mut updated = chunk.clone();

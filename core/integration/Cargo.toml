@@ -68,6 +68,13 @@ futures.workspace = true
 
 [features]
 default = []
+# Code-authority lanes (review r6 findings 2/5): the shared registered-locator
+# refresh + bound-generation ingestion pipeline live on the coordinator and
+# need `engram-ingest`'s git acquisition + generation staging. Every shipped
+# surface enables it (sqlite recipes via the `sqlite` feature below; the
+# pgvector recipe enables it explicitly); the gate only keeps bare
+# dependency-only builds of this crate honest.
+code-lanes = ["dep:engram-ingest"]
 # Optional FastEmbed-backed SQLite vector query provider. Implies `sqlite` (to
 # bring in the vector store) and forwards to that crate's fastembed-provider
 # feature.
@@ -87,6 +94,7 @@ sqlite = [
     "dep:engram-rerank-mmr",
     "dep:engram-ingest",
     "dep:futures",
+    "code-lanes",
 ]
 # Cross-encoder reranker adapter (RFC-0019 T4 / D2.1c). Opt-in: the adapter is
 # constructible when a deployer wires a `RerankScorer`; no in-tree model ships

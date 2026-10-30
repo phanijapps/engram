@@ -8,8 +8,8 @@
 //! `integration → backends` dependency would be a cycle, so the recipe — not
 //! `EngramProvider::open` — is the entry point).
 
-mod query;
-mod recall;
+pub(crate) mod query;
+pub(crate) mod recall;
 
 use std::sync::Arc;
 
@@ -19,8 +19,8 @@ use engram_integration::{
 };
 use engram_runtime::{CoreError, CoreResult};
 use engram_store_pgvector::{
-    PgBeliefStore, PgConnection, PgHierarchyStore, PgKnowledgeStore, PgMemoryService,
-    PgProcedureStore, PgVectorIndex, schema,
+    PgBeliefStore, PgCodeBindingRepository, PgConnection, PgHierarchyStore, PgKnowledgeStore,
+    PgMemoryService, PgProcedureStore, PgVectorIndex, schema,
 };
 
 use query::PgKnowledgeQuery;
@@ -85,21 +85,110 @@ pub fn open(config: &EngramConfig) -> CoreResult<EngramProvider> {
         None
     };
 
+    // Scoped chunk listing (engine-neutral KnowledgeQuery port) — constructed
+    // before the recall so the bound vector lane can resolve its eligible
+    // target set.
+    let knowledge_query = Arc::new(PgKnowledgeQuery::new(mk_conn()?));
+    let reset_bindings: Arc<dyn engram_knowledge::CodeBindingRepository> =
+        Arc::new(PgCodeBindingRepository::new(mk_conn()?)?);
+    let code_eligibility: Arc<dyn engram_retrieval::CodeEligibilityResolver> = Arc::new(
+        engram_integration::code_binding::RepositoryEligibilitySource::new(reset_bindings.clone()),
+    );
+
     // Unified recall: composes memory.retrieve + beliefs + the vector lane
     // (PS2) via RRF. Lexical (tsvector) is a documented gap on this engine.
+    // Bound-code eligibility stays unwired here until the recipe wires the
+    // binding repository (TASK-019 owns backends/* wiring); the constrained
+    // lane itself is implemented + proven in recall.rs.
     let recall = Arc::new(PgUnifiedRecall {
         memory: memory.clone(),
         beliefs: beliefs.clone(),
         knowledge: knowledge.clone(),
         vectors: vectors.clone(),
         embedder: embedding_provider.clone(),
+        code_eligibility: Some(code_eligibility.clone()),
+        knowledge_query: Some(knowledge_query.clone()),
+        graph_lane: Some(Arc::new(recall::PgGraphLane::with_eligibility(
+            knowledge_query.clone(),
+            code_eligibility.clone(),
+        ))),
+        // Canonical repository evidence shares the memory service's owning
+        // authorizer and the same durable binding cell as eligibility, so
+        // bound code candidates can prove their record-level lineage.
+        candidate_evidence: Some(Arc::new(
+            engram_integration::candidate_evidence::RepositoryCandidateEvidence::new(
+                memory.clone() as Arc<dyn engram_memory::MemoryRepository>,
+                beliefs.clone() as Arc<dyn engram_belief::BeliefRepository>,
+                knowledge.clone() as Arc<dyn engram_knowledge::KnowledgeRepository>,
+                memory.retrieval_authorizer(),
+                Some(reset_bindings.clone()),
+                Some(knowledge.clone() as Arc<dyn engram_knowledge::KnowledgeGraphRepository>),
+            ),
+        )),
     });
 
     // Knowledge query: the read surface behind the MCP code-intel tools
     // (search / symbol_context / architecture / whats_changed / the scan's
     // lexical delta feed + embed listing). Without this handle those tools
     // fail on `knowledge_query not wired` even though the cells are healthy.
-    let knowledge_query = Arc::new(PgKnowledgeQuery::new(mk_conn()?));
+    // (Constructed above, before the bound recall.)
+
+    // Bound code authority (TASK-019): the neutral binding coordinator over
+    // the REAL pgvector binding cell + the adapter-owned retained snapshot
+    // reader over `<storage>/retained` — the same required neutral
+    // binding/graph/source/reset handles the SQLite recipe injects. Graph
+    // handles were wired above (`graph`, `knowledge_query`, the recall's
+    // graph lane); the reset seam rides the coordinator's durable
+    // repository ports (`preview_reset`/`journal_reset`; the exact-preview
+    // implementation lands with TASK-023/TASK-024).
+    let reset_graph_cache: Arc<dyn engram_retrieval::GraphCache> =
+        Arc::new(engram_retrieval::InMemoryGraphCache::new());
+    let reset_lanes = Arc::new(
+        engram_integration::code_binding::RecipeResetLaneLifecycle::new(
+            None,
+            vectors
+                .clone()
+                .map(|vector| vector as Arc<dyn engram_retrieval::VectorIndex>),
+            reset_graph_cache.clone(),
+        ),
+    );
+    let code_coordinator = Arc::new(
+        engram_integration::code_binding::CodeBindingCoordinator::new(
+            reset_bindings.clone(),
+            Arc::new(engram_integration::code_binding::RecipeDefaultAuthorizer),
+            Vec::new(),
+        )
+        .with_reset_lanes(reset_lanes)
+        .with_preservation_source(Arc::new(
+            engram_integration::code_binding::KnowledgePreservationRecordSource::new(
+                knowledge.clone() as Arc<dyn engram_knowledge::KnowledgeRepository>,
+                knowledge_query.clone() as Arc<dyn engram_integration::KnowledgeQuery>,
+                reset_bindings,
+            ),
+        )),
+    );
+    let code_source: Arc<dyn engram_knowledge::RetainedSourceReader> =
+        Arc::new(engram_ingest::git_source::RetainedSnapshotReader::new(
+            config.storage_path.join("retained"),
+        ));
+    // Bound-code ingestion lanes (review r6 finding 2): registered-locator
+    // acquisition + generation staging/publication over the SAME knowledge
+    // and graph handles the recipe wires, with retained-snapshot custody at
+    // `<storage>/retained` (lineage/source staging and receipts ride the
+    // binding cell's own durable ports).
+    let code_ingestion = Arc::new(engram_integration::code_binding::CodeIngestionLanes {
+        knowledge: knowledge.clone() as Arc<dyn engram_knowledge::KnowledgeRepository>,
+        graph: knowledge.clone() as Arc<dyn engram_knowledge::KnowledgeGraphRepository>,
+        retained_root: config.storage_path.join("retained"),
+    });
+    // Optional absent lanes stay honestly unavailable (plan matrix: "A
+    // backend without a lane must report that lane unavailable"): the
+    // lexical/hybrid-composition lane is a documented pgvector gap
+    // (tsvector lexical is not wired), and vectors follow the runtime
+    // kill-switch below.
+    let hybrid_search_state = CapabilityState::Unsupported {
+        reason: CapabilityReason::UnsupportedStoreFamily,
+    };
 
     let report = CapabilityReport::builder()
         .memory(CapabilityState::Supported)
@@ -117,6 +206,10 @@ pub fn open(config: &EngramConfig) -> CoreResult<EngramProvider> {
             }
         })
         .unified_recall(CapabilityState::Supported)
+        .hybrid_search(hybrid_search_state)
+        .code_binding(CapabilityState::Supported)
+        .code_source(CapabilityState::Supported)
+        .code_reset(CapabilityState::Supported)
         .build();
 
     let mut provider_builder = EngramProviderBuilder::new(report)
@@ -127,14 +220,18 @@ pub fn open(config: &EngramConfig) -> CoreResult<EngramProvider> {
         .hierarchy(hierarchy)
         .procedures(procedures)
         .knowledge_query(knowledge_query)
-        .recall(recall);
+        .recall(recall)
+        .graph_cache(reset_graph_cache);
     if let Some(vectors) = vectors {
         provider_builder = provider_builder.vectors(vectors);
     }
     if let Some(embedder) = embedding_provider {
         provider_builder = provider_builder.embedding_provider(embedder);
     }
-    let provider = provider_builder;
+    let provider = provider_builder
+        .code_bindings(code_coordinator)
+        .code_source(code_source)
+        .code_ingestion(code_ingestion);
 
     Ok(provider.build())
 }

@@ -32,6 +32,7 @@ use engram_store_sqlite::SqlHierarchyStore;
 use engram_store_sqlite::SqlKnowledgeStore;
 use engram_store_sqlite::SqlMemoryService;
 use engram_store_sqlite::SqliteVectorIndex;
+use engram_store_sqlite::knowledge::SqlCodeBindingRepository;
 use futures::executor::block_on;
 
 use crate::sqlite::{
@@ -1327,4 +1328,51 @@ fn diag_scope() -> Scope {
         session: None,
         environment: None,
     }
+}
+
+/// Bound code authority (TASK-019): the durable binding cell recovers a
+/// first bind idempotently, keeps a conflicting branch a `BindingConflict`,
+/// and derives scope eligibility from the published pointer. In-memory
+/// SQLite against a real `SqlCodeBindingRepository`.
+pub(crate) fn code_binding_ok() -> bool {
+    use engram_knowledge::CodeBindingRepository;
+    let Ok(store) = SqlCodeBindingRepository::open(":memory:") else {
+        return false;
+    };
+    let scope = Scope {
+        tenant: "tenant-a".to_string(),
+        subject: None,
+        workspace: Some("bound".to_string()),
+        session: None,
+        environment: None,
+    };
+    let repo = RepoId("repo-conformance".to_string());
+    let binding = CodeBinding {
+        scope: scope.clone(),
+        repo_id: repo.clone(),
+        branch_ref: "refs/heads/main".to_string(),
+        version: 1,
+        active_generation: None,
+        epoch: 0,
+    };
+    let Ok(first) = block_on(store.bind(binding.clone())) else {
+        return false;
+    };
+    let Ok(again) = block_on(store.bind(binding.clone())) else {
+        return false;
+    };
+    if first != again {
+        return false;
+    }
+    let conflict = CodeBinding {
+        branch_ref: "refs/heads/other".to_string(),
+        ..binding.clone()
+    };
+    if !block_on(store.bind(conflict)).is_err() {
+        return false;
+    }
+    matches!(
+        block_on(store.get_binding(&scope, &repo)),
+        Ok(Some(stored)) if stored == first
+    )
 }

@@ -60,13 +60,13 @@ fn walk_calls(
 ) {
     let kind = node.kind();
     // scan-reliability AC5: JSX elements are declarative component usage.
-    if kind == "jsx_opening_element" || kind == "jsx_self_closing_element" {
-        if let Some(name_node) = node.child_by_field_name("name") {
-            let name = node_text(name_node, source);
-            if name.chars().next().is_some_and(char::is_uppercase) {
-                sites.push((node.start_position().row, name.to_owned()));
-                return;
-            }
+    if (kind == "jsx_opening_element" || kind == "jsx_self_closing_element")
+        && let Some(name_node) = node.child_by_field_name("name")
+    {
+        let name = node_text(name_node, source);
+        if name.chars().next().is_some_and(char::is_uppercase) {
+            sites.push((node.start_position().row, name.to_owned()));
+            return;
         }
     }
     if matches!(
@@ -281,12 +281,12 @@ fn root_state(
         "scoped_identifier" => {
             // `Type::new(...).method()` — constructor root (Rust).
             let text = node_text(root_obj, source);
-            if let Some((owner, method)) = text.rsplit_once("::") {
-                if matches!(method, "new" | "default") && !owner.contains("::") {
-                    if let Some(ty) = terminal(owner) {
-                        return seed_ctor_state(&ty, fc, repo);
-                    }
-                }
+            if let Some((owner, method)) = text.rsplit_once("::")
+                && matches!(method, "new" | "default")
+                && !owner.contains("::")
+                && let Some(ty) = terminal(owner)
+            {
+                return seed_ctor_state(&ty, fc, repo);
             }
             State::UnknownExpression
         }
@@ -390,14 +390,13 @@ fn inner_call_state(
         }
         "scoped_identifier" => {
             let text = node_text(func, source);
-            if ext == "rs" {
-                if let Some((owner, method)) = text.rsplit_once("::") {
-                    if matches!(method, "new" | "default") && !owner.contains("::") {
-                        if let Some(ty) = terminal(owner) {
-                            return seed_ctor_state(&ty, fc, repo);
-                        }
-                    }
-                }
+            if ext == "rs"
+                && let Some((owner, method)) = text.rsplit_once("::")
+                && matches!(method, "new" | "default")
+                && !owner.contains("::")
+                && let Some(ty) = terminal(owner)
+            {
+                return seed_ctor_state(&ty, fc, repo);
             }
             State::UnknownExpression
         }

@@ -84,6 +84,11 @@ impl SqlMemoryService {
         })
     }
 
+    /// Returns the configured owning retrieval authorizer for internal recipe composition.
+    pub fn retrieval_authorizer(&self) -> Arc<dyn PolicyAuthorizer> {
+        Arc::clone(&self.authorizer)
+    }
+
     /// Lists memory records visible to `scope` (store-specific; not on a port).
     ///
     /// Export and maintenance paths need a scope-wide enumeration of stored

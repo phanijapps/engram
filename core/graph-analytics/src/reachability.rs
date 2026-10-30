@@ -203,11 +203,11 @@ where
             break;
         }
         found.insert(node.clone());
-        if depth < max_depth {
-            if let Some(preds) = predecessors.get(&node) {
-                for pred in preds {
-                    queue.push_back((pred.clone(), depth + 1));
-                }
+        if depth < max_depth
+            && let Some(preds) = predecessors.get(&node)
+        {
+            for pred in preds {
+                queue.push_back((pred.clone(), depth + 1));
             }
         }
     }
@@ -250,11 +250,11 @@ where
             break;
         }
         found.insert(node.clone());
-        if depth < max_depth {
-            if let Some(children) = adjacency.get(&node) {
-                for child in children {
-                    queue.push_back((child.clone(), depth + 1));
-                }
+        if depth < max_depth
+            && let Some(children) = adjacency.get(&node)
+        {
+            for child in children {
+                queue.push_back((child.clone(), depth + 1));
             }
         }
     }

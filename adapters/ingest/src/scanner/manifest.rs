@@ -216,10 +216,10 @@ where
 
     // Emit contract manifest entries for files processed in this scan.
     for (rel, keys) in &current_contract_ops {
-        if !keys.is_empty() {
-            if let Ok(json) = serde_json::to_string(keys) {
-                new_manifest.insert(format!("{CONTRACT_PREFIX}{rel}"), json);
-            }
+        if !keys.is_empty()
+            && let Ok(json) = serde_json::to_string(keys)
+        {
+            new_manifest.insert(format!("{CONTRACT_PREFIX}{rel}"), json);
         }
     }
 

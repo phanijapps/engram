@@ -10,9 +10,8 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 use engram_domain::{
-    AllowedUse, DeleteMode, FusionStrategy, FusionTrace, KnowledgeChunk, KnowledgeEntity, Policy,
-    Provenance, RerankStrategy, Retention, RetrievalRequest, RetrievalResult, RetrievalScore,
-    RetrievalTargetType, Scope, Sensitivity, Visibility,
+    FusionStrategy, FusionTrace, KnowledgeChunk, KnowledgeEntity, Policy, Provenance,
+    RerankStrategy, RetrievalRequest, RetrievalResult, RetrievalScore, RetrievalTargetType, Scope,
 };
 use engram_retrieval::{GraphCache, RetrievalIndex};
 use engram_runtime::CoreResult;
@@ -262,16 +261,12 @@ fn graph_result(rank: usize, score: f32, view: GraphCandidateView) -> RetrievalR
     }
 }
 
-/// Default policy for graph entity candidates (entities carry no policy field).
+/// Default policy for graph entity candidates (entities carry no policy
+/// field): the ONE domain constructor — graphless entity/relationship policy
+/// is governed by [`Policy::graph_lane_default`] everywhere, with no
+/// per-adapter synthetic duplicate.
 fn graph_default_policy() -> Policy {
-    Policy {
-        visibility: Visibility::Workspace,
-        retention: Retention::Durable,
-        sensitivity: Some(Sensitivity::Low),
-        allowed_uses: vec![AllowedUse::Retrieval],
-        expires_at: None,
-        delete_mode: Some(DeleteMode::Tombstone),
-    }
+    Policy::graph_lane_default()
 }
 
 /// The SQLite knowledge store is a graph candidate source.

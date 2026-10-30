@@ -112,6 +112,23 @@ impl KnowledgeRepository for SqlKnowledgeStore {
         Ok(source)
     }
 
+    async fn get_source(
+        &self,
+        id: &SourceId,
+        scope: &Scope,
+    ) -> CoreResult<Option<KnowledgeSource>> {
+        let source = self.get_source_by_id(id).await?;
+        Ok(source.filter(|source| crate::knowledge::scope::scope_allows(&source.scope, scope)))
+    }
+
+    async fn list_sources(&self, scope: &Scope) -> CoreResult<Vec<KnowledgeSource>> {
+        SqlKnowledgeStore::list_sources(self, scope).await
+    }
+
+    async fn list_documents(&self, scope: &Scope) -> CoreResult<Vec<SourceDocument>> {
+        SqlKnowledgeStore::list_documents(self, scope).await
+    }
+
     async fn put_document(&self, document: SourceDocument) -> CoreResult<SourceDocument> {
         let json =
             serde_json::to_string(&document).map_err(crate::knowledge::schema::json_error)?;

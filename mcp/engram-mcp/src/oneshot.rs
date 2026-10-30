@@ -43,8 +43,28 @@ pub fn run(argv: &[String]) -> i32 {
     match cmd {
         "recall" => run_recall(rest),
         "status" => run_status(rest),
+        "code" => run_code(rest),
+        "fetch-content" => run_fetch_content(rest),
+        "symbol-context" => run_symbol_context(rest),
+        "backfill-embeddings" => run_backfill_embeddings(rest),
+        "reindex" => {
+            // TASK-022: the ambiguous alias is DEPRECATED with a diagnostic —
+            // embedding backfill and branch rebuild are DISTINCT semantics and
+            // never silently become each other.
+            eprintln!(
+                "engram-mcp reindex is deprecated and ambiguous.\n  \
+                 - backfill-embeddings: embed un-embedded document chunks \
+                 (scope-wide; NEVER a branch rebuild).\n  \
+                 - code --op refresh / code --op rebuild: bound-code operations \
+                 over the persisted binding."
+            );
+            2
+        }
         other => {
-            eprintln!("engram-mcp: unknown one-shot subcommand {other:?} (recall | status)");
+            eprintln!(
+                "engram-mcp: unknown one-shot subcommand {other:?} \
+                 (recall | status | code | fetch-content | symbol-context | backfill-embeddings)"
+            );
             2
         }
     }
@@ -55,7 +75,13 @@ pub fn run(argv: &[String]) -> i32 {
 pub fn is_oneshot(argv: &[String]) -> bool {
     matches!(
         argv.first().map(String::as_str),
-        Some("recall") | Some("status")
+        Some("recall")
+            | Some("status")
+            | Some("code")
+            | Some("fetch-content")
+            | Some("symbol-context")
+            | Some("backfill-embeddings")
+            | Some("reindex")
     )
 }
 
@@ -333,10 +359,10 @@ fn run_status(argv: &[String]) -> i32 {
                     last_index_at = Some(mtime);
                 }
             }
-            if let Ok(text) = std::fs::read_to_string(&path) {
-                if let Ok(map) = serde_json::from_str::<serde_json::Map<String, Value>>(&text) {
-                    indexed_files += map.len();
-                }
+            if let Ok(text) = std::fs::read_to_string(&path)
+                && let Ok(map) = serde_json::from_str::<serde_json::Map<String, Value>>(&text)
+            {
+                indexed_files += map.len();
             }
         }
     }
@@ -371,6 +397,322 @@ fn run_status(argv: &[String]) -> i32 {
         println!("memories:      {memories}");
         println!("beliefs:       {beliefs}");
         0
+    }
+}
+
+/// Builds the shared one-shot [`App`] from the passthrough config args.
+fn one_shot_app(rest: &[String]) -> Result<(App, config::McpConfig), String> {
+    let config = config::McpConfig::from_args(rest)?;
+    let provider = bootstrap::open_provider(&config)?;
+    let app = App {
+        provider,
+        scope: scope::resolve_scope(
+            config.org.as_deref(),
+            config.domain.as_deref(),
+            config.subdomain.as_deref(),
+            &config.project,
+        ),
+        ontology: ontology::resolve_ontology_config(config.ontology_path.as_deref())
+            .unwrap_or_default(),
+        taxonomy: ontology::resolve_taxonomy_config(config.taxonomy_path.as_deref())
+            .unwrap_or_default(),
+        storage_dir: std::path::PathBuf::from(&config.storage_path),
+    };
+    Ok((app, config))
+}
+
+/// Extracts the text payload from a tool's `text_content` result.
+fn text_payload(value: &Value) -> String {
+    value["content"][0]["text"]
+        .as_str()
+        .unwrap_or_default()
+        .to_owned()
+}
+
+/// `engram-mcp code --op register|bind|status|refresh [--repo R]
+/// [--branch-ref B] [--path P] [--json] [config args]` — the one-shot twin
+/// of the stdio code tools (TASK-021/TASK-022 parity: same handlers, same
+/// typed denials). Mutating failures exit NONZERO (the read-hook
+/// fail-open contract belongs to `recall`/`status` only).
+fn run_code(argv: &[String]) -> i32 {
+    let mut op = None;
+    let mut repo = None;
+    let mut branch_ref = None;
+    let mut path = None;
+    let mut request_id = None;
+    let mut journal = None;
+    let mut decision = None;
+    let mut json_out = false;
+    let mut rest: Vec<String> = Vec::with_capacity(argv.len());
+    let mut it = argv.iter();
+    while let Some(arg) = it.next() {
+        match arg.as_str() {
+            "--help" | "-h" => {
+                println!(
+                    "usage: engram-mcp code --op register|bind|status|refresh \\\n                       [--repo <RepoId>] [--branch-ref <refs/heads/…>] [--path <locator>] \\\n                       [--json] [--storage <path>] [--project <name>]\\\n                       [--backend pgvector]\\\n\\\n                       One-shot scoped code operations over the persisted binding —\\\n                       the same handlers and typed denials as the stdio tools. Mutating\\\n                       failures exit nonzero."
+                );
+                return 0;
+            }
+            "--op" => op = it.next().cloned(),
+            "--repo" => repo = it.next().cloned(),
+            "--branch-ref" | "--branchRef" => branch_ref = it.next().cloned(),
+            "--path" => path = it.next().cloned(),
+            "--request-id" | "--requestId" => request_id = it.next().cloned(),
+            "--journal" => journal = it.next().cloned(),
+            "--decision" => decision = it.next().cloned(),
+            "--json" => json_out = true,
+            _ => rest.push(arg.clone()),
+        }
+    }
+    let Some(op) = op.as_deref() else {
+        eprintln!(
+            "engram-mcp code: --op <register|bind|status|refresh|rebuild|reset-preview|reset-apply|reset-resume> is required"
+        );
+        return 2;
+    };
+    let (app, _config) = match one_shot_app(&rest) {
+        Ok(pair) => pair,
+        Err(message) => {
+            eprintln!("engram-mcp code: {message}");
+            return 1;
+        }
+    };
+    let mut args = serde_json::Map::new();
+    if let Some(repo) = repo.clone() {
+        args.insert("repo".to_owned(), json!(repo));
+    }
+    if let Some(branch) = branch_ref.clone() {
+        args.insert("branchRef".to_owned(), json!(branch));
+    }
+    if let Some(path) = path.clone() {
+        args.insert("path".to_owned(), json!(path));
+    }
+    if let Some(request_id) = request_id {
+        args.insert("requestId".to_owned(), json!(request_id));
+    }
+    if let Some(journal) = journal {
+        match serde_json::from_str::<Value>(&journal) {
+            Ok(value) => {
+                args.insert("journal".to_owned(), value);
+            }
+            Err(error) => {
+                eprintln!("engram-mcp code: --journal must be JSON: {error}");
+                return 2;
+            }
+        }
+    }
+    if let Some(decision) = decision {
+        args.insert("decision".to_owned(), json!(decision));
+    }
+    if op == "reset-preview" {
+        args.insert(
+            "scope".to_owned(),
+            serde_json::to_value(&app.scope).expect("scope serializes"),
+        );
+    }
+    let arguments = Value::Object(args);
+    let outcome = match op {
+        "register" => crate::tools::code_repo_register(&app, &arguments),
+        "bind" => crate::tools::code_bind(&app, &arguments),
+        "status" => crate::tools::code_status(&app, &arguments),
+        "refresh" => crate::tools::code_refresh(&app, &arguments),
+        "rebuild" => crate::tools::code_rebuild(&app, &arguments),
+        "reset-preview" => crate::tools::code_reset_preview(&app, &arguments),
+        "reset-apply" => crate::tools::code_reset_apply(&app, &arguments),
+        "reset-resume" => crate::tools::code_reset_resume(&app, &arguments),
+        other => {
+            eprintln!(
+                "engram-mcp code: unknown op {other:?} (register|bind|status|refresh|rebuild|reset-preview|reset-apply|reset-resume)"
+            );
+            return 2;
+        }
+    };
+    match outcome {
+        Ok(value) => {
+            let text = text_payload(&value);
+            if json_out {
+                println!(
+                    "{}",
+                    json!({ "ok": true, "command": "code", "op": op, "output": text })
+                );
+            } else {
+                println!("{text}");
+            }
+            0
+        }
+        Err(error) => {
+            // Mutations (and explicit operator reads) report typed failures
+            // with a NONZERO exit — never swallowed into an ok:false envelope.
+            if json_out {
+                println!(
+                    "{}",
+                    json!({ "ok": false, "command": "code", "op": op, "error": error.message })
+                );
+            } else {
+                eprintln!("engram-mcp code {op}: {}", error.message);
+            }
+            1
+        }
+    }
+}
+
+/// `engram-mcp backfill-embeddings [--json] [config args]` — the EXPLICIT
+/// embedding-backfill name for the existing scope-wide missing-embedding
+/// behavior (the stdio `reindex` tool's semantics). DISTINCT semantics:
+/// this embeds un-embedded document chunks and NEVER rebuilds a bound code
+/// index, never touches a binding, and never fetches from a remote.
+/// `engram-mcp fetch-content` exposes the same retained-byte read operation as
+/// the stdio `fetch_content` tool without starting a JSON-RPC server.
+/// Read failures use the hook-safe `{ok:false}` envelope and exit zero.
+fn run_fetch_content(argv: &[String]) -> i32 {
+    let mut path = None;
+    let mut mode = None;
+    let mut symbol = None;
+    let mut rest = Vec::new();
+    let mut it = argv.iter();
+    while let Some(arg) = it.next() {
+        match arg.as_str() {
+            "--help" | "-h" => {
+                println!(
+                    "usage: engram-mcp fetch-content --path <path> [--mode auto|verbatim|chunks] [--symbol <name>] [--storage <path>] [--project <name>]\\n\\nOne-shot exact retained-source read. JSON output and read errors use the hook envelope."
+                );
+                return 0;
+            }
+            "--path" => path = it.next().cloned(),
+            "--mode" => mode = it.next().cloned(),
+            "--symbol" => symbol = it.next().cloned(),
+            _ => rest.push(arg.clone()),
+        }
+    }
+    let Some(path) = path else {
+        return fail_open_json("fetch-content", "--path <path> is required");
+    };
+    let (app, _) = match one_shot_app(&rest) {
+        Ok(app) => app,
+        Err(error) => return fail_open_json("fetch-content", &error),
+    };
+    let mut args = serde_json::Map::new();
+    args.insert("path".to_owned(), json!(path));
+    if let Some(mode) = mode {
+        args.insert("mode".to_owned(), json!(mode));
+    }
+    if let Some(symbol) = symbol {
+        args.insert("symbol".to_owned(), json!(symbol));
+    }
+    match crate::fetch_content::fetch_content(&app, &Value::Object(args)) {
+        Ok(value) => {
+            println!(
+                "{}",
+                json!({"ok": true, "command": "fetch-content", "output": text_payload(&value)})
+            );
+            0
+        }
+        Err(error) => fail_open_json("fetch-content", &error.message),
+    }
+}
+
+/// `engram-mcp symbol-context` exposes the same bounded graph read operation
+/// as the stdio `symbol_context` tool without starting a JSON-RPC server.
+/// Read failures use the hook-safe `{ok:false}` envelope and exit zero.
+fn run_symbol_context(argv: &[String]) -> i32 {
+    let mut symbol = None;
+    let mut depth = None;
+    let mut rest = Vec::new();
+    let mut it = argv.iter();
+    while let Some(arg) = it.next() {
+        match arg.as_str() {
+            "--help" | "-h" => {
+                println!(
+                    "usage: engram-mcp symbol-context --symbol <name> [--depth N] [--storage <path>] [--project <name>]\\n\\nOne-shot bounded code-graph read. JSON output and read errors use the hook envelope."
+                );
+                return 0;
+            }
+            "--symbol" => symbol = it.next().cloned(),
+            "--depth" => depth = it.next().cloned(),
+            _ => rest.push(arg.clone()),
+        }
+    }
+    let Some(symbol) = symbol else {
+        return fail_open_json("symbol-context", "--symbol <name> is required");
+    };
+    let (app, _) = match one_shot_app(&rest) {
+        Ok(app) => app,
+        Err(error) => return fail_open_json("symbol-context", &error),
+    };
+    let mut args = serde_json::Map::new();
+    args.insert("symbol".to_owned(), json!(symbol));
+    if let Some(depth) = depth {
+        match depth.parse::<u32>() {
+            Ok(depth) => {
+                args.insert("depth".to_owned(), json!(depth));
+            }
+            Err(_) => {
+                return fail_open_json("symbol-context", "--depth must be an unsigned integer");
+            }
+        }
+    }
+    match crate::codegraph::symbol_context(&app, &Value::Object(args)) {
+        Ok(value) => {
+            println!(
+                "{}",
+                json!({"ok": true, "command": "symbol-context", "output": text_payload(&value)})
+            );
+            0
+        }
+        Err(error) => fail_open_json("symbol-context", &error.message),
+    }
+}
+
+fn run_backfill_embeddings(argv: &[String]) -> i32 {
+    let mut json_out = false;
+    let mut rest: Vec<String> = Vec::with_capacity(argv.len());
+    for arg in argv {
+        match arg.as_str() {
+            "--help" | "-h" => {
+                println!(
+                    "usage: engram-mcp backfill-embeddings [--json] [--limit N] \\\n                       [--storage <path>] [--project <name>]\\\n\\\n                       Embedding BACKFILL: drains the un-embedded document-chunk\\\n                       backlog for the scope (same semantics as the stdio reindex\\\n                       tool). This is NOT a code rescan and NOT a branch rebuild: it\\\n                       never touches code bindings or generations. Bound-code\\\n                       refresh/rebuild are separate `code` operations. Failures exit\\\n                       nonzero."
+                );
+                return 0;
+            }
+            "--json" => json_out = true,
+            _ => rest.push(arg.clone()),
+        }
+    }
+    let (app, _config) = match one_shot_app(&rest) {
+        Ok(pair) => pair,
+        Err(message) => {
+            eprintln!("engram-mcp backfill-embeddings: {message}");
+            return 1;
+        }
+    };
+    let scope = app.scope.clone();
+    match crate::codegraph::reindex_outcome(&app, &scope, 256) {
+        Ok(text) => {
+            if json_out {
+                println!(
+                    "{}",
+                    json!({ "ok": true, "command": "backfill-embeddings", "output": text })
+                );
+            } else {
+                println!("{text}");
+            }
+            0
+        }
+        Err(error) => {
+            if json_out {
+                println!(
+                    "{}",
+                    json!({
+                        "ok": false,
+                        "command": "backfill-embeddings",
+                        "error": error.message,
+                    })
+                );
+            } else {
+                eprintln!("engram-mcp backfill-embeddings: {}", error.message);
+            }
+            1
+        }
     }
 }
 

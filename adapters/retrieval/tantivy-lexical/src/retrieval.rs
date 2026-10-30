@@ -13,7 +13,7 @@ use engram_domain::{
     FusionStrategy, FusionTrace, Metadata, Policy, Provenance, RerankStrategy,
     RetrievalExplanation, RetrievalRequest, RetrievalResult, RetrievalScore, RetrievalTargetType,
 };
-use engram_retrieval::RetrievalIndex;
+use engram_retrieval::{CodeEligibilityResolver, RetrievalIndex, resolve_view};
 use engram_runtime::{CoreError, CoreResult};
 
 use crate::LexicalIndex;
@@ -37,6 +37,20 @@ pub trait LexicalTargetResolver: Send + Sync {
         target_id: &str,
         request: &RetrievalRequest,
     ) -> CoreResult<Option<LexicalResolvedTarget>>;
+
+    /// Returns canonical target IDs allowed for this request's resolved view.
+    /// The collector consumes this set before TopDocs, so contributor stamps
+    /// alone can never admit a forged current-generation or legacy code row.
+    async fn eligible_target_ids(
+        &self,
+        _request: &RetrievalRequest,
+        _view: &engram_retrieval::BoundCodeView,
+    ) -> CoreResult<std::collections::BTreeSet<String>> {
+        Err(CoreError::CapabilityUnsupported {
+            capability: "lexical-canonical-target-eligibility".to_owned(),
+            reason: "resolver does not expose canonical target eligibility".to_owned(),
+        })
+    }
 }
 
 /// Canonical target data required before a lexical hit can become a result.
@@ -49,6 +63,11 @@ pub struct LexicalResolvedTarget {
     pub policy: Policy,
     pub explanation: Option<RetrievalExplanation>,
     pub metadata: Option<Metadata>,
+    /// True when the resolved record is a CODE KIND (symbol entity, code
+    /// chunk kind). Corrective r2 (finding 4): together with the resolver's
+    /// durable lineage this drives classification — an unstamped code-kind
+    /// record is legacy unbound code and never eligible.
+    pub code_kind: bool,
 }
 
 /// Retrieval candidate source backed by Tantivy BM25 search over chunk text.
@@ -56,6 +75,13 @@ pub struct LexicalRetrievalIndex {
     index: Arc<LexicalIndex>,
     target_resolver: Arc<dyn LexicalTargetResolver>,
     default_limit: u32,
+    /// Optional bound-code eligibility: when wired, BM25 collection is
+    /// constrained to the eligible contributor set (published code
+    /// generations + ordinary documents) BEFORE the limit, and each resolved
+    /// target is classified against the resolved view before it can enter
+    /// the candidate page (REQ-005, task_013 seam). `None` keeps the
+    /// historical unconstrained lane for deployments without bindings.
+    eligibility: Option<Arc<dyn CodeEligibilityResolver>>,
 }
 
 impl LexicalRetrievalIndex {
@@ -75,6 +101,7 @@ impl LexicalRetrievalIndex {
             index,
             target_resolver,
             default_limit: 20,
+            eligibility: None,
         }
     }
 
@@ -88,7 +115,40 @@ impl LexicalRetrievalIndex {
             index: Arc::new(index),
             target_resolver,
             default_limit,
+            eligibility: None,
         }
+    }
+
+    /// [`Self::from_arc`] with a bound-code eligibility resolver wired in:
+    /// every query resolves the scope's published generations once, collects
+    /// BM25 within the eligible contributor set, and classifies each resolved
+    /// target before it can consume a candidate slot.
+    pub fn from_arc_with_eligibility(
+        index: Arc<LexicalIndex>,
+        target_resolver: Arc<dyn LexicalTargetResolver>,
+        eligibility: Arc<dyn CodeEligibilityResolver>,
+    ) -> Self {
+        Self {
+            index,
+            target_resolver,
+            default_limit: 20,
+            eligibility: Some(eligibility),
+        }
+    }
+
+    /// The allowed Tantivy contributor keys for a resolved view: ordinary
+    /// documents always pass; each published code generation contributes its
+    /// `code:<generation>` key. Staged/retired/unbound generations are absent,
+    /// so their documents cannot enter the collector at all.
+    fn allowed_contributor_keys(
+        view: &engram_retrieval::BoundCodeView,
+    ) -> std::collections::BTreeSet<String> {
+        let mut keys = std::collections::BTreeSet::new();
+        keys.insert(crate::LEXICAL_DOC_CONTRIBUTOR_KEY.to_owned());
+        for generation in view.eligible_generations() {
+            keys.insert(crate::code_contributor_key(&generation));
+        }
+        keys
     }
 }
 
@@ -99,6 +159,25 @@ impl RetrievalIndex for LexicalRetrievalIndex {
         request: &RetrievalRequest,
     ) -> CoreResult<Vec<RetrievalResult>> {
         let limit = search_limit(request, self.default_limit) as usize;
+        // Resolve bound-code eligibility ONCE per request. The view drives
+        // (a) the collector constraint below — before the TopDocs limit — and
+        // (b) per-target classification after resolution. A resolver failure
+        // fails the lane closed (it degrades via source_failures upstream),
+        // never silently widens to an unconstrained page.
+        let view = match &self.eligibility {
+            Some(resolver) => Some(
+                resolve_view(
+                    resolver.as_ref(),
+                    &request.scope,
+                    request
+                        .filters
+                        .as_ref()
+                        .and_then(|filters| filters.code_index_keys.as_deref()),
+                )
+                .await?,
+            ),
+            None => None,
+        };
         // Code-artifact suppression runs at the RESOLVER (the only place the
         // full entity is available), which is AFTER the BM25 search below —
         // so over-fetch now (4×, floor 32) and truncate after filtering,
@@ -109,13 +188,28 @@ impl RetrievalIndex for LexicalRetrievalIndex {
         } else {
             limit
         };
-        let hits = self
-            .index
-            .search(&request.query, fetch)
-            .map_err(|e| CoreError::Adapter {
-                adapter: "engram-store-lexical".to_owned(),
-                message: e.to_string(),
-            })?;
+        let hits = match &view {
+            Some(view) => {
+                let target_ids = self
+                    .target_resolver
+                    .eligible_target_ids(request, view)
+                    .await?;
+                let contributor_keys = Self::allowed_contributor_keys(view);
+                self.index
+                    .search_targets_within(&request.query, fetch, &target_ids, &contributor_keys)
+                    .map_err(|e| CoreError::Adapter {
+                        adapter: "engram-store-lexical".to_owned(),
+                        message: e.to_string(),
+                    })?
+            }
+            None => self
+                .index
+                .search(&request.query, fetch)
+                .map_err(|e| CoreError::Adapter {
+                    adapter: "engram-store-lexical".to_owned(),
+                    message: e.to_string(),
+                })?,
+        };
 
         let mut results = Vec::with_capacity(hits.len());
         for (rank, (target_id, score)) in hits.into_iter().enumerate() {
@@ -125,6 +219,18 @@ impl RetrievalIndex for LexicalRetrievalIndex {
             // Resolver seam: suppressed entity targets resolve to None (see
             // KnowledgeLexicalResolver), keeping the eligibility decision in
             // one place; the over-fetch above refills the page.
+            //
+            // Bound-code classification (corrective r2, finding 4): the
+            // durable-lineage view + the resolver's CODE KIND decide — a
+            // lineage record on a non-published binding, or a code-kind
+            // record without lineage (legacy unbound code), drops BEFORE the
+            // page budget is consumed; ordinary non-code targets always pass
+            // (AC-006).
+            if let Some(view) = &view
+                && !view.allows(target.target_id.as_str(), target.code_kind)
+            {
+                continue;
+            }
             results.push(lexical_result(rank, &target_id, score, target));
         }
         results.truncate(limit);
@@ -271,6 +377,7 @@ mod tests {
 
     fn resolved_chunk(id: &str) -> LexicalResolvedTarget {
         LexicalResolvedTarget {
+            code_kind: false,
             target_type: RetrievalTargetType::Chunk,
             target_id: id.to_owned(),
             content: format!("content for {id}"),

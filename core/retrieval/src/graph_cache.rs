@@ -53,6 +53,27 @@ pub struct GraphSnapshot {
     /// skip the ~57k-edge Louvain recompute. Refreshed together with the
     /// entities/relationships on a cache miss or invalidation.
     pub community_labels: Option<HashMap<String, usize>>,
+    /// The bound-code eligibility epoch this snapshot was materialized under
+    /// (task_014). `None` = the snapshot predates eligibility wiring (legacy).
+    /// A lane with eligibility wired treats a snapshot whose epoch differs
+    /// from the CURRENT published epoch as a miss and repopulates — a warm
+    /// cache can never serve a post-retirement (stale) derived answer.
+    pub eligibility_epoch: Option<u64>,
+}
+
+impl GraphSnapshot {
+    /// True when this snapshot is current for a lane observing `epoch`:
+    /// either it was stamped by an eligibility-aware lane with the same epoch,
+    /// or it predates eligibility wiring (`None`) and stays usable only by
+    /// lanes that do not constrain by eligibility.
+    pub fn current_for_epoch(&self, epoch: Option<u64>) -> bool {
+        match (self.eligibility_epoch, epoch) {
+            (Some(stamped), Some(current)) => stamped == current,
+            // Legacy snapshots serve only unconstrained lanes.
+            (None, None) => true,
+            _ => false,
+        }
+    }
 }
 
 /// Pluggable graph cache: stores materialized [`GraphSnapshot`]s keyed by
@@ -193,6 +214,7 @@ mod tests {
             entities: Vec::new(),
             relationships: Vec::new(),
             community_labels: None,
+            eligibility_epoch: None,
         })
     }
 

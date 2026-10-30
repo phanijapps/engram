@@ -208,8 +208,12 @@ impl GraphExtractor {
                 aliases: Vec::new(),
                 scope: source.scope.clone(),
                 source_refs: vec![EvidenceRef {
-                    target_type: EvidenceTargetType::Document,
-                    target_id: Some(document.id.to_string()),
+                    // Entity evidence must resolve through the canonical
+                    // scoped source port. Documents have no keyed read port,
+                    // so a Document reference makes every code entity
+                    // unresolved in the recall serving guard.
+                    target_type: EvidenceTargetType::Source,
+                    target_id: Some(source.id.to_string()),
                     uri: None,
                     quote: None,
                     location: Some(SourceLocation {
@@ -868,10 +872,10 @@ fn local_qualify(
     // qualified symbol, before the unique-tail rule.
     if reference.contains("::") {
         let tail = reference.rsplit("::").next().unwrap_or(reference);
-        if let Some(candidates) = bare_to_qualified.get(tail) {
-            if let Some(exact) = candidates.iter().find(|q| q.as_str() == reference) {
-                return Some(exact.clone());
-            }
+        if let Some(candidates) = bare_to_qualified.get(tail)
+            && let Some(exact) = candidates.iter().find(|q| q.as_str() == reference)
+        {
+            return Some(exact.clone());
         }
     }
     let candidates = bare_to_qualified.get(reference)?;

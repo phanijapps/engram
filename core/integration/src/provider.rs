@@ -86,11 +86,79 @@ pub struct EngramProvider {
     community_query: Option<Arc<dyn crate::CommunityQuery>>,
     lexical_feed: Option<Arc<dyn LexicalFeed>>,
     graph_cache: Option<Arc<dyn engram_retrieval::GraphCache>>,
+    code_bindings: Option<Arc<crate::code_binding::CodeBindingCoordinator>>,
+    code_source: Option<Arc<dyn engram_knowledge::RetainedSourceReader>>,
+    #[cfg(feature = "code-lanes")]
+    code_ingestion: Option<Arc<crate::code_binding::CodeIngestionLanes>>,
     schema_version: String,
     adapter_version: String,
 }
 
 impl EngramProvider {
+    /// Reach authorized code operations through the same neutral coordinator used by transports.
+    pub fn code_bindings(&self) -> CoreResult<&Arc<crate::code_binding::CodeBindingCoordinator>> {
+        self.code_bindings
+            .as_ref()
+            .ok_or_else(|| CoreError::CapabilityUnsupported {
+                capability: "code-binding".into(),
+                reason: "code binding coordinator is not configured".into(),
+            })
+    }
+
+    /// Host policy injection for the code-authority lane (review r6 finding
+    /// 1): consumes this provider and returns one whose code coordinator
+    /// carries the EXPLICIT authorizer over the SAME durable store, required
+    /// lanes, and clock. Recipe-built providers deny by default
+    /// (`RecipeDefaultAuthorizer`); a host that exposes code operations
+    /// injects its policy through this seam — e.g. a launch-scope
+    /// [`crate::code_binding::ScopeSetAuthorizer`]. Every surface that reads
+    /// `code_bindings()` (Rust facade, N-API, TS, stdio, one-shot) then
+    /// observes the SAME injected policy.
+    pub fn with_code_authorizer(
+        mut self,
+        authorizer: Arc<dyn crate::code_binding::CodeBindingAuthorizer>,
+    ) -> CoreResult<Self> {
+        let coordinator =
+            self.code_bindings
+                .as_ref()
+                .ok_or_else(|| CoreError::CapabilityUnsupported {
+                    capability: "code-binding".into(),
+                    reason: "no code binding coordinator to authorize".into(),
+                })?;
+        let authorized = coordinator.with_authorizer(authorizer);
+        self.code_bindings = Some(Arc::new(authorized));
+        Ok(self)
+    }
+
+    /// The adapter-owned retained-source reader serving exact committed
+    /// bytes (corrective r2). Absent handle ⇒ typed `CapabilityUnsupported`,
+    /// never a checkout fallback.
+    pub fn retained_code_source(
+        &self,
+    ) -> CoreResult<&Arc<dyn engram_knowledge::RetainedSourceReader>> {
+        self.code_source
+            .as_ref()
+            .ok_or_else(|| CoreError::CapabilityUnsupported {
+                capability: "code-source".into(),
+                reason: "retained code source reader is not configured".into(),
+            })
+    }
+
+    /// The bound-code ingestion lanes (review r6 finding 2): the neutral
+    /// knowledge/graph write handles + retained-snapshot custody root that
+    /// `CodeBindingCoordinator::ingest_registered` needs. Absent lanes
+    /// produce a typed `CapabilityUnsupported` — code ingestion NEVER falls
+    /// back to a checkout scan.
+    #[cfg(feature = "code-lanes")]
+    pub fn code_ingestion(&self) -> CoreResult<&Arc<crate::code_binding::CodeIngestionLanes>> {
+        self.code_ingestion
+            .as_ref()
+            .ok_or_else(|| CoreError::CapabilityUnsupported {
+                capability: "code-ingestion".into(),
+                reason: "registered-locator code ingestion lanes are not configured".into(),
+            })
+    }
+
     /// Validates configuration and returns a provider with no handles.
     ///
     /// This is the config-validation entry point. Every family is reported
@@ -675,6 +743,10 @@ impl EngramProvider {
             community_query: None,
             lexical_feed: None,
             graph_cache: None,
+            code_bindings: None,
+            code_source: None,
+            #[cfg(feature = "code-lanes")]
+            code_ingestion: None,
             schema_version: "unwired".to_string(),
             adapter_version: "unwired".to_string(),
         }
@@ -718,6 +790,10 @@ pub struct EngramProviderBuilder {
     community_query: Option<Arc<dyn crate::CommunityQuery>>,
     lexical_feed: Option<Arc<dyn LexicalFeed>>,
     graph_cache: Option<Arc<dyn engram_retrieval::GraphCache>>,
+    code_bindings: Option<Arc<crate::code_binding::CodeBindingCoordinator>>,
+    code_source: Option<Arc<dyn engram_knowledge::RetainedSourceReader>>,
+    #[cfg(feature = "code-lanes")]
+    code_ingestion: Option<Arc<crate::code_binding::CodeIngestionLanes>>,
     schema_version: String,
     adapter_version: String,
 }
@@ -755,6 +831,10 @@ impl EngramProviderBuilder {
             community_query: None,
             lexical_feed: None,
             graph_cache: None,
+            code_source: None,
+            code_bindings: None,
+            #[cfg(feature = "code-lanes")]
+            code_ingestion: None,
             schema_version: "unknown".to_string(),
             adapter_version: "unknown".to_string(),
         }
@@ -943,6 +1023,32 @@ impl EngramProviderBuilder {
         self
     }
 
+    pub fn code_bindings(
+        mut self,
+        coordinator: Arc<crate::code_binding::CodeBindingCoordinator>,
+    ) -> Self {
+        self.code_bindings = Some(coordinator);
+        self
+    }
+
+    /// Attaches the ADAPTER-OWNED retained-source reader serving exact
+    /// committed bytes (corrective r2, finding 7: neutral core never owns
+    /// filesystem custody). Optional: without it, exact fetches report a
+    /// typed unsupported error rather than falling back to a checkout.
+    pub fn code_source(mut self, source: Arc<dyn engram_knowledge::RetainedSourceReader>) -> Self {
+        self.code_source = Some(source);
+        self
+    }
+
+    /// Attaches the bound-code ingestion lanes (review r6 finding 2): the
+    /// neutral knowledge/graph write handles + retained-snapshot custody
+    /// root used by `CodeBindingCoordinator::ingest_registered`.
+    #[cfg(feature = "code-lanes")]
+    pub fn code_ingestion(mut self, lanes: Arc<crate::code_binding::CodeIngestionLanes>) -> Self {
+        self.code_ingestion = Some(lanes);
+        self
+    }
+
     /// Builds the provider.
     pub fn build(self) -> EngramProvider {
         EngramProvider {
@@ -975,6 +1081,10 @@ impl EngramProviderBuilder {
             community_query: self.community_query,
             lexical_feed: self.lexical_feed,
             graph_cache: self.graph_cache,
+            code_bindings: self.code_bindings,
+            code_source: self.code_source,
+            #[cfg(feature = "code-lanes")]
+            code_ingestion: self.code_ingestion,
             schema_version: self.schema_version,
             adapter_version: self.adapter_version,
         }

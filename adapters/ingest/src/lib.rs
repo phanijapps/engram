@@ -10,8 +10,11 @@ mod contract;
 mod contract_entities;
 mod extractor;
 mod filesystem;
+mod generation_manifest;
+mod generation_stage;
 pub mod git;
 mod git_detect;
+pub mod git_source;
 mod hash;
 pub(crate) mod ingestor;
 mod markdown_chunker;
@@ -35,6 +38,13 @@ pub use engram_code::CodeSymbolChunker;
 pub use engram_code::TreeSitterChunker;
 pub use extractor::{ExtractedGraph, GraphExtractor, register_entities, resolve_call_refs};
 pub use filesystem::{FilesystemSourceReader, FilesystemSourceReaderOptions};
+#[doc(hidden)]
+pub use generation_manifest::stage_generation_records_with_options;
+pub use generation_manifest::{generation_manifest_key, stage_generation_records};
+pub use generation_stage::{
+    CommittedGenerationFiles, PreparedGeneration, StagedDocument, prepare_generation,
+    write_prepared_generation,
+};
 pub use git::GitSourceReader;
 pub use git_detect::detect_git;
 pub use hash::content_hash;

@@ -23,6 +23,14 @@ function mockProvider(): {
     },
     consolidateJson: capture("consolidate"),
     scanRepositoryJson: capture("scan"),
+    codeBindJson: capture("codeBind"),
+    codeStatusJson: capture("codeStatus"),
+    codeRegisterJson: capture("codeRegister"),
+    codeRefreshJson: capture("codeRefresh"),
+    codeFetchJson: capture("codeFetch"),
+    codeResetPreviewJson: capture("codeResetPreview"),
+    codeResetApplyJson: capture("codeResetApply"),
+    codeResetResumeJson: capture("codeResetResume"),
     requireMemoryApi: () => ({
       searchJson: capture("search"),
       writeJson: capture("write"),
@@ -65,12 +73,18 @@ describe("NativeProviderTransport", () => {
     expect(recorded("write")[0]).toMatchObject({ key: "k", content: "c" });
   });
 
-  it("scan dispatches to scanRepositoryJson with path + scope", async () => {
+  it("scan dispatches mutually exclusive bound and legacy requests", async () => {
     const { provider, recorded } = mockProvider();
     const transport = createNativeProviderTransport({ provider });
-    await transport.scan({ path: "/repo", scope: { tenant: "t" } });
-    expect(recorded("scan")).toHaveLength(1);
-    expect(recorded("scan")[0]).toMatchObject({ path: "/repo", scope: { tenant: "t" } });
+    await transport.scan({ scope: { tenant: "t" }, repo: "repo-a" });
+    await transport.scan({ scope: { tenant: "t" }, path: "/docs" });
+    expect(recorded("scan")).toEqual([
+      { scope: { tenant: "t" }, repo: "repo-a" },
+      { scope: { tenant: "t" }, path: "/docs" }
+    ]);
+
+    // @ts-expect-error A caller path cannot accompany bound ingestion.
+    transport.scan({ scope: { tenant: "t" }, repo: "repo-a", path: "/repo" });
   });
 
   it("consolidate forwards dryRun and injects a system requester", async () => {
@@ -108,6 +122,29 @@ describe("NativeProviderTransport", () => {
     await transport.batchIngest({ writes: [] });
     expect(recorded("batchIngest")).toHaveLength(1);
     expect(recorded("batchIngest")[0]).toMatchObject({ writes: [] });
+  });
+
+  it("forwards the typed bound-source fetch envelope", async () => {
+    const { provider, recorded } = mockProvider();
+    const transport = createNativeProviderTransport({ provider });
+    await transport.codeFetch({ scope: { tenant: "t" }, path: "src/lib.rs", symbol: "fixture" });
+    expect(recorded("codeFetch")[0]).toEqual({
+      scope: { tenant: "t" },
+      path: "src/lib.rs",
+      symbol: "fixture"
+    });
+  });
+
+  it("forwards typed reset preview, apply, and resume envelopes", async () => {
+    const { provider, recorded } = mockProvider();
+    const transport = createNativeProviderTransport({ provider });
+    const journal = { preview: { previewHash: "preview" }, checkpoints: [] };
+    await transport.codeResetPreview({ scope: { tenant: "t" }, repo: "repo-a" });
+    await transport.codeResetApply({ journal, decision: "owner-approved" } as never);
+    await transport.codeResetResume({ journal } as never);
+    expect(recorded("codeResetPreview")[0]).toEqual({ scope: { tenant: "t" }, repo: "repo-a" });
+    expect(recorded("codeResetApply")[0]).toMatchObject({ decision: "owner-approved", journal });
+    expect(recorded("codeResetResume")[0]).toMatchObject({ journal });
   });
 
   it("capabilities dispatches to capabilitiesJson", async () => {

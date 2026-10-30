@@ -6,7 +6,11 @@ license.workspace = true
 rust-version.workspace = true
 
 [dependencies]
+sha2.workspace = true
+chrono.workspace = true
 async-trait.workspace = true
+serde.workspace = true
+serde_json.workspace = true
 engram-domain = { path = "../domain", version = "0.1.0" }
 engram-runtime = { path = "../runtime", version = "0.1.0" }
 

@@ -13,6 +13,10 @@
 
 mod batch_ledger;
 mod changes;
+pub mod code_binding;
+mod code_binding_port;
+mod code_read_leases;
+mod generation_staging;
 mod graph;
 mod identity;
 #[allow(clippy::module_inception)]
@@ -25,6 +29,7 @@ mod scope;
 mod service;
 mod taxonomy;
 
+pub use code_binding_port::{RetirementBoundary, RetirementPhase, SqlCodeBindingRepository};
 pub use identity::SqlIdentityStore;
 pub use retrieval::{GraphCandidateSource, GraphRetrievalIndex};
 pub use service::SqlKnowledgeStore;

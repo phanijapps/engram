@@ -70,6 +70,23 @@ pub struct Policy {
     pub delete_mode: Option<DeleteMode>,
 }
 
+impl Policy {
+    /// Returns the domain policy shape for graphless entities and relationships.
+    ///
+    /// Those records carry no policy field, while graph-owned records always use
+    /// their owning graph's actual policy instead of this fallback.
+    pub fn graph_lane_default() -> Self {
+        Self {
+            visibility: Visibility::Workspace,
+            retention: Retention::Durable,
+            sensitivity: Some(Sensitivity::Low),
+            allowed_uses: vec![AllowedUse::Retrieval],
+            expires_at: None,
+            delete_mode: Some(DeleteMode::Tombstone),
+        }
+    }
+}
+
 // ── Derived-record policy composition (never-widen lattice) ─────────────────
 // MCCL-audit F2: records derived from inputs (reflection beliefs, future
 // summaries) must never be LESS protected than their most restrictive input.

@@ -1,6 +1,13 @@
 //! Scan-root registry: resolves the on-disk root a `scan_repo` ingested
 //! from, so `fetch_content` can read verbatim source at call time.
 //!
+//! LEGACY / UNBOUND surface only (TASK-018 boundary note): a BOUND code
+//! repository never resolves content through this sidecar — its exact
+//! source is the retained immutable snapshot keyed by the durable binding
+//! (scope + RepoId + generation). Root basenames and source strings here
+//! are therefore never code authority, and basename collisions between two
+//! different repositories cannot select a bound repository's metadata.
+//!
 //! Two layers:
 //! - **In-memory** (process-local): every successful `scan_repo` records
 //!   `provenance source → absolute root`. Same-process fetches resolve

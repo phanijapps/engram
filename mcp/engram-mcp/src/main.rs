@@ -93,6 +93,12 @@ USAGE
   engram-mcp [flags]                    start the stdio MCP server
   engram-mcp recall --query <text> [...]  one-shot recall (no handshake)
   engram-mcp status [...]               one-shot store status
+  engram-mcp code --op <register|bind|status|refresh> [...]  one-shot scoped
+                                         code operations (same handlers as stdio)
+  engram-mcp backfill-embeddings [...]   one-shot embedding backfill (document
+                                         chunks; NEVER a code rescan/rebuild)
+  engram-mcp reindex [...]               deprecated ambiguous alias; exits with
+                                         guidance and never selects a code rebuild
 
 LAUNCH FLAGS
   --storage <path>            Store directory (required; env ENGRAM_STORAGE)
@@ -211,6 +217,7 @@ fn main() {
              [--pg-connection-string <url>] \
              [--tools core|full|all|consolidated] [--slim|--no-vector|--vector] [--rebuild-vectors] \
              one-shot: engram-mcp recall --query <text> [--json] [--limit N] | status [--json] \
+             | code --op register|bind|status|refresh | backfill-embeddings \
              (full contract: mcp/engram-mcp/HOW-TO.md#launch--runtime-arguments--the-contract)"
         );
         std::process::exit(2);
@@ -371,6 +378,23 @@ pub static DEFAULT_TOOLS: &[&str] = &[
     // Freshness — resumable change pages + truthful staleness.
     "subscribe_changes",
     "code_staleness",
+    // TASK-021 — the scoped bound-code operations (stdio parity with the
+    // SDK + native surfaces over the same neutral coordinator).
+    "code_repo_register",
+    "code_bind",
+    "code_status",
+    "code_refresh",
+    "code_rebuild",
+    // The existing stdio embedding-backfill operation.  It is distinct from
+    // bound-code rebuild and remains available for its historical `reindex`
+    // callers.
+    "reindex",
+    "code_reset_preview",
+    "code_reset_apply",
+    "code_reset_resume",
+    // Inspectable typed diagnostics — the capability report is part of the
+    // default surface (TASK-021).
+    "capability_report",
     // The outcome loop — attribute task results to recalls.
     "report_outcome",
     "list_outcomes",
@@ -577,18 +601,25 @@ fn register_all_tools(registry: &mut ToolRegistry<App>) {
     });
     registry.register(ToolRecord {
         name: "scan_repo",
-        description: "Treesitter-index a code repository into the project workspace (code lane). \
-                      Incremental: a per-root manifest is persisted under <storage>/scan-manifests/ \
-                      so re-scans skip unchanged files; pass force=true to re-ingest everything. \
-                      Honors an optional scan config: pass `scan_config` (path to a JSON file) or \
-                      drop one at `<repo>/.engram/scan.json` to tune the concept-link filter \
-                      (blocklist/allowlist/min_name_length) and the file denylist (dirs/extensions). \
-                      Missing/malformed config soft-fails to the builtin filter.",
+        description: "Legacy scanner for UNBOUND scopes: treesitter-index a repository's \
+                      documents+code into the project workspace. When the scope has PUBLISHED \
+                      bound code, arbitrary-path code scanning is DENIED — code bytes flow \
+                      exclusively through the bound registered-locator pipeline \
+                      (code_repo_register + code_bind, then the bound ingestion surface); pass \
+                      documentOnly=true for the explicitly labeled document-only lane (code \
+                      files excluded). Incremental: a per-root manifest is persisted under \
+                      <storage>/scan-manifests/ so re-scans skip unchanged files; pass force=true \
+                      to re-ingest everything. Honors an optional scan config: pass `scan_config` \
+                      (path to a JSON file) or drop one at `<repo>/.engram/scan.json` to tune the \
+                      concept-link filter (blocklist/allowlist/min_name_length) and the file \
+                      denylist (dirs/extensions). Missing/malformed config soft-fails to the \
+                      builtin filter.",
         input_schema: json!({
             "type": "object",
             "properties": {
                 "path": { "type": "string", "description": "Repository root path." },
                 "force": { "type": "boolean", "description": "Skip the incremental manifest and re-ingest every file (default false)." },
+                "documentOnly": { "type": "boolean", "description": "Explicit document-only lane: code files are excluded and the result is labeled legacy document-only (always required when the scope has published bound code)." },
                 "scan_config": { "type": "string", "description": "Optional path to a scan-filter JSON config (overrides <repo>/.engram/scan.json)." }
             },
             "required": ["path"]
@@ -1149,6 +1180,9 @@ fn register_all_tools(registry: &mut ToolRegistry<App>) {
         input_schema: json!({ "type": "object", "properties": {} }),
         handler: codegraph::capability_report,
     });
+    // TASK-021: the scoped code operations (register/bind/status/refresh) —
+    // stdio parity with the SDK + native surfaces over the same coordinator.
+    tools::register_code_tools(registry);
 }
 
 fn ping(_app: &App, _args: &Value) -> Result<Value, ToolError> {

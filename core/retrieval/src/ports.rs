@@ -29,6 +29,121 @@ pub trait RetrievalIndex: Send + Sync {
     ) -> CoreResult<Vec<RetrievalResult>>;
 }
 
+/// Canonical evidence for deciding whether a candidate can survive an
+/// unavailable code-authority source.
+///
+/// This stays inside orchestration.  It is not serialized on `RetrievalResult`
+/// and cannot be supplied by an arbitrary retrieval producer.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CandidateEvidence {
+    Ordinary,
+    CodeDependent,
+    Unknown,
+}
+
+/// Classification plus the canonical dependency record ids that are CODE
+/// (kind or durable lineage) — the recipe-side normal-path eligibility input
+/// (corrective r4, canonical 6c): a recipe holding a SUCCESSFUL eligibility
+/// view must still validate a derived record's code dependencies against
+/// that view.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct EvidenceClassification {
+    pub evidence: CandidateEvidence,
+    pub code_dependencies: Vec<String>,
+    /// True ONLY when the classifier validated the COMPLETE dependency set
+    /// (corrective r5, work package A3): every reachable reference was
+    /// resolved within budget by a repository-backed resolver. The trait
+    /// default and every state that stops short of a validated set (budget
+    /// exhaustion, an unsettleable own-lineage read, an unbound candidate)
+    /// carry `false` — aggregate-only classification cannot prove an empty
+    /// dependency set, so recipes must not accept on it.
+    pub complete: bool,
+}
+
+impl EvidenceClassification {
+    /// A fully validated ordinary chain: every reachable reference resolved
+    /// through authorized ordinary records within budget.
+    pub fn ordinary() -> Self {
+        Self {
+            evidence: CandidateEvidence::Ordinary,
+            code_dependencies: Vec::new(),
+            complete: true,
+        }
+    }
+
+    /// A fully validated code-dependent chain. `code_dependencies` is the
+    /// COMPLETE code set the recipe must validate against its view.
+    pub fn code_dependent(code_dependencies: Vec<String>) -> Self {
+        Self {
+            evidence: CandidateEvidence::CodeDependent,
+            code_dependencies,
+            complete: true,
+        }
+    }
+
+    /// A fully enumerated chain in which a reachable reference refused to
+    /// settle (missing/foreign/unauthorized/unresolvable): a decisive,
+    /// complete denial — not an unfinished walk.
+    pub fn unknown() -> Self {
+        Self {
+            evidence: CandidateEvidence::Unknown,
+            code_dependencies: Vec::new(),
+            complete: true,
+        }
+    }
+
+    /// General complete form produced by repository-backed walks.
+    /// Callers must guarantee `code_dependencies` is nonempty whenever
+    /// `evidence` is `CodeDependent`.
+    pub fn complete(evidence: CandidateEvidence, code_dependencies: Vec<String>) -> Self {
+        Self {
+            evidence,
+            code_dependencies,
+            complete: true,
+        }
+    }
+
+    /// The classifier did NOT validate the complete dependency set (the
+    /// aggregate-only trait default, budget exhaustion, an unsettleable
+    /// own-lineage read, or an unbound candidate). Never sufficient for
+    /// recipe acceptance.
+    pub fn incomplete(evidence: CandidateEvidence) -> Self {
+        Self {
+            evidence,
+            code_dependencies: Vec::new(),
+            complete: false,
+        }
+    }
+}
+
+/// Resolves candidate evidence from the owning canonical stores under the
+/// request scope and policy boundary.
+// clippy roll 2026-10: async_trait generates redundant must_use futures.
+#[allow(clippy::double_must_use)]
+#[async_trait]
+pub trait CandidateEvidenceResolver: Send + Sync {
+    async fn evidence(
+        &self,
+        candidate: &RetrievalResult,
+        request: &RetrievalRequest,
+    ) -> CoreResult<CandidateEvidence>;
+
+    /// Full classification with code dependency ids. The default resolves
+    /// only the aggregate evidence (implementors backed by the owning
+    /// canonical stores provide the dependency detail).
+    async fn classify_with_dependencies(
+        &self,
+        candidate: &RetrievalResult,
+        request: &RetrievalRequest,
+    ) -> CoreResult<EvidenceClassification> {
+        // Aggregate-only classification cannot prove an empty dependency
+        // set (work package A3): the default is explicitly incomplete.
+        Ok(EvidenceClassification::incomplete(
+            self.evidence(candidate, request).await?,
+        ))
+    }
+}
+
 /// Merges and reranks candidates from multiple retrieval sources.
 ///
 /// Implementations should preserve or populate `FusionTrace` so callers can see

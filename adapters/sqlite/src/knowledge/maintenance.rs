@@ -115,17 +115,16 @@ impl GraphMaintenanceRepository for SqlKnowledgeStore {
                 if !filter.kinds.is_empty() && !filter.kinds.contains(&e.kind) {
                     return None;
                 }
-                if let Some(sid) = &filter.source_id {
-                    if !entity_from_source(&e, sid) {
-                        return None;
-                    }
+                if let Some(sid) = &filter.source_id
+                    && !entity_from_source(&e, sid)
+                {
+                    return None;
                 }
-                if let Some(thr) = filter.min_confidence {
-                    if let Some(c) = e.provenance.confidence {
-                        if c < thr {
-                            return None;
-                        }
-                    }
+                if let Some(thr) = filter.min_confidence
+                    && let Some(c) = e.provenance.confidence
+                    && c < thr
+                {
+                    return None;
                 }
                 Some(e)
             })
@@ -195,22 +194,21 @@ impl GraphMaintenanceRepository for SqlKnowledgeStore {
                 if !scope_allows(&r.scope, scope) {
                     return None;
                 }
-                if let Some(p) = &filter.predicate {
-                    if &r.predicate != p {
-                        return None;
-                    }
+                if let Some(p) = &filter.predicate
+                    && &r.predicate != p
+                {
+                    return None;
                 }
-                if let Some(sid) = &filter.source_id {
-                    if !relationship_from_source(&r, sid) {
-                        return None;
-                    }
+                if let Some(sid) = &filter.source_id
+                    && !relationship_from_source(&r, sid)
+                {
+                    return None;
                 }
-                if let Some(thr) = filter.min_confidence {
-                    if let Some(c) = r.confidence.or(r.provenance.confidence) {
-                        if c < thr {
-                            return None;
-                        }
-                    }
+                if let Some(thr) = filter.min_confidence
+                    && let Some(c) = r.confidence.or(r.provenance.confidence)
+                    && c < thr
+                {
+                    return None;
                 }
                 Some(r)
             })
@@ -653,23 +651,23 @@ fn stage_rewrite(
         return Ok(StageOutcome::Unchanged);
     }
     let mut changed = false;
-    if let Some(p) = rewrite.predicate {
-        if &rel.predicate != p {
-            rel.predicate = p.clone();
-            changed = true;
-        }
+    if let Some(p) = rewrite.predicate
+        && &rel.predicate != p
+    {
+        rel.predicate = p.clone();
+        changed = true;
     }
-    if let Some(s) = rewrite.subject {
-        if rel.subject.id.as_ref() != Some(s) {
-            rel.subject.id = Some(s.clone());
-            changed = true;
-        }
+    if let Some(s) = rewrite.subject
+        && rel.subject.id.as_ref() != Some(s)
+    {
+        rel.subject.id = Some(s.clone());
+        changed = true;
     }
-    if let Some(o) = rewrite.object {
-        if rel.object.id.as_ref() != Some(o) {
-            rel.object.id = Some(o.clone());
-            changed = true;
-        }
+    if let Some(o) = rewrite.object
+        && rel.object.id.as_ref() != Some(o)
+    {
+        rel.object.id = Some(o.clone());
+        changed = true;
     }
     if !changed {
         return Ok(StageOutcome::Unchanged);

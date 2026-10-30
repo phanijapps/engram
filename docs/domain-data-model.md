@@ -56,6 +56,45 @@ and API payloads must conform to these artifacts. Rust domain types may become
 the generation source later, but they do not override accepted v1 contract files
 without an explicit compatibility review.
 
+## Project-Bound Code Indexing Extension
+
+Branch-indexed code is a versioned extension contract, not an additive mutation of the frozen v1 wire schema. A repository has an opaque RepoId independent of its URL or checkout path. A binding associates one authorized tenant/workspace scope and RepoId with one exact case-sensitive `refs/heads/...` ref, a monotonically increasing binding version and epoch, and at most one published generation. The binding is durable authority; caller paths and branch arguments cannot create or widen it.
+
+A generation identifies the full Git object ID, immutable retained snapshot digest, parser fingerprint, and filter fingerprint. Indexed records carry generation-specific lineage and contributor identities. A lineage record also carries an optional canonical span (`CanonicalSpan`: 1-based inclusive `startLine`/`endLine`, `startLine` ≥ 1, `endLine` ≥ `startLine`) pinning the record's lines in its `sourcePath` at the generation's pinned commit; the span is staged once at publication (durable canonical-span authentication, r5 final finding 2) and is never re-read from mutable rows. Records without a single canonical span (source/graph/relationship rows, and lineage persisted before the field existed) omit it. The field is additive and optional (nullable): existing v1 data validates unchanged and consumers that do not read it are unaffected. An attempt carries an idempotency key, expected binding version and epoch, a fencing token, lifecycle state, and typed lane receipts. Publication is permitted only after required lane receipts are durable and the expected binding version, epoch, and fencing token still match. A reset preview binds an exact target set to a digest and an optional `preservationInventory` of ordinary record IDs, per-record content and contributor digests, and an aggregate inventory digest; each `TargetLineage` carries contributor identities. Its journal records checkpoints and preservation digests. Retry and cleanup authority belongs to durable records, not process-local locks.
+
+The portable domain model defines validation for identity, canonical branch-ref shape, source object/digest identifiers, repository-relative paths, contributor lineage, attempt fencing metadata, and exact reset previews. Git ref resolution, repository acquisition, SQL persistence, and cryptographic preview verification remain adapter/coordinator responsibilities. The typed payload definitions are additive schema definitions under the existing contract package. Requiring a binding for code selection changes observable behavior and must be explicitly activated and documented as a breaking behavior change; it does not change existing v1 field meanings or infer a binding for legacy records. No automatic legacy migration is permitted.
+
+`CodeResetPreview` is an immutable proposal that carries its binding, `previewHash`, transport-compatible `targetIds`, exact targets, ambiguous-ownership entries, preservation digests, optional `preservationInventory`, binding versions, and code epoch. `preservationInventory` contains preserved ordinary-record IDs, each record's `recordClass` (the knowledge class of the preserved record), content and contributor digests, and an aggregate digest that is rechecked after target retirement. `PreservationEntry.recordClass` is an additive optional wire property for backward compatibility, although current Rust serialization always emits its camelCase value; existing inventory data validates unchanged and consumers that do not read the field are unaffected. Each exact target carries its record/store IDs, fingerprint, lineage, snapshot reference, scan metadata keys, binding version, and code epoch. `TargetLineage.contributors` preserves the durable contributor identities used for exact target authentication. `CodeResetJournal` binds the preview and hash to exact target fingerprints, owner authorization decisions, checkpoints, and preservation digests. The added preview and lineage fields are additive and optional: existing data validates unchanged and consumers that do not read them are unaffected. These shapes authorize preview → owner gate → apply/resume only; they do not promise a scope wipe or cross-store atomic rollback.
+
+`CodeRefObservation` records one configured `branchRef`, full observed object ID, observation time, and `on_request` policy. It is durable only after branch and object-ID validation. The observation is separate from the indexed generation OID and is never derived from checkout `HEAD`, a scan-root sidecar, or an unrelated checkpoint.
+
+A binding-keyed staging manifest identifies the full authorized scope, RepoId, canonical ref, binding version, generation, pinned object ID, parser/filter fingerprints, and attempt ID.
+A knowledge readiness receipt identifies its attempt, generation, lane, and digest of the staged target/contributor and exact-source inventories.
+The adapter emits a receipt only after durable record, contributor, source descriptor, and manifest writes succeed.
+A matching retry reuses its durable receipt without reconciling or deleting an active generation.
+An internal manifest is not a publication pointer, a new scope authority, or evidence of cross-store ACID.
+The durable attempt lookup returns its immutable generation association with the attempt record so a crash retry cannot substitute another generation.
+A newer durable fencing token supersedes an older token before either attempt publishes; merely requiring a positive token is insufficient.
+The coordinator authorizes each binding operation before storage access and derives required receipt lanes from trusted configuration rather than accepting a caller-selected reduced set.
+
+A request-local read lease pins one authorized scope, durable code epoch, and complete published generation set until its configured expiry.
+The store atomically compares the epoch and generation set when it acquires a lease; renewal and release require the current lease fencing token.
+Every successful binding/publication/reset visibility change increments a scope-wide code epoch, not the maximum of independent repository counters.
+A reader revalidates this epoch before returning and retries at most once; a second change returns a retryable generation-change error.
+Retention protects active, immediately previous, nonterminal-attempt and unexpired or configured-grace-period leased generations.
+An expired lease never authorizes cleanup by itself; exact no-reference proof and separate cleanup authority remain required.
+
+### Acquisition custody and resource limits
+
+Concrete retained file paths must contain only unambiguous repository-relative components.
+Acquisition rejects traversal, control characters, Windows device/stream names and trailing-dot/space components rather than renaming or silently dropping them.
+Retention preflights destination filesystem aliases before writing file content; logical identities and exact case remain unchanged.
+Every parsed tree entry and scheduled traversal item consumes a finite admission before allocation or enqueue, including repeated subtree references.
+The fetched-data boundary is the sum of logical regular-file bytes admitted to one attempt-owned cache, not physical filesystem blocks, resident memory or the total retained cache across attempts.
+Transport capture, cumulative inflated/delta reconstruction work, object count, tree-entry work, traversal/depth and selected snapshot bytes have independent limits.
+A failed operation whose owned cleanup cannot complete reports cleanup-pending custody with the exact retry target; that target does not authorize deleting successful referenced generations.
+These adapter resource/custody semantics add no frozen-v1 wire fields and do not change binding/reset authority.
+
 ## Modeling Principles
 
 - Domain contracts are independent of storage engines, APIs, and language

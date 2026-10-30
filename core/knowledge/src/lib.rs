@@ -10,12 +10,17 @@
 
 mod batch_ledger;
 pub mod changes;
+pub mod code_binding;
+mod code_read_leases;
+mod generation_staging;
 mod graph;
 pub mod identity;
 mod ingest;
 mod maintenance;
 mod ontology;
 mod repository;
+pub mod retained_source;
+pub mod retirement;
 mod taxonomy;
 mod taxonomy_validation;
 
@@ -23,6 +28,13 @@ pub use engram_runtime::{CoreError, CoreResult};
 
 pub use batch_ledger::{SourceBatchLedger, SourceBatchRecord, SourceBatchRecordKind};
 pub use changes::{KnowledgeChangeLog, ScanCheckpointStore};
+pub use code_binding::{
+    AcquisitionMode, CodeBindingRepository, CodeEligibility, CodeEligibilityGate,
+    CodeRefObservation, ConstrainedCodeQuery, RefObservationPolicy, RepositoryRegistration,
+    StageReceipt, TargetLineage,
+};
+pub use code_read_leases::{CodeReadLease, CodeReadLeases};
+pub use generation_staging::CodeGenerationStaging;
 pub use graph::KnowledgeGraphRepository;
 pub use identity::EntityIdentityRepository;
 pub use ingest::{Chunker, IngestionService, SourceReader};
@@ -32,5 +44,9 @@ pub use maintenance::GraphMaintenanceRepository;
 pub use maintenance::detect_candidates;
 pub use ontology::OntologyRepository;
 pub use repository::KnowledgeRepository;
+pub use retained_source::{
+    ExactSourceView, RetainedPath, RetainedSourceReader, content_digest, exact_unavailable,
+};
+pub use retirement::RetirementTarget;
 pub use taxonomy::TaxonomyRepository;
 pub use taxonomy_validation::validate_taxonomy_proposal;

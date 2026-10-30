@@ -28,6 +28,14 @@ pub struct CommunitySummaryIndex {
     source: Arc<dyn GraphRelationshipSource>,
     default_limit: u32,
     cache: Option<Arc<dyn GraphCache>>,
+    /// Bound-code eligibility (task_014): when wired, communities are detected
+    /// over the eligible universe only — stale/retired/legacy-unbound code
+    /// entities leave the member set BEFORE Louvain, so a summary that touched
+    /// a retired generation is recomputed from the surviving eligible code and
+    /// non-code inputs rather than served stale or dropped wholesale. The warm
+    /// snapshot + cached labels are epoch-stamped: a retirement bumps the
+    /// epoch, which invalidates both.
+    eligibility: Option<Arc<dyn engram_retrieval::CodeEligibilityResolver>>,
 }
 
 impl CommunitySummaryIndex {
@@ -42,6 +50,7 @@ impl CommunitySummaryIndex {
             source,
             default_limit,
             cache: None,
+            eligibility: None,
         }
     }
 
@@ -57,6 +66,25 @@ impl CommunitySummaryIndex {
             source,
             default_limit,
             cache: Some(cache),
+            eligibility: None,
+        }
+    }
+
+    /// [`Self::with_cache`] with bound-code eligibility wired (task_014):
+    /// summaries touching a retired generation are recomputed from the
+    /// surviving inputs before serving, and warm snapshots/labels from a
+    /// retired epoch are misses.
+    pub fn with_cache_and_eligibility(
+        source: Arc<dyn GraphRelationshipSource>,
+        default_limit: u32,
+        cache: Arc<dyn GraphCache>,
+        eligibility: Arc<dyn engram_retrieval::CodeEligibilityResolver>,
+    ) -> Self {
+        Self {
+            source,
+            default_limit,
+            cache: Some(cache),
+            eligibility: Some(eligibility),
         }
     }
 }
@@ -73,13 +101,36 @@ impl RetrievalIndex for CommunitySummaryIndex {
             .unwrap_or(self.default_limit);
         let scope = &request.scope;
 
+        // Bound-code eligibility (task_014 + corrective r2 findings 5/8):
+        // resolve the durable view once, applying the request's repository
+        // narrowing; the observed epoch gates the warm snapshot AND the
+        // cached Louvain labels — a retirement bumps the epoch, so both
+        // recompute.
+        let (view, observed_epoch) = match &self.eligibility {
+            Some(resolver) => {
+                let eligibility = resolver.resolve(scope).await?;
+                let epoch = eligibility.epoch;
+                let view = engram_retrieval::BoundCodeView::from_eligibility(&eligibility)
+                    .with_requested_keys(
+                        request
+                            .filters
+                            .as_ref()
+                            .and_then(|filters| filters.code_index_keys.as_deref()),
+                    );
+                (Some(view), Some(epoch))
+            }
+            None => (None, None),
+        };
+
         // Cache hit: serve the in-scope entities + relationships from the
         // materialized snapshot, skipping the per-query store reload. A miss
         // (or no cache) loads from the source as before and populates the cache
         // (this lane reads BOTH entities and relationships, so it always stores
-        // a full snapshot).
+        // a full snapshot). An eligibility-wired lane only accepts a snapshot
+        // stamped with the CURRENT epoch (see [`GraphSnapshot::current_for_epoch`]).
         let (entities, relationships) = if let Some(cache) = &self.cache
             && let Some(snap) = cache.get(scope).await
+            && snap.current_for_epoch(observed_epoch)
         {
             (snap.entities.clone(), snap.relationships.clone())
         } else {
@@ -96,11 +147,47 @@ impl RetrievalIndex for CommunitySummaryIndex {
                             entities: ents.clone(),
                             relationships: rels.clone(),
                             community_labels: None,
+                            eligibility_epoch: observed_epoch,
                         }),
                     )
                     .await;
             }
             (ents, rels)
+        };
+
+        // Lineage partition BEFORE community detection (task_014): ineligible
+        // code entities leave the member set and every edge touching them is
+        // dropped, so communities — and their summaries — are computed from
+        // eligible code + surviving non-code inputs only. A mixed community is
+        // recomputed (smaller), never served stale and never dropped wholesale.
+        let (entities, relationships) = match &view {
+            Some(view) => {
+                let mut authorized_ids: std::collections::HashSet<String> = Default::default();
+                let entities = entities
+                    .into_iter()
+                    .filter(|entity| {
+                        let allowed = view.allows(entity.id.as_str(), entity_is_code_kind(entity));
+                        if allowed {
+                            authorized_ids.insert(entity.id.to_string());
+                        }
+                        allowed
+                    })
+                    .collect::<Vec<_>>();
+                let relationships = relationships
+                    .into_iter()
+                    .filter(|relationship| {
+                        [
+                            relationship.subject.id.as_ref().map(|id| id.as_str()),
+                            relationship.object.id.as_ref().map(|id| id.as_str()),
+                        ]
+                        .into_iter()
+                        .flatten()
+                        .all(|id| authorized_ids.contains(id))
+                    })
+                    .collect::<Vec<_>>();
+                (entities, relationships)
+            }
+            None => (entities, relationships),
         };
 
         let by_key: HashMap<&str, &KnowledgeEntity> =
@@ -130,14 +217,22 @@ impl RetrievalIndex for CommunitySummaryIndex {
         // subsequent query reuses them until the graph changes. Entities and
         // relationships are already cached (above), so this only adds the label
         // map to the snapshot on the warm-up query.
-        let labels = if let Some(cache) = &self.cache
+        let labels = if view.is_none()
+            && let Some(cache) = &self.cache
             && let Some(snap) = cache.get(scope).await
+            && snap.current_for_epoch(observed_epoch)
             && let Some(cached) = &snap.community_labels
         {
             cached.clone()
         } else {
             let computed = communities(&edges, 20);
-            if let Some(cache) = &self.cache {
+            // The shared snapshot is request-independent raw graph data.
+            // Never replace it with a repository-narrowed graph or labels,
+            // because a later wildcard or differently narrowed request would
+            // otherwise reuse the prior request's universe.
+            if view.is_none()
+                && let Some(cache) = &self.cache
+            {
                 cache
                     .put(
                         scope,
@@ -145,6 +240,7 @@ impl RetrievalIndex for CommunitySummaryIndex {
                             entities: entities.clone(),
                             relationships: relationships.clone(),
                             community_labels: Some(computed.clone()),
+                            eligibility_epoch: observed_epoch,
                         }),
                     )
                     .await;
@@ -299,6 +395,24 @@ fn name_matches_tokens(name: &str, tokens: &[String]) -> bool {
 }
 
 /// Resolves an entity reference to its entity-id key, or `None` if no id.
+/// Typed code classification never trusts a metadata stamp.  A code symbol or
+/// structural artifact without durable lineage remains code and is denied by
+/// a bound view.
+fn entity_is_code_kind(entity: &KnowledgeEntity) -> bool {
+    engram_retrieval::is_code_artifact(entity)
+        || matches!(
+            entity.kind,
+            engram_domain::EntityKind::Class
+                | engram_domain::EntityKind::Function
+                | engram_domain::EntityKind::Method
+                | engram_domain::EntityKind::Struct
+                | engram_domain::EntityKind::Interface
+                | engram_domain::EntityKind::Trait
+                | engram_domain::EntityKind::TypeAlias
+                | engram_domain::EntityKind::Enum
+        )
+}
+
 fn entity_key(reference: &EntityRef) -> Option<String> {
     reference.id.as_ref().map(|id| id.as_str().to_owned())
 }

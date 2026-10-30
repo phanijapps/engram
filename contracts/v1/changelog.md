@@ -1,5 +1,28 @@
 # v1 Changelog
 
+## 2026-10-30 (preservation record class)
+
+- Added optional `PreservationEntry.recordClass` for the camelCase knowledge class emitted by the Rust preservation-record serializer. Additive/compatible: the property remains optional so existing inventory payloads validate unchanged; current Rust serialization emits it for every preserved record.
+
+## 2026-10-30 (reset preservation inventory)
+
+- Added optional `CodeResetPreview.preservationInventory`, `PreservationInventory`, and `PreservationEntry` definitions for preserved ordinary-record IDs, per-record content and contributor digests, and the aggregate inventory digest that is rechecked after reset retirement. Additive/compatible: existing data validates unchanged; consumers that do not read the optional field are unaffected.
+
+## 2026-10-30 (project-bound code indexing activation)
+
+- Behavioral tightening / BREAKING for code callers: code selection and bound-code operations now require a durable, explicitly authorized binding. This is not a v1 schema change. Implementations do not infer a binding from a checkout, path, `HEAD`, or legacy record, and they do not automatically migrate legacy unbound code.
+- BREAKING for legacy native callers: `NativeIngestEngine.codeBindJson` is removed from the supported bind path and returns the typed `LegacyCodeBindUnsupported` denial. Use `NativeProvider` or the TypeScript provider/client path and inject host `codeAuthority.launchScopes`; absent host authority returns the typed `CodeAuthorizationRequired` denial.
+- Added additive reset preview/journal and ref-observation shapes for the bound-code extension. Reset authorization is preview → owner gate → apply/resume; an observation records the configured ref separately from the indexed generation OID.
+
+## 2026-10-30 (durable canonical spans)
+
+- Added the `CanonicalSpan` definition (1-based inclusive `startLine`/`endLine`,
+  both ≥ 1) and the optional, nullable `CodeLineage.span` field pinning a
+  lineage record's canonical lines at its generation's pinned commit (r5
+  durable canonical-span authentication; staged once at publication, never
+  re-read from mutable rows). Additive/compatible: existing lineage data
+  validates unchanged; consumers that do not read `span` are unaffected.
+
 ## 2026-10-24 (outcome loop)
 
 - Added `TaskOutcome` + `RecallOutcome` definitions with an example (F2:

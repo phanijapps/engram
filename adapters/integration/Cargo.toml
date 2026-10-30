@@ -33,3 +33,7 @@ default = []
 # recall lane (pulls model-bearing code). Forwards to the core crate's feature
 # of the same name, which brings in the vector store + its fastembed-provider.
 fastembed = ["engram-integration/fastembed"]
+
+[dev-dependencies]
+rusqlite.workspace = true
+tempfile = "3"

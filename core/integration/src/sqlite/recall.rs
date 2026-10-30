@@ -41,7 +41,8 @@ use engram_domain::{
 use engram_memory::MemoryService;
 use engram_retrieval::compose_context;
 use engram_retrieval::{
-    ReciprocalFusionConfig, ReciprocalRankFusion, RetrievalCompositionInput, RetrievalIndex,
+    CandidateEvidence, CandidateEvidenceResolver, CodeEligibilityResolver, ReciprocalFusionConfig,
+    ReciprocalRankFusion, RetrievalCompositionInput, RetrievalIndex, resolve_view,
 };
 use engram_runtime::{CoreError, CoreResult};
 use futures::future::join_all;
@@ -75,6 +76,13 @@ pub struct SqlUnifiedRecall {
     /// facts-lane candidates (e.g. operator-approved memories outrank the
     /// same text written directly by an agent).
     trust: engram_retrieval::TrustWeights,
+    /// Bound-code eligibility (task_013): when wired, the facts lane's
+    /// code-derived memory items are classified against the published
+    /// generation set BEFORE they enter fusion, and every recall resolves
+    /// the view once and reuses it for the post-lane guard. `None` keeps
+    /// the historical behavior (no binding system in scope).
+    code_eligibility: Option<Arc<dyn CodeEligibilityResolver>>,
+    candidate_evidence: Option<Arc<dyn CandidateEvidenceResolver>>,
 }
 
 impl SqlUnifiedRecall {
@@ -115,7 +123,32 @@ impl SqlUnifiedRecall {
             fusion,
             reranker,
             trust: engram_retrieval::TrustWeights::default(),
+            code_eligibility: None,
+            candidate_evidence: None,
         }
+    }
+
+    /// Wires bound-code eligibility into the recall composition (task_013
+    /// seam): the facts lane filters code-derived items by the published
+    /// generation set before fusion, and a post-lane guard re-classifies every
+    /// surviving candidate (defense in depth for lanes that cannot constrain
+    /// internally) so ineligible code never reaches rerank input or
+    /// `compose_context`. Non-code candidates are never removed (AC-006).
+    /// Wires canonical evidence for degraded code-authority handling.
+    pub fn with_candidate_evidence(
+        mut self,
+        candidate_evidence: Arc<dyn CandidateEvidenceResolver>,
+    ) -> Self {
+        self.candidate_evidence = Some(candidate_evidence);
+        self
+    }
+
+    pub fn with_code_eligibility(
+        mut self,
+        code_eligibility: Arc<dyn CodeEligibilityResolver>,
+    ) -> Self {
+        self.code_eligibility = Some(code_eligibility);
+        self
     }
 }
 
@@ -127,6 +160,38 @@ impl UnifiedRecall for SqlUnifiedRecall {
         let mut source_failures: Vec<RetrievalSourceFailure> = Vec::new();
         let mut omitted = Vec::new();
 
+        // ---- Bound-code eligibility (task_013) --------------------------------
+        // Resolve the published generation set ONCE per recall. The view
+        // (a) filters the facts lane's code-derived memory items below,
+        // (b) guards the fused candidate set after every lane — a lane that
+        // could not constrain internally (or a stale warm entry) cannot slip
+        // ineligible code into rerank input or compose_context. A resolver
+        // failure degrades the recall with a source failure rather than
+        // silently running unconstrained.
+        // Corrective r2 (finding 6): an eligibility-resolution FAILURE fails
+        // CLOSED. The authority-unavailable branch does not disable the
+        // guard: code-capable candidates (chunk/entity targets — the types
+        // that require the failed authority) are denied, while independently
+        // authorized non-code results (facts-lane memories, beliefs) are
+        // preserved and the failure is surfaced as a source failure.
+        let mut authority_failed = false;
+        let code_view = match &self.code_eligibility {
+            Some(resolver) => {
+                let requested = request
+                    .filters
+                    .as_ref()
+                    .and_then(|filters| filters.code_index_keys.as_deref());
+                match resolve_view(resolver.as_ref(), &request.scope, requested).await {
+                    Ok(view) => Some(view),
+                    Err(error) => {
+                        source_failures.push(lane_failure("code_eligibility", &error));
+                        authority_failed = true;
+                        None
+                    }
+                }
+            }
+            None => None,
+        };
         // ---- Facts lane: memory.retrieve (already-composed ContextPayload) ----
         // Its items feed the outer fusion; its source_failures + omitted merge
         // into the outer payload (compose_context keeps all candidates — no
@@ -168,6 +233,10 @@ impl UnifiedRecall for SqlUnifiedRecall {
                         .partial_cmp(&a.score.total)
                         .unwrap_or(std::cmp::Ordering::Equal)
                 });
+                // Facts-lane code-derived items were classified against the
+                // published set here before A3; the post-lane guard below is
+                // now the single eligibility decision point (it classifies
+                // every candidate, facts-lane items included).
                 candidates.extend(payload.items);
                 source_failures.extend(payload.source_failures);
                 omitted.extend(payload.omitted);
@@ -222,6 +291,111 @@ impl UnifiedRecall for SqlUnifiedRecall {
             Err(e) => {
                 source_failures.push(lane_failure(BELIEF_LANE, &e));
             }
+        }
+
+        // ---- Post-lane eligibility guard (defense in depth) ------------------
+        // Every fused candidate is re-classified before rerank input and
+        // compose_context: an ineligible code target that survived a lane —
+        // e.g. via a stale warm index or a lane constructed without its own
+        // constraint — is dropped here rather than entering the composed
+        // context budget. With canonical evidence configured, a SUCCESSFUL
+        // view additionally validates every candidate's canonical CODE
+        // DEPENDENCIES against that view (corrective r4, canonical 6c): a
+        // memory/belief whose provenance derives from stale code denies even
+        // though its own id carries no lineage; positively authorized
+        // independent ordinary records keep flowing, and genuinely Unknown
+        // evidence fails closed. On AUTHORITY FAILURE the same evidence
+        // decides (finding 6): only positively authorized ordinary records
+        // survive.
+        //
+        // Work package A3 (r5): acceptance requires `complete` — a fully
+        // validated dependency set; the aggregate-only trait default can
+        // never pass. A code-dependent acceptance additionally requires a
+        // NONEMPTY code set (never a vacuous `.all` over a default-empty
+        // vector), and a MISSING evidence resolver is not derived-record
+        // independence: without it the guard fails closed identically to
+        // the authority-failure branch.
+        // clippy roll 2026-10: paired checks preserve the explicit fail-closed branch.
+        #[allow(clippy::unnecessary_unwrap)]
+        if code_view.is_some() && self.candidate_evidence.is_some() {
+            let evidence = self.candidate_evidence.as_ref().expect("checked");
+            let view = code_view.as_ref().expect("checked");
+            let mut allowed = Vec::with_capacity(candidates.len());
+            for candidate in candidates {
+                match evidence
+                    .classify_with_dependencies(&candidate, &request)
+                    .await
+                {
+                    Ok(classification) => {
+                        let dependency_eligible = classification.complete
+                            && !classification.code_dependencies.is_empty()
+                            && classification
+                                .code_dependencies
+                                .iter()
+                                .all(|dependency| view.allows(dependency.as_str(), true));
+                        if classification.complete
+                            && (classification.evidence == CandidateEvidence::Ordinary
+                                || (classification.evidence == CandidateEvidence::CodeDependent
+                                    && dependency_eligible))
+                        {
+                            allowed.push(candidate);
+                        }
+                    }
+                    Err(error) => source_failures.push(lane_failure("candidate_evidence", &error)),
+                }
+            }
+            candidates = allowed;
+        } else if code_view.is_some() {
+            // Missing evidence resolver ≠ derived-record independence (A3):
+            // own-id lineage cannot prove a memory/belief free of stale code
+            // dependencies, so every candidate fails closed while code
+            // bindings exist and the denial is surfaced, not silent.
+            source_failures.push(lane_failure(
+                "candidate_evidence",
+                &CoreError::Adapter {
+                    adapter: "candidate-evidence".to_string(),
+                    message: "evidence resolver not configured; candidates fail \
+                             closed while code bindings exist"
+                        .to_string(),
+                },
+            ));
+            candidates.clear();
+        } else if authority_failed {
+            let Some(evidence) = &self.candidate_evidence else {
+                candidates.clear();
+                return compose_context(RetrievalCompositionInput {
+                    request: &request,
+                    fusion: &ReciprocalRankFusion::new(self.fusion.clone()),
+                    reranker: self.reranker.as_deref(),
+                    candidates,
+                    omitted,
+                    source_failures,
+                    created_at: now,
+                });
+            };
+            // Review r5 (finding 6): the degraded path uses the SAME
+            // completeness contract as the successful-view path —
+            // `classify_with_dependencies`, accepting ONLY complete,
+            // positively ordinary evidence. An aggregate-only resolver
+            // cannot pass here (its classification is explicitly
+            // incomplete), and an incomplete Ordinary never flows.
+            let mut allowed = Vec::with_capacity(candidates.len());
+            for candidate in candidates {
+                match evidence
+                    .classify_with_dependencies(&candidate, &request)
+                    .await
+                {
+                    Ok(classification) => {
+                        if classification.complete
+                            && classification.evidence == CandidateEvidence::Ordinary
+                        {
+                            allowed.push(candidate);
+                        }
+                    }
+                    Err(error) => source_failures.push(lane_failure("candidate_evidence", &error)),
+                }
+            }
+            candidates = allowed;
         }
 
         // ---- Fuse + compose via the existing RRF + compose_context -----------

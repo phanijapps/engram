@@ -29,5 +29,8 @@ pub use noise::{is_noise_declaration, is_noise_symbol};
 pub use parser::chunking::{ChunkCandidate, Chunker};
 pub use parser::code_symbol::CodeSymbolChunker;
 pub use parser::tree_sitter_chunker::TreeSitterChunker;
-pub use queries::{ExploreNode, FileDependency, explore, file_dependencies};
+pub use queries::{
+    ExploreNode, ExploreNodeById, FileDependency, explore, explore_by_id, file_dependencies,
+    file_dependencies_resolved,
+};
 pub use resolution::{receiver_type_hint, resolve_refs, split_dotted};

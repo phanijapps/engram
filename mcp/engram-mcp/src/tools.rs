@@ -2034,6 +2034,200 @@ pub(crate) mod tests {
         );
     }
 
+    /// Minimal seeded knowledge-query double for degrade-path tests: only
+    /// `list_entities` carries data (the degrade scan reads nothing else).
+    struct SeededEntitiesQuery {
+        entities: Vec<KnowledgeEntity>,
+    }
+
+    #[async_trait::async_trait]
+    impl engram_integration::KnowledgeQuery for SeededEntitiesQuery {
+        async fn list_entities(
+            &self,
+            _scope: &engram_domain::Scope,
+        ) -> engram_knowledge::CoreResult<Vec<KnowledgeEntity>> {
+            Ok(self.entities.clone())
+        }
+        async fn list_relationships(
+            &self,
+            _scope: &engram_domain::Scope,
+        ) -> engram_knowledge::CoreResult<Vec<KnowledgeRelationship>> {
+            Ok(Vec::new())
+        }
+        async fn list_chunks(
+            &self,
+            _scope: &engram_domain::Scope,
+        ) -> engram_knowledge::CoreResult<Vec<KnowledgeChunk>> {
+            Ok(Vec::new())
+        }
+    }
+
+    fn fallback_entity(name: &str, kind: EntityKind) -> KnowledgeEntity {
+        KnowledgeEntity {
+            id: Id::from(name),
+            graph_id: None,
+            kind,
+            name: name.to_owned(),
+            aliases: Vec::new(),
+            scope: project_scope("test-project", "default"),
+            source_refs: Vec::new(),
+            concept_refs: Vec::new(),
+            ontology_class_refs: Vec::new(),
+            provenance: provenance("test-a7-fallback"),
+            created_at: Utc::now(),
+            updated_at: None,
+            valid_from: None,
+            valid_until: None,
+            metadata: None,
+            archived_at: None,
+        }
+    }
+
+    /// A7 (r5): the ACTUAL degrade-path substring fallback producer
+    /// (`substring_symbol_scan`, reached when unified recall is unavailable)
+    /// and its consumer (the search packet) — an eligible ordinary positive
+    /// PLUS an injected-shape ineligible high-rank code candidate whose name
+    /// EXACTLY equals the query (the strongest match arm; a naive scan would
+    /// list it first). The fallback serves the ordinary positive and never
+    /// the artifact; the explicit opt-in re-admits it through the SAME
+    /// producer.
+    #[test]
+    fn degrade_substring_fallback_serves_eligible_and_blocks_artifact() {
+        let dir = tempfile::tempdir().unwrap();
+        let knowledge: std::sync::Arc<dyn engram_integration::KnowledgeQuery> =
+            std::sync::Arc::new(SeededEntitiesQuery {
+                entities: vec![
+                    fallback_entity("deploywidgetRunbook", EntityKind::Concept),
+                    fallback_entity("deploywidget", EntityKind::Module),
+                ],
+            });
+        // No recall handle configured: `require_recall` fails and the search
+        // tool takes its REAL degrade arm (the substring fallback producer).
+        let provider = engram_integration::EngramProviderBuilder::new(
+            engram_integration::CapabilityReport::new(engram_domain::CapabilityState::Supported),
+        )
+        .knowledge_query(knowledge)
+        .build();
+        let app = App {
+            provider,
+            scope: project_scope("test-project", "default"),
+            ontology: OntologyConfig::default(),
+            taxonomy: TaxonomyConfig::default(),
+            storage_dir: dir.path().to_path_buf(),
+        };
+        assert!(
+            app.provider.recall().is_none(),
+            "fixture sanity: this app has NO recall handle — the degrade arm runs"
+        );
+
+        let res = crate::codegraph::search(
+            &app,
+            &json!({ "query": "deploywidget", "diagnostics": true }),
+        )
+        .unwrap();
+        let body = res["content"][0]["text"].as_str().unwrap();
+        assert!(
+            body.contains("deploywidgetRunbook"),
+            "the substring fallback serves the eligible ordinary positive: {body}"
+        );
+        assert!(
+            !body.contains("(Module)"),
+            "the degrade fallback never serves the exact-name artifact: {body}"
+        );
+
+        let opt_in = crate::codegraph::search(
+            &app,
+            &json!({ "query": "deploywidget", "include_code_artifacts": true }),
+        )
+        .unwrap();
+        let opt_in_body = opt_in["content"][0]["text"].as_str().unwrap();
+        assert!(
+            opt_in_body.contains("(Module)"),
+            "the explicit opt-in re-admits the artifact through the same producer: {opt_in_body}"
+        );
+    }
+
+    /// A7 (r5): the ACTUAL post-recall fallback producer
+    /// (`inject_exact_matches` — the tool-level exact/substring injection
+    /// arm) with unified recall wired: an eligible ordinary positive flows
+    /// (recall or injection — both real producers), while an ineligible
+    /// code candidate whose name EXACTLY equals the query — which the
+    /// injection would score at the TOP anchor rank — never enters the
+    /// packet; an artifact-ONLY match yields the SUCCESS-empty packet with
+    /// the actionable opt-in hint, and the opt-in re-admits it.
+    #[test]
+    fn recall_injection_fallback_blocks_exact_name_artifact_at_top_rank() {
+        let dir = tempfile::tempdir().unwrap();
+        let app = test_app(dir.path());
+        put_entity(
+            &app,
+            &json!({ "name": "deploywidgetRunbook", "kind": "concept" }),
+        )
+        .unwrap();
+        put_entity(&app, &json!({ "name": "deploywidget", "kind": "module" })).unwrap();
+        put_entity(&app, &json!({ "name": "kernmod", "kind": "module" })).unwrap();
+        // Fixture sanity: both artifact entities exist and classify as code
+        // artifacts — their absence below is the producer gate, not a
+        // missing fixture.
+        let by_id = crate::codegraph::entity_lookup(&app);
+        assert!(
+            by_id.values().any(|entity| entity.name == "deploywidget"
+                && engram_retrieval::is_code_artifact(entity))
+                && by_id
+                    .values()
+                    .any(|entity| entity.name == "kernmod"
+                        && engram_retrieval::is_code_artifact(entity)),
+            "fixture must contain the exact-name artifact entities"
+        );
+
+        // Eligible ordinary positive + exact-name artifact: the ordinary
+        // positive serves; the artifact (which the injection arm would score
+        // at the TOP anchor rank on an exact identifier match) never appears.
+        let res = crate::codegraph::search(
+            &app,
+            &json!({ "query": "deploywidget", "diagnostics": true }),
+        )
+        .unwrap();
+        let body = res["content"][0]["text"].as_str().unwrap();
+        assert!(
+            body.contains("deploywidgetRunbook"),
+            "the eligible ordinary positive serves: {body}"
+        );
+        assert!(
+            !body.contains("(Module)"),
+            "the exact-name artifact must not be injected at top rank: {body}"
+        );
+
+        // Artifact-ONLY match: SUCCESS-empty packet with the actionable
+        // opt-in hint (never a silent empty, never a fallback serve).
+        let artifact_only = crate::codegraph::search(&app, &json!({ "query": "kernmod" })).unwrap();
+        let hint_body = artifact_only["content"][0]["text"].as_str().unwrap();
+        assert!(
+            hint_body.contains("No results"),
+            "artifact-only match is success-empty: {hint_body}"
+        );
+        assert!(
+            hint_body.contains("include_code_artifacts: true"),
+            "the empty packet carries the opt-in hint: {hint_body}"
+        );
+        assert!(
+            !hint_body.contains("(Module)"),
+            "the artifact-only fallback never serves the artifact: {hint_body}"
+        );
+
+        // Opt-in re-admits the artifact through the same producer.
+        let opt_in = crate::codegraph::search(
+            &app,
+            &json!({ "query": "kernmod", "include_code_artifacts": true, "diagnostics": true }),
+        )
+        .unwrap();
+        let opt_in_body = opt_in["content"][0]["text"].as_str().unwrap();
+        assert!(
+            opt_in_body.contains("(Module)"),
+            "the opt-in re-admits the artifact: {opt_in_body}"
+        );
+    }
+
     /// Code-artifact suppression battery (2026-10-20): scan a fixture whose
     /// graph contains import-path Module/File entities plus a real Function;
     /// default search suppresses the artifacts, the flag opts them back in,
@@ -2073,15 +2267,31 @@ pub(crate) mod tests {
             "artifacts suppressed by default: {body}"
         );
 
-        // Exact suppressed-name search: SUCCESS-empty + actionable hint.
+        // `main` has a real Function in this fixture, so exact-name injection
+        // must return that eligible symbol without re-admitting an artifact.
         let res = crate::codegraph::search(&app, &json!({ "query": "main" })).unwrap();
         let body = res["content"][0]["text"].as_str().unwrap();
-        if !body.contains("charge_card") {
-            assert!(
-                body.contains("include_code_artifacts: true"),
-                "empty packet must carry the opt-in hint: {body}"
-            );
-        }
+        assert!(
+            body.contains("main — engram-mcp-scan, src/main.rs"),
+            "the eligible fn main remains searchable: {body}"
+        );
+        assert!(
+            !body.contains("(Module)") && !body.contains("(File)"),
+            "the exact-name injection must not re-admit an artifact: {body}"
+        );
+
+        // The module name has no ordinary symbol counterpart, so its default
+        // search is SUCCESS-empty and gives the actionable opt-in hint.
+        let res = crate::codegraph::search(&app, &json!({ "query": "engram-mcp-scan" })).unwrap();
+        let body = res["content"][0]["text"].as_str().unwrap();
+        assert!(
+            body.contains("No results"),
+            "artifact-only match must be success-empty: {body}"
+        );
+        assert!(
+            body.contains("include_code_artifacts: true"),
+            "artifact-only match must carry the opt-in hint: {body}"
+        );
 
         // File-as-query: a PATH-SHAPED query auto-includes artifacts — the
         // reproduced regression (source-of-symbol accuracy 100% -> 0% under
@@ -2362,4 +2572,383 @@ impl Store {
             "listItems should connect to endpoint via wrapper propagation: {rels:?}"
         );
     }
+}
+
+// --- TASK-021: scoped bound-code operations through stdio ---------------------
+//
+// NOT an independent implementation: every operation forwards to the SAME
+// shared handlers the Rust facade, native N-API binding, and TypeScript
+// surfaces use — the coordinator's `register`/`bind`/`status`/
+// `refresh_from_registration` (review r6 finding 5 closed the parity gap:
+// register + registered-locator refresh are now callable on every surface,
+// and the native `codeObserveRef` OID-supplying shortcut is gone). Every
+// failure is a TYPED, inspectable diagnosis — the JSON-RPC error message
+// begins with the stable kind (`BindingRequired`, `BindingConflict`,
+// `CapabilityUnsupported`, …) so transports can branch without parsing
+// prose.
+
+use engram_domain::{CodeResetJournal, RepoId, Scope};
+use engram_integration::code_binding::CodeBindingStatus;
+use engram_knowledge::{AcquisitionMode, RepositoryRegistration};
+use serde::Deserialize;
+
+/// Maps a coordinator/provider failure onto the typed tool-error envelope:
+/// the message carries the CoreError's own text (which begins with the
+/// stable typed reason) under the internal-error code.
+fn code_authority_error(error: engram_knowledge::CoreError) -> ToolError {
+    internal(error.to_string())
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct CodeResetPreviewRequest {
+    scope: Scope,
+    repo: RepoId,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct CodeRebuildRequest {
+    repo: RepoId,
+    request_id: String,
+    #[serde(default)]
+    branch_ref: Option<String>,
+    #[serde(default)]
+    path: Option<String>,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct CodeResetApplyRequest {
+    journal: CodeResetJournal,
+    decision: String,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct CodeResetResumeRequest {
+    journal: CodeResetJournal,
+}
+
+fn reset_request<T: serde::de::DeserializeOwned>(args: &Value) -> Result<T, ToolError> {
+    serde_json::from_value(args.clone())
+        .map_err(|error| invalid(format!("invalid reset request: {error}")))
+}
+
+fn req_repo(args: &Value) -> Result<RepoId, ToolError> {
+    let repo = args["repo"]
+        .as_str()
+        .map(str::trim)
+        .filter(|repo| !repo.is_empty())
+        .ok_or_else(|| invalid("missing required string arg 'repo'"))?;
+    Ok(RepoId(repo.to_owned()))
+}
+
+/// `code_repo_register`: register a repository's acquisition locator for
+/// this scope. `{ repo, mode: "local-only" | "configured-remote", path }`.
+pub fn code_repo_register(app: &App, args: &Value) -> Result<Value, ToolError> {
+    let repo = req_repo(args)?;
+    let mode = match args["mode"].as_str().unwrap_or("local-only") {
+        "local-only" => AcquisitionMode::LocalOnly,
+        "configured-remote" => AcquisitionMode::ConfiguredRemote,
+        other => {
+            return Err(invalid(format!(
+                "unknown acquisition mode {other:?} (local-only | configured-remote)"
+            )));
+        }
+    };
+    let path = args["path"]
+        .as_str()
+        .map(str::trim)
+        .filter(|path| !path.is_empty())
+        .ok_or_else(|| invalid("missing required string arg 'path' (the authorized locator)"))?;
+    let coordinator = app.provider.code_bindings().map_err(code_authority_error)?;
+    let registration = block_on(coordinator.register(
+        &system_actor(),
+        &app.scope,
+        RepositoryRegistration {
+            repo_id: repo.clone(),
+            locator_id: path.to_owned(),
+            acquisition: mode,
+        },
+    ))
+    .map_err(code_authority_error)?;
+    Ok(protocol::text_content(format!(
+        "REGISTERED {} (mode {}, locator on record — display URLs are never identity)",
+        registration.repo_id.0,
+        match registration.acquisition {
+            AcquisitionMode::LocalOnly => "local-only",
+            AcquisitionMode::ConfiguredRemote => "configured-remote",
+        },
+    )))
+}
+
+/// `code_rebuild`: ingest the bound branch from its registered locator and publish it.
+/// A request ID is required for operator retry correlation; coordinator generation identity
+/// makes a repeat at the same pinned commit idempotent without accepting a caller path.
+pub fn code_rebuild(app: &App, args: &Value) -> Result<Value, ToolError> {
+    let request: CodeRebuildRequest = reset_request(args)?;
+    if request.request_id.trim().is_empty() {
+        return Err(invalid("missing required string arg 'requestId'"));
+    }
+    if request.path.is_some() {
+        return Err(invalid(
+            "path is not an input to bound code ingestion — use the registered locator",
+        ));
+    }
+    let coordinator = app.provider.code_bindings().map_err(code_authority_error)?;
+    let lanes = app
+        .provider
+        .code_ingestion()
+        .map_err(code_authority_error)?;
+    let ingested = block_on(coordinator.ingest_registered(
+        &system_actor(),
+        &app.scope,
+        &request.repo,
+        request.branch_ref.as_deref(),
+        None,
+        lanes,
+    ))
+    .map_err(code_authority_error)?;
+    Ok(protocol::text_content(
+        serde_json::to_string(&ingested).expect("bound rebuild serializes"),
+    ))
+}
+
+/// `code_reset_preview`: create the exact reset proposal through the reset-authorized coordinator seam.
+pub fn code_reset_preview(app: &App, args: &Value) -> Result<Value, ToolError> {
+    let request: CodeResetPreviewRequest = reset_request(args)?;
+    let coordinator = app.provider.code_bindings().map_err(code_authority_error)?;
+    let preview =
+        block_on(coordinator.preview_reset(&system_actor(), &request.scope, &request.repo))
+            .map_err(code_authority_error)?;
+    Ok(protocol::text_content(
+        serde_json::to_string(&preview).expect("reset preview serializes"),
+    ))
+}
+
+/// `code_reset_apply`: persist the owner-approved journal and execute its reset state machine.
+pub fn code_reset_apply(app: &App, args: &Value) -> Result<Value, ToolError> {
+    let request: CodeResetApplyRequest = reset_request(args)?;
+    let coordinator = app.provider.code_bindings().map_err(code_authority_error)?;
+    let journal =
+        block_on(coordinator.journal_reset(&system_actor(), request.journal, request.decision))
+            .map_err(code_authority_error)?;
+    let applied = block_on(coordinator.apply_reset(&system_actor(), journal))
+        .map_err(code_authority_error)?;
+    Ok(protocol::text_content(
+        serde_json::to_string(&applied).expect("reset journal serializes"),
+    ))
+}
+
+/// `code_reset_resume`: retry pending or failed lanes from the immutable durable journal.
+pub fn code_reset_resume(app: &App, args: &Value) -> Result<Value, ToolError> {
+    let request: CodeResetResumeRequest = reset_request(args)?;
+    let coordinator = app.provider.code_bindings().map_err(code_authority_error)?;
+    let resumed = block_on(coordinator.apply_reset(&system_actor(), request.journal))
+        .map_err(code_authority_error)?;
+    Ok(protocol::text_content(
+        serde_json::to_string(&resumed).expect("reset journal serializes"),
+    ))
+}
+
+/// `code_bind`: bind a repository's branch for the launch scope.
+/// `{ repo, branchRef }` — same-ref idempotent; another branch is a typed
+/// `BindingConflict` denial.
+pub fn code_bind(app: &App, args: &Value) -> Result<Value, ToolError> {
+    let repo = req_repo(args)?;
+    let branch_ref = args["branchRef"]
+        .as_str()
+        .map(str::trim)
+        .filter(|branch| !branch.is_empty())
+        .ok_or_else(|| {
+            invalid("missing required string arg 'branchRef' (full refs/heads/… ref)")
+        })?;
+    let coordinator = app.provider.code_bindings().map_err(code_authority_error)?;
+    let actor = system_actor();
+    let binding = block_on(coordinator.bind(&actor, &app.scope, &repo, branch_ref))
+        .map_err(code_authority_error)?;
+    Ok(protocol::text_content(format!(
+        "BOUND {} -> {} (version {}, epoch {}, active generation {})",
+        binding.repo_id.0,
+        binding.branch_ref,
+        binding.version,
+        binding.epoch,
+        binding.active_generation.as_deref().unwrap_or("none"),
+    )))
+}
+
+/// `code_status`: the binding-keyed status — configured ref, indexed OID,
+/// on-request ref freshness (unknown until an explicit observation; never
+/// checkout-HEAD-derived), and the RepoId-keyed checkpoint.
+pub fn code_status(app: &App, args: &Value) -> Result<Value, ToolError> {
+    let repo = req_repo(args)?;
+    let coordinator = app.provider.code_bindings().map_err(code_authority_error)?;
+    let actor = system_actor();
+    let status: CodeBindingStatus = block_on(coordinator.status(&actor, &app.scope, &repo, None))
+        .map_err(code_authority_error)?;
+    Ok(protocol::text_content(render_code_status(&status)))
+}
+
+/// `code_refresh`: ONE on-request observation of the bound branch ref,
+/// delegated to the SHARED registered-locator refresh
+/// (`CodeBindingCoordinator::refresh_from_registration`) — the same handler
+/// the native N-API/TS surfaces call. The observed OID/time is resolved from
+/// the REGISTERED locator's local git (no fetch, no checkout mutation, never
+/// a caller-supplied OID) and recorded separately from the indexed
+/// generation OID.
+pub fn code_refresh(app: &App, args: &Value) -> Result<Value, ToolError> {
+    let repo = req_repo(args)?;
+    let coordinator = app.provider.code_bindings().map_err(code_authority_error)?;
+    let actor = system_actor();
+    let observation = block_on(coordinator.refresh_from_registration(&actor, &app.scope, &repo))
+        .map_err(code_authority_error)?;
+    Ok(protocol::text_content(format!(
+        "OBSERVED {} {} at {} (policy {})",
+        observation.branch_ref,
+        observation.observed_oid,
+        observation.observed_at,
+        match observation.policy {
+            engram_knowledge::RefObservationPolicy::OnRequest => "on_request",
+        },
+    )))
+}
+
+/// Renders the binding-keyed status as inspectable text (stable prefixes:
+/// `FRESHNESS:`, `INDEXED:`, `CHECKPOINT:`).
+pub fn render_code_status(status: &CodeBindingStatus) -> String {
+    use engram_integration::code_binding::CodeFreshnessState;
+    let mut out = format!(
+        "BOUND {} {} (version {}, epoch {})\nINDEXED: {}",
+        status.checkpoint.repo_id.0,
+        status.freshness.branch_ref,
+        status.checkpoint.binding_version,
+        status.checkpoint.code_epoch,
+        status
+            .indexed_commit_oid
+            .as_deref()
+            .unwrap_or("none (no published generation)"),
+    );
+    match (&status.freshness.observed_oid, status.freshness.observed_at) {
+        (Some(oid), Some(at)) => {
+            out.push_str(&format!("\nFRESHNESS: observed {oid} at {at}"));
+        }
+        _ => out.push_str("\nFRESHNESS: unknown (no valid observation — refresh on request)"),
+    }
+    match status.freshness.state {
+        CodeFreshnessState::Unknown => out.push_str("\nFRESHNESS-STATE: unknown"),
+        CodeFreshnessState::Observed {
+            matches_indexed: Some(true),
+        } => out.push_str("\nFRESHNESS-STATE: at the indexed commit"),
+        CodeFreshnessState::Observed {
+            matches_indexed: Some(false),
+        } => out.push_str("\nFRESHNESS-STATE: ref moved past the indexed commit"),
+        CodeFreshnessState::Observed {
+            matches_indexed: None,
+        } => out.push_str("\nFRESHNESS-STATE: observed; indexed commit unreadable"),
+    }
+    out.push_str(&format!(
+        "\nCHECKPOINT: repo={} generation={}{}",
+        status.checkpoint.repo_id.0,
+        status
+            .checkpoint
+            .generation
+            .as_ref()
+            .map(|generation| format!(
+                " {} @ {} (parser {}, filter {})",
+                generation.id,
+                generation.commit_oid,
+                generation.parser_fingerprint,
+                generation.filter_fingerprint
+            ))
+            .unwrap_or_else(|| "none".to_owned()),
+        "",
+    ));
+    out
+}
+
+/// Registers the scoped code-operation tools (TASK-021). Called from the
+/// stdio profile wiring; every handler forwards to the SAME neutral
+/// coordinator the recipes, SDK, and native binding use.
+pub fn register_code_tools(registry: &mut crate::registry::ToolRegistry<App>) {
+    use crate::registry::ToolRecord;
+    use serde_json::json;
+    registry.register(ToolRecord {
+        name: "code_repo_register",
+        description: "Register a repository's acquisition locator for this scope (bound code \
+                      authority, TASK-021). mode: local-only | configured-remote. The locator is \
+                      a secret-free reference on record — never a checkout guess.",
+        input_schema: json!({
+            "type": "object",
+            "properties": {
+                "repo": { "type": "string", "description": "RepoId (opaque authority key)" },
+                "mode": { "type": "string", "enum": ["local-only", "configured-remote"] },
+                "path": { "type": "string", "description": "Authorized locator (local-only: the repository path)" }
+            },
+            "required": ["repo", "path"]
+        }),
+        handler: code_repo_register,
+    });
+    registry.register(ToolRecord {
+        name: "code_rebuild",
+        description: "Publish bound code from the registered locator only. requestId correlates retries; a caller path is never accepted.",
+        input_schema: json!({"type":"object", "properties":{"repo":{"type":"string"}, "requestId":{"type":"string"}, "branchRef":{"type":"string"}}, "required":["repo", "requestId"]}),
+        handler: code_rebuild,
+    });
+    registry.register(ToolRecord {
+        name: "code_reset_preview",
+        description: "Create an exact reset preview for one bound repository through the reset-authorized coordinator.",
+        input_schema: json!({"type":"object", "properties":{"scope":{"type":"object"}, "repo":{"type":"string"}}, "required":["scope", "repo"]}),
+        handler: code_reset_preview,
+    });
+    registry.register(ToolRecord {
+        name: "code_reset_apply",
+        description: "Persist an owner-approved reset journal and apply its durable reset state machine.",
+        input_schema: json!({"type":"object", "properties":{"journal":{"type":"object"}, "decision":{"type":"string"}}, "required":["journal", "decision"]}),
+        handler: code_reset_apply,
+    });
+    registry.register(ToolRecord {
+        name: "code_reset_resume",
+        description: "Resume pending or failed lanes from an immutable owner-approved reset journal.",
+        input_schema: json!({"type":"object", "properties":{"journal":{"type":"object"}}, "required":["journal"]}),
+        handler: code_reset_resume,
+    });
+    registry.register(ToolRecord {
+        name: "code_bind",
+        description: "Bind a repository's branch (full refs/heads/… ref) for the launch scope. \
+                      Same-ref retries are idempotent; another branch is a typed BindingConflict.",
+        input_schema: json!({
+            "type": "object",
+            "properties": {
+                "repo": { "type": "string" },
+                "branchRef": { "type": "string" }
+            },
+            "required": ["repo", "branchRef"]
+        }),
+        handler: code_bind,
+    });
+    registry.register(ToolRecord {
+        name: "code_status",
+        description: "Binding-keyed status: configured ref, indexed OID, on-request ref \
+                      freshness (unknown until an explicit refresh — never checkout-HEAD \
+                      derived), and the RepoId-keyed checkpoint.",
+        input_schema: json!({
+            "type": "object",
+            "properties": { "repo": { "type": "string" } },
+            "required": ["repo"]
+        }),
+        handler: code_status,
+    });
+    registry.register(ToolRecord {
+        name: "code_refresh",
+        description: "ONE on-request observation of the bound branch ref, resolved from the \
+                      REGISTERED locator (local git only — no fetch, no checkout change). \
+                      Recorded separately from the indexed generation OID.",
+        input_schema: json!({
+            "type": "object",
+            "properties": { "repo": { "type": "string" } },
+            "required": ["repo"]
+        }),
+        handler: code_refresh,
+    });
 }

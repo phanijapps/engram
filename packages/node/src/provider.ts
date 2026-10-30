@@ -1,9 +1,14 @@
 import { createNativeEmbeddingProviderTransport, type NativeEmbeddingProviderTransport } from "./embedding-provider.js";
 import type {
+  CodeBinding,
+  CodeGeneration,
   ContextPayload,
   RetrievalRequest,
+  Scope,
   WriteMemoryRequest,
-  WriteMemoryResponse
+  WriteMemoryResponse,
+  CodeResetJournal,
+  CodeResetPreview
 } from "@engram/contracts";
 
 import {
@@ -82,6 +87,148 @@ export interface ScopeCounts {
   hierarchyRelations: number;
 }
 
+/** One on-request ref observation as the Rust coordinator serializes it
+ *  (policy `on_request`; r6 finding 6: carried with GENERATED contract types,
+ *  never `unknown`). */
+export interface CodeRefObservation {
+  branchRef: string;
+  observedOid: string;
+  observedAt: string;
+  policy: "on_request";
+}
+
+/** Truthful freshness classification (never checkout-HEAD-derived):
+ *  the serde externally-tagged shape — `"unknown"` (unit variant) or
+ *  `{ observed: { matchesIndexed } }`. */
+export type CodeFreshnessState = "unknown" | { observed: { matchesIndexed: boolean | null } };
+
+/** Binding-keyed freshness facts. */
+export interface CodeRefFreshness {
+  branchRef: string;
+  policy: "on_request";
+  observedOid: string | null;
+  observedAt: string | null;
+  state: CodeFreshnessState;
+}
+
+/** The binding-keyed checkpoint pointer (RepoId-keyed, never basename-keyed);
+ *  its generation facts are the GENERATED `CodeGeneration` contract. */
+export interface CodeBindingCheckpoint {
+  repoId: string;
+  branchRef: string;
+  bindingVersion: number;
+  codeEpoch: number;
+  generation: CodeGeneration | null;
+}
+
+/** Serialized `CodeBindingStatus` — binding carried as the GENERATED
+ *  `CodeBinding` contract. */
+export interface CodeBindingStatus {
+  binding: CodeBinding;
+  attempt: unknown;
+  codeEpoch: number;
+  indexedCommitOid: string | null;
+  freshness: CodeRefFreshness;
+  checkpoint: CodeBindingCheckpoint;
+}
+
+/** Acquisition locator registration — the Rust port's serialization
+ *  (snake_case fields and enum values). */
+export interface RepositoryRegistration {
+  repo_id: string;
+  locator_id: string;
+  acquisition: "local_only" | "configured_remote";
+}
+
+/** Optional filter overrides accepted by the Rust `ScanFilterConfig` decoder. */
+export interface CodeScanFilter {
+  concepts?: {
+    minNameLength?: number;
+    blocklist?: string[];
+    allowlist?: string[];
+  };
+  deny?: {
+    dirs?: string[];
+    extensions?: string[];
+  };
+}
+
+/** Registered-locator ingestion. A caller path is never an ingestion input. */
+export interface BoundCodeScanRequest {
+  scope: Scope;
+  repo: string;
+  path?: never;
+  branchRef?: string;
+  scanFilter?: CodeScanFilter;
+}
+
+/** Explicit legacy document-only scan. It cannot name a bound repository. */
+export interface LegacyDocumentScanRequest {
+  scope: Scope;
+  path: string;
+  repo?: never;
+  branchRef?: never;
+  scanFilter?: CodeScanFilter;
+}
+
+/** Mutually exclusive native scan lanes. */
+export type CodeScanRequest = BoundCodeScanRequest | LegacyDocumentScanRequest;
+
+/** Serialized `IngestedGeneration` from the bound ingestion lane. */
+export interface BoundCodeScanResult {
+  mode: "bound";
+  repoId: string;
+  branchRef: string;
+  commitOid: string;
+  generationId: string;
+  snapshotDigest: string;
+  files: number;
+  documents: number;
+  entities: number;
+  relationships: number;
+  idempotent: boolean;
+  binding: CodeBinding;
+}
+
+/** Serialized `ScanSummary` from the legacy document-only lane. */
+export interface LegacyDocumentScanResult {
+  mode: "legacy-document-only";
+  scanned: number;
+  ingested: number;
+  unchanged: number;
+  skipped: number;
+  entities: number;
+  relationships: number;
+  errors: number;
+  git_remote: string | null;
+  git_branch: string | null;
+  git_sha: string | null;
+  coverage_warnings: string[];
+}
+
+/** Typed outcome of either native scan lane. */
+export type CodeScanResult = BoundCodeScanResult | LegacyDocumentScanResult;
+
+/** Request for digest-validated retained bytes from a published bound generation. */
+export interface CodeFetchRequest {
+  scope: Scope;
+  path: string;
+  symbol?: string;
+}
+
+/** Exact retained-source response. `bytes` preserves non-UTF-8 source without lossy decoding. */
+export interface CodeFetchResult {
+  repoId: string;
+  generationId: string;
+  bytes: number[];
+  fullContentDigest: string;
+  servedDigest: string;
+  commitOid: string;
+  path: string;
+  span: [number, number] | null;
+  participants: Array<{ recordId: string; startLine: number; endLine: number; byteSpan: [number, number] }>;
+}
+
 /** The typed transport over the native binding — every route in the TS MCP
  *  server dispatches through one of these methods. */
 export interface NativeProviderTransport {
@@ -93,8 +240,35 @@ export interface NativeProviderTransport {
   recall(request: RetrievalRequest): Promise<ContextPayload>;
   /** Write a memory + lifecycle event. */
   write(request: WriteMemoryRequest): Promise<WriteMemoryResponse>;
-  /** Treesitter-index a repository into the project workspace. */
-  scan(request: { path: string; scope: unknown; scanFilter?: unknown }): Promise<unknown>;
+  /** Treesitter-index a BOUND repository into the project workspace
+   *  (TASK-020: `repo` names the persisted binding — the durable cell, not
+   *  the path, is the authority; `branchRef` may assert equality). */
+  scan(request: CodeScanRequest): Promise<CodeScanResult>;
+  /** Bind a repository branch (TASK-020): same-ref idempotent, other branch
+   *  BindingConflict. */
+  codeBind(request: { scope: Scope; repo: string; branchRef: string }): Promise<CodeBinding>;
+  /** Register a repository's acquisition locator (r6 finding 5): the SAME
+   *  shared seam as stdio/one-shot — `mode` is `local-only` (default) or
+   *  `configured-remote`. */
+  codeRegister(request: {
+    scope: Scope;
+    repo: string;
+    path: string;
+    mode?: "local-only" | "configured-remote";
+  }): Promise<RepositoryRegistration>;
+  /** Binding-keyed status: indexed OID, on-request ref freshness (unknown
+   *  until an explicit observation — never checkout-HEAD-derived), and the
+   *  binding-keyed checkpoint. */
+  codeStatus(request: { scope: Scope; repo: string }): Promise<CodeBindingStatus>;
+  /** ONE on-request refresh of the bound branch ref, resolved from the
+   *  REGISTERED locator's local git (r6 finding 5) — the caller never
+   *  supplies an OID; the former codeObserveRef surface is gone. */
+  codeRefresh(request: { scope: Scope; repo: string }): Promise<CodeRefObservation>;
+  /** Exact bytes from the active bound generation's retained source. */
+  codeFetch(request: CodeFetchRequest): Promise<CodeFetchResult>;
+  codeResetPreview(request: { scope: Scope; repo: string }): Promise<CodeResetPreview>;
+  codeResetApply(request: { journal: CodeResetJournal; decision: string }): Promise<CodeResetJournal>;
+  codeResetResume(request: { journal: CodeResetJournal }): Promise<CodeResetJournal>;
   /** Run a consolidation cycle (reflection + decay). A system requester is
    *  injected; callers pass only `scope` + optional `dryRun` / `since` / `until`. */
   consolidate(request: {
@@ -237,8 +411,45 @@ class JsonNativeProviderTransport implements NativeProviderTransport {
     return decode<WriteMemoryResponse>(this.provider.requireMemoryApi().writeJson(encode(request)));
   }
 
-  async scan(request: { path: string; scope: unknown; scanFilter?: unknown }): Promise<unknown> {
-    return decode(this.provider.scanRepositoryJson(encode(request)));
+  async scan(request: CodeScanRequest): Promise<CodeScanResult> {
+    return decode<CodeScanResult>(this.provider.scanRepositoryJson(encode(request)));
+  }
+
+  async codeBind(request: { scope: Scope; repo: string; branchRef: string }): Promise<CodeBinding> {
+    return decode<CodeBinding>(this.provider.codeBindJson(encode(request)));
+  }
+
+  async codeStatus(request: { scope: Scope; repo: string }): Promise<CodeBindingStatus> {
+    return decode<CodeBindingStatus>(this.provider.codeStatusJson(encode(request)));
+  }
+
+  async codeRegister(request: {
+    scope: Scope;
+    repo: string;
+    path: string;
+    mode?: "local-only" | "configured-remote";
+  }): Promise<RepositoryRegistration> {
+    return decode<RepositoryRegistration>(this.provider.codeRegisterJson(encode(request)));
+  }
+
+  async codeRefresh(request: { scope: Scope; repo: string }): Promise<CodeRefObservation> {
+    return decode<CodeRefObservation>(this.provider.codeRefreshJson(encode(request)));
+  }
+
+  async codeFetch(request: CodeFetchRequest): Promise<CodeFetchResult> {
+    return decode<CodeFetchResult>(this.provider.codeFetchJson(encode(request)));
+  }
+
+  async codeResetPreview(request: { scope: Scope; repo: string }): Promise<CodeResetPreview> {
+    return decode<CodeResetPreview>(this.provider.codeResetPreviewJson(encode(request)));
+  }
+
+  async codeResetApply(request: { journal: CodeResetJournal; decision: string }): Promise<CodeResetJournal> {
+    return decode<CodeResetJournal>(this.provider.codeResetApplyJson(encode(request)));
+  }
+
+  async codeResetResume(request: { journal: CodeResetJournal }): Promise<CodeResetJournal> {
+    return decode<CodeResetJournal>(this.provider.codeResetResumeJson(encode(request)));
   }
 
   async consolidate(request: {

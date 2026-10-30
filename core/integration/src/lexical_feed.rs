@@ -20,4 +20,29 @@ pub trait LexicalFeed: Send + Sync {
 
     /// Upsert many `(target_id, text)` entries at once.
     async fn upsert_batch(&self, entries: &[(String, String)]) -> CoreResult<()>;
+
+    /// Upsert one searchable document under an explicit bound-code
+    /// contributor key (`"code:<generation-id>"`): the entry is eligible only
+    /// while that generation is published, and retiring the generation
+    /// removes exactly these tokens (task_013 / task_014 seam).
+    async fn upsert_code_target(
+        &self,
+        target_id: &str,
+        text: &str,
+        generation_id: &str,
+    ) -> CoreResult<()>;
+
+    /// Targeted warm-index retirement (task_014): removes every document the
+    /// retired generation contributed and returns the removed count — the
+    /// durable receipt. Targets holding OTHER contributor keys (an ordinary
+    /// `doc` contribution, a surviving generation) keep their tokens.
+    async fn retire_generation(&self, generation_id: &str) -> CoreResult<usize>;
+
+    /// Removes only this target's contribution from the retired generation.
+    /// Other contributor documents for the target remain searchable.
+    async fn retire_code_target(&self, target_id: &str, generation_id: &str) -> CoreResult<usize>;
+
+    /// Removes every contributor document for one target id (task_014
+    /// target-ID deletion).
+    async fn delete_target(&self, target_id: &str) -> CoreResult<()>;
 }

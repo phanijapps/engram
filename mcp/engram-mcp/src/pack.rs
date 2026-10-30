@@ -664,14 +664,16 @@ pub(crate) fn pack_concept_broader_pairs(
         .classes
         .iter()
         .flat_map(|class| {
-            class.parent_class_ids.iter().filter_map(|parent_id| {
-                known.contains(parent_id.as_str()).then(|| {
+            class
+                .parent_class_ids
+                .iter()
+                .filter(|&parent_id| known.contains(parent_id.as_str()))
+                .map(|parent_id| {
                     (
                         ConceptId::from(class.id.to_string()),
                         ConceptId::from(parent_id.to_string()),
                     )
                 })
-            })
         })
         .collect()
 }
@@ -843,7 +845,7 @@ fn run_status(argv: &[String]) -> i32 {
                 None => lines.push(format!(
                     "  {} sha256 {}… (no manifest)",
                     id,
-                    &sha256_hex(&bytes).get(..12).unwrap_or("?")
+                    sha256_hex(&bytes).get(..12).unwrap_or("?")
                 )),
             }
         }
@@ -898,7 +900,7 @@ fn run_status(argv: &[String]) -> i32 {
                 .unwrap_or_else(|| "unparseable".to_owned());
             lines.push(format!(
                 "workspace {workspace}: launch config {} (pack layer(s): {}, {counts})",
-                &sha256_hex(text.as_bytes()).get(..12).unwrap_or("?"),
+                sha256_hex(text.as_bytes()).get(..12).unwrap_or("?"),
                 pack_layers.join(", ")
             ));
         }

@@ -39,7 +39,9 @@
 //! ```
 
 pub mod batch;
+pub mod candidate_evidence;
 pub mod capability;
+pub mod code_binding;
 pub mod code_graph;
 pub mod community_query;
 pub mod config;

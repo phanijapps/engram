@@ -91,6 +91,34 @@ impl KnowledgeRepository for PgKnowledgeStore {
         Ok(source)
     }
 
+    async fn get_source(
+        &self,
+        id: &SourceId,
+        scope: &Scope,
+    ) -> CoreResult<Option<KnowledgeSource>> {
+        self.conn.block_on(async {
+            let row = self.conn.client.query_opt(
+                "SELECT record_json FROM knowledge_sources WHERE id=$1 AND tenant=$2 AND (subject IS NULL OR subject=$3) AND (workspace IS NULL OR workspace=$4)",
+                &[&id.to_string(), &scope.tenant, &scope.subject, &scope.workspace],
+            ).await.map_err(|e| Self::pg_err(e.to_string()))?;
+            row.map(|row| serde_json::from_value(row.get::<_, serde_json::Value>(0)).map_err(|e| Self::pg_err(e.to_string()))).transpose()
+        })
+    }
+
+    async fn list_sources(&self, scope: &Scope) -> CoreResult<Vec<KnowledgeSource>> {
+        self.conn.block_on(async {
+            let rows = self.conn.client.query("SELECT record_json FROM knowledge_sources WHERE tenant=$1 AND (subject IS NULL OR subject=$2) AND (workspace IS NULL OR workspace=$3) ORDER BY id", &[&scope.tenant, &scope.subject, &scope.workspace]).await.map_err(|e| Self::pg_err(e.to_string()))?;
+            rows.into_iter().map(|row| serde_json::from_value(row.get(0)).map_err(|e| Self::pg_err(e.to_string()))).collect()
+        })
+    }
+
+    async fn list_documents(&self, scope: &Scope) -> CoreResult<Vec<SourceDocument>> {
+        self.conn.block_on(async {
+            let rows = self.conn.client.query("SELECT d.record_json FROM knowledge_documents d JOIN knowledge_sources s ON d.source_id=s.id WHERE s.tenant=$1 AND (s.subject IS NULL OR s.subject=$2) AND (s.workspace IS NULL OR s.workspace=$3) ORDER BY d.id", &[&scope.tenant, &scope.subject, &scope.workspace]).await.map_err(|e| Self::pg_err(e.to_string()))?;
+            rows.into_iter().map(|row| serde_json::from_value(row.get(0)).map_err(|e| Self::pg_err(e.to_string()))).collect()
+        })
+    }
+
     async fn put_document(&self, doc: SourceDocument) -> CoreResult<SourceDocument> {
         let json = serde_json::to_value(&doc).map_err(|e| Self::pg_err(e.to_string()))?;
         let key = doc.path.as_deref().unwrap_or("");

@@ -9,6 +9,9 @@
 //! zero-dep default.
 
 pub mod cells;
+pub mod code_binding;
+mod code_binding_port;
+mod code_read_leases;
 pub mod connection;
 pub mod knowledge;
 pub mod memory;
@@ -16,6 +19,7 @@ pub mod schema;
 pub mod vector;
 
 pub use cells::{PgBeliefStore, PgHierarchyStore, PgMemoryService, PgProcedureStore};
+pub use code_binding_port::PgCodeBindingRepository;
 pub use connection::PgConnection;
 pub use knowledge::PgKnowledgeStore;
 pub use memory::{read_recent, write_memory, PgMemoryRow};

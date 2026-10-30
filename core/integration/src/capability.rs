@@ -110,6 +110,25 @@ pub struct CapabilityReport {
     /// port backs them.
     #[serde(default = "default_code_graph")]
     pub code_graph: CapabilityState,
+
+    /// Bound code authority (TASK-019): registration, binding, publication,
+    /// status, and ref observations through the neutral code-binding
+    /// coordinator. Supported only when the recipe wires the binding
+    /// repository handle.
+    #[serde(default = "default_code_graph")]
+    pub code_binding: CapabilityState,
+
+    /// Exact retained-source reads for bound code (TASK-019): the
+    /// adapter-owned retained-snapshot reader over immutable acquired
+    /// bytes. Supported only when the recipe wires the source handle.
+    #[serde(default = "default_code_graph")]
+    pub code_source: CapabilityState,
+
+    /// Targeted code reset/rebuild authorization surface (TASK-019): the
+    /// neutral reset seam the recipes inject (preview/journal ports now;
+    /// the full exact-preview reset lands with TASK-023/TASK-024).
+    #[serde(default = "default_code_graph")]
+    pub code_reset: CapabilityState,
 }
 
 /// Serde default for the `code_graph` field.
@@ -182,7 +201,10 @@ impl CapabilityReport {
             procedures: state.clone(),
             proposals: state.clone(),
             outcomes: state.clone(),
-            code_graph: state,
+            code_graph: state.clone(),
+            code_binding: state.clone(),
+            code_source: state.clone(),
+            code_reset: state,
         }
     }
 
@@ -372,6 +394,9 @@ impl CapabilityReportBuilder {
                 procedures: provider_unavailable.clone(),
                 outcomes: provider_unavailable.clone(),
                 proposals: provider_unavailable.clone(),
+                code_binding: provider_unavailable.clone(),
+                code_source: provider_unavailable.clone(),
+                code_reset: provider_unavailable.clone(),
                 migration: provider_unavailable,
                 hybrid_search: feature_disabled.clone(),
                 episodes_evidence: feature_disabled.clone(),
@@ -481,6 +506,24 @@ impl CapabilityReportBuilder {
     /// Sets the episodes/evidence capability state.
     pub fn code_graph(mut self, state: CapabilityState) -> Self {
         self.report.code_graph = state;
+        self
+    }
+
+    /// Sets the code-binding capability state (TASK-019).
+    pub fn code_binding(mut self, state: CapabilityState) -> Self {
+        self.report.code_binding = state;
+        self
+    }
+
+    /// Sets the code-source capability state (TASK-019).
+    pub fn code_source(mut self, state: CapabilityState) -> Self {
+        self.report.code_source = state;
+        self
+    }
+
+    /// Sets the code-reset capability state (TASK-019).
+    pub fn code_reset(mut self, state: CapabilityState) -> Self {
+        self.report.code_reset = state;
         self
     }
 

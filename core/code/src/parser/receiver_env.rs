@@ -258,10 +258,10 @@ fn resolve_inits(root: &mut ScopeNode) {
             },
             InitShape::Other => None,
         };
-        if let Some(t) = typed {
-            if let Some(scope) = scope_at(root, &path) {
-                scope.bindings[idx].type_of = t;
-            }
+        if let Some(t) = typed
+            && let Some(scope) = scope_at(root, &path)
+        {
+            scope.bindings[idx].type_of = t;
         }
     }
 }
@@ -741,10 +741,10 @@ impl<'a> Walker<'a> {
         }
         if kind == "new_expression" {
             // `new Type(...)`.
-            if let Some(ctor) = value.child_by_field_name("constructor") {
-                if let Some(t) = terminal_type(self.text(ctor)) {
-                    return Some(BindType::Known(t));
-                }
+            if let Some(ctor) = value.child_by_field_name("constructor")
+                && let Some(t) = terminal_type(self.text(ctor))
+            {
+                return Some(BindType::Known(t));
             }
             return Some(BindType::Unknown);
         }

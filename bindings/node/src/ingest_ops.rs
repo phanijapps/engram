@@ -12,11 +12,36 @@ use futures::executor::block_on;
 use napi::bindgen_prelude::*;
 use serde::Serialize;
 use std::path::PathBuf;
+use std::sync::Arc;
 
 use crate::{decode, encode, scope_field, to_napi_error};
 
 use super::ingest_state::ScanJobState;
 use super::resolve_cross_file_edges;
+
+/// Default write policy when a legacy scan request omits `policy`
+/// (TASK-020: the binding gate is the authority; payload ergonomics default
+/// to the same durable workspace-visible policy the provider scan uses).
+fn default_scan_policy() -> Policy {
+    Policy {
+        visibility: engram_domain::Visibility::Workspace,
+        retention: engram_domain::Retention::Durable,
+        sensitivity: Some(engram_domain::Sensitivity::Low),
+        allowed_uses: vec![engram_domain::AllowedUse::Retrieval],
+        expires_at: None,
+        delete_mode: Some(engram_domain::DeleteMode::Tombstone),
+    }
+}
+
+/// Default system actor when a legacy scan request omits `actor`.
+fn default_scan_actor() -> Actor {
+    Actor {
+        id: engram_domain::Id::from("engram-node-legacy"),
+        kind: engram_domain::ActorKind::Agent,
+        display_name: None,
+        metadata: None,
+    }
+}
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -25,6 +50,26 @@ struct IngestExtractResponse {
     entities: Vec<engram_domain::KnowledgeEntity>,
     relationships: Vec<engram_domain::KnowledgeRelationship>,
     chunk_count: usize,
+}
+
+/// Shared handle to the durable binding cell for engines that hold it by
+/// value (TASK-020, review r6 finding 10): `Arc`-wraps the NEUTRAL
+/// `CodeBindingRepository` port so sibling engines (knowledge) can read
+/// eligibility without owning a second connection — and without naming a
+/// concrete engine type in the bridge.
+pub struct BindingCell {
+    inner: Arc<dyn engram_knowledge::CodeBindingRepository>,
+}
+
+impl BindingCell {
+    pub fn new(cell: Arc<dyn engram_knowledge::CodeBindingRepository>) -> Self {
+        Self { inner: cell }
+    }
+    /// A clone of the neutral durable-cell handle (composition builds shared
+    /// coordinators over the SAME cell).
+    pub fn handle(&self) -> Arc<dyn engram_knowledge::CodeBindingRepository> {
+        Arc::clone(&self.inner)
+    }
 }
 
 /// Provides ingest operations for the Node-API bridge.
@@ -43,9 +88,63 @@ impl IngestOps {
         }
     }
 
+    /// Denies legacy binding because this engine has no host-policy seam.
+    ///
+    /// Binding mutations must pass the coordinator used by provider-backed
+    /// operations, which receives an explicit host authorizer. The legacy
+    /// engine cannot construct that coordinator safely, so it provides no
+    /// binding operation and never writes its private binding cell.
+    pub fn code_bind_json(&self, _request_json: String) -> Result<String> {
+        Err(to_napi_error(
+            engram_runtime::CoreError::CapabilityUnsupported {
+                capability: "legacy-code-bind".into(),
+                reason: "LegacyCodeBindUnsupported: use NativeProvider with host codeAuthority"
+                    .into(),
+            },
+        ))
+    }
+
+    pub fn code_reset_preview_json(&self, _request_json: String) -> Result<String> {
+        Err(to_napi_error(
+            engram_runtime::CoreError::CapabilityUnsupported {
+                capability: "legacy-code-reset".into(),
+                reason: "LegacyCodeResetUnsupported: use NativeProvider with host codeAuthority"
+                    .into(),
+            },
+        ))
+    }
+
+    pub fn code_reset_apply_json(&self, _request_json: String) -> Result<String> {
+        self.code_reset_preview_json(String::new())
+    }
+
+    pub fn code_reset_resume_json(&self, _request_json: String) -> Result<String> {
+        self.code_reset_preview_json(String::new())
+    }
+
+    pub fn backfill_embeddings_json(&self, _request_json: String) -> Result<String> {
+        Err(to_napi_error(
+            engram_runtime::CoreError::CapabilityUnsupported {
+                capability: "legacy-embedding-backfill".into(),
+                reason: "LegacyEmbeddingBackfillUnsupported: use NativeProvider".into(),
+            },
+        ))
+    }
+
+    /// TASK-020 binding gate REMOVED (review r6 finding 2): binding-existence
+    /// was never authorization for ingesting code bytes, and the legacy
+    /// engine no longer ingests code at all — see [`Self::start_scan_job_json`].
+    ///
     /// Starts a background repository scan; returns `{ jobId }` immediately.
     /// Progress is read via `getScanJobJson`. The request carries
-    /// `{ root, scope, policy, actor, sourceName, maxBytes, manifestPath }`.
+    /// `{ root, scope, documentOnly, policy, actor, sourceName, maxBytes, manifestPath }`.
+    ///
+    /// Review r6 finding 2: the legacy engine NEVER ingests code bytes.
+    /// Naming `repo` (code intent) is a typed denial directing to the bound
+    /// registered-locator pipeline — binding-existence is not authorization
+    /// and a checkout was never an acquisition authority. The explicit
+    /// `documentOnly: true` lane scans documents only (code files excluded
+    /// by the document-only filter); it needs no binding.
     pub fn start_scan_job_json(&mut self, request_json: String) -> Result<String> {
         let value = decode::<serde_json::Value>(&request_json)?;
         let root = value
@@ -53,31 +152,53 @@ impl IngestOps {
             .and_then(|v| v.as_str())
             .ok_or_else(|| Error::from_reason("missing 'root'"))?
             .to_owned();
-        let source_name = value
-            .get("sourceName")
-            .and_then(|v| v.as_str())
-            .unwrap_or("scan")
-            .to_owned();
+        // `sourceName` is no longer honored: the document-only lane stamps a
+        // stable legacy-docs source name (callers reach code ingestion through
+        // the bound pipeline, which derives its own generation namespaced
+        // source).
         let max_bytes = value.get("maxBytes").and_then(|v| v.as_u64()).unwrap_or(0);
         let manifest_path = value
             .get("manifestPath")
             .and_then(|v| v.as_str())
             .map(PathBuf::from);
         let scope: Scope = scope_field(&value)?;
-        let policy: Policy = serde_json::from_value(
-            value
-                .get("policy")
-                .cloned()
-                .unwrap_or(serde_json::Value::Null),
-        )
-        .map_err(|e| Error::from_reason(e.to_string()))?;
-        let actor: Actor = serde_json::from_value(
-            value
-                .get("actor")
-                .cloned()
-                .unwrap_or(serde_json::Value::Null),
-        )
-        .map_err(|e| Error::from_reason(e.to_string()))?;
+        let policy: Policy = match value.get("policy") {
+            None => default_scan_policy(),
+            Some(policy) => serde_json::from_value(policy.clone())
+                .map_err(|error| Error::from_reason(format!("InvalidPolicy: {error}")))?,
+        };
+        let actor: Actor = match value.get("actor") {
+            None => default_scan_actor(),
+            Some(actor) => serde_json::from_value(actor.clone())
+                .map_err(|error| Error::from_reason(format!("InvalidActor: {error}")))?,
+        };
+
+        // Review r6 finding 2: code intent (a named repository) is DENIED on
+        // the legacy engine — code flows exclusively through the provider's
+        // registered-locator ingestion pipeline. Documents need no binding.
+        let document_only = value
+            .get("documentOnly")
+            .and_then(|v| v.as_bool())
+            .unwrap_or(false);
+        let has_repo = value
+            .get("repo")
+            .map(|field| !field.is_null())
+            .unwrap_or(false);
+        match (has_repo, document_only) {
+            (true, _) => {
+                return Err(Error::from_reason(
+                    "LegacyCodeScanDenied: the legacy engine never ingests code — use the \
+                     bound code pipeline (register + bind + scan with `repo`) instead",
+                ));
+            }
+            (false, true) => {}
+            (false, false) => {
+                return Err(Error::from_reason(
+                    "BindingRequired: code scans require the bound registered-locator \
+                     pipeline; pass documentOnly=true for the document-only legacy scan",
+                ));
+            }
+        }
 
         // Load the prior manifest (incremental resume). Skip when force=true so
         // every file is re-ingested (e.g. after an extractor change).
@@ -114,27 +235,29 @@ impl IngestOps {
         // polls via getScanJobJson.
         let job_id_for_thread = job_id.clone();
         std::thread::spawn(move || {
+            // Document-only lane (review r6 finding 2): code files are
+            // excluded; the source name labels the legacy-docs lane.
             let opts = ScanOptions {
                 scope,
                 policy,
                 actor,
-                source_name: source_name.clone(),
+                source_name: "engram-node-legacy-docs".to_owned(),
                 max_bytes,
                 manifest: prior,
-                scan_filter: engram_ingest::ScanFilter::default(),
+                scan_filter: engram_ingest::ScanFilter::document_only(),
             };
             let progress = |p: engram_ingest::ScanProgress| {
-                if let Ok(mut jobs) = jobs.lock() {
-                    if let Some(state) = jobs.get_mut(&job_id_for_thread) {
-                        state.current_file = Some(p.file);
-                        state.processed += 1;
-                        match p.status {
-                            "ingested" => state.ingested += 1,
-                            "unchanged" => state.unchanged += 1,
-                            "skipped" => state.skipped += 1,
-                            "error" => state.errors += 1,
-                            _ => {}
-                        }
+                if let Ok(mut jobs) = jobs.lock()
+                    && let Some(state) = jobs.get_mut(&job_id_for_thread)
+                {
+                    state.current_file = Some(p.file);
+                    state.processed += 1;
+                    match p.status {
+                        "ingested" => state.ingested += 1,
+                        "unchanged" => state.unchanged += 1,
+                        "skipped" => state.skipped += 1,
+                        "error" => state.errors += 1,
+                        _ => {}
                     }
                 }
             };
@@ -142,10 +265,10 @@ impl IngestOps {
             // Cross-file resolution: after the parallel scan, connect entities
             // that share a name across different graphs so the Q&A + explorer
             // see cross-file/cross-repo edges.
-            if let Ok((ref summary, _)) = result {
-                if summary.ingested > 0 {
-                    resolve_cross_file_edges(&store, &opts.scope);
-                }
+            if let Ok((ref summary, _)) = result
+                && summary.ingested > 0
+            {
+                resolve_cross_file_edges(&store, &opts.scope);
             }
             let final_state = match result {
                 Ok((summary, new_manifest)) => {

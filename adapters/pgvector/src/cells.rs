@@ -132,11 +132,67 @@ fn update_jsonb_field(
 
 pub struct PgMemoryService {
     conn: PgConnection,
+    /// Owning policy authorizer for this service instance. The default is
+    /// the host compatibility default (allow-all); `with_dependencies`
+    /// injects a stricter deployer authorizer that the owning retrieval path
+    /// AND every composed recipe share (r3 construction decision: no
+    /// resolver-only permissive bypass, no second policy truth).
+    authorizer: std::sync::Arc<dyn engram_runtime::PolicyAuthorizer>,
+}
+
+/// Host-level explicit compatibility default shared by the normal retrieval
+/// path and every composed evidence recipe (the same role
+/// `AllowAllPolicyAuthorizer` plays in the SQLite cell).
+pub struct PgAllowAllPolicyAuthorizer;
+
+impl engram_runtime::PolicyAuthorizer for PgAllowAllPolicyAuthorizer {
+    fn can_write(
+        &self,
+        _requester: &engram_domain::Requester,
+        _scope: &engram_domain::Scope,
+        _policy: &engram_domain::Policy,
+    ) -> engram_runtime::CoreResult<()> {
+        Ok(())
+    }
+    fn can_retrieve(
+        &self,
+        _requester: &engram_domain::Requester,
+        _scope: &engram_domain::Scope,
+        _policy: &engram_domain::Policy,
+    ) -> engram_runtime::CoreResult<()> {
+        Ok(())
+    }
+    fn can_forget(
+        &self,
+        _requester: &engram_domain::Requester,
+        _scope: &engram_domain::Scope,
+        _policy: &engram_domain::Policy,
+    ) -> engram_runtime::CoreResult<()> {
+        Ok(())
+    }
 }
 
 impl PgMemoryService {
     pub fn new(conn: PgConnection) -> Self {
-        Self { conn }
+        Self {
+            conn,
+            authorizer: std::sync::Arc::new(PgAllowAllPolicyAuthorizer),
+        }
+    }
+
+    /// Construction with an explicit owning authorizer: the injected
+    /// decision is the one the owning retrieval path and every composed
+    /// recipe (candidate evidence) share.
+    pub fn with_dependencies(
+        conn: PgConnection,
+        authorizer: std::sync::Arc<dyn engram_runtime::PolicyAuthorizer>,
+    ) -> Self {
+        Self { conn, authorizer }
+    }
+
+    /// The configured owning retrieval authorizer (recipe composition seam).
+    pub fn retrieval_authorizer(&self) -> std::sync::Arc<dyn engram_runtime::PolicyAuthorizer> {
+        std::sync::Arc::clone(&self.authorizer)
     }
 }
 
@@ -274,6 +330,13 @@ impl engram_memory::MemoryService for PgMemoryService {
         let items: Vec<RetrievalResult> = records
             .into_iter()
             .filter(|r| r.status == MemoryStatus::Active)
+            // Owning policy decision shared with every composed recipe: an
+            // unauthorized record is never a retrieval candidate.
+            .filter(|r| {
+                self.authorizer
+                    .can_retrieve(&request.requester, &r.scope, &r.policy)
+                    .is_ok()
+            })
             .map(|r| RetrievalResult {
                 id: format!("result-{}", r.id),
                 target_type: RetrievalTargetType::Memory,

@@ -17,6 +17,7 @@ mod batch;
 pub mod batch_supersession;
 mod bootstrap;
 mod community;
+pub use community::overview_eligible;
 mod conformance;
 mod consolidation_adapters;
 mod export_import;
@@ -45,4 +46,5 @@ pub use provenance::SqlProvenanceQuery;
 pub use recall::SqlUnifiedRecall;
 pub use recall_lanes::{
     associative_recall_lane, community_summary_recall_lane, lexical_recall_lane,
+    lexical_recall_lane_bound, vector_recall_lane_bound,
 };

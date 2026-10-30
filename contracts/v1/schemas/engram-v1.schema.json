@@ -1347,7 +1347,7 @@
         },
         "verdict": {
           "type": "string",
-          "description": "Optional assertion verdict stamped onto the written record (DEC-P06); absent means no verdict on this write surface. 'derived' is reserved for the derivation layer and is rejected by every write surface — it is not a legal value here.",
+          "description": "Optional assertion verdict stamped onto the written record (DEC-P06); absent means no verdict on this write surface. 'derived' is reserved for the derivation layer and is rejected by every write surface \u2014 it is not a legal value here.",
           "enum": [
             "asserted_by_agent",
             "grounded_in_source"
@@ -1878,7 +1878,7 @@
     },
     "KnowledgeChangesPage": {
       "type": "object",
-      "description": "One bounded page of changes plus resume state. resetRequired means the cursor predates the retained window — take a fresh snapshot.",
+      "description": "One bounded page of changes plus resume state. resetRequired means the cursor predates the retained window \u2014 take a fresh snapshot.",
       "additionalProperties": false,
       "properties": {
         "items": {
@@ -1979,7 +1979,7 @@
     },
     "CodeGraphStaleness": {
       "type": "object",
-      "description": "Code-graph freshness vs its repository. commitsBehind is local-ancestry-only; null means unknown — never a fabricated 0.",
+      "description": "Code-graph freshness vs its repository. commitsBehind is local-ancestry-only; null means unknown \u2014 never a fabricated 0.",
       "additionalProperties": false,
       "properties": {
         "sourceKey": {
@@ -2023,7 +2023,7 @@
     },
     "TaskOutcome": {
       "type": "object",
-      "description": "Host-verified task result. Association data — never causal proof.",
+      "description": "Host-verified task result. Association data \u2014 never causal proof.",
       "additionalProperties": false,
       "properties": {
         "success": {
@@ -2090,6 +2090,486 @@
         "grounded_in_source",
         "derived"
       ]
+    },
+    "CodeBinding": {
+      "type": "object",
+      "required": [
+        "scope",
+        "repoId",
+        "branchRef",
+        "version",
+        "activeGeneration",
+        "epoch"
+      ],
+      "properties": {
+        "scope": {
+          "$ref": "#/$defs/Scope"
+        },
+        "repoId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "branchRef": {
+          "type": "string",
+          "pattern": "^refs/heads/(?!.*(?:\\.\\.|//|@\\{))[A-Za-z0-9._/-]+$"
+        },
+        "version": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "activeGeneration": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "epoch": {
+          "type": "integer",
+          "minimum": 0
+        }
+      },
+      "additionalProperties": false
+    },
+    "CodeGeneration": {
+      "type": "object",
+      "required": [
+        "id",
+        "bindingVersion",
+        "commitOid",
+        "snapshotDigest",
+        "parserFingerprint",
+        "filterFingerprint"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "bindingVersion": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "commitOid": {
+          "type": "string",
+          "pattern": "^([a-fA-F0-9]{40}|[a-fA-F0-9]{64})$"
+        },
+        "snapshotDigest": {
+          "type": "string",
+          "pattern": "^[a-fA-F0-9]{64}$"
+        },
+        "parserFingerprint": {
+          "type": "string",
+          "minLength": 1
+        },
+        "filterFingerprint": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "additionalProperties": false
+    },
+    "CodeLineage": {
+      "type": "object",
+      "required": [
+        "repoId",
+        "generationId",
+        "sourcePath",
+        "contributors"
+      ],
+      "properties": {
+        "repoId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "generationId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "sourcePath": {
+          "type": "string",
+          "minLength": 1
+        },
+        "contributors": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "minItems": 1
+        },
+        "span": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/CanonicalSpan"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "additionalProperties": false
+    },
+    "CanonicalSpan": {
+      "type": "object",
+      "required": [
+        "startLine",
+        "endLine"
+      ],
+      "properties": {
+        "startLine": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "endLine": {
+          "type": "integer",
+          "minimum": 1
+        }
+      },
+      "additionalProperties": false
+    },
+    "IndexedSource": {
+      "type": "object",
+      "required": [
+        "repoId",
+        "generationId",
+        "commitOid",
+        "path",
+        "contentDigest"
+      ],
+      "properties": {
+        "repoId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "generationId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "commitOid": {
+          "type": "string",
+          "pattern": "^([a-fA-F0-9]{40}|[a-fA-F0-9]{64})$"
+        },
+        "path": {
+          "type": "string",
+          "minLength": 1
+        },
+        "contentDigest": {
+          "type": "string",
+          "pattern": "^[a-fA-F0-9]{64}$"
+        }
+      },
+      "additionalProperties": false
+    },
+    "CodeAttempt": {
+      "type": "object",
+      "required": [
+        "id",
+        "idempotencyKey",
+        "bindingVersion",
+        "expectedEpoch",
+        "expectedActiveGeneration",
+        "fencingToken",
+        "state",
+        "receiptKinds"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "idempotencyKey": {
+          "type": "string",
+          "minLength": 1
+        },
+        "bindingVersion": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "expectedEpoch": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "fencingToken": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "state": {
+          "enum": [
+            "created",
+            "acquiring",
+            "staging",
+            "ready",
+            "published",
+            "failed",
+            "superseded",
+            "cleanup_pending"
+          ]
+        },
+        "receiptKinds": {
+          "type": "array",
+          "items": {
+            "enum": [
+              "source",
+              "knowledge",
+              "vector",
+              "lexical",
+              "derived"
+            ]
+          }
+        },
+        "expectedActiveGeneration": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "additionalProperties": false
+    },
+    "CodeResetPreview": {
+      "type": "object",
+      "required": [
+        "binding",
+        "previewHash",
+        "targetIds"
+      ],
+      "properties": {
+        "binding": {
+          "$ref": "#/$defs/CodeBinding"
+        },
+        "previewHash": {
+          "type": "string",
+          "pattern": "^[a-fA-F0-9]{64}$"
+        },
+        "targetIds": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "minItems": 1
+        },
+        "preservationInventory": {
+          "$ref": "#/$defs/PreservationInventory"
+        },
+        "targets": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/CodeResetTarget"
+          }
+        },
+        "ambiguity": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/AmbiguousOwnership"
+          }
+        },
+        "preservationDigests": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^[a-fA-F0-9]{64}$"
+          }
+        },
+        "bindingVersions": {
+          "type": "array",
+          "items": {
+            "type": "array",
+            "prefixItems": [
+              {
+                "type": "string",
+                "minLength": 1
+              },
+              {
+                "type": "integer",
+                "minimum": 0
+              }
+            ],
+            "minItems": 2,
+            "maxItems": 2
+          }
+        },
+        "codeEpoch": {
+          "type": "integer",
+          "minimum": 0
+        }
+      },
+      "additionalProperties": false
+    },
+    "CodeResetTarget": {
+      "type": "object",
+      "required": [
+        "recordId",
+        "storeId",
+        "fingerprint",
+        "lineage",
+        "snapshotRef",
+        "scanMetadataKeys",
+        "bindingVersion",
+        "codeEpoch"
+      ],
+      "properties": {
+        "recordId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "storeId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "fingerprint": {
+          "type": "string",
+          "minLength": 1
+        },
+        "lineage": {
+          "$ref": "#/$defs/CodeLineage"
+        },
+        "snapshotRef": {
+          "type": "string",
+          "minLength": 1
+        },
+        "scanMetadataKeys": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "bindingVersion": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "codeEpoch": {
+          "type": "integer",
+          "minimum": 0
+        }
+      },
+      "additionalProperties": false
+    },
+    "AmbiguousOwnership": {
+      "type": "object",
+      "required": [
+        "recordId",
+        "reason"
+      ],
+      "properties": {
+        "recordId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "reason": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "additionalProperties": false
+    },
+    "PreservationInventory": {
+      "type": "object",
+      "required": [
+        "records",
+        "digest"
+      ],
+      "properties": {
+        "records": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/PreservationEntry"
+          }
+        },
+        "digest": {
+          "type": "string",
+          "pattern": "^[a-fA-F0-9]{64}$"
+        }
+      },
+      "additionalProperties": false
+    },
+    "PreservationEntry": {
+      "type": "object",
+      "required": [
+        "recordId",
+        "contentDigest",
+        "contributorDigest"
+      ],
+      "properties": {
+        "recordClass": {
+          "type": "string",
+          "minLength": 1
+        },
+        "recordId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "contentDigest": {
+          "type": "string",
+          "pattern": "^[a-fA-F0-9]{64}$"
+        },
+        "contributorDigest": {
+          "type": "string",
+          "pattern": "^[a-fA-F0-9]{64}$"
+        }
+      },
+      "additionalProperties": false
+    },
+    "CodeResetJournal": {
+      "type": "object",
+      "required": [
+        "preview",
+        "checkpoints",
+        "preservationDigests"
+      ],
+      "properties": {
+        "resetId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "preview": {
+          "$ref": "#/$defs/CodeResetPreview"
+        },
+        "previewHash": {
+          "type": "string",
+          "pattern": "^[a-fA-F0-9]{64}$"
+        },
+        "targetFingerprints": {
+          "type": "array",
+          "items": {
+            "type": "array",
+            "prefixItems": [
+              {
+                "type": "string",
+                "minLength": 1
+              },
+              {
+                "type": "string",
+                "minLength": 1
+              }
+            ],
+            "minItems": 2,
+            "maxItems": 2
+          }
+        },
+        "authorizingDecisions": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "checkpoints": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "preservationDigests": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^[a-fA-F0-9]{64}$"
+          }
+        }
+      },
+      "additionalProperties": false
     }
   }
 }

@@ -72,6 +72,9 @@ describe("@engram/client native transport", () => {
             return '{"graph":{},"entities":[],"relationships":[],"chunkCount":0}';
           }
           startScanJobJson(): string { return '{"jobId":"job-0"}'; }
+          codeBindJson(): string {
+            return '{"repoId":"repo-fake","branchRef":"refs/heads/main","version":1,"activeGeneration":null,"epoch":0}';
+          }
           getScanJobJson(): string {
             return '{"status":"done","processed":0,"ingested":0,"unchanged":0,"skipped":0,"errors":0}';
           }

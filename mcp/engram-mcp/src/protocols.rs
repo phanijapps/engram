@@ -138,19 +138,19 @@ pub fn scan_protocols(app: &App, args: &Value) -> Result<Value, ToolError> {
         for caps in fetch_re.captures_iter(text) {
             let url = &caps[1];
             let pos = caps.get(0).map(|m| m.start()).unwrap_or(0);
-            if extract_path(url).is_none() {
-                if let Some(func) = enclosing_function(text, pos) {
-                    wrapper_names.insert(func);
-                }
+            if extract_path(url).is_none()
+                && let Some(func) = enclosing_function(text, pos)
+            {
+                wrapper_names.insert(func);
             }
         }
         for caps in client_method_re.captures_iter(text) {
             let url = &caps[2];
             let pos = caps.get(0).map(|m| m.start()).unwrap_or(0);
-            if extract_path(url).is_none() {
-                if let Some(func) = enclosing_function(text, pos) {
-                    wrapper_names.insert(func);
-                }
+            if extract_path(url).is_none()
+                && let Some(func) = enclosing_function(text, pos)
+            {
+                wrapper_names.insert(func);
             }
         }
     }
@@ -174,10 +174,10 @@ pub fn scan_protocols(app: &App, args: &Value) -> Result<Value, ToolError> {
                         for method in ["get", "post", "put", "delete", "patch"] {
                             let ep_id = endpoint_id(method, &normalized);
                             if endpoints.contains_key(&ep_id) {
-                                if let Some(caller) = enclosing_function(text, pos) {
-                                    if caller != wrapper_name {
-                                        client_edges.push((ep_id, caller));
-                                    }
+                                if let Some(caller) = enclosing_function(text, pos)
+                                    && caller != wrapper_name
+                                {
+                                    client_edges.push((ep_id, caller));
                                 }
                                 break;
                             }
@@ -390,17 +390,16 @@ fn walk_dir(root: &Path, dir: &Path, files: &mut Vec<(String, String)>) {
             if matches!(
                 ext,
                 "rs" | "ts" | "tsx" | "js" | "jsx" | "py" | "java" | "go" | "rb" | "cs"
-            ) {
-                if let Ok(text) = std::fs::read_to_string(&path) {
-                    if text.len() > 512 * 1024 {
-                        continue; // skip very large files
-                    }
-                    let rel = path
-                        .strip_prefix(root)
-                        .map(|p| p.to_string_lossy().to_string())
-                        .unwrap_or_default();
-                    files.push((rel, text));
+            ) && let Ok(text) = std::fs::read_to_string(&path)
+            {
+                if text.len() > 512 * 1024 {
+                    continue; // skip very large files
                 }
+                let rel = path
+                    .strip_prefix(root)
+                    .map(|p| p.to_string_lossy().to_string())
+                    .unwrap_or_default();
+                files.push((rel, text));
             }
         }
     }

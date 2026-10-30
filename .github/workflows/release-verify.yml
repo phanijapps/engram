@@ -26,6 +26,13 @@ jobs:
         with:
           components: rustfmt, clippy
       - uses: Swatinem/rust-cache@v2
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Enable pnpm
+        run: corepack enable
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
       - name: Format
         run: cargo fmt --all --check
       - name: Check
@@ -35,9 +42,9 @@ jobs:
       - name: Test
         run: cargo test --workspace
       - name: Check vector FastEmbed feature tests
-        run: cargo check -p engram-store-vector --features fastembed-tests --tests
+        run: cargo check -p engram-store-sqlite --features fastembed-tests --tests
       - name: Clippy vector FastEmbed feature tests
-        run: cargo clippy -p engram-store-vector --features fastembed-tests --tests -- -D warnings
+        run: cargo clippy -p engram-store-sqlite --features fastembed-tests --tests -- -D warnings
 
   docs:
     name: Documentation
@@ -58,6 +65,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
       - uses: actions/setup-node@v4
         with:
           node-version: "22"

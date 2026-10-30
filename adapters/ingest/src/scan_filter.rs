@@ -102,6 +102,7 @@ pub struct ScanFilter {
     allowlist: HashSet<String>,
     deny_dirs: HashSet<String>,
     deny_exts: HashSet<String>,
+    deny_names: HashSet<String>,
 }
 
 impl Default for ScanFilter {
@@ -120,6 +121,51 @@ impl ScanFilter {
             allowlist: HashSet::new(),
             deny_dirs: DENY_DIRS.iter().map(|s| (*s).to_owned()).collect(),
             deny_exts: DENY_FILE_EXT.iter().map(|s| (*s).to_owned()).collect(),
+            deny_names: HashSet::new(),
+        }
+    }
+
+    /// The DOCUMENT-ONLY filter (review r6 finding 2): every code file
+    /// name and extension is denied, so a scan running under it can never
+    /// ingest code bytes — the legacy scan lane is explicitly
+    /// document-only; code flows exclusively through the bound
+    /// registered-locator pipeline. Base denial cannot be widened by a
+    /// caller config (the deny sets only grow).
+    pub fn document_only() -> Self {
+        let mut filter = Self::builtin();
+        for name in crate::classifier::CODE_NAMES {
+            filter.deny_names.insert((*name).to_lowercase());
+        }
+        for ext in crate::classifier::CODE_EXTENSIONS {
+            filter.deny_exts.insert((*ext).to_owned());
+        }
+        filter
+    }
+
+    /// [`Self::document_only`] merged with a loaded config (config values
+    /// are additive on top of the code denial — a caller may narrow the
+    /// document lane further, never re-admit code).
+    pub fn document_only_with(config: &ScanFilterConfig) -> Self {
+        let mut filter = Self::document_only();
+        filter.apply_config(config);
+        filter
+    }
+
+    fn apply_config(&mut self, config: &ScanFilterConfig) {
+        if let Some(min) = config.concepts.min_name_length {
+            self.min_concept_name_len = min;
+        }
+        for term in &config.concepts.blocklist {
+            self.blocklist.insert(term.to_lowercase());
+        }
+        for term in &config.concepts.allowlist {
+            self.allowlist.insert(term.to_lowercase());
+        }
+        for dir in &config.deny.dirs {
+            self.deny_dirs.insert(dir.clone());
+        }
+        for ext in &config.deny.extensions {
+            self.deny_exts.insert(ext.to_lowercase());
         }
     }
 
@@ -130,21 +176,7 @@ impl ScanFilter {
     /// blocklist and the length threshold.
     pub fn merge(config: &ScanFilterConfig) -> Self {
         let mut filter = Self::builtin();
-        if let Some(min) = config.concepts.min_name_length {
-            filter.min_concept_name_len = min;
-        }
-        for term in &config.concepts.blocklist {
-            filter.blocklist.insert(term.to_lowercase());
-        }
-        for term in &config.concepts.allowlist {
-            filter.allowlist.insert(term.to_lowercase());
-        }
-        for dir in &config.deny.dirs {
-            filter.deny_dirs.insert(dir.clone());
-        }
-        for ext in &config.deny.extensions {
-            filter.deny_exts.insert(ext.to_lowercase());
-        }
+        filter.apply_config(config);
         filter
     }
 
@@ -174,6 +206,9 @@ impl ScanFilter {
             return true;
         }
         let base = segs.last().copied().unwrap_or("");
+        if self.deny_names.contains(&base.to_lowercase()) {
+            return true;
+        }
         let ext = match base.rsplit_once('.') {
             Some((_, e)) => e.to_lowercase(),
             None => String::new(),

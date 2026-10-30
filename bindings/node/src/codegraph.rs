@@ -289,6 +289,7 @@ mod pinned_view_tests {
     use engram_integration::code_binding::{
         CodeAuthorityAction, CodeBindingAuthorizer, CodeIngestionLanes,
     };
+    use engram_knowledge::KnowledgeRepository;
     use engram_runtime::CoreResult;
 
     struct AllowAuthorizer;
@@ -398,71 +399,91 @@ mod pinned_view_tests {
         ))
         .unwrap();
         assert_eq!(first.commit_oid, first_oid);
-        assert!(first.entities >= 1, "fixture staged entities");
+        let (_, first_entities) =
+            pinned_generation_records(&coordinator, &knowledge, &scope()).expect("first view");
+        assert!(
+            !first_entities.is_empty(),
+            "one-function fixture stages an entity"
+        );
 
-        // A COEXISTING unbound legacy relationship (no durable lineage).
-        let legacy = engram_domain::KnowledgeRelationship {
-            id: engram_domain::Id::from("legacy-rel"),
-            graph_id: Some(engram_domain::Id::from("legacy-graph")),
-            predicate: "calls".to_owned(),
-            subject: engram_domain::EntityRef {
-                id: Some(engram_domain::Id::from("legacy-a")),
-                name: Some("legacy_a".to_owned()),
-                kind: Some("function".to_owned()),
-                aliases: Vec::new(),
-            },
-            object: engram_domain::EntityRef {
-                id: Some(engram_domain::Id::from("legacy-b")),
-                name: Some("legacy_b".to_owned()),
-                kind: Some("function".to_owned()),
-                aliases: Vec::new(),
-            },
-            scope: scope(),
-            evidence: Vec::new(),
-            confidence: None,
-            code_resolution: None,
-            provenance: engram_domain::Provenance {
-                source: "pinned-view-legacy".to_owned(),
-                actor: code_graph_actor(),
-                observed_at: chrono::Utc::now(),
+        let relationship =
+            |id: &str, subject: &str, object: &str| engram_domain::KnowledgeRelationship {
+                id: engram_domain::Id::from(id),
+                graph_id: Some(engram_domain::Id::from("pinned-view-graph")),
+                predicate: "calls".to_owned(),
+                subject: engram_domain::EntityRef {
+                    id: Some(engram_domain::Id::from(subject)),
+                    name: Some(subject.to_owned()),
+                    kind: Some("function".to_owned()),
+                    aliases: Vec::new(),
+                },
+                object: engram_domain::EntityRef {
+                    id: Some(engram_domain::Id::from(object)),
+                    name: Some(object.to_owned()),
+                    kind: Some("function".to_owned()),
+                    aliases: Vec::new(),
+                },
+                scope: scope(),
                 evidence: Vec::new(),
-                derivations: Vec::new(),
-                confidence: Some(1.0),
-                method: Some("test".to_owned()),
-            },
-            created_at: chrono::Utc::now(),
-            updated_at: None,
-            archived_at: None,
+                confidence: None,
+                code_resolution: None,
+                provenance: engram_domain::Provenance {
+                    source: "pinned-view-fixture".to_owned(),
+                    actor: code_graph_actor(),
+                    observed_at: chrono::Utc::now(),
+                    evidence: Vec::new(),
+                    derivations: Vec::new(),
+                    confidence: Some(1.0),
+                    method: Some("test".to_owned()),
+                },
+                created_at: chrono::Utc::now(),
+                updated_at: None,
+                archived_at: None,
+            };
+        let entity = |id: &str, name: &str| {
+            let mut entity = first_entities[0].clone();
+            entity.id = engram_domain::Id::from(id);
+            entity.name = name.to_owned();
+            entity
         };
-        futures::executor::block_on(
-            <SqlKnowledgeStore as engram_knowledge::KnowledgeRepository>::put_relationship(
-                &knowledge,
-                legacy.clone(),
-            ),
-        )
-        .unwrap();
+        let put_relationship = |relationship| {
+            futures::executor::block_on(knowledge.put_relationship(relationship))
+                .expect("stage relationship");
+        };
+        let put_entity = |entity| {
+            futures::executor::block_on(knowledge.put_entity(entity)).expect("stage entity");
+        };
+        let lineage = |record_id: &str, generation_id: &str| engram_domain::CodeLineage {
+            repo_id: repo.clone(),
+            generation_id: generation_id.to_owned(),
+            source_path: "src/lib.rs".to_owned(),
+            contributors: vec![record_id.to_owned()],
+            span: None,
+        };
 
-        let request = serde_json::json!({ "scope": scope() }).to_string();
-        let (relationships, entities) =
-            pinned_generation_records(&coordinator, &knowledge, &scope()).expect("pinned view");
-        assert!(
-            relationships
-                .iter()
-                .all(|relationship| relationship.id != legacy.id),
-            "the unbound legacy relationship never participates: {relationships:?}"
-        );
-        assert!(
-            entities
-                .iter()
-                .all(|entity| entity.kind != engram_domain::EntityKind::File
-                    || entity.name.ends_with(".rs")),
-            "entities are the pinned generation's own"
-        );
-        let _ = dead_code_json(&knowledge, &coordinator, request.clone())
-            .expect("dead code serves the pinned view");
+        for (id, subject, object) in [
+            ("stale-relationship", "stale_caller", "stale_target"),
+            ("retired-relationship", "retired_caller", "retired_target"),
+            ("unbound-relationship", "unbound_caller", "unbound_target"),
+        ] {
+            put_relationship(relationship(id, subject, object));
+        }
+        for (id, name) in [
+            ("stale-entity", "stale_seed"),
+            ("retired-entity", "retired_seed"),
+            ("unbound-entity", "unbound_seed"),
+        ] {
+            put_entity(entity(id, name));
+        }
+        for record_id in ["stale-relationship", "stale-entity"] {
+            futures::executor::block_on(coordinator.store().put_lineage(
+                &scope(),
+                record_id,
+                lineage(record_id, &first.generation_id),
+            ))
+            .expect("stage first-generation lineage");
+        }
 
-        // Publish a SECOND generation (new commit): the first generation's
-        // records become STALE — the pinned view must exclude them.
         let run = |args: &[&str]| {
             let status = std::process::Command::new("git")
                 .args(args)
@@ -486,24 +507,130 @@ mod pinned_view_tests {
         ))
         .unwrap();
         assert_ne!(second.generation_id, first.generation_id);
-        let (relationships, _entities) =
-            pinned_generation_records(&coordinator, &knowledge, &scope()).expect("view after gen2");
-        let first_generation_filter = |record: &str| record.contains(&first.generation_id);
-        let _ = first_generation_filter;
-        // Every served relationship's durable lineage is gen2's (the stale
-        // gen1 rows and the legacy row are all excluded by classification).
-        let view =
-            futures::executor::block_on(coordinator.eligibility_view(&scope(), None)).unwrap();
-        for relationship in &relationships {
-            assert!(
-                matches!(
-                    view.classify(&relationship.id.to_string(), true),
-                    RecordEligibility::EligibleCode
-                ),
-                "served relationship is pinned-generation code: {relationship:?}"
+
+        let generated_current =
+            futures::executor::block_on(coordinator.store().target_lineage(&scope()))
+                .expect("current lineage")
+                .into_iter()
+                .filter(|target| target.generation_id == second.generation_id && !target.retired)
+                .map(|target| engram_knowledge::RetirementTarget {
+                    repo_id: target.repo_id,
+                    generation_id: target.generation_id,
+                    record_id: target.record_id,
+                })
+                .collect::<Vec<_>>();
+        assert!(
+            !generated_current.is_empty(),
+            "the one-function fixture stages current records before explicit assertions"
+        );
+        futures::executor::block_on(coordinator.store().retire_lineage_targets(
+            &scope(),
+            &[(repo.clone(), second.binding.epoch)],
+            &generated_current,
+        ))
+        .expect("retire generated current records");
+
+        put_relationship(relationship(
+            "eligible-relationship",
+            "eligible_caller",
+            "eligible_target",
+        ));
+        put_entity(entity("eligible-entity", "eligible_seed"));
+        for record_id in [
+            "eligible-relationship",
+            "eligible-entity",
+            "retired-relationship",
+            "retired-entity",
+        ] {
+            futures::executor::block_on(coordinator.store().put_lineage(
+                &scope(),
+                record_id,
+                lineage(record_id, &second.generation_id),
+            ))
+            .expect("stage current-generation lineage");
+        }
+        let binding = futures::executor::block_on(coordinator.store().get_binding(&scope(), &repo))
+            .expect("read binding")
+            .expect("binding exists");
+        futures::executor::block_on(coordinator.store().retire_lineage_targets(
+            &scope(),
+            &[(repo.clone(), binding.epoch)],
+            &[
+                engram_knowledge::RetirementTarget {
+                    repo_id: repo.0.clone(),
+                    generation_id: second.generation_id.clone(),
+                    record_id: "retired-relationship".to_owned(),
+                },
+                engram_knowledge::RetirementTarget {
+                    repo_id: repo.0.clone(),
+                    generation_id: second.generation_id.clone(),
+                    record_id: "retired-entity".to_owned(),
+                },
+            ],
+        ))
+        .expect("retire explicit records");
+
+        let (relationships, entities) =
+            pinned_generation_records(&coordinator, &knowledge, &scope()).expect("pinned view");
+        let relationship_ids = relationships
+            .iter()
+            .map(|relationship| relationship.id.to_string())
+            .collect::<std::collections::BTreeSet<_>>();
+        let entity_ids = entities
+            .iter()
+            .map(|entity| entity.id.to_string())
+            .collect::<std::collections::BTreeSet<_>>();
+        assert_eq!(
+            relationship_ids,
+            std::collections::BTreeSet::from(["eligible-relationship".to_owned()])
+        );
+        assert_eq!(
+            entity_ids,
+            std::collections::BTreeSet::from(["eligible-entity".to_owned()])
+        );
+        let view = futures::executor::block_on(coordinator.eligibility_view(&scope(), None))
+            .expect("eligibility view");
+        for record_id in ["eligible-relationship", "eligible-entity"] {
+            assert_eq!(
+                view.classify(record_id, true),
+                RecordEligibility::EligibleCode
             );
         }
-        let _ = dead_code_json(&knowledge, &coordinator, request).expect("dead code after gen2");
+        for record_id in [
+            "stale-relationship",
+            "stale-entity",
+            "retired-relationship",
+            "retired-entity",
+            "unbound-relationship",
+            "unbound-entity",
+        ] {
+            assert_eq!(
+                view.classify(record_id, true),
+                RecordEligibility::IneligibleCode
+            );
+        }
+        let traversal = blast_radius_json(
+            &knowledge,
+            &coordinator,
+            serde_json::json!({ "scope": scope(), "target": "eligible_target" }).to_string(),
+        )
+        .expect("traversal uses pinned view");
+        assert!(
+            traversal.contains("eligible_caller"),
+            "eligible traversal is served"
+        );
+        assert!(
+            !traversal.contains("unbound"),
+            "unbound traversal is denied"
+        );
+        let seeds = explore_json(
+            &knowledge,
+            &coordinator,
+            serde_json::json!({ "scope": scope(), "query": "eligible_seed" }).to_string(),
+        )
+        .expect("seed selection uses pinned view");
+        assert!(seeds.contains("eligible_seed"), "eligible seed is served");
+        assert!(!seeds.contains("unbound"), "unbound seed is denied");
 
         let _ = std::fs::remove_dir_all(&dir);
         let _ = std::fs::remove_dir_all(&repo_path);

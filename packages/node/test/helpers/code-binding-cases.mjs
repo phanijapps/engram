@@ -216,6 +216,42 @@ export function describeCodeBindingCases(getAddon, recipe) {
     expect(typeof job.jobId).toBe("string");
   });
 
+  it(`${recipe}: legacy_authority_validation`, () => {
+    // Review r6 finding 9 regression: SUPPLIED malformed policy/actor values
+    // are typed rejections (InvalidPolicy/InvalidActor) — never silent
+    // permissive defaults; ABSENT values keep the documented defaults.
+    const engine = new (getAddon().NativeIngestEngine)();
+    const root = mkdtempSync(join(tmpdir(), `task020-${recipe}-auth-`));
+    writeFileSync(join(root, "notes.md"), "# Notes\n");
+
+    expect(() =>
+      engine.startScanJobJson(
+        JSON.stringify({
+          root,
+          scope,
+          documentOnly: true,
+          policy: { visibility: "not-a-visibility" }
+        })
+      )
+    ).toThrow(/InvalidPolicy/);
+    expect(() =>
+      engine.startScanJobJson(
+        JSON.stringify({
+          root,
+          scope,
+          documentOnly: true,
+          actor: { id: 42 }
+        })
+      )
+    ).toThrow(/InvalidActor/);
+    // Absent → defaults apply (the job starts; the typed path is proven by
+    // the absence of a validation rejection).
+    const job = JSON.parse(
+      engine.startScanJobJson(JSON.stringify({ root, scope, documentOnly: true }))
+    );
+    expect(typeof job.jobId).toBe("string");
+  });
+
   it(`${recipe}: direct_retrieval_denied`, () => {
     const engine = new (getAddon().NativeKnowledgeEngine)();
     expect(() => engine.deadCodeJson(JSON.stringify({ scope }))).toThrow(/BindingRequired/);

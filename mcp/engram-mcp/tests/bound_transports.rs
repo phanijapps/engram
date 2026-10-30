@@ -175,15 +175,49 @@ fn pg_available() -> bool {
     std::env::var("ENGRAM_TEST_PG_URL").is_ok()
 }
 
-// The recipe under test: `pgvector` when the URL is present AND the binary
-// was built with the feature (a build without the feature refuses the
-// backend with its typed error — asserted in the unavailable path below).
-fn backends() -> Vec<(&'static str, &'static str)> {
-    if pg_available() {
+fn pg_required() -> bool {
+    std::env::var("ENGRAM_TEST_REQUIRE_PG").map_or(false, |value| value == "1")
+}
+
+/// The pure recipe-selection rule (review r6 finding 8): `pgvector` when the
+/// URL is present AND the binary was built with the feature (a build without
+/// the feature refuses the backend with its typed error — asserted in the
+/// unavailable path below). REQUIRED-Pg mode without a URL FAILS FAST —
+/// never a silent SQLite-only fallback.
+fn select_backends(pg_required: bool, pg_url: bool) -> Vec<(&'static str, &'static str)> {
+    if pg_required && !pg_url {
+        panic!(
+            "ENGRAM_TEST_REQUIRE_PG=1 but ENGRAM_TEST_PG_URL is absent — a required-Pg run              must fail fast rather than silently testing SQLite alone"
+        );
+    }
+    if pg_url {
         vec![("sqlite", "sqlite"), ("pgvector", "pg")]
     } else {
         vec![("sqlite", "sqlite")]
     }
+}
+
+// The recipe set under test.
+fn backends() -> Vec<(&'static str, &'static str)> {
+    select_backends(pg_required(), pg_available())
+}
+
+#[test]
+fn require_pg_without_url_fails_fast() {
+    let result = std::panic::catch_unwind(|| select_backends(true, false));
+    assert!(
+        result.is_err(),
+        "required-Pg without a URL must fail fast, never a silent SQLite fallback"
+    );
+    assert_eq!(select_backends(false, false), vec![("sqlite", "sqlite")]);
+    assert_eq!(
+        select_backends(true, true),
+        vec![("sqlite", "sqlite"), ("pgvector", "pg")]
+    );
+    assert_eq!(
+        select_backends(false, true),
+        vec![("sqlite", "sqlite"), ("pgvector", "pg")]
+    );
 }
 
 // ---------- task_021 focused cases ------------------------------------------
@@ -536,46 +570,74 @@ mod task_022 {
     /// ambiguous `reindex` alias is a deprecation diagnostic naming both.
     #[test]
     fn backfill_not_rescan() {
-        let run = unique_suffix();
-        let repo_id = format!("repo-backfill-{run}");
-        let (repo_path, _oid) = git_fixture("backfill");
-        let storage = storage_for("backfill");
-        let mut base = oneshot_args(&storage, "backfill", &[]);
-        base.insert(0, "code".into());
-        base.extend(
-            [
-                "--op",
-                "bind",
-                "--repo",
-                repo_id.as_str(),
-                "--branch-ref",
-                "refs/heads/main",
-            ]
-            .iter()
-            .map(|s| (*s).to_owned()),
-        );
-        // Register first so bind is legitimate.
-        let mut reg = oneshot_args(&storage, "backfill", &[]);
-        reg.insert(0, "code".into());
-        reg.extend(
-            ["--op", "register", "--repo", repo_id.as_str(), "--path"]
-                .iter()
-                .map(|s| (*s).to_owned()),
-        );
-        reg.push(repo_path.to_str().unwrap().to_owned());
-        let (code, text) = oneshot(&oneshot_refs(&reg), &[]);
-        assert_eq!(code, 0, "register: {text}");
-        let (code, text) = oneshot(&oneshot_refs(&base), &[]);
-        assert_eq!(code, 0, "bind: {text}");
+        // Review r6 finding 8: the backfill semantics run against BOTH
+        // recipes in the Pg-featured target (not SQLite alone).
+        for (backend, tag) in backends() {
+            backfill_not_rescan_case(backend, &format!("backfill-{tag}"));
+        }
+    }
 
-        let mut status_args = oneshot_args(&storage, "backfill", &[]);
+    fn backfill_not_rescan_case(backend: &str, tag: &str) {
+        let run = unique_suffix();
+        let repo_id = format!("repo-backfill-{tag}-{run}");
+        let (repo_path, _oid) = git_fixture(tag);
+        let storage = storage_for(tag);
+        let mut envs: Vec<(&str, &str)> = Vec::new();
+        let mut extra: Vec<&str> = Vec::new();
+        if backend == "pgvector" {
+            let url = std::env::var("ENGRAM_TEST_PG_URL").expect("pg url");
+            envs.push(("ENGRAM_PG_CONNECTION_STRING", url.leak()));
+            extra = vec!["--backend", "pgvector"];
+        }
+        for op_args in [
+            &mut base_args(
+                &storage,
+                tag,
+                &extra,
+                &repo_id,
+                repo_path.to_str().unwrap(),
+                "register",
+            ),
+            &mut base_args(&storage, tag, &extra, &repo_id, "", "bind"),
+        ] {
+            let (code, text) = oneshot(&oneshot_refs(op_args), &envs);
+            assert_eq!(code, 0, "{backend} setup: {text}");
+        }
+        fn base_args(
+            storage: &std::path::Path,
+            tag: &str,
+            extra: &[&str],
+            repo_id: &str,
+            path: &str,
+            op: &str,
+        ) -> Vec<String> {
+            let mut args = oneshot_args(storage, tag, extra);
+            args.insert(0, "code".into());
+            let mut tail = vec![
+                "--op".to_owned(),
+                op.to_owned(),
+                "--repo".to_owned(),
+                repo_id.to_owned(),
+            ];
+            if op == "register" {
+                tail.push("--path".to_owned());
+                tail.push(path.to_owned());
+            } else if op == "bind" {
+                tail.push("--branch-ref".to_owned());
+                tail.push("refs/heads/main".to_owned());
+            }
+            args.extend(tail);
+            args
+        }
+
+        let mut status_args = oneshot_args(&storage, tag, &extra);
         status_args.insert(0, "code".into());
         status_args.extend(
             ["--op", "status", "--repo", repo_id.as_str()]
                 .iter()
                 .map(|s| (*s).to_owned()),
         );
-        let (_, before) = oneshot(&oneshot_refs(&status_args), &[]);
+        let (_, before) = oneshot(&oneshot_refs(&status_args), &envs);
 
         // Help: the explicit distinction, in the operator surface.
         let (code, help) = oneshot(&["backfill-embeddings", "--help"], &[]);
@@ -587,9 +649,9 @@ mod task_022 {
 
         // The run itself (no vector lane in this build): a typed NONZERO
         // failure about the embedding lane — never a binding mutation.
-        let mut backfill = oneshot_args(&storage, "backfill", &[]);
+        let mut backfill = oneshot_args(&storage, tag, &extra);
         backfill.insert(0, "backfill-embeddings".into());
-        let (code, text) = oneshot(&oneshot_refs(&backfill), &[]);
+        let (code, text) = oneshot(&oneshot_refs(&backfill), &envs);
         assert_ne!(code, 0, "a failed mutation must exit nonzero: {text}");
         assert!(
             text.contains("no embedding provider wired"),
@@ -597,7 +659,7 @@ mod task_022 {
         );
 
         // The binding is byte-equal: backfill NEVER rescans/rebuilds code.
-        let (_, after) = oneshot(&oneshot_refs(&status_args), &[]);
+        let (_, after) = oneshot(&oneshot_refs(&status_args), &envs);
         assert_eq!(
             before, after,
             "embedding backfill must not touch the binding"
@@ -619,11 +681,31 @@ mod task_022 {
     /// ZERO even when the store cannot open.
     #[test]
     fn read_error_envelope() {
+        // Review r6 finding 8: the read-hook fail-open contract is verified
+        // on BOTH recipes — SQLite via an impossible storage path, pgvector
+        // via a refused connection (the envelope contract, not the fixture).
+        for (backend, tag) in backends() {
+            read_error_envelope_case(backend, &format!("envelope-{tag}"));
+        }
+    }
+
+    fn read_error_envelope_case(backend: &str, tag: &str) {
         // A storage path that cannot exist (its parent is a FILE).
         let dir = tempfile::tempdir().unwrap();
         let blocker = dir.path().join("blocker");
         std::fs::write(&blocker, b"not a directory").unwrap();
         let impossible = blocker.join("storage");
+        let mut envs: Vec<(&str, &str)> = Vec::new();
+        let mut extra: Vec<&str> = Vec::new();
+        if backend == "pgvector" {
+            // Refused connection: the open fails BEFORE the envelope check,
+            // exercising the same read-hook fail-open on the Pg recipe.
+            envs.push((
+                "ENGRAM_PG_CONNECTION_STRING",
+                "postgresql://engram:nobody@127.0.0.1:1/none",
+            ));
+            extra = vec!["--backend", "pgvector"];
+        }
 
         let (code, text) = oneshot(
             &[
@@ -636,10 +718,14 @@ mod task_022 {
                 "--org",
                 "task-transports",
                 "--project",
-                "envelope",
+                tag,
                 "--no-vector",
-            ],
-            &[],
+            ]
+            .iter()
+            .chain(extra.iter())
+            .copied()
+            .collect::<Vec<_>>(),
+            &envs,
         );
         assert_eq!(code, 0, "read-hook fail-open stays exit 0: {text}");
         let envelope: Value = serde_json::from_str(
@@ -667,10 +753,14 @@ mod task_022 {
                 "--org",
                 "task-transports",
                 "--project",
-                "envelope",
+                tag,
                 "--no-vector",
-            ],
-            &[],
+            ]
+            .iter()
+            .chain(extra.iter())
+            .copied()
+            .collect::<Vec<_>>(),
+            &envs,
         );
         assert_eq!(code, 0, "status fail-open stays exit 0: {text}");
         let envelope: Value = serde_json::from_str(

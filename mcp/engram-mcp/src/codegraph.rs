@@ -5653,7 +5653,7 @@ mod phase2_tool_tests {
 }
 
 #[cfg(test)]
-#[path = "../tests/bound_code_authority.rs"]
+#[path = "../tests/bin_modules/bound_code_authority.rs"]
 mod bound_code_authority_tests;
 #[cfg(test)]
 #[path = "codegraph_reindex_tests.rs"]

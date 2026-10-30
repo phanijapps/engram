@@ -179,10 +179,10 @@ def default_command(row: Row, sqlite_root: Path, pg_url_name: str) -> CommandSpe
         "source": ("engram-integration", "bound_source_status", "exact_bytes_and_spans", "exact_bytes_and_spans"),
         # These Pg Rust proofs must not use the SQLite integration/conformance
         # fixtures above.  Each selected case opens the real pgvector recipe.
-        "pg_scan": ("engram-backend-pgvector", "bound_recipe", "task_019::authorized_registration", "authorized_registration"),
-        "pg_retrieval": ("engram-backend-pgvector", "bound_recipe", "task_019::required_handles", "required_handles"),
-        "pg_graph": ("engram-backend-pgvector", "bound_recipe", "task_019::required_handles", "required_handles"),
-        "pg_source": ("engram-backend-pgvector", "bound_recipe", "task_019::required_handles", "required_handles"),
+        "pg_scan": ("engram-backend-pgvector", "bound_recipe", "task_019::real_pg_scan_publish_content", "real_pg_scan_publish_content"),
+        "pg_retrieval": ("engram-backend-pgvector", "bound_recipe", "task_019::real_pg_retrieval_eligible_content", "real_pg_retrieval_eligible_content"),
+        "pg_graph": ("engram-backend-pgvector", "bound_recipe", "task_019::real_pg_graph_bound_answer", "real_pg_graph_bound_answer"),
+        "pg_source": ("engram-backend-pgvector", "bound_recipe", "task_019::real_pg_source_exact_bytes_and_span", "real_pg_source_exact_bytes_and_span"),
         "reset": ("engram-conformance", "code_reset_recovery", "real_recipe_bundle_retires_code_and_preserves_ordinary_lexical_records", "real_recipe_bundle_retires_code_and_preserves_ordinary_lexical_records"),
         "backfill": ("engram-mcp", "bound_transports", "task_022::backfill_not_rescan", "backfill_not_rescan"),
     }
@@ -190,6 +190,8 @@ def default_command(row: Row, sqlite_root: Path, pg_url_name: str) -> CommandSpe
         key = f"pg_{row.operation}" if row.backend == "pgvector" and row.operation in {"scan", "retrieval", "graph", "source"} else row.operation
         package, target, filter_name, marker = rust[key]
         spec = cargo_spec(package, target, filter_name, marker, row.backend)
+        if row.backend == "pgvector" and row.operation in {"scan", "retrieval", "graph", "source"}:
+            spec.argv.extend(["--ignored"])
         if row.operation == "reset" and row.backend == "pgvector":
             package, target, filter_name, marker = "engram-backend-pgvector", "code_reset_recovery", "task_023::authorization_hash_and_ambiguous_ownership_are_behavioral", "authorization_hash_and_ambiguous_ownership_are_behavioral"
             spec = cargo_spec(package, target, filter_name, marker, row.backend)

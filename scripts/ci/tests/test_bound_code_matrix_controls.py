@@ -107,10 +107,19 @@ class BoundCodeMatrixControls(unittest.TestCase):
 
     def test_pg_rust_rows_select_pg_recipe_proofs_and_execute_ignored_reset(self):
         root = Path("/tmp/matrix-control")
-        for operation in ("scan", "retrieval", "graph", "source"):
+        expected = {
+            "scan": "real_pg_scan_publish_content",
+            "retrieval": "real_pg_retrieval_eligible_content",
+            "graph": "real_pg_graph_bound_answer",
+            "source": "real_pg_source_exact_bytes_and_span",
+        }
+        for operation, marker in expected.items():
             command = matrix.default_command(matrix.Row(operation, "pgvector", "rust", True), root, "ENGRAM_TEST_PG_URL")
             self.assertIn("engram-backend-pgvector", command.argv)
             self.assertIn("bound_recipe", command.argv)
+            self.assertTrue(any(marker in argument for argument in command.argv))
+            self.assertEqual(command.marker, marker)
+            self.assertIn("--ignored", command.argv)
         reset = matrix.default_command(matrix.Row("reset", "pgvector", "rust", True), root, "ENGRAM_TEST_PG_URL")
         self.assertIn("code_reset_recovery", reset.argv)
         self.assertIn("--ignored", reset.argv)

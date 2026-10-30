@@ -140,6 +140,8 @@ impl PgCodeBindingStore {
         }
         runtime().block_on(async{let attempt=db(self.connection.client.query_opt("SELECT generation_id,required_receipts FROM code_attempts WHERE attempt_id=$1",&[&r.attempt_id]).await)?.ok_or(CodeBindingError::InvalidAttempt)?;let generation:String=attempt.get(0);let required:Vec<String>=serde_json::from_value(attempt.get(1)).map_err(|_|CodeBindingError::PersistenceFailure)?;if generation!=r.generation_id||!required.iter().any(|v|v==&r.lane){return Err(CodeBindingError::InvalidAttempt)}let n=db(self.connection.client.execute("INSERT INTO code_attempt_receipts(attempt_id,lane,digest) VALUES($1,$2,$3) ON CONFLICT DO NOTHING",&[&r.attempt_id,&r.lane,&r.digest]).await)?;if n==0{let row=db(self.connection.client.query_one("SELECT digest FROM code_attempt_receipts WHERE attempt_id=$1 AND lane=$2",&[&r.attempt_id,&r.lane]).await)?;if row.get::<_,String>(0)!=r.digest{return Err(CodeBindingError::InvalidAttempt)}}Ok(r.clone())})
     }
+    // clippy roll 2026-10: SQL row tuple matches fixed query column order.
+    #[allow(clippy::type_complexity)]
     pub fn publish(
         &mut self,
         scope: &Scope,

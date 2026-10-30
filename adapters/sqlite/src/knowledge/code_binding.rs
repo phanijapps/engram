@@ -360,6 +360,8 @@ impl SqlCodeBindingStore {
             .map_err(|_| CodeBindingError::PersistenceFailure)?;
         Ok(())
     }
+    // clippy roll 2026-10: SQL row tuple matches fixed query column order.
+    #[allow(clippy::type_complexity)]
     pub fn publish(
         &mut self,
         scope: &engram_domain::Scope,

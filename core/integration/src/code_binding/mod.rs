@@ -122,7 +122,9 @@ pub struct CodeBindingCoordinator {
 /// Recipes do not own an actor-to-scope policy, so accepting a synthetic
 /// transport actor here would turn missing host policy into authorization.
 /// Hosts that expose code operations MUST construct the coordinator with an
-/// explicit [`CodeBindingAuthorizer`].
+/// explicit [`CodeBindingAuthorizer`] (directly, or via
+/// [`CodeBindingCoordinator::with_authorizer`] /
+/// `EngramProvider::with_code_authorizer` over a recipe-built provider).
 pub struct RecipeDefaultAuthorizer;
 #[async_trait]
 impl CodeBindingAuthorizer for RecipeDefaultAuthorizer {
@@ -135,6 +137,41 @@ impl CodeBindingAuthorizer for RecipeDefaultAuthorizer {
     ) -> CoreResult<()> {
         Err(engram_runtime::CoreError::PolicyDenied {
             reason: "CodeAuthorizationRequired: inject a host CodeBindingAuthorizer".into(),
+        })
+    }
+}
+
+/// An EXPLICIT host policy: code operations are authorized exactly for the
+/// configured scope set (review r6 finding 1 — hosts that expose code
+/// operations inject this instead of relying on the deny-by-default
+/// [`RecipeDefaultAuthorizer`]). Every actor and repository within an
+/// allowed scope is accepted; anything else denies with the same typed
+/// `CodeAuthorizationRequired` envelope as the recipe default, so callers
+/// cannot distinguish "no policy" from "policy says no" beyond the shared
+/// denial kind.
+pub struct ScopeSetAuthorizer {
+    allowed: Vec<Scope>,
+}
+impl ScopeSetAuthorizer {
+    /// Creates the authorizer over the host's allowed scope set.
+    pub fn new(allowed: Vec<Scope>) -> Self {
+        Self { allowed }
+    }
+}
+#[async_trait]
+impl CodeBindingAuthorizer for ScopeSetAuthorizer {
+    async fn authorize(
+        &self,
+        _actor: &Actor,
+        scope: &Scope,
+        _repo: &RepoId,
+        _action: CodeAuthorityAction,
+    ) -> CoreResult<()> {
+        if self.allowed.contains(scope) {
+            return Ok(());
+        }
+        Err(engram_runtime::CoreError::PolicyDenied {
+            reason: "CodeAuthorizationRequired: scope is not authorized for code operations".into(),
         })
     }
 }
@@ -169,6 +206,20 @@ impl CodeBindingCoordinator {
     pub fn with_clock(mut self, clock: Arc<dyn engram_runtime::Clock>) -> Self {
         self.clock = clock;
         self
+    }
+
+    /// Host policy injection (review r6 finding 1): a coordinator over the
+    /// SAME durable store, required lanes, and clock, but with the host's
+    /// EXPLICIT authorizer replacing the recipe default. Denial stays the
+    /// behavior until a host calls this (or constructs a coordinator
+    /// directly) with a real policy.
+    pub fn with_authorizer(&self, authorizer: Arc<dyn CodeBindingAuthorizer>) -> Self {
+        Self {
+            store: Arc::clone(&self.store),
+            authorizer,
+            required_lanes: self.required_lanes.clone(),
+            clock: Arc::clone(&self.clock),
+        }
     }
 
     /// Shared caller-authority check for code operations (corrective r2,

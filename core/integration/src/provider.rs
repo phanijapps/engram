@@ -103,6 +103,31 @@ impl EngramProvider {
             })
     }
 
+    /// Host policy injection for the code-authority lane (review r6 finding
+    /// 1): consumes this provider and returns one whose code coordinator
+    /// carries the EXPLICIT authorizer over the SAME durable store, required
+    /// lanes, and clock. Recipe-built providers deny by default
+    /// (`RecipeDefaultAuthorizer`); a host that exposes code operations
+    /// injects its policy through this seam — e.g. a launch-scope
+    /// [`crate::code_binding::ScopeSetAuthorizer`]. Every surface that reads
+    /// `code_bindings()` (Rust facade, N-API, TS, stdio, one-shot) then
+    /// observes the SAME injected policy.
+    pub fn with_code_authorizer(
+        mut self,
+        authorizer: Arc<dyn crate::code_binding::CodeBindingAuthorizer>,
+    ) -> CoreResult<Self> {
+        let coordinator =
+            self.code_bindings
+                .as_ref()
+                .ok_or_else(|| CoreError::CapabilityUnsupported {
+                    capability: "code-binding".into(),
+                    reason: "no code binding coordinator to authorize".into(),
+                })?;
+        let authorized = coordinator.with_authorizer(authorizer);
+        self.code_bindings = Some(Arc::new(authorized));
+        Ok(self)
+    }
+
     /// The adapter-owned retained-source reader serving exact committed
     /// bytes (corrective r2). Absent handle ⇒ typed `CapabilityUnsupported`,
     /// never a checkout fallback.

@@ -69,13 +69,25 @@ fn repo() -> RepoId {
     RepoId("repo-recipe".to_string())
 }
 
+/// Host test policy (review r6 finding 1): the recipes' own explicit host
+/// policy type over the fixture scopes — the same seam
+/// (`CodeBindingCoordinator::with_authorizer` + `ScopeSetAuthorizer`) a real
+/// host uses to replace the recipes' deny-by-default `RecipeDefaultAuthorizer`.
+fn host_policy() -> std::sync::Arc<engram_integration::code_binding::ScopeSetAuthorizer> {
+    std::sync::Arc::new(engram_integration::code_binding::ScopeSetAuthorizer::new(
+        vec![scope(), foreign_scope()],
+    ))
+}
+
 mod task_019 {
     use super::*;
 
-    /// persisted_binding: a binding made through the OPENED recipe survives a
-    /// recipe re-open (a new process-equivalent handle over the same
-    /// storage), and ordinary scope isolation holds — the foreign workspace
-    /// has no binding (BindingRequired), never a cross-scope read.
+    /// persisted_binding: a binding made through the OPENED recipe (with the
+    /// host's EXPLICIT authorizer injected — the recipes deny by default,
+    /// review r6 finding 1) survives a recipe re-open (a new
+    /// process-equivalent handle over the same storage), and ordinary scope
+    /// isolation holds — the foreign workspace has no binding
+    /// (BindingRequired), never a cross-scope read.
     #[test]
     fn persisted_binding() {
         let dir = tempfile::tempdir().expect("tempdir");
@@ -83,8 +95,17 @@ mod task_019 {
         {
             let provider = engram_backend_sqlite::open(&config(dir.path())).expect("open recipe");
             let coordinator = provider.code_bindings().expect("binding handle");
-            let bound = block_on(coordinator.bind(&actor(), &scope(), &repo(), "refs/heads/main"))
-                .expect("bind through recipe");
+            // Deny-by-default FIRST (review r6 finding 1): the recipe-built
+            // coordinator denies even the fixture scope until policy is
+            // injected.
+            let denied = block_on(coordinator.bind(&actor(), &scope(), &repo(), "refs/heads/main"));
+            assert!(
+                matches!(&denied, Err(CoreError::PolicyDenied { reason }) if reason.contains("CodeAuthorizationRequired")),
+                "recipe default must deny bind with the typed envelope, got {denied:?}"
+            );
+            let authorized = coordinator.with_authorizer(host_policy());
+            let bound = block_on(authorized.bind(&actor(), &scope(), &repo(), "refs/heads/main"))
+                .expect("bind through injected host policy");
             assert_eq!(bound.branch_ref, "refs/heads/main");
             assert_eq!(bound.active_generation, None);
         }
@@ -99,12 +120,100 @@ mod task_019 {
         assert_eq!(binding.branch_ref, "refs/heads/main");
         assert_eq!(binding.version, 1);
 
-        // Ordinary scope isolation: the foreign workspace never sees it.
-        let foreign = block_on(coordinator.status(&actor(), &foreign_scope(), &repo(), None));
+        // Ordinary scope isolation: the foreign workspace never sees it
+        // (read through the injected-policy coordinator so the denial under
+        // test is the BINDING, not the policy).
+        let authorized = coordinator.with_authorizer(host_policy());
+        let foreign = block_on(authorized.status(&actor(), &foreign_scope(), &repo(), None));
         assert!(
             matches!(foreign, Err(CoreError::InvalidRequest { ref reason }) if reason == "BindingRequired"),
             "foreign scope must deny with BindingRequired, got {foreign:?}"
         );
+    }
+
+    /// deny_by_default_authorization (review r6 finding 1): BOTH authority
+    /// actions through the recipe-constructed coordinator — bind, register,
+    /// and inspect — deny with the SAME typed `CodeAuthorizationRequired`
+    /// envelope until a host injects an explicit authorizer; the denial is
+    /// not a binding/conflict artifact (the scope is fully unbound).
+    #[test]
+    fn deny_by_default_authorization() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        std::fs::create_dir_all(dir.path().join("storage")).expect("mkdir storage");
+        let provider = engram_backend_sqlite::open(&config(dir.path())).expect("open recipe");
+        let coordinator = provider.code_bindings().expect("binding handle");
+        let deny = |outcome: &Result<(), CoreError>, action: &str| {
+            assert!(
+                matches!(outcome, Err(CoreError::PolicyDenied { reason }) if reason.contains("CodeAuthorizationRequired")),
+                "recipe default must deny {action} with the typed envelope, got {outcome:?}"
+            );
+        };
+        deny(
+            &block_on(coordinator.bind(&actor(), &scope(), &repo(), "refs/heads/main")).map(|_| ()),
+            "bind",
+        );
+        deny(
+            &block_on(coordinator.register(
+                &actor(),
+                &scope(),
+                engram_knowledge::RepositoryRegistration {
+                    repo_id: repo(),
+                    locator_id: dir.path().to_string_lossy().to_string(),
+                    acquisition: engram_knowledge::AcquisitionMode::LocalOnly,
+                },
+            ))
+            .map(|_| ()),
+            "register",
+        );
+        deny(
+            &block_on(coordinator.status(&actor(), &scope(), &repo(), None)).map(|_| ()),
+            "status",
+        );
+        // Nothing leaked through the denials: the durable cell stays empty.
+        assert!(
+            block_on(coordinator.store().get_binding(&scope(), &repo()))
+                .expect("durable read")
+                .is_none(),
+            "a denied bind must not persist a binding"
+        );
+    }
+
+    /// authorized_registration (review r6 finding 1): with an EXPLICIT host
+    /// authorizer injected, registration succeeds through the SAME shared
+    /// coordinator seam (authorize-before-store) and the locator is durable;
+    /// the same request through the DEFAULT (uninjected) coordinator stays
+    /// denied — an unauthorized direct register never reaches storage.
+    #[test]
+    fn authorized_registration() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        std::fs::create_dir_all(dir.path().join("storage")).expect("mkdir storage");
+        let provider = engram_backend_sqlite::open(&config(dir.path())).expect("open recipe");
+        let coordinator = provider.code_bindings().expect("binding handle");
+        let registration = engram_knowledge::RepositoryRegistration {
+            repo_id: repo(),
+            locator_id: dir.path().to_string_lossy().to_string(),
+            acquisition: engram_knowledge::AcquisitionMode::LocalOnly,
+        };
+        // Unauthorized (default policy): denied, nothing stored.
+        assert!(matches!(
+            block_on(coordinator.register(&actor(), &scope(), registration.clone())),
+            Err(CoreError::PolicyDenied { .. })
+        ));
+        assert!(
+            block_on(coordinator.store().get_registration(&repo()))
+                .expect("registration read")
+                .is_none(),
+            "a denied register must not persist a locator"
+        );
+        // Authorized (injected policy): the shared seam stores it durably.
+        let authorized = coordinator.with_authorizer(host_policy());
+        let stored = block_on(authorized.register(&actor(), &scope(), registration))
+            .expect("authorized registration");
+        assert_eq!(stored.repo_id, repo());
+        let durable = block_on(coordinator.store().get_registration(&repo()))
+            .expect("registration read")
+            .expect("locator persisted through the authorized seam");
+        assert_eq!(durable.locator_id, dir.path().to_string_lossy().to_string());
     }
 
     /// required_handles: the recipe exposes every REQUIRED neutral handle —

@@ -49,6 +49,7 @@ mod task_006 {
         s
     }
     #[test]
+    #[ignore = "requires ENGRAM_TEST_PG_URL; run via --ignored with the sourced env"]
     fn restart_two_scopes() {
         let r = id();
         let w1 = id();
@@ -74,6 +75,7 @@ mod task_006 {
         );
     }
     #[test]
+    #[ignore = "requires ENGRAM_TEST_PG_URL; run via --ignored with the sourced env"]
     fn same_bind_idempotent() {
         let r = id();
         let w = id();
@@ -82,6 +84,7 @@ mod task_006 {
         assert_eq!(s.bind(&b).unwrap(), s.bind(&b).unwrap());
     }
     #[test]
+    #[ignore = "requires ENGRAM_TEST_PG_URL; run via --ignored with the sourced env"]
     fn conflict_preserves_pointer() {
         let r = id();
         let w = id();
@@ -100,6 +103,7 @@ mod task_006 {
         );
     }
     #[test]
+    #[ignore = "requires ENGRAM_TEST_PG_URL; run via --ignored with the sourced env"]
     fn concurrent_first_bind_processes() {
         let r = id();
         let w = id();
@@ -193,6 +197,7 @@ mod task_006 {
         }
     }
     #[test]
+    #[ignore = "requires ENGRAM_TEST_PG_URL; run via --ignored with the sourced env"]
     fn fenced_publication_cas() {
         let r = id();
         let w = id();
@@ -427,6 +432,7 @@ mod maintenance_retirement_contract {
     /// retirement is an idempotent no-op SUCCESS that advances NEITHER the
     /// binding epoch NOR the scope epoch and performs no write.
     #[test]
+    #[ignore = "requires ENGRAM_TEST_PG_URL; run via --ignored with the sourced env"]
     fn repeated_matching_retirement_is_noop_success() {
         let workspace = id();
         let repository = repository();
@@ -466,6 +472,7 @@ mod maintenance_retirement_contract {
     /// whole operation with NOTHING mutated (the boolean decode under test
     /// runs for every existing target).
     #[test]
+    #[ignore = "requires ENGRAM_TEST_PG_URL; run via --ignored with the sourced env"]
     fn wrong_generation_target_rejects_without_mutation() {
         let workspace = id();
         let repository = repository();
@@ -489,6 +496,7 @@ mod maintenance_retirement_contract {
     /// A declared-repository mismatch against the durable lineage rejects
     /// identically (the typed association is validated as a whole).
     #[test]
+    #[ignore = "requires ENGRAM_TEST_PG_URL; run via --ignored with the sourced env"]
     fn wrong_repository_association_rejects() {
         let workspace = id();
         let repository = repository();
@@ -507,6 +515,7 @@ mod maintenance_retirement_contract {
     /// A stale expected epoch rejects even when every target is already
     /// retired (the no-op path still validates the fence).
     #[test]
+    #[ignore = "requires ENGRAM_TEST_PG_URL; run via --ignored with the sourced env"]
     fn stale_epoch_rejects_even_for_noop() {
         let workspace = id();
         let repository = repository();
@@ -531,6 +540,7 @@ mod maintenance_retirement_contract {
     /// and advances the epochs exactly ONCE (whole-set validation first,
     /// then one fenced mutation).
     #[test]
+    #[ignore = "requires ENGRAM_TEST_PG_URL; run via --ignored with the sourced env"]
     fn mixed_retired_and_fresh_retire_successfully() {
         let workspace = id();
         let repository = repository();
@@ -574,6 +584,7 @@ mod maintenance_retirement_contract {
 
     /// A MISSING target record rejects the whole set without mutation.
     #[test]
+    #[ignore = "requires ENGRAM_TEST_PG_URL; run via --ignored with the sourced env"]
     fn missing_target_rejects() {
         let workspace = id();
         let repository = repository();

@@ -681,6 +681,7 @@ mod task_008 {
         lfs_or_subrepo(&r3, "submodule", "gitlink");
     }
     #[test]
+    #[ignore = "requires ENGRAM_TEST_PYTHON and AsyncSSH; run via --ignored with the sourced env"]
     fn explicit_remote_on_request() {
         for object_format in ["sha1", "sha256"] {
             let (scratch, source) = repo_format(object_format);

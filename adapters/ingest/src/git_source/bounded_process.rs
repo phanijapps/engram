@@ -536,6 +536,7 @@ mod task_008 {
         }
     }
     #[test]
+    #[ignore = "requires ENGRAM_TEST_PYTHON; run via --ignored with the sourced env"]
     fn child_timeout_is_killed_and_reaped() {
         let mut limits = GitResourceLimits::default();
         limits.subprocess_timeout = Duration::from_millis(50);
@@ -550,6 +551,7 @@ mod task_008 {
         assert!(start.elapsed() < Duration::from_secs(3));
     }
     #[test]
+    #[ignore = "requires ENGRAM_TEST_PYTHON; run via --ignored with the sourced env"]
     fn concurrent_pipe_drain_caps_output_before_allocation() {
         let mut limits = GitResourceLimits::default();
         limits.subprocess_timeout = Duration::from_secs(2);
@@ -571,6 +573,7 @@ mod task_008 {
     }
 
     #[test]
+    #[ignore = "requires ENGRAM_TEST_PYTHON; run via --ignored with the sourced env"]
     fn inherited_pipe_descendant_cannot_block_cleanup() {
         let temp = tempfile::tempdir().unwrap();
         let marker = temp.path().join("descendant.pid");
@@ -647,6 +650,7 @@ mod task_008 {
         assert!(start.elapsed() < Duration::from_secs(3));
     }
     #[test]
+    #[ignore = "requires ENGRAM_TEST_PYTHON; run via --ignored with the sourced env"]
     fn task_008_early_child_exit_preserves_status_and_reaps_without_io_threads() {
         let mut command = Command::new(fixture_python());
         command.args(["-c", "import sys;sys.exit(7)"]);
@@ -661,6 +665,7 @@ mod task_008 {
 
     #[cfg(unix)]
     #[test]
+    #[ignore = "requires ENGRAM_TEST_PYTHON; run via --ignored with the sourced env"]
     fn task_008_session_escape_cannot_hold_reader_threads() {
         let dir = tempfile::tempdir().unwrap();
         let pid_path = dir.path().join("escaped.pid");
@@ -687,6 +692,7 @@ mod task_008 {
         assert!(started.elapsed() < Duration::from_secs(3));
     }
     #[test]
+    #[ignore = "requires ENGRAM_TEST_PYTHON; run via --ignored with the sourced env"]
     fn task_008_blocked_stdin_is_pre_admitted_and_never_uses_an_io_thread() {
         let mut command = Command::new(fixture_python());
         command.args(["-c", "import time; time.sleep(30)"]);
@@ -704,6 +710,7 @@ mod task_008 {
         );
     }
     #[test]
+    #[ignore = "requires ENGRAM_TEST_PYTHON; run via --ignored with the sourced env"]
     fn task_008_native_stage_observation_smallest_child_without_stdin() {
         let mut command = Command::new(fixture_python());
         command.args([
@@ -719,6 +726,7 @@ mod task_008 {
         );
     }
     #[test]
+    #[ignore = "requires ENGRAM_TEST_PYTHON; run via --ignored with the sourced env"]
     fn task_008_native_stage_observation_protocol_stdin_roundtrip() {
         let mut command = Command::new(fixture_python());
         command.args([
@@ -740,6 +748,7 @@ mod task_008 {
     }
     #[cfg(windows)]
     #[test]
+    #[ignore = "requires ENGRAM_TEST_PYTHON; run via --ignored with the sourced env"]
     fn task_008_primary_failure_reports_unresolved_cleanup_custody_and_retry_resolves() {
         use super::super::windows_job::CleanupFault;
         let primaries: &[(&str, fn(&mut Command, &mut GitResourceLimits))] = &[
@@ -826,6 +835,7 @@ mod task_008 {
         assert_eq!(super::super::windows_job::pending_count(), 0);
     }
     #[test]
+    #[ignore = "requires ENGRAM_TEST_PYTHON; run via --ignored with the sourced env"]
     fn storage_budget_checked_before_process_completion() {
         let mut command = Command::new(fixture_python());
         command.args(["-c", "import time; time.sleep(30)"]);

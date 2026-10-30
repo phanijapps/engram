@@ -6,12 +6,7 @@
  *
  * Builds BOTH recipe artifacts of the engram-node addon in isolated artifact
  * directories, copying each cargo cdylib product to
- * `packages/node/test/artifacts/<recipe>/engram_node.node`:
- *   - sqlite   : `cargo build -p engram-node --no-default-features
- *                --features http-embeddings` (the SQLite recipe — engram-node
- *                always compiles the sqlite wiring).
- *   - pgvector : the same plus `,pgvector` (routes pgvector configs to the
- *                backends/pgvector recipe).
+ * `packages/node/test/artifacts/<recipe>/engram_node.node`.
  *
  * Freshness: every invocation asks Cargo to validate the complete workspace
  * dependency graph for each recipe before copying its artifact. Cargo shares
@@ -31,7 +26,8 @@
  * copies are never dlopen'd into one process.
  */
 import { execFileSync } from "node:child_process";
-import { closeSync, copyFileSync, existsSync, mkdirSync, openSync, rmSync, statSync, utimesSync } from "node:fs";
+import { createHash } from "node:crypto";
+import { closeSync, copyFileSync, existsSync, mkdirSync, openSync, readFileSync, rmSync, statSync, utimesSync } from "node:fs";
 import { createRequire } from "node:module";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -40,8 +36,7 @@ const here = dirname(fileURLToPath(import.meta.url));
 // helpers/ -> test/ -> node/ -> packages/ -> repo root
 const repoRoot = join(here, "..", "..", "..", "..");
 const pkgRoot = join(here, "..", "..");
-const artifactsRoot = join(pkgRoot, "test", "artifacts");
-const lockPath = join(artifactsRoot, ".build-native-recipes.lock");
+const sharedArtifactsRoot = join(pkgRoot, "test", "artifacts");
 const LOCK_RETRY_MS = 50;
 const LOCK_TIMEOUT_MS = 15 * 60 * 1000;
 
@@ -69,8 +64,12 @@ function featuresFor(recipe) {
   }
 }
 
-function artifactPath(recipe) {
+function artifactPath(artifactsRoot, recipe) {
   return join(artifactsRoot, recipe, "engram_node.node");
+}
+
+function artifactLockPath(artifactsRoot) {
+  return join(artifactsRoot, ".build-native-recipes.lock");
 }
 
 function sleep(milliseconds) {
@@ -78,9 +77,10 @@ function sleep(milliseconds) {
 }
 
 /** Acquires the cross-process artifact-set lock with bounded retry. */
-function acquireArtifactLock() {
+function acquireArtifactLock(artifactsRoot) {
   mkdirSync(artifactsRoot, { recursive: true });
   const deadline = Date.now() + LOCK_TIMEOUT_MS;
+  const lockPath = artifactLockPath(artifactsRoot);
   for (;;) {
     try {
       closeSync(openSync(lockPath, "wx"));
@@ -97,14 +97,18 @@ function acquireArtifactLock() {
   }
 }
 
-function validateArtifact(recipe) {
-  const dest = artifactPath(recipe);
+function validateArtifact(artifactsRoot, recipe) {
+  const dest = artifactPath(artifactsRoot, recipe);
   if (!existsSync(dest) || statSync(dest).size === 0) {
     throw new Error(`invalid ${recipe} artifact: ${dest}`);
   }
 }
 
-function buildRecipe(recipe) {
+function digestArtifact(artifactsRoot, recipe) {
+  return createHash("sha256").update(readFileSync(artifactPath(artifactsRoot, recipe))).digest("hex");
+}
+
+function buildRecipe(artifactsRoot, recipe) {
   // Remove the SHARED cdylib first so cargo must relink THIS recipe's
   // variant even when every object is cached — the copied artifact can then
   // never alias the other recipe's last link (r6a-fix2 finding 7 repair).
@@ -119,33 +123,49 @@ function buildRecipe(recipe) {
   if (!existsSync(src)) {
     throw new Error(`build artifact not found: ${src}`);
   }
-  const dest = artifactPath(recipe);
+  const dest = artifactPath(artifactsRoot, recipe);
   mkdirSync(dirname(dest), { recursive: true });
   copyFileSync(src, dest);
   // cargo keeps the cdylib mtime from its last link; stamp the copy AFTER the
   // sources so freshness math stays monotonic.
   utimesSync(dest, new Date(), new Date());
-  validateArtifact(recipe);
+  validateArtifact(artifactsRoot, recipe);
   console.log(`[task_020 helper] placed ${recipe} artifact: ${dest}`);
 }
 
-/** Validates and rebuilds both recipe artifacts through Cargo. Returns the
- *  recipe-specific copies after each validated feature build. */
-export function ensureRecipeArtifacts() {
-  acquireArtifactLock();
-  try {
-    const paths = {};
-    for (const recipe of RECIPES) {
-      buildRecipe(recipe);
-      paths[recipe] = artifactPath(recipe);
-    }
-    for (const recipe of RECIPES) {
-      validateArtifact(recipe);
-    }
-    return paths;
-  } finally {
-    rmSync(lockPath, { force: true });
+/** Builds, validates, and hashes an artifact set while its lock is held. */
+function rebuildRecipeArtifacts(artifactsRoot) {
+  const paths = {};
+  for (const recipe of RECIPES) {
+    buildRecipe(artifactsRoot, recipe);
+    paths[recipe] = artifactPath(artifactsRoot, recipe);
   }
+  const digests = {};
+  for (const recipe of RECIPES) {
+    validateArtifact(artifactsRoot, recipe);
+    digests[recipe] = digestArtifact(artifactsRoot, recipe);
+  }
+  return { paths, digests };
+}
+
+/** Runs a callback inside the artifact-set transaction. */
+export function withRecipeArtifacts(callback, { artifactsRoot = sharedArtifactsRoot } = {}) {
+  acquireArtifactLock(artifactsRoot);
+  try {
+    const artifacts = rebuildRecipeArtifacts(artifactsRoot);
+    return callback({
+      ...artifacts,
+      rebuild: () => rebuildRecipeArtifacts(artifactsRoot),
+    });
+  } finally {
+    rmSync(artifactLockPath(artifactsRoot), { force: true });
+  }
+}
+
+/** Validates and rebuilds both recipe artifacts through Cargo. Returns paths
+ * and SHA-256 digests calculated while the artifact-set lock is held. */
+export function ensureRecipeArtifacts(options) {
+  return withRecipeArtifacts(({ paths, digests }) => ({ ...paths, digests }), options);
 }
 
 /** Loads one recipe's addon (isolated path → isolated dlopen instance). */

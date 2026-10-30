@@ -7,9 +7,25 @@
 /** The recipe names this helper builds. */
 export declare const RECIPES: readonly ["sqlite", "pgvector"];
 
-/** Ensures both recipe artifacts exist and are fresh; returns their paths. */
-export declare function ensureRecipeArtifacts(): Record<"sqlite" | "pgvector", string>;
+type Recipe = (typeof RECIPES)[number];
+type RecipePaths = Record<Recipe, string>;
+type RecipeDigests = Record<Recipe, string>;
+type ArtifactOptions = { artifactsRoot?: string };
+type ArtifactTransaction = {
+  paths: RecipePaths;
+  digests: RecipeDigests;
+  rebuild: () => { paths: RecipePaths; digests: RecipeDigests };
+};
+
+/** Runs a callback while the selected artifact set remains locked. */
+export declare function withRecipeArtifacts<T>(
+  callback: (transaction: ArtifactTransaction) => T,
+  options?: ArtifactOptions,
+): T;
+
+/** Ensures both recipe artifacts exist and returns paths and in-lock digests. */
+export declare function ensureRecipeArtifacts(options?: ArtifactOptions): RecipePaths & { digests: RecipeDigests };
 
 /** Loads one recipe's addon (isolated artifact directory → isolated dlopen). */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-export declare function loadRecipe(recipe: "sqlite" | "pgvector"): any;
+export declare function loadRecipe(recipe: Recipe): any;

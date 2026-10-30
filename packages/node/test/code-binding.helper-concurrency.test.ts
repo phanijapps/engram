@@ -1,18 +1,17 @@
 import { spawn } from "node:child_process";
-import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 
 const helperUrl = new URL("./helpers/build-native-recipes.mjs", import.meta.url).href;
 
-function runHelperParticipant(participant: number): Promise<Record<string, { path: string; sha256: string }>> {
+type RecipeResult = Record<string, { path: string; sha256: string }>;
+
+function runHelperParticipant(participant: number): Promise<RecipeResult> {
   const program = `
-    import { createHash } from "node:crypto";
-    import { readFileSync } from "node:fs";
     import { ensureRecipeArtifacts } from ${JSON.stringify(helperUrl)};
-    const paths = ensureRecipeArtifacts();
+    const { digests, ...paths } = ensureRecipeArtifacts();
     const result = Object.fromEntries(Object.entries(paths).map(([recipe, path]) => [recipe, {
       path,
-      sha256: createHash("sha256").update(readFileSync(path)).digest("hex")
+      sha256: digests[recipe]
     }]));
     console.log("TASK_020_RECIPE_RESULT=" + JSON.stringify(result));
   `;
@@ -65,10 +64,8 @@ describe("task_020 helper cross-process serialization", () => {
       }
       const complete = results.filter((result): result is { path: string; sha256: string } => result !== undefined);
       expect(new Set(complete.map((result) => result.sha256)).size).toBe(1);
-      // Each child hashes its artifact before releasing its transaction.
-      // A later independent Vitest worker may legally begin a new transaction
-      // before this parent observes the shared path, so only the child-local
-      // validated hashes prove this concurrent transaction's outcome.
+      // ensureRecipeArtifacts calculates and returns these digests before it
+      // releases the artifact-set lock; no child re-reads mutable paths later.
     }
   }, 15 * 60 * 1000);
 });

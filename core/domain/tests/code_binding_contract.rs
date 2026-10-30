@@ -309,15 +309,22 @@ mod task_002 {
     #[test]
     fn nonempty_preservation_preview_and_journal_match_schema() {
         let mut inventory = PreservationInventory {
-            records: ["source", "document", "chunk", "entity", "relationship", "graph"]
-                .into_iter()
-                .map(|record_class| PreservationRecord {
-                    record_class: record_class.into(),
-                    record_id: format!("{record_class}-1"),
-                    content_digest: "a".repeat(64),
-                    contributor_digest: "b".repeat(64),
-                })
-                .collect(),
+            records: [
+                "source",
+                "document",
+                "chunk",
+                "entity",
+                "relationship",
+                "graph",
+            ]
+            .into_iter()
+            .map(|record_class| PreservationRecord {
+                record_class: record_class.into(),
+                record_id: format!("{record_class}-1"),
+                content_digest: "a".repeat(64),
+                contributor_digest: "b".repeat(64),
+            })
+            .collect(),
             digest: String::new(),
         };
         inventory.digest = inventory.content_hash().unwrap();
@@ -361,7 +368,9 @@ mod task_002 {
                 "{name} must serialize all six preservation classes"
             );
             assert!(
-                records.iter().all(|record| record.get("recordClass").is_some()),
+                records
+                    .iter()
+                    .all(|record| record.get("recordClass").is_some()),
                 "{name} must serialize recordClass in camelCase"
             );
             assert!(

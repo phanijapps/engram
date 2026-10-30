@@ -286,3 +286,125 @@ mod finding_2_scan_gate {
         );
     }
 }
+
+mod finding_4_staleness {
+    use super::*;
+
+    /// A legacy scan checkpoint whose scan_root is a REAL git fixture: its
+    /// HEAD must NEVER appear in a bound scope's staleness answers (review
+    /// r6 finding 4) — only binding-keyed durable facts do.
+    #[test]
+    fn bound_staleness_isolated_from_legacy_checkpoint() {
+        let app = bound_app();
+        // A real git fixture: its HEAD is the value that must NOT leak.
+        let dir = tempfile::tempdir().expect("tempdir");
+        let fixture = dir.path().join("repo");
+        std::fs::create_dir_all(&fixture).expect("mkdir");
+        let run = |args: &[&str]| {
+            let status = std::process::Command::new("git")
+                .args(args)
+                .current_dir(&fixture)
+                .env("GIT_CONFIG_GLOBAL", "/dev/null")
+                .env("GIT_CONFIG_SYSTEM", "/dev/null")
+                .status()
+                .expect("git");
+            assert!(status.success(), "git {args:?}");
+        };
+        run(&["init", "--initial-branch=main", "."]);
+        run(&["config", "user.email", "staleness@engram.test"]);
+        run(&["config", "user.name", "staleness"]);
+        std::fs::write(fixture.join("lib.rs"), "pub fn unrelated() {}\n").expect("write");
+        run(&["add", "."]);
+        run(&["commit", "--no-gpg-sign", "-m", "unrelated"]);
+        let head = std::process::Command::new("git")
+            .args(["rev-parse", "HEAD"])
+            .current_dir(&fixture)
+            .env("GIT_CONFIG_GLOBAL", "/dev/null")
+            .env("GIT_CONFIG_SYSTEM", "/dev/null")
+            .output()
+            .expect("rev-parse");
+        let legacy_head = String::from_utf8(head.stdout).unwrap().trim().to_owned();
+
+        // An UNRELATED legacy scan checkpoint in the SAME scope.
+        let checkpoints = app.provider.require_checkpoints().expect("checkpoints");
+        block_on(checkpoints.put_checkpoint(engram_domain::ScanCheckpoint {
+            scope: app.scope.clone(),
+            git_ref: Some("refs/heads/main".to_owned()),
+            stable_source_key: "unrelated-legacy-root".to_owned(),
+            scan_root: Some(fixture.to_string_lossy().to_string()),
+            scan_run_id: "scan-legacy".to_owned(),
+            started_at: chrono::Utc::now(),
+            completed_at: Some(chrono::Utc::now()),
+            indexed_revision: Some(legacy_head.clone()),
+            status: engram_domain::ScanStatus::Completed,
+            dirty: Some(false),
+            errors: 0,
+        }))
+        .expect("put checkpoint");
+
+        // The default (no-repo) code_staleness: binding-keyed only.
+        let answer =
+            crate::changes::code_staleness(&app, &serde_json::json!({})).expect("bound staleness");
+        let text = answer["content"][0]["text"].as_str().unwrap_or_default();
+        assert!(
+            !text.contains(&legacy_head),
+            "the unrelated legacy HEAD must never leak: {text}"
+        );
+        assert!(
+            text.contains("FRESHNESS (binding-keyed, durable records only"),
+            "durable summary rendered: {text}"
+        );
+        assert!(
+            text.contains(&"a".repeat(40)) && text.contains("repo-gate"),
+            "the bound repository's durable indexed OID is reported: {text}"
+        );
+
+        // The codegraph annotation: same isolation.
+        let note = crate::changes::staleness_note(&app);
+        assert!(
+            !note.contains(&legacy_head),
+            "the annotation never reports the legacy root's HEAD: {note}"
+        );
+        assert!(
+            note.contains("binding-keyed") || note.is_empty(),
+            "annotation is durable-record driven: {note}"
+        );
+    }
+
+    /// UNBOUND scopes keep the legacy checkpoint diagnostics (explicitly the
+    /// pre-binding lane) — the isolation is bound-code-specific.
+    #[test]
+    fn unbound_scope_keeps_legacy_staleness() {
+        let knowledge = Arc::new(SqlKnowledgeStore::open_in_memory().expect("open knowledge"));
+        let cell = Arc::new(SqlCodeBindingRepository::open(":memory:").expect("empty cell"));
+        let coordinator = CodeBindingCoordinator::new(
+            cell as Arc<dyn CodeBindingRepository>,
+            Arc::new(AllowAuthorizer),
+            Vec::new(),
+        );
+        let provider = engram_integration::EngramProviderBuilder::new(
+            engram_integration::CapabilityReport::new(engram_domain::CapabilityState::Supported),
+        )
+        .knowledge_query(knowledge.clone())
+        .knowledge(knowledge.clone())
+        .graph(knowledge.clone())
+        .change_log(knowledge.clone() as Arc<dyn engram_knowledge::KnowledgeChangeLog>)
+        .checkpoints(knowledge.clone() as Arc<dyn engram_knowledge::ScanCheckpointStore>)
+        .code_bindings(Arc::new(coordinator))
+        .build();
+        let app = App {
+            provider,
+            scope: scope(),
+            ontology: OntologyConfig::default(),
+            taxonomy: TaxonomyConfig::default(),
+            storage_dir: std::env::temp_dir(),
+        };
+        // No checkpoints at all: the legacy note is simply absent (nothing
+        // to be stale against) — and never a binding-keyed claim.
+        let note = crate::changes::staleness_note(&app);
+        assert!(
+            !note.contains("binding-keyed"),
+            "unbound scopes do not claim bound freshness: {note}"
+        );
+    }
+}

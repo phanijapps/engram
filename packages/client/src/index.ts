@@ -24,5 +24,10 @@ export {
   type BoundCodeScanResult,
   type LegacyDocumentScanResult,
   type CodeStatusRequest,
+  type CodeResetPreviewRequest,
+  type CodeResetApplyRequest,
+  type CodeResetResumeRequest,
+  type CodeResetJournal,
+  type CodeResetPreview,
   type Scope
 } from "./code-binding.js";

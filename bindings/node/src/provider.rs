@@ -72,6 +72,26 @@ pub struct NativeProvider {
     inner: EngramProvider,
 }
 
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct CodeResetPreviewRequest {
+    scope: Scope,
+    repo: engram_domain::RepoId,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct CodeResetApplyRequest {
+    journal: engram_domain::CodeResetJournal,
+    decision: String,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct CodeResetResumeRequest {
+    journal: engram_domain::CodeResetJournal,
+}
+
 #[napi]
 impl NativeProvider {
     /// Opens a provider from an `EngramConfig` JSON string.
@@ -382,6 +402,49 @@ impl NativeProvider {
         ))
         .map_err(to_napi_error)?;
         encode(&observation)
+    }
+
+    /// Creates an exact reset preview through the reset-authorized coordinator.
+    #[napi(js_name = "codeResetPreviewJson")]
+    pub fn code_reset_preview_json(&self, request_json: String) -> Result<String> {
+        let request: CodeResetPreviewRequest = decode(&request_json)?;
+        let coordinator = self.inner.code_bindings().map_err(to_napi_error)?.clone();
+        let preview = futures::executor::block_on(coordinator.preview_reset(
+            &system_code_actor(),
+            &request.scope,
+            &request.repo,
+        ))
+        .map_err(to_napi_error)?;
+        encode(&preview)
+    }
+
+    /// Persists an owner-approved reset journal and applies its durable state machine.
+    #[napi(js_name = "codeResetApplyJson")]
+    pub fn code_reset_apply_json(&self, request_json: String) -> Result<String> {
+        let request: CodeResetApplyRequest = decode(&request_json)?;
+        let coordinator = self.inner.code_bindings().map_err(to_napi_error)?.clone();
+        let journal = futures::executor::block_on(coordinator.journal_reset(
+            &system_code_actor(),
+            request.journal,
+            request.decision,
+        ))
+        .map_err(to_napi_error)?;
+        let applied =
+            futures::executor::block_on(coordinator.apply_reset(&system_code_actor(), journal))
+                .map_err(to_napi_error)?;
+        encode(&applied)
+    }
+
+    /// Resumes pending or failed reset lanes from an immutable approved journal.
+    #[napi(js_name = "codeResetResumeJson")]
+    pub fn code_reset_resume_json(&self, request_json: String) -> Result<String> {
+        let request: CodeResetResumeRequest = decode(&request_json)?;
+        let coordinator = self.inner.code_bindings().map_err(to_napi_error)?.clone();
+        let resumed = futures::executor::block_on(
+            coordinator.apply_reset(&system_code_actor(), request.journal),
+        )
+        .map_err(to_napi_error)?;
+        encode(&resumed)
     }
 
     /// Returns an export-import handle, or throws if not wired.

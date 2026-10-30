@@ -107,6 +107,24 @@ impl IngestOps {
         ))
     }
 
+    pub fn code_reset_preview_json(&self, _request_json: String) -> Result<String> {
+        Err(to_napi_error(
+            engram_runtime::CoreError::CapabilityUnsupported {
+                capability: "legacy-code-reset".into(),
+                reason: "LegacyCodeResetUnsupported: use NativeProvider with host codeAuthority"
+                    .into(),
+            },
+        ))
+    }
+
+    pub fn code_reset_apply_json(&self, _request_json: String) -> Result<String> {
+        self.code_reset_preview_json(String::new())
+    }
+
+    pub fn code_reset_resume_json(&self, _request_json: String) -> Result<String> {
+        self.code_reset_preview_json(String::new())
+    }
+
     /// TASK-020 binding gate REMOVED (review r6 finding 2): binding-existence
     /// was never authorization for ingesting code bytes, and the legacy
     /// engine no longer ingests code at all — see [`Self::start_scan_job_json`].

@@ -11,7 +11,7 @@
  * messages; [`isBindingDenied`] recognizes that exact envelope so callers can
  * branch on it without string-matching internals.
  */
-import type { CodeBinding, Scope } from "@engram/contracts";
+import type { CodeBinding, CodeResetJournal, CodeResetPreview, Scope } from "@engram/contracts";
 import type {
   CodeBindingCheckpoint,
   CodeBindingStatus,
@@ -41,7 +41,7 @@ export type {
   LegacyDocumentScanResult
 };
 /** Generated portable binding and scope contract shapes. */
-export type { CodeBinding, Scope };
+export type { CodeBinding, CodeResetJournal, CodeResetPreview, Scope };
 
 /** Bind request (`{ scope, repo, branchRef }`). */
 export interface CodeBindRequest {
@@ -69,6 +69,11 @@ export interface CodeRefreshRequest {
   scope: Scope;
   repo: string;
 }
+
+/** Reset request and response contracts are generated portable types. */
+export interface CodeResetPreviewRequest { scope: Scope; repo: string; }
+export interface CodeResetApplyRequest { journal: CodeResetJournal; decision: string; }
+export interface CodeResetResumeRequest { journal: CodeResetJournal; }
 
 /** Bound or explicit legacy document-only scan request. */
 export type CodeScanRequest = NodeBoundCodeScanRequest | NodeLegacyDocumentScanRequest;

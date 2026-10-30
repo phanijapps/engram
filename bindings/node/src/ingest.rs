@@ -49,6 +49,20 @@ impl NativeIngestEngine {
         self.ops.code_bind_json(request_json)
     }
 
+    /// Legacy engines have no host authorization seam and deny reset uniformly.
+    #[napi(js_name = "codeResetPreviewJson")]
+    pub fn code_reset_preview_json(&self, request_json: String) -> Result<String> {
+        self.ops.code_reset_preview_json(request_json)
+    }
+    #[napi(js_name = "codeResetApplyJson")]
+    pub fn code_reset_apply_json(&self, request_json: String) -> Result<String> {
+        self.ops.code_reset_apply_json(request_json)
+    }
+    #[napi(js_name = "codeResetResumeJson")]
+    pub fn code_reset_resume_json(&self, request_json: String) -> Result<String> {
+        self.ops.code_reset_resume_json(request_json)
+    }
+
     /// Starts a background repository scan; returns `{ jobId }` immediately.
     /// Progress is read via `getScanJobJson`. The request carries
     /// `{ root, scope, repo, branchRef?, policy, actor, sourceName, maxBytes, manifestPath }`.

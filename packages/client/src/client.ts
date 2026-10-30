@@ -9,7 +9,7 @@ import type {
 
 import type { EngramTransport } from "./transport.js";
 import type { CodeStatusRequest } from "./code-binding.js";
-import type { CodeBinding } from "@engram/contracts";
+import type { CodeBinding, CodeResetJournal, CodeResetPreview } from "@engram/contracts";
 import type { CodeBindingStatus } from "@engram/node";
 import {
   EngramCodeBindingUnsupportedError,
@@ -18,7 +18,10 @@ import {
   type CodeRegisterRequest,
   type CodeRefObservation,
   type CodeScanRequest,
-  type CodeScanResult
+  type CodeScanResult,
+  type CodeResetPreviewRequest,
+  type CodeResetApplyRequest,
+  type CodeResetResumeRequest
 } from "./code-binding.js";
 
 /** Construction options for an `EngramClient`, currently limited to the required transport. */
@@ -73,6 +76,9 @@ function codeTransport(
   codeStatus(request: CodeStatusRequest): Promise<CodeBindingStatus>;
   codeRefresh(request: CodeRefreshRequest): Promise<CodeRefObservation>;
   scanCode(request: CodeScanRequest): Promise<CodeScanResult>;
+  codeResetPreview(request: CodeResetPreviewRequest): Promise<CodeResetPreview>;
+  codeResetApply(request: CodeResetApplyRequest): Promise<CodeResetJournal>;
+  codeResetResume(request: CodeResetResumeRequest): Promise<CodeResetJournal>;
 } {
   const candidate = transport as {
     codeBind?: (request: CodeBindRequest) => Promise<CodeBinding>;
@@ -80,13 +86,19 @@ function codeTransport(
     codeStatus?: (request: CodeStatusRequest) => Promise<CodeBindingStatus>;
     codeRefresh?: (request: CodeRefreshRequest) => Promise<CodeRefObservation>;
     scanCode?: (request: CodeScanRequest) => Promise<CodeScanResult>;
+    codeResetPreview?: (request: CodeResetPreviewRequest) => Promise<CodeResetPreview>;
+    codeResetApply?: (request: CodeResetApplyRequest) => Promise<CodeResetJournal>;
+    codeResetResume?: (request: CodeResetResumeRequest) => Promise<CodeResetJournal>;
   };
   if (
     !candidate.codeBind ||
     !candidate.codeRegister ||
     !candidate.codeStatus ||
     !candidate.codeRefresh ||
-    !candidate.scanCode
+    !candidate.scanCode ||
+    !candidate.codeResetPreview ||
+    !candidate.codeResetApply ||
+    !candidate.codeResetResume
   ) {
     throw new EngramCodeBindingUnsupportedError();
   }
@@ -112,6 +124,13 @@ export class EngramCodeBindingClient {
   codeStatus(request: CodeStatusRequest): Promise<CodeBindingStatus> {
     return this.#transport.codeStatus(request);
   }
+
+  /** Creates an exact reset preview through the authorized transport. */
+  codeResetPreview(request: CodeResetPreviewRequest): Promise<CodeResetPreview> { return this.#transport.codeResetPreview(request); }
+  /** Persists an owner-approved reset journal and applies it. */
+  codeResetApply(request: CodeResetApplyRequest): Promise<CodeResetJournal> { return this.#transport.codeResetApply(request); }
+  /** Resumes the immutable approved journal after an interruption. */
+  codeResetResume(request: CodeResetResumeRequest): Promise<CodeResetJournal> { return this.#transport.codeResetResume(request); }
 
   /** Registers a repository's acquisition locator (r6 finding 5). */
   codeRegister(request: CodeRegisterRequest): Promise<unknown> {

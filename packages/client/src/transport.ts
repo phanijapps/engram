@@ -18,12 +18,15 @@ export interface EngramTransport {
   codeRegister?(request: CodeRegisterRequest): Promise<unknown>;
   codeStatus?(request: CodeStatusRequest): Promise<CodeBindingStatus>;
   codeRefresh?(request: CodeRefreshRequest): Promise<CodeRefObservation>;
+  codeResetPreview?(request: CodeResetPreviewRequest): Promise<CodeResetPreview>;
+  codeResetApply?(request: CodeResetApplyRequest): Promise<CodeResetJournal>;
+  codeResetResume?(request: CodeResetResumeRequest): Promise<CodeResetJournal>;
   scanCode?(request: CodeScanRequest): Promise<CodeScanResult>;
 }
 
 // TASK-020: the optional code-binding surface's types (declared on
 // EngramTransport above) re-exported for transports that implement it.
-import type { CodeBinding } from "@engram/contracts";
+import type { CodeBinding, CodeResetJournal, CodeResetPreview } from "@engram/contracts";
 import type { CodeBindingStatus } from "@engram/node";
 import type {
   CodeBindRequest,
@@ -32,7 +35,10 @@ import type {
   CodeRefObservation,
   CodeScanRequest,
   CodeScanResult,
-  CodeStatusRequest
+  CodeStatusRequest,
+  CodeResetPreviewRequest,
+  CodeResetApplyRequest,
+  CodeResetResumeRequest
 } from "./code-binding.js";
 
 /** The required code-binding surface (what `EngramCodeBindingClient` uses). */
@@ -42,4 +48,7 @@ export interface CodeBindingTransport {
   codeStatus(request: CodeStatusRequest): Promise<CodeBindingStatus>;
   codeRefresh(request: CodeRefreshRequest): Promise<CodeRefObservation>;
   scanCode(request: CodeScanRequest): Promise<CodeScanResult>;
+  codeResetPreview(request: CodeResetPreviewRequest): Promise<CodeResetPreview>;
+  codeResetApply(request: CodeResetApplyRequest): Promise<CodeResetJournal>;
+  codeResetResume(request: CodeResetResumeRequest): Promise<CodeResetJournal>;
 }

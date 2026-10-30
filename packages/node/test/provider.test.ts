@@ -27,6 +27,9 @@ function mockProvider(): {
     codeStatusJson: capture("codeStatus"),
     codeRegisterJson: capture("codeRegister"),
     codeRefreshJson: capture("codeRefresh"),
+    codeResetPreviewJson: capture("codeResetPreview"),
+    codeResetApplyJson: capture("codeResetApply"),
+    codeResetResumeJson: capture("codeResetResume"),
     requireMemoryApi: () => ({
       searchJson: capture("search"),
       writeJson: capture("write"),
@@ -118,6 +121,18 @@ describe("NativeProviderTransport", () => {
     await transport.batchIngest({ writes: [] });
     expect(recorded("batchIngest")).toHaveLength(1);
     expect(recorded("batchIngest")[0]).toMatchObject({ writes: [] });
+  });
+
+  it("forwards typed reset preview, apply, and resume envelopes", async () => {
+    const { provider, recorded } = mockProvider();
+    const transport = createNativeProviderTransport({ provider });
+    const journal = { preview: { previewHash: "preview" }, checkpoints: [] };
+    await transport.codeResetPreview({ scope: { tenant: "t" }, repo: "repo-a" });
+    await transport.codeResetApply({ journal, decision: "owner-approved" } as never);
+    await transport.codeResetResume({ journal } as never);
+    expect(recorded("codeResetPreview")[0]).toEqual({ scope: { tenant: "t" }, repo: "repo-a" });
+    expect(recorded("codeResetApply")[0]).toMatchObject({ decision: "owner-approved", journal });
+    expect(recorded("codeResetResume")[0]).toMatchObject({ journal });
   });
 
   it("capabilities dispatches to capabilitiesJson", async () => {

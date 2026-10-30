@@ -274,6 +274,9 @@ export interface NativeProviderBinding {
   codeStatusJson(requestJson: string): string;
   codeRegisterJson(requestJson: string): string;
   codeRefreshJson(requestJson: string): string;
+  codeResetPreviewJson(requestJson: string): string;
+  codeResetApplyJson(requestJson: string): string;
+  codeResetResumeJson(requestJson: string): string;
   /** Optional for compatibility with older injected test bindings. */
   requireEmbeddingProviderApi?(): NativeEmbeddingProviderApiBinding;
   requireMemoryApi(): NativeMemoryApiBinding;

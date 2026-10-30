@@ -6,7 +6,9 @@ import type {
   RetrievalRequest,
   Scope,
   WriteMemoryRequest,
-  WriteMemoryResponse
+  WriteMemoryResponse,
+  CodeResetJournal,
+  CodeResetPreview
 } from "@engram/contracts";
 
 import {
@@ -242,6 +244,9 @@ export interface NativeProviderTransport {
    *  REGISTERED locator's local git (r6 finding 5) — the caller never
    *  supplies an OID; the former codeObserveRef surface is gone. */
   codeRefresh(request: { scope: Scope; repo: string }): Promise<CodeRefObservation>;
+  codeResetPreview(request: { scope: Scope; repo: string }): Promise<CodeResetPreview>;
+  codeResetApply(request: { journal: CodeResetJournal; decision: string }): Promise<CodeResetJournal>;
+  codeResetResume(request: { journal: CodeResetJournal }): Promise<CodeResetJournal>;
   /** Run a consolidation cycle (reflection + decay). A system requester is
    *  injected; callers pass only `scope` + optional `dryRun` / `since` / `until`. */
   consolidate(request: {
@@ -407,6 +412,18 @@ class JsonNativeProviderTransport implements NativeProviderTransport {
 
   async codeRefresh(request: { scope: Scope; repo: string }): Promise<CodeRefObservation> {
     return decode<CodeRefObservation>(this.provider.codeRefreshJson(encode(request)));
+  }
+
+  async codeResetPreview(request: { scope: Scope; repo: string }): Promise<CodeResetPreview> {
+    return decode<CodeResetPreview>(this.provider.codeResetPreviewJson(encode(request)));
+  }
+
+  async codeResetApply(request: { journal: CodeResetJournal; decision: string }): Promise<CodeResetJournal> {
+    return decode<CodeResetJournal>(this.provider.codeResetApplyJson(encode(request)));
+  }
+
+  async codeResetResume(request: { journal: CodeResetJournal }): Promise<CodeResetJournal> {
+    return decode<CodeResetJournal>(this.provider.codeResetResumeJson(encode(request)));
   }
 
   async consolidate(request: {

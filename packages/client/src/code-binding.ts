@@ -71,8 +71,11 @@ export interface CodeRefreshRequest {
 }
 
 /** Reset request and response contracts are generated portable types. */
+/** Request for an exact reset preview. */
 export interface CodeResetPreviewRequest { scope: Scope; repo: string; }
+/** Request to persist an owner decision and apply an approved reset journal. */
 export interface CodeResetApplyRequest { journal: CodeResetJournal; decision: string; }
+/** Request to resume an immutable approved reset journal. */
 export interface CodeResetResumeRequest { journal: CodeResetJournal; }
 
 /** Bound or explicit legacy document-only scan request. */

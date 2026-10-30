@@ -35,9 +35,22 @@ Use `NativeProvider` or the TypeScript provider/client path with host `codeAutho
 1. Create an exact reset preview for the intended binding.
 2. Review the preview hash, exact targets, ambiguous-ownership entries, and preservation digests.
 3. Obtain the owner gate that names that preview hash.
-4. Apply only the owner-approved preview.
-5. Resume the durable journal after an interruption with the same authorization reference.
+4. Apply only the owner-approved journal with that decision.
+5. Resume the durable journal after an interruption without changing its approved contents.
 
+Use one of these shipped transport invocations.
+
+```text
+MCP stdio: code_reset_preview {scope,repo}; code_reset_apply {journal,decision}; code_reset_resume {journal}
+one-shot: engram-mcp code --op reset-preview --repo <repo>; engram-mcp code --op reset-apply --journal '<journal-json>' --decision <owner-decision>; engram-mcp code --op reset-resume --journal '<journal-json>'
+native: NativeProvider.codeResetPreviewJson(requestJson); NativeProvider.codeResetApplyJson(requestJson); NativeProvider.codeResetResumeJson(requestJson)
+TypeScript: transport.codeResetPreview({scope,repo}); transport.codeResetApply({journal,decision}); transport.codeResetResume({journal})
+```
+
+The stdio preview includes `scope` in its typed JSON request.
+The one-shot commands receive scope and provider settings through their normal launch configuration.
+`reset-apply` and `reset-resume` exit nonzero on typed mutation failure.
+The legacy `NativeIngestEngine` reset methods return `LegacyCodeResetUnsupported`.
 Do not apply a preview with ambiguous ownership.
 Do not substitute a target, a subset, a binding version, an epoch, or a preview hash after owner approval.
 The journal records exact target fingerprints, authorization decisions, checkpoints, and preservation digests.

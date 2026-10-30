@@ -13,7 +13,9 @@
 //! binding-existence-unlocks-a-checkout-scan shape is gone from every
 //! surface that routes here.
 
-use super::{CodeAuthorityAction, CodeBindingCoordinator, CodeGenerationStages, CodeRebuildRequest};
+use super::{
+    CodeAuthorityAction, CodeBindingCoordinator, CodeGenerationStages, CodeRebuildRequest,
+};
 use engram_domain::{Actor, CodeAttempt, CodeBinding, CodeGeneration, RepoId, Scope};
 use engram_knowledge::{CodeBindingRepository, CoreError, CoreResult, StageReceipt};
 

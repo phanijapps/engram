@@ -98,11 +98,13 @@ impl IngestOps {
     /// engine cannot construct that coordinator safely, so it provides no
     /// binding operation and never writes its private binding cell.
     pub fn code_bind_json(&self, _request_json: String) -> Result<String> {
-        Err(to_napi_error(engram_runtime::CoreError::CapabilityUnsupported {
-            capability: "legacy-code-bind".into(),
-            reason: "LegacyCodeBindUnsupported: use NativeProvider with host codeAuthority"
-                .into(),
-        }))
+        Err(to_napi_error(
+            engram_runtime::CoreError::CapabilityUnsupported {
+                capability: "legacy-code-bind".into(),
+                reason: "LegacyCodeBindUnsupported: use NativeProvider with host codeAuthority"
+                    .into(),
+            },
+        ))
     }
 
     /// TASK-020 binding gate REMOVED (review r6 finding 2): binding-existence

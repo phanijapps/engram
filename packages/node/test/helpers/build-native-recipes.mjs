@@ -170,7 +170,6 @@ export function ensureRecipeArtifacts(options) {
 
 /** Loads one recipe's addon (isolated path → isolated dlopen instance). */
 export function loadRecipe(recipe) {
-  const paths = ensureRecipeArtifacts();
   const require = createRequire(import.meta.url);
-  return require(paths[recipe]);
+  return withRecipeArtifacts(({ paths }) => require(paths[recipe]));
 }

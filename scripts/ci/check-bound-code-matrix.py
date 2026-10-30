@@ -212,7 +212,23 @@ class MatrixRunner:
             if receipt["status"] == "skipped" and row.required:
                 skipped_required += 1
             payload = json.dumps(receipt, sort_keys=True) + "\n"
-            (receipt_dir / f"{ordinal:03d}-{row.operation}-{row.backend}-{row.transport}.json").write_text(payload, encoding="utf-8")
+            receipt_path = receipt_dir / f"{ordinal:03d}-{row.operation}-{row.backend}-{row.transport}.json"
+            receipt_path.write_text(payload, encoding="utf-8")
+        manifest_receipts = []
+        for receipt_path in sorted(receipt_dir.glob("[0-9][0-9][0-9]-*.json")):
+            receipt = json.loads(receipt_path.read_text(encoding="utf-8"))
+            manifest_receipts.append({
+                "exit": receipt["exit"],
+                "path": receipt_path.name,
+                "required": receipt["required"],
+                "row": receipt["row"],
+                "sha256": hashlib.sha256(receipt_path.read_bytes()).hexdigest(),
+                "status": receipt["status"],
+            })
+        (receipt_dir / "manifest.json").write_text(
+            json.dumps({"receipt_count": len(manifest_receipts), "receipts": manifest_receipts}, indent=2, sort_keys=True) + "\n",
+            encoding="utf-8",
+        )
         if failed or (fail_on_skip and skipped_required):
             return 1
         return 0

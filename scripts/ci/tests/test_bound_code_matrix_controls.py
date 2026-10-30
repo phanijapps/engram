@@ -63,7 +63,7 @@ class BoundCodeMatrixControls(unittest.TestCase):
             row = matrix.Row("binding", "sqlite", "rust", True)
             code = runner.execute([row], lambda _: (_ for _ in ()).throw(FileNotFoundError("synthetic absent")), Path(temp), {}, True)
             self.assertEqual(code, 1)
-            receipt = json.loads(next(Path(temp).glob("*.json")).read_text())
+            receipt = json.loads(next(Path(temp).glob("[0-9][0-9][0-9]-*.json")).read_text())
             self.assertEqual(receipt["status"], "skipped")
 
     def test_optional_skip_is_not_fatal_without_fail_on_skip(self):
@@ -105,9 +105,12 @@ class BoundCodeMatrixControls(unittest.TestCase):
                 return subprocess.CompletedProcess(argv, 0, "ok", "")
             result = matrix.MatrixRunner(fake).execute(rows, lambda row: ["synthetic", row.name], Path(temp), {}, True)
             self.assertEqual(result, 0)
-            receipts = list(Path(temp).glob("*.json"))
+            receipts = list(Path(temp).glob("[0-9][0-9][0-9]-*.json"))
             self.assertEqual(len(receipts), len(rows))
             self.assertEqual({json.loads(path.read_text())["row"] for path in receipts}, {row.name for row in rows})
+            manifest = json.loads((Path(temp) / "manifest.json").read_text())
+            self.assertEqual(manifest["receipt_count"], len(rows))
+            self.assertEqual({entry["row"] for entry in manifest["receipts"]}, {row.name for row in rows})
 
     def test_sanitized_receipts_do_not_contain_credential_material(self):
         with tempfile.TemporaryDirectory() as temp:
@@ -116,7 +119,7 @@ class BoundCodeMatrixControls(unittest.TestCase):
             def fake(argv, **kwargs):
                 return subprocess.CompletedProcess(argv, 1, f"postgresql://u:{secret}@host/db token={secret}", "")
             matrix.MatrixRunner(fake).execute([row], lambda _: ["synthetic", f"postgresql://u:{secret}@host/db"], Path(temp), {}, True)
-            receipt = next(Path(temp).glob("*.json")).read_text()
+            receipt = next(Path(temp).glob("[0-9][0-9][0-9]-*.json")).read_text()
             self.assertNotIn(secret, receipt)
             self.assertIn("[REDACTED]", receipt)
 

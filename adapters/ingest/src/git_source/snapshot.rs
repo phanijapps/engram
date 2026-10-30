@@ -374,6 +374,8 @@ mod tests {
         assert_eq!(reused.digest, retained.digest);
         let retained_file = retained.root.join("src/lib.rs");
         let mut permissions = std::fs::metadata(&retained_file).unwrap().permissions();
+        // clippy roll 2026-10: this test deliberately clears a temporary file readonly bit.
+        #[allow(clippy::permissions_set_readonly_false)]
         permissions.set_readonly(false);
         std::fs::set_permissions(&retained_file, permissions).unwrap();
         std::fs::write(&retained_file, b"pub fn corrupted() {}\n").unwrap();
@@ -495,6 +497,8 @@ mod tests {
         let temp = tempfile::tempdir().unwrap();
         let root = temp.path().join("bounded");
         let mut limits = GitResourceLimits::default();
+        // clippy roll 2026-10: staged fixture defaults make only the exercised limit explicit.
+        #[allow(clippy::field_reassign_with_default)]
         limits.max_snapshot_bytes = 1;
         assert!(
             retain_snapshot_with_limits(&root, commit(), &[file("one", b"12")], &limits).is_err()

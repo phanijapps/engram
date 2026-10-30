@@ -289,6 +289,8 @@ fn line_start_offsets(blob: &[u8]) -> Vec<usize> {
 /// retained blob — the only payload bytes a fallback consumer may emit
 /// (r5 C4, verification finding 1: a validated ID is not a validated
 /// payload).
+// clippy roll 2026-10: tuple result preserves established selection error contract.
+#[allow(clippy::type_complexity)]
 fn participant_span(
     descriptors: &[ParticipantDescriptor],
     symbol: Option<&str>,

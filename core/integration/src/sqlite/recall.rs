@@ -315,6 +315,8 @@ impl UnifiedRecall for SqlUnifiedRecall {
         // vector), and a MISSING evidence resolver is not derived-record
         // independence: without it the guard fails closed identically to
         // the authority-failure branch.
+        // clippy roll 2026-10: paired checks preserve the explicit fail-closed branch.
+        #[allow(clippy::unnecessary_unwrap)]
         if code_view.is_some() && self.candidate_evidence.is_some() {
             let evidence = self.candidate_evidence.as_ref().expect("checked");
             let view = code_view.as_ref().expect("checked");

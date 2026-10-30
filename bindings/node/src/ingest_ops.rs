@@ -2,7 +2,7 @@
 //!
 //! Repository scanning and document ingestion operations with background job support.
 
-use engram_domain::{Actor, CodeBinding, Policy, Scope, SourceDocumentKind};
+use engram_domain::{Actor, Policy, Scope, SourceDocumentKind};
 use engram_ingest::{
     CodeSymbolChunker, DocumentIngestRequest, GraphExtractor, KnowledgeIngestor, PlainTextChunker,
     PlainTextChunkerOptions, ScanOptions, scan_repository,
@@ -78,55 +78,31 @@ impl BindingCell {
 /// Provides ingest operations for the Node-API bridge.
 pub struct IngestOps {
     store: SqlKnowledgeStore,
-    /// The durable code-binding cell (TASK-020, review r6 finding 10): the
-    /// NEUTRAL repository port — no concrete engine type in the bridge, so
-    /// the cell can be swapped by composition without rewriting these
-    /// helpers. Code scans require a persisted binding — the legacy engine
-    /// consults the same durable authority as the provider path, never a
-    /// checkout-derived binding.
-    bindings: Arc<dyn engram_knowledge::CodeBindingRepository>,
     jobs: std::sync::Arc<std::sync::Mutex<std::collections::HashMap<String, ScanJobState>>>,
     job_counter: std::sync::atomic::AtomicU64,
 }
 
 impl IngestOps {
-    pub fn new(
-        store: SqlKnowledgeStore,
-        bindings: Arc<dyn engram_knowledge::CodeBindingRepository>,
-    ) -> Self {
+    pub fn new(store: SqlKnowledgeStore) -> Self {
         Self {
             store,
-            bindings,
             jobs: std::sync::Arc::new(std::sync::Mutex::new(std::collections::HashMap::new())),
             job_counter: std::sync::atomic::AtomicU64::new(0),
         }
     }
 
-    /// Binds a repository branch durably (TASK-020): same durable first-bind
-    /// semantics as the neutral coordinator's cell.
-    pub fn code_bind_json(&self, request_json: String) -> Result<String> {
-        let value = decode::<serde_json::Value>(&request_json)?;
-        let scope = scope_field(&value)?;
-        let repo = value
-            .get("repo")
-            .and_then(|field| field.as_str())
-            .ok_or_else(|| Error::from_reason("missing 'repo'"))?
-            .to_owned();
-        let branch_ref = value
-            .get("branchRef")
-            .and_then(|field| field.as_str())
-            .ok_or_else(|| Error::from_reason("missing 'branchRef'"))?
-            .to_owned();
-        let binding = CodeBinding {
-            scope,
-            repo_id: engram_domain::RepoId(repo),
-            branch_ref,
-            version: 1,
-            active_generation: None,
-            epoch: 0,
-        };
-        let bound = block_on(self.bindings.bind(binding)).map_err(to_napi_error)?;
-        encode(&bound)
+    /// Denies legacy binding because this engine has no host-policy seam.
+    ///
+    /// Binding mutations must pass the coordinator used by provider-backed
+    /// operations, which receives an explicit host authorizer. The legacy
+    /// engine cannot construct that coordinator safely, so it provides no
+    /// binding operation and never writes its private binding cell.
+    pub fn code_bind_json(&self, _request_json: String) -> Result<String> {
+        Err(to_napi_error(engram_runtime::CoreError::CapabilityUnsupported {
+            capability: "legacy-code-bind".into(),
+            reason: "LegacyCodeBindUnsupported: use NativeProvider with host codeAuthority"
+                .into(),
+        }))
     }
 
     /// TASK-020 binding gate REMOVED (review r6 finding 2): binding-existence

@@ -2,13 +2,10 @@
 //!
 //! Stateful local ingest engine exposed to Node through N-API.
 //! Owns one SQLite-backed `SqlKnowledgeStore` and manages background scan jobs.
-//! TASK-020: it also owns the durable code-binding cell sibling
-//! (`<store>.code-bindings.sqlite`) — code scans REQUIRE a persisted binding
-//! (no checkout-derived binding, no direct-ingest bypass).
+//! Legacy code scans and bindings are unsupported because this engine cannot
+//! receive the provider host's code-authorization policy.
 
-use engram_domain::CodeBinding;
 use engram_store_sqlite::SqlKnowledgeStore;
-use engram_store_sqlite::knowledge::SqlCodeBindingRepository;
 use napi::bindgen_prelude::*;
 use napi_derive::napi;
 
@@ -29,7 +26,7 @@ impl NativeIngestEngine {
     /// Opens a SQLite ingest engine. Pass a path for a durable file-backed store
     /// (shared with the knowledge engine when the same file is used); omit for
     /// in-memory. The durable binding cell opens alongside at
-    /// `<path>.code-bindings.sqlite` (in-memory when no path is given).
+    /// No code-binding cell is opened because legacy binding is unsupported.
     #[napi(constructor)]
     pub fn new(path: Option<String>) -> Result<Self> {
         let store = match &path {
@@ -37,22 +34,8 @@ impl NativeIngestEngine {
             None => SqlKnowledgeStore::open_in_memory(),
         }
         .map_err(|e| Error::from_reason(e.to_string()))?;
-        let bindings_path =
-            path.map(|path| std::path::PathBuf::from(path).with_extension("code-bindings.sqlite"));
-        let bindings: std::sync::Arc<dyn engram_knowledge::CodeBindingRepository> =
-            match bindings_path {
-                Some(path) => SqlCodeBindingRepository::open(path).map(|cell| {
-                    std::sync::Arc::new(cell)
-                        as std::sync::Arc<dyn engram_knowledge::CodeBindingRepository>
-                }),
-                None => SqlCodeBindingRepository::open(":memory:").map(|cell| {
-                    std::sync::Arc::new(cell)
-                        as std::sync::Arc<dyn engram_knowledge::CodeBindingRepository>
-                }),
-            }
-            .map_err(|e| Error::from_reason(e.to_string()))?;
         Ok(Self {
-            ops: IngestOps::new(store, bindings),
+            ops: IngestOps::new(store),
         })
     }
 

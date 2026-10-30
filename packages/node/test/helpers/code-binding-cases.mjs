@@ -239,9 +239,13 @@ export function describeCodeBindingCases(getAddon, recipe) {
     expect(() =>
       engine.startScanJobJson(JSON.stringify({ root: repoDir, scope }))
     ).toThrow(/BindingRequired/);
-    engine.codeBindJson(
-      JSON.stringify({ scope, repo: "repo-legacy", branchRef: "refs/heads/main" })
-    );
+    // Legacy binding is unsupported because this engine has no host-policy
+    // configuration seam. It must not mutate the durable binding cell.
+    expect(() =>
+      engine.codeBindJson(
+        JSON.stringify({ scope, repo: "repo-legacy", branchRef: "refs/heads/main" })
+      )
+    ).toThrow(/LegacyCodeBindUnsupported/);
     expect(() =>
       engine.startScanJobJson(JSON.stringify({ root: repoDir, scope, repo: "repo-legacy" }))
     ).toThrow(/LegacyCodeScanDenied/);

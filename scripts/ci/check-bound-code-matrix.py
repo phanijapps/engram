@@ -24,7 +24,7 @@ from urllib.parse import parse_qsl, urlparse
 ROOT = Path(__file__).resolve().parents[2]
 MARKER = "engram.factory.job=010-project-bound-branch-indexing; disposable=true"
 PG_ENV_FILE = "ENGRAM_TEST_PG_ENV_FILE"
-PINNED_CONTAINER_ID = "583ce534a623cdfd58400583b441941429e9ae9533b634bb59b1060e61f44bc5"
+PINNED_CONTAINER_ID = "8547ab6b97516829617bbf13dd2c66f148dbe923f2a36af4889ebeab0ae61491"
 PINNED_DATABASE = "engram_test_ec536887ebee"
 PINNED_LABELS = {"engram.factory.job": "010-project-bound-branch-indexing", "engram.factory.disposable": "true", "engram.factory.owner": "engram-builder"}
 URL_QUERY_KEYS = {"sslmode", "application_name", "connect_timeout"}

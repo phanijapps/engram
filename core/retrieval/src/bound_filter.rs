@@ -382,21 +382,6 @@ pub async fn resolve_view(
 mod tests {
     use super::*;
 
-    fn bindings(entries: &[(&str, &str, &str)]) -> BoundCodeEligibility {
-        BoundCodeEligibility {
-            epoch: 1,
-            bindings: entries
-                .iter()
-                .map(|(repo, branch, generation)| BoundBinding {
-                    repo_id: (*repo).to_owned(),
-                    branch_ref: (*branch).to_owned(),
-                    generation_id: (*generation).to_owned(),
-                })
-                .collect(),
-            lineage: Vec::new(),
-        }
-    }
-
     fn eligibility_with_lineage(
         binding_entries: &[(&str, &str, &str)],
         lineage_entries: &[(&str, &str, &str)],

@@ -17,7 +17,8 @@ import {
   type CodeRefreshRequest,
   type CodeRegisterRequest,
   type CodeRefObservation,
-  type CodeScanRequest
+  type CodeScanRequest,
+  type CodeScanResult
 } from "./code-binding.js";
 
 /** Construction options for an `EngramClient`, currently limited to the required transport. */
@@ -71,14 +72,14 @@ function codeTransport(
   codeRegister(request: CodeRegisterRequest): Promise<unknown>;
   codeStatus(request: CodeStatusRequest): Promise<CodeBindingStatus>;
   codeRefresh(request: CodeRefreshRequest): Promise<CodeRefObservation>;
-  scanCode(request: CodeScanRequest): Promise<unknown>;
+  scanCode(request: CodeScanRequest): Promise<CodeScanResult>;
 } {
   const candidate = transport as {
     codeBind?: (request: CodeBindRequest) => Promise<CodeBinding>;
     codeRegister?: (request: CodeRegisterRequest) => Promise<unknown>;
     codeStatus?: (request: CodeStatusRequest) => Promise<CodeBindingStatus>;
     codeRefresh?: (request: CodeRefreshRequest) => Promise<CodeRefObservation>;
-    scanCode?: (request: CodeScanRequest) => Promise<unknown>;
+    scanCode?: (request: CodeScanRequest) => Promise<CodeScanResult>;
   };
   if (
     !candidate.codeBind ||
@@ -125,7 +126,7 @@ export class EngramCodeBindingClient {
 
   /** Scans a BOUND repository (persisted binding mandatory — no direct-ingest
    *  bypass; unbound scopes deny with `BindingRequired`). */
-  scanCode(request: CodeScanRequest): Promise<unknown> {
+  scanCode(request: CodeScanRequest): Promise<CodeScanResult> {
     return this.#transport.scanCode(request);
   }
 }

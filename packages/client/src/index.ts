@@ -14,7 +14,11 @@ export {
   type CodeRegisterRequest,
   type CodeRefFreshness,
   type CodeRefObservation,
+  type CodeScanFilter,
   type CodeScanRequest,
+  type CodeScanResult,
+  type BoundCodeScanResult,
+  type LegacyDocumentScanResult,
   type CodeStatusRequest,
   type Scope
 } from "./code-binding.js";

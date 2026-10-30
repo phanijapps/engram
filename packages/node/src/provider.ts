@@ -138,6 +138,75 @@ export interface RepositoryRegistration {
   acquisition: "local_only" | "configured_remote";
 }
 
+/** Optional filter overrides accepted by the Rust `ScanFilterConfig` decoder. */
+export interface CodeScanFilter {
+  concepts?: {
+    minNameLength?: number;
+    blocklist?: string[];
+    allowlist?: string[];
+  };
+  deny?: {
+    dirs?: string[];
+    extensions?: string[];
+  };
+}
+
+/** Registered-locator ingestion. A caller path is never an ingestion input. */
+export interface BoundCodeScanRequest {
+  scope: Scope;
+  repo: string;
+  path?: never;
+  branchRef?: string;
+  scanFilter?: CodeScanFilter;
+}
+
+/** Explicit legacy document-only scan. It cannot name a bound repository. */
+export interface LegacyDocumentScanRequest {
+  scope: Scope;
+  path: string;
+  repo?: never;
+  branchRef?: never;
+  scanFilter?: CodeScanFilter;
+}
+
+/** Mutually exclusive native scan lanes. */
+export type CodeScanRequest = BoundCodeScanRequest | LegacyDocumentScanRequest;
+
+/** Serialized `IngestedGeneration` from the bound ingestion lane. */
+export interface BoundCodeScanResult {
+  mode: "bound";
+  repoId: string;
+  branchRef: string;
+  commitOid: string;
+  generationId: string;
+  snapshotDigest: string;
+  files: number;
+  documents: number;
+  entities: number;
+  relationships: number;
+  idempotent: boolean;
+  binding: CodeBinding;
+}
+
+/** Serialized `ScanSummary` from the legacy document-only lane. */
+export interface LegacyDocumentScanResult {
+  mode: "legacy-document-only";
+  scanned: number;
+  ingested: number;
+  unchanged: number;
+  skipped: number;
+  entities: number;
+  relationships: number;
+  errors: number;
+  git_remote: string | null;
+  git_branch: string | null;
+  git_sha: string | null;
+  coverage_warnings: string[];
+}
+
+/** Typed outcome of either native scan lane. */
+export type CodeScanResult = BoundCodeScanResult | LegacyDocumentScanResult;
+
 /** The typed transport over the native binding — every route in the TS MCP
  *  server dispatches through one of these methods. */
 export interface NativeProviderTransport {
@@ -152,16 +221,7 @@ export interface NativeProviderTransport {
   /** Treesitter-index a BOUND repository into the project workspace
    *  (TASK-020: `repo` names the persisted binding — the durable cell, not
    *  the path, is the authority; `branchRef` may assert equality). */
-  scan(request: {
-    path: string;
-    scope: unknown;
-    /** The bound repository (TASK-020): code scans require a persisted
-     *  binding; omitting it denies with the typed `BindingRequired`
-     *  envelope from the Rust side. */
-    repo?: string;
-    branchRef?: string;
-    scanFilter?: unknown;
-  }): Promise<unknown>;
+  scan(request: CodeScanRequest): Promise<CodeScanResult>;
   /** Bind a repository branch (TASK-020): same-ref idempotent, other branch
    *  BindingConflict. */
   codeBind(request: { scope: Scope; repo: string; branchRef: string }): Promise<CodeBinding>;
@@ -324,14 +384,8 @@ class JsonNativeProviderTransport implements NativeProviderTransport {
     return decode<WriteMemoryResponse>(this.provider.requireMemoryApi().writeJson(encode(request)));
   }
 
-  async scan(request: {
-    path: string;
-    scope: unknown;
-    repo?: string;
-    branchRef?: string;
-    scanFilter?: unknown;
-  }): Promise<unknown> {
-    return decode(this.provider.scanRepositoryJson(encode(request)));
+  async scan(request: CodeScanRequest): Promise<CodeScanResult> {
+    return decode<CodeScanResult>(this.provider.scanRepositoryJson(encode(request)));
   }
 
   async codeBind(request: { scope: Scope; repo: string; branchRef: string }): Promise<CodeBinding> {

@@ -17,7 +17,13 @@ import type {
   CodeBindingStatus,
   CodeFreshnessState,
   CodeRefFreshness,
-  CodeRefObservation
+  CodeRefObservation,
+  CodeScanFilter,
+  CodeScanResult as NodeCodeScanResult,
+  BoundCodeScanRequest as NodeBoundCodeScanRequest,
+  LegacyDocumentScanRequest as NodeLegacyDocumentScanRequest,
+  BoundCodeScanResult,
+  LegacyDocumentScanResult
 } from "@engram/node";
 
 // The Rust-serialized result shapes (single definition in `@engram/node`,
@@ -27,7 +33,10 @@ export type {
   CodeBindingStatus,
   CodeFreshnessState,
   CodeRefFreshness,
-  CodeRefObservation
+  CodeRefObservation,
+  CodeScanFilter,
+  BoundCodeScanResult,
+  LegacyDocumentScanResult
 };
 export type { CodeBinding, Scope };
 
@@ -58,14 +67,11 @@ export interface CodeRefreshRequest {
   repo: string;
 }
 
-/** Bound code-scan request (persisted binding mandatory). */
-export interface CodeScanRequest {
-  path: string;
-  scope: Scope;
-  repo: string;
-  branchRef?: string;
-  scanFilter?: unknown;
-}
+/** Bound or explicit legacy document-only scan request. */
+export type CodeScanRequest = NodeBoundCodeScanRequest | NodeLegacyDocumentScanRequest;
+
+/** Typed outcome from the selected scan lane. */
+export type CodeScanResult = NodeCodeScanResult;
 
 /** Typed error thrown when a transport lacks the code-binding surface. */
 export class EngramCodeBindingUnsupportedError extends Error {

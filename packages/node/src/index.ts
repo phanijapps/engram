@@ -72,6 +72,13 @@ export {
   type CodeFreshnessState,
   type CodeRefFreshness,
   type CodeRefObservation,
+  type CodeScanFilter,
+  type CodeScanRequest,
+  type BoundCodeScanRequest,
+  type LegacyDocumentScanRequest,
+  type CodeScanResult,
+  type BoundCodeScanResult,
+  type LegacyDocumentScanResult,
   type RepositoryRegistration,
   type RecordCounts,
   type ScopeCounts

@@ -42,27 +42,19 @@ describe.skipIf(!existsSync(ADDON_PATH))("NativeProviderTransport end-to-end (re
       const caps = (await transport.capabilities()) as { families?: unknown[] };
       expect(caps).toBeDefined();
 
-      // 2. Bind the repository, then scan it through the facade + napi
-      //    boundary (TASK-020: persisted binding is mandatory for code).
+      // 2. The explicit legacy lane scans documents through the facade + N-API
+      //    boundary. Bound ingestion is covered by the registered-repository
+      //    recipe suite because it requires an authorized git registration.
       const scope = { tenant: "smoke", workspace: "smoke" };
-      const binding = (await transport.codeBind({
-        scope,
-        repo: "smoke-repo",
-        branchRef: "refs/heads/main"
-      })) as { branchRef?: string };
-      expect(binding.branchRef).toBe("refs/heads/main");
-      const summary = (await transport.scan({
-        path: repo,
-        scope,
-        repo: "smoke-repo"
-      })) as {
-        scanned?: number;
-        entities?: number;
-      };
+      writeFileSync(join(repo, "README.md"), "# smoke\n");
+      const summary = await transport.scan({ path: repo, scope });
       // eslint-disable-next-line no-console
       console.log("[smoke] scan:", JSON.stringify(summary));
+      expect(summary.mode).toBe("legacy-document-only");
+      if (summary.mode !== "legacy-document-only") {
+        throw new Error(`expected legacy document scan, got ${summary.mode}`);
+      }
       expect(summary.scanned).toBeGreaterThanOrEqual(1);
-      expect(summary.entities).toBeGreaterThanOrEqual(1);
 
       // 3. Consolidation EXECUTION (non-dry-run) returns a ConsolidationRun.
       const run = (await transport.consolidate({ scope, dryRun: false })) as {

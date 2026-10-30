@@ -18,7 +18,7 @@ export interface EngramTransport {
   codeRegister?(request: CodeRegisterRequest): Promise<unknown>;
   codeStatus?(request: CodeStatusRequest): Promise<CodeBindingStatus>;
   codeRefresh?(request: CodeRefreshRequest): Promise<CodeRefObservation>;
-  scanCode?(request: CodeScanRequest): Promise<unknown>;
+  scanCode?(request: CodeScanRequest): Promise<CodeScanResult>;
 }
 
 // TASK-020: the optional code-binding surface's types (declared on
@@ -31,6 +31,7 @@ import type {
   CodeRegisterRequest,
   CodeRefObservation,
   CodeScanRequest,
+  CodeScanResult,
   CodeStatusRequest
 } from "./code-binding.js";
 
@@ -40,5 +41,5 @@ export interface CodeBindingTransport {
   codeRegister(request: CodeRegisterRequest): Promise<unknown>;
   codeStatus(request: CodeStatusRequest): Promise<CodeBindingStatus>;
   codeRefresh(request: CodeRefreshRequest): Promise<CodeRefObservation>;
-  scanCode(request: CodeScanRequest): Promise<unknown>;
+  scanCode(request: CodeScanRequest): Promise<CodeScanResult>;
 }

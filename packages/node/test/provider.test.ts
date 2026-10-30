@@ -69,16 +69,18 @@ describe("NativeProviderTransport", () => {
     expect(recorded("write")[0]).toMatchObject({ key: "k", content: "c" });
   });
 
-  it("scan dispatches to scanRepositoryJson with path + scope + repo (binding mandatory)", async () => {
+  it("scan dispatches mutually exclusive bound and legacy requests", async () => {
     const { provider, recorded } = mockProvider();
     const transport = createNativeProviderTransport({ provider });
-    await transport.scan({ path: "/repo", scope: { tenant: "t" }, repo: "repo-a" });
-    expect(recorded("scan")).toHaveLength(1);
-    expect(recorded("scan")[0]).toMatchObject({
-      path: "/repo",
-      scope: { tenant: "t" },
-      repo: "repo-a"
-    });
+    await transport.scan({ scope: { tenant: "t" }, repo: "repo-a" });
+    await transport.scan({ scope: { tenant: "t" }, path: "/docs" });
+    expect(recorded("scan")).toEqual([
+      { scope: { tenant: "t" }, repo: "repo-a" },
+      { scope: { tenant: "t" }, path: "/docs" }
+    ]);
+
+    // @ts-expect-error A caller path cannot accompany bound ingestion.
+    transport.scan({ scope: { tenant: "t" }, repo: "repo-a", path: "/repo" });
   });
 
   it("consolidate forwards dryRun and injects a system requester", async () => {

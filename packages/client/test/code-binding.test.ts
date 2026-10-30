@@ -17,6 +17,20 @@ import {
 import type { CanonicalSpan, CodeBinding, CodeGeneration, IndexedSource } from "@engram/contracts";
 
 const scope = { tenant: "task-020", workspace: "client" };
+const legacyScanResult = {
+  mode: "legacy-document-only" as const,
+  scanned: 0,
+  ingested: 0,
+  unchanged: 0,
+  skipped: 0,
+  entities: 0,
+  relationships: 0,
+  errors: 0,
+  git_remote: null,
+  git_branch: null,
+  git_sha: null,
+  coverage_warnings: []
+};
 
 /** A transport whose native side rejects code ops with the Rust envelope. */
 const denyingTransport: EngramTransport = {
@@ -97,7 +111,7 @@ const workingTransport: EngramTransport = {
       observedAt: "2026-10-30T00:00:00Z",
       policy: "on_request"
     }),
-  scanCode: () => Promise.resolve({ scanned: 0 })
+  scanCode: () => Promise.resolve(legacyScanResult)
 };
 
 describe("task_020", () => {
@@ -128,8 +142,14 @@ describe("task_020", () => {
     expect(observed.observedOid).toBe("c".repeat(40));
     expect(observed.policy).toBe("on_request");
 
-    const scan = await code.scanCode({ path: "/repo", scope, repo: "repo-client" });
-    expect(scan).toEqual({ scanned: 0 });
+    const scan = await code.scanCode({ scope, repo: "repo-client" });
+    expect(scan).toEqual(legacyScanResult);
+
+    const legacy = await code.scanCode({ scope, path: "/docs" });
+    expect(legacy).toEqual(legacyScanResult);
+
+    // @ts-expect-error Bound ingestion and legacy document scans are exclusive.
+    code.scanCode({ scope, path: "/repo", repo: "repo-client" });
   });
 
   it("legacy_unbound_denied", async () => {
@@ -137,7 +157,7 @@ describe("task_020", () => {
     const code = client.codeBinding();
     // The client surfaces the SAME typed denials the provider and legacy
     // native paths produce (envelope parity).
-    await expect(code.scanCode({ path: "/repo", scope, repo: "repo-x" })).rejects.toThrow(
+    await expect(code.scanCode({ scope, repo: "repo-x" })).rejects.toThrow(
       /BindingRequired/
     );
     await expect(

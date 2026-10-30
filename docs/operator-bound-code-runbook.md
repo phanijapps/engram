@@ -55,6 +55,8 @@ The legacy `NativeIngestEngine` reset methods return `LegacyCodeResetUnsupported
 Do not apply a preview with ambiguous ownership.
 Do not substitute a target, a subset, a binding version, an epoch, or a preview hash after owner approval.
 The journal records exact target fingerprints, authorization decisions, checkpoints, and preservation digests.
+The preservation inventory covers the KNOWLEDGE store classes: source, document, chunk, entity, relationship, and graph.
+MEMORY is outside that enumerated inventory and remains structurally preserved because no reset lane mutates memory records.
 A reset is targeted and resumable, not a scope wipe and not a cross-store rollback.
 
 ## Matrix runner

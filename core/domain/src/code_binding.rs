@@ -125,6 +125,9 @@ pub struct AmbiguousOwnership {
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PreservationRecord {
+    /// Knowledge-store class whose serialized record bytes were hashed.
+    #[serde(default)]
+    pub record_class: String,
     pub record_id: String,
     pub content_digest: String,
     /// This digest binds the contributors that a surviving source shares with
@@ -166,7 +169,8 @@ impl PreservationInventory {
         if self.digest.len() != 64
             || !self.digest.bytes().all(|b| b.is_ascii_hexdigit())
             || self.records.iter().any(|record| {
-                record.record_id.trim().is_empty()
+                record.record_class.trim().is_empty()
+                    || record.record_id.trim().is_empty()
                     || record.content_digest.len() != 64
                     || record.contributor_digest.len() != 64
             })

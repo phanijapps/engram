@@ -730,12 +730,24 @@ pub(crate) fn bootstrap_sqlite(config: &EngramConfig) -> CoreResult<EngramProvid
                 vectors.clone(),
                 graph_cache.clone(),
             ));
+            let bindings: Arc<dyn engram_knowledge::CodeBindingRepository> = Arc::new(bindings);
             let coordinator = crate::code_binding::CodeBindingCoordinator::new(
-                Arc::new(bindings),
+                bindings.clone(),
                 Arc::new(crate::code_binding::RecipeDefaultAuthorizer),
                 Vec::new(),
             )
             .with_reset_lanes(reset_lanes);
+            let coordinator = if let Some(knowledge_handle) = &knowledge_store {
+                coordinator.with_preservation_source(Arc::new(
+                    crate::code_binding::KnowledgePreservationRecordSource::new(
+                        knowledge_handle.clone() as Arc<dyn engram_knowledge::KnowledgeRepository>,
+                        knowledge_handle.clone() as Arc<dyn crate::KnowledgeQuery>,
+                        bindings,
+                    ),
+                ))
+            } else {
+                coordinator
+            };
             let retained_root = config.storage_path.join("retained");
             code_source = Some(Arc::new(
                 engram_ingest::git_source::RetainedSnapshotReader::new(retained_root.clone()),

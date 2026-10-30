@@ -2,6 +2,7 @@
 mod eligibility;
 #[cfg(feature = "code-lanes")]
 mod ingestion;
+mod preservation;
 mod publication;
 mod registration;
 mod reset;
@@ -14,6 +15,7 @@ use engram_domain::{
 use engram_knowledge::{CodeBindingRepository, CoreResult, StageReceipt};
 #[cfg(feature = "code-lanes")]
 pub use ingestion::{CodeIngestionLanes, IngestedGeneration};
+pub use preservation::{KnowledgePreservationRecordSource, PreservationRecordSource};
 pub use publication::CodeRebuildRequest;
 pub use reset::{RecipeResetLaneLifecycle, ResetLane, ResetLaneLifecycle};
 pub use source::{BoundParticipant, ExactReadCandidate, ParticipantExactSource};
@@ -121,6 +123,7 @@ pub struct CodeBindingCoordinator {
     authorizer: Arc<dyn CodeBindingAuthorizer>,
     required_lanes: Vec<CodeReceiptKind>,
     reset_lanes: Arc<dyn reset::ResetLaneLifecycle>,
+    preservation_source: Arc<dyn preservation::PreservationRecordSource>,
     clock: Arc<dyn engram_runtime::Clock>,
 }
 
@@ -199,6 +202,7 @@ impl CodeBindingCoordinator {
             authorizer,
             required_lanes,
             reset_lanes: Arc::new(reset::NoopResetLaneLifecycle),
+            preservation_source: Arc::new(preservation::UnavailablePreservationRecordSource),
             clock: Arc::new(UtcClock),
         }
     }
@@ -226,6 +230,7 @@ impl CodeBindingCoordinator {
             authorizer,
             required_lanes: self.required_lanes.clone(),
             reset_lanes: Arc::clone(&self.reset_lanes),
+            preservation_source: Arc::clone(&self.preservation_source),
             clock: Arc::clone(&self.clock),
         }
     }

@@ -27,6 +27,22 @@ pub trait KnowledgeRepository: Send + Sync {
         Ok(None)
     }
 
+    /// Lists all source records visible to `scope` for a complete knowledge inventory.
+    async fn list_sources(&self, _scope: &Scope) -> CoreResult<Vec<KnowledgeSource>> {
+        Err(CoreError::CapabilityUnsupported {
+            capability: "knowledge-source-list".into(),
+            reason: "this store does not enumerate knowledge sources".into(),
+        })
+    }
+
+    /// Lists all document records visible to `scope` for a complete knowledge inventory.
+    async fn list_documents(&self, _scope: &Scope) -> CoreResult<Vec<SourceDocument>> {
+        Err(CoreError::CapabilityUnsupported {
+            capability: "knowledge-document-list".into(),
+            reason: "this store does not enumerate knowledge documents".into(),
+        })
+    }
+
     /// Stores a versioned document extracted from a source.
     async fn put_document(&self, document: SourceDocument) -> CoreResult<SourceDocument>;
 

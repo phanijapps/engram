@@ -146,14 +146,22 @@ pub fn open(config: &EngramConfig) -> CoreResult<EngramProvider> {
             reset_graph_cache.clone(),
         ),
     );
+    let reset_bindings: Arc<dyn engram_knowledge::CodeBindingRepository> =
+        Arc::new(PgCodeBindingRepository::new(mk_conn()?)?);
     let code_coordinator = Arc::new(
         engram_integration::code_binding::CodeBindingCoordinator::new(
-            Arc::new(PgCodeBindingRepository::new(mk_conn()?)?)
-                as Arc<dyn engram_knowledge::CodeBindingRepository>,
+            reset_bindings.clone(),
             Arc::new(engram_integration::code_binding::RecipeDefaultAuthorizer),
             Vec::new(),
         )
-        .with_reset_lanes(reset_lanes),
+        .with_reset_lanes(reset_lanes)
+        .with_preservation_source(Arc::new(
+            engram_integration::code_binding::KnowledgePreservationRecordSource::new(
+                knowledge.clone() as Arc<dyn engram_knowledge::KnowledgeRepository>,
+                knowledge_query.clone() as Arc<dyn engram_integration::KnowledgeQuery>,
+                reset_bindings,
+            ),
+        )),
     );
     let code_source: Arc<dyn engram_knowledge::RetainedSourceReader> =
         Arc::new(engram_ingest::git_source::RetainedSnapshotReader::new(

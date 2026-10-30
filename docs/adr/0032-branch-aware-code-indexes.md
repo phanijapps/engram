@@ -48,3 +48,10 @@ branch produced them.
 - Legacy unqualified keys work as single-index during migration.
 - True authorization (ops can't see dev) is a future policy feature, not
   this ADR.
+
+## Implementation status (2026-10-30)
+
+Bound indexing is shipped through the durable registration, binding, generation, retained-source, status, ref-observation, and reset-journal surfaces.
+The public transports expose MCP stdio `code_repo_register`, `code_bind`, `code_status`, and `code_refresh`, plus equivalent one-shot `code --op register|bind|status|refresh` and native/TypeScript provider operations.
+Recipe defaults deny code authority until the host injects its allowed launch scopes.
+The matrix receipts and manifest are written by `scripts/ci/check-bound-code-matrix.py` to the operator-selected `--receipt-dir`; see `docs/operator-bound-code-runbook.md` for custody and fixture rotation.

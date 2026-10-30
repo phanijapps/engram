@@ -1,5 +1,11 @@
 # v1 Changelog
 
+## 2026-10-30 (project-bound code indexing activation)
+
+- Behavioral tightening / BREAKING for code callers: code selection and bound-code operations now require a durable, explicitly authorized binding. This is not a v1 schema change. Implementations do not infer a binding from a checkout, path, `HEAD`, or legacy record, and they do not automatically migrate legacy unbound code.
+- BREAKING for legacy native callers: `NativeIngestEngine.codeBindJson` is removed from the supported bind path and returns the typed `LegacyCodeBindUnsupported` denial. Use `NativeProvider` or the TypeScript provider/client path and inject host `codeAuthority.launchScopes`; absent host authority returns the typed `CodeAuthorizationRequired` denial.
+- Added additive reset preview/journal and ref-observation shapes for the bound-code extension. Reset authorization is preview → owner gate → apply/resume; an observation records the configured ref separately from the indexed generation OID.
+
 ## 2026-10-30 (durable canonical spans)
 
 - Added the `CanonicalSpan` definition (1-based inclusive `startLine`/`endLine`,

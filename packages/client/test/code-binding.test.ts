@@ -48,6 +48,9 @@ const denyingTransport: EngramTransport = {
     Promise.reject(new Error("PolicyDenied: CodeAuthorizationRequired")),
   codeRefresh: () =>
     Promise.reject(new Error("BindingConflict: asserted branch does not match the bound ref")),
+  codeResetPreview: () => Promise.reject(new Error("BindingRequired")),
+  codeResetApply: () => Promise.reject(new Error("BindingRequired")),
+  codeResetResume: () => Promise.reject(new Error("BindingRequired")),
   scanCode: () =>
     Promise.reject(
       new Error(
@@ -111,6 +114,9 @@ const workingTransport: EngramTransport = {
       observedAt: "2026-10-30T00:00:00Z",
       policy: "on_request"
     }),
+  codeResetPreview: () => Promise.resolve({} as never),
+  codeResetApply: () => Promise.resolve({} as never),
+  codeResetResume: () => Promise.resolve({} as never),
   scanCode: () => Promise.resolve(legacyScanResult)
 };
 

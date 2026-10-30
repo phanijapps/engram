@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
@@ -30,7 +30,17 @@ describe("task_020 helper freshness", () => {
         expect(refreshed.digests.sqlite).toBe(before);
         // Loading and validating the repaired addon remains inside the lock.
         // eslint-disable-next-line @typescript-eslint/no-require-imports
-        const addon = require(refreshed.paths.sqlite as string);
+        const refreshedPath = refreshed.paths.sqlite as string;
+        const refreshedDigest = refreshed.digests.sqlite as string;
+        const addon = require(refreshedPath);
+        expect(typeof addon.NativeProvider).toBe("function");
+
+        // A later transaction publishes a new immutable version rather than
+        // rewriting the inode this already-loaded consumer maps.
+        const later = rebuild();
+        expect(later.paths.sqlite).not.toBe(refreshedPath);
+        expect(existsSync(refreshedPath)).toBe(true);
+        expect(sha(refreshedPath)).toBe(refreshedDigest);
         expect(typeof addon.NativeProvider).toBe("function");
       }, { artifactsRoot });
     } finally {

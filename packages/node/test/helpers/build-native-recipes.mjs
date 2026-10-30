@@ -4,19 +4,20 @@
  * packages/node/test/helpers … using existing cargo feature build interfaces
  * in isolated artifact directories before load").
  *
- * Builds BOTH recipe artifacts of the engram-node addon in isolated artifact
- * directories, copying each cargo cdylib product to
- * `packages/node/test/artifacts/<recipe>/engram_node.node`.
+ * Builds BOTH recipe artifacts of the engram-node addon in artifact
+ * directories. Every published artifact has a fresh versioned filename that
+ * includes its content digest. Published files are immutable and are retained;
+ * the helper never replaces or removes a published artifact. A consumer can
+ * therefore keep mapping its loaded inode while later transactions build and
+ * publish newer artifacts.
  *
  * Freshness: every invocation asks Cargo to validate the complete workspace
- * dependency graph for each recipe before copying its artifact. Cargo shares
- * `target/debug` between the feature invocations, so the helper removes the
- * shared cdylib before each recipe build — cargo then ALWAYS relinks that
- * recipe's variant (cached objects, fresh link) and the copy below is
- * guaranteed to be THIS recipe's binary. Without the removal, a no-op build
- * after the OTHER recipe's link would copy the wrong variant into this
- * recipe's slot (two dlopen copies of the same featured binary then
- * segfault on napi static-state interposition — observed at r6a-fix 57bde08).
+ * dependency graph for each recipe before publishing its artifact. Cargo uses
+ * one shared `target/debug` directory, so ONE repository-wide lock covers the
+ * delete, build, and copy pipeline for every artifact root. This serializes an
+ * isolated-root transaction with a shared-root transaction. It prevents either
+ * transaction from deleting or copying the shared cdylib while the other uses
+ * it. Artifact roots isolate destinations only; they do not isolate Cargo.
  *
  * Selection honesty: tests assert the SELECTED recipe through the addon's own
  * behavior (the sqlite artifact refuses a pgvector config with the exact
@@ -26,8 +27,8 @@
  * copies are never dlopen'd into one process.
  */
 import { execFileSync } from "node:child_process";
-import { createHash } from "node:crypto";
-import { closeSync, copyFileSync, existsSync, mkdirSync, openSync, readFileSync, rmSync, statSync, utimesSync } from "node:fs";
+import { createHash, randomUUID } from "node:crypto";
+import { closeSync, constants, copyFileSync, existsSync, mkdirSync, openSync, readFileSync, rmSync, statSync, utimesSync } from "node:fs";
 import { createRequire } from "node:module";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -64,23 +65,19 @@ function featuresFor(recipe) {
   }
 }
 
-function artifactPath(artifactsRoot, recipe) {
-  return join(artifactsRoot, recipe, "engram_node.node");
-}
-
-function artifactLockPath(artifactsRoot) {
-  return join(artifactsRoot, ".build-native-recipes.lock");
+function sharedTargetLockPath() {
+  return join(repoRoot, "target", ".engram-node-recipe-build.lock");
 }
 
 function sleep(milliseconds) {
   Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, milliseconds);
 }
 
-/** Acquires the cross-process artifact-set lock with bounded retry. */
-function acquireArtifactLock(artifactsRoot) {
-  mkdirSync(artifactsRoot, { recursive: true });
+/** Acquires the one lock that protects every shared-target build pipeline. */
+function acquireSharedTargetLock() {
+  const lockPath = sharedTargetLockPath();
+  mkdirSync(dirname(lockPath), { recursive: true });
   const deadline = Date.now() + LOCK_TIMEOUT_MS;
-  const lockPath = artifactLockPath(artifactsRoot);
   for (;;) {
     try {
       closeSync(openSync(lockPath, "wx"));
@@ -90,28 +87,43 @@ function acquireArtifactLock(artifactsRoot) {
         throw error;
       }
       if (Date.now() >= deadline) {
-        throw new Error(`timed out after ${LOCK_TIMEOUT_MS}ms waiting for recipe artifact lock`);
+        throw new Error(`timed out after ${LOCK_TIMEOUT_MS}ms waiting for shared recipe build lock`);
       }
       sleep(LOCK_RETRY_MS);
     }
   }
 }
 
-function validateArtifact(artifactsRoot, recipe) {
-  const dest = artifactPath(artifactsRoot, recipe);
-  if (!existsSync(dest) || statSync(dest).size === 0) {
-    throw new Error(`invalid ${recipe} artifact: ${dest}`);
+function validateArtifact(path, recipe) {
+  if (!existsSync(path) || statSync(path).size === 0) {
+    throw new Error(`invalid ${recipe} artifact: ${path}`);
   }
 }
 
-function digestArtifact(artifactsRoot, recipe) {
-  return createHash("sha256").update(readFileSync(artifactPath(artifactsRoot, recipe))).digest("hex");
+function digestArtifact(path) {
+  return createHash("sha256").update(readFileSync(path)).digest("hex");
+}
+
+/** Publishes a fresh immutable copy without replacing any published inode. */
+function publishArtifact(artifactsRoot, recipe, src) {
+  const digest = digestArtifact(src);
+  const destinationDirectory = join(artifactsRoot, recipe);
+  mkdirSync(destinationDirectory, { recursive: true });
+  const dest = join(destinationDirectory, `engram_node.${recipe}.${digest.slice(0, 16)}.${randomUUID()}.node`);
+  copyFileSync(src, dest, constants.COPYFILE_EXCL);
+  // cargo keeps the cdylib mtime from its last link; stamp the new copy AFTER
+  // the sources so freshness math stays monotonic without changing its bytes.
+  utimesSync(dest, new Date(), new Date());
+  validateArtifact(dest, recipe);
+  if (digestArtifact(dest) !== digest) {
+    throw new Error(`published ${recipe} artifact digest changed: ${dest}`);
+  }
+  return { path: dest, digest };
 }
 
 function buildRecipe(artifactsRoot, recipe) {
-  // Remove the SHARED cdylib first so cargo must relink THIS recipe's
-  // variant even when every object is cached — the copied artifact can then
-  // never alias the other recipe's last link (r6a-fix2 finding 7 repair).
+  // The repository-wide lock acquired by withRecipeArtifacts covers this
+  // deletion, Cargo invocation, and publish step for every destination root.
   const sharedCdylib = join(repoRoot, "target", "debug", cdylib);
   if (existsSync(sharedCdylib)) {
     rmSync(sharedCdylib, { force: true });
@@ -119,38 +131,29 @@ function buildRecipe(artifactsRoot, recipe) {
   const argv = ["build", "-p", "engram-node", ...featuresFor(recipe)];
   console.log(`[task_020 helper] cargo ${argv.join(" ")}`);
   execFileSync("cargo", argv, { stdio: "inherit", cwd: repoRoot });
-  const src = join(repoRoot, "target", "debug", cdylib);
-  if (!existsSync(src)) {
-    throw new Error(`build artifact not found: ${src}`);
+  if (!existsSync(sharedCdylib)) {
+    throw new Error(`build artifact not found: ${sharedCdylib}`);
   }
-  const dest = artifactPath(artifactsRoot, recipe);
-  mkdirSync(dirname(dest), { recursive: true });
-  copyFileSync(src, dest);
-  // cargo keeps the cdylib mtime from its last link; stamp the copy AFTER the
-  // sources so freshness math stays monotonic.
-  utimesSync(dest, new Date(), new Date());
-  validateArtifact(artifactsRoot, recipe);
-  console.log(`[task_020 helper] placed ${recipe} artifact: ${dest}`);
+  const artifact = publishArtifact(artifactsRoot, recipe, sharedCdylib);
+  console.log(`[task_020 helper] published ${recipe} artifact: ${artifact.path}`);
+  return artifact;
 }
 
-/** Builds, validates, and hashes an artifact set while its lock is held. */
+/** Builds, validates, and hashes an artifact set while the shared lock is held. */
 function rebuildRecipeArtifacts(artifactsRoot) {
   const paths = {};
-  for (const recipe of RECIPES) {
-    buildRecipe(artifactsRoot, recipe);
-    paths[recipe] = artifactPath(artifactsRoot, recipe);
-  }
   const digests = {};
   for (const recipe of RECIPES) {
-    validateArtifact(artifactsRoot, recipe);
-    digests[recipe] = digestArtifact(artifactsRoot, recipe);
+    const artifact = buildRecipe(artifactsRoot, recipe);
+    paths[recipe] = artifact.path;
+    digests[recipe] = artifact.digest;
   }
   return { paths, digests };
 }
 
-/** Runs a callback inside the artifact-set transaction. */
+/** Runs a callback inside the shared-target build transaction. */
 export function withRecipeArtifacts(callback, { artifactsRoot = sharedArtifactsRoot } = {}) {
-  acquireArtifactLock(artifactsRoot);
+  acquireSharedTargetLock();
   try {
     const artifacts = rebuildRecipeArtifacts(artifactsRoot);
     return callback({
@@ -158,17 +161,17 @@ export function withRecipeArtifacts(callback, { artifactsRoot = sharedArtifactsR
       rebuild: () => rebuildRecipeArtifacts(artifactsRoot),
     });
   } finally {
-    rmSync(artifactLockPath(artifactsRoot), { force: true });
+    rmSync(sharedTargetLockPath(), { force: true });
   }
 }
 
 /** Validates and rebuilds both recipe artifacts through Cargo. Returns paths
- * and SHA-256 digests calculated while the artifact-set lock is held. */
+ * and SHA-256 digests calculated while the shared target lock is held. */
 export function ensureRecipeArtifacts(options) {
   return withRecipeArtifacts(({ paths, digests }) => ({ ...paths, digests }), options);
 }
 
-/** Loads one recipe's addon (isolated path → isolated dlopen instance). */
+/** Loads one recipe's addon from a fresh immutable path. */
 export function loadRecipe(recipe) {
   const require = createRequire(import.meta.url);
   return withRecipeArtifacts(({ paths }) => require(paths[recipe]));

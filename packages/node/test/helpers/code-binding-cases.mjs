@@ -208,6 +208,76 @@ export function describeCodeBindingCases(getAddon, recipe) {
     expect(readdirSync(retained).sort()).not.toEqual(beforeDenied);
   });
 
+  it(`${recipe}: bound_retrieval_eligible_results`, () => {
+    const { path: repoPath } = gitFixture(`${recipe}-retrieval`);
+    const base = mkdtempSync(join(tmpdir(), `task020-${recipe}-retrieval-`));
+    const provider = new (getAddon().NativeProvider)(authorizedConfig(base));
+    const repo = `repo-${recipe}-retrieval`;
+    provider.codeRegisterJson(JSON.stringify({ scope, repo, path: repoPath }));
+    provider.codeBindJson(JSON.stringify({ scope, repo, branchRef: "refs/heads/main" }));
+    provider.scanRepositoryJson(JSON.stringify({ scope, repo }));
+
+    const recalled = JSON.parse(
+      provider.requireRecallApi().recallJson(
+        JSON.stringify({
+          query: "fixture",
+          scope,
+          requester: { actor: { id: "task-020", kind: "agent", displayName: "task-020" }, roles: [], permissions: [] },
+          modes: ["graph"],
+          cues: [],
+          includeExplanations: true
+        })
+      )
+    );
+    expect(recalled).toHaveProperty("items");
+    expect(Array.isArray(recalled.items)).toBe(true);
+    console.log("bound eligible results", recalled.items.length);
+  });
+
+  it(`${recipe}: bound_graph_traversal_answer`, () => {
+    const { path: repoPath } = gitFixture(`${recipe}-graph`);
+    const base = mkdtempSync(join(tmpdir(), `task020-${recipe}-graph-`));
+    const provider = new (getAddon().NativeProvider)(authorizedConfig(base));
+    const repo = `repo-${recipe}-graph`;
+    provider.codeRegisterJson(JSON.stringify({ scope, repo, path: repoPath }));
+    provider.codeBindJson(JSON.stringify({ scope, repo, branchRef: "refs/heads/main" }));
+    provider.scanRepositoryJson(JSON.stringify({ scope, repo }));
+
+    const answer = JSON.parse(
+      provider.exploreJson(JSON.stringify({ scope, query: "fixture", includeCodeArtifacts: true }))
+    );
+    expect(Array.isArray(answer)).toBe(true);
+    console.log("bound traversal answer", answer.length);
+  });
+
+  it(`${recipe}: bound_reset_preview_apply_outcome`, () => {
+    const { path: repoPath } = gitFixture(`${recipe}-reset`);
+    const base = mkdtempSync(join(tmpdir(), `task020-${recipe}-reset-`));
+    const provider = new (getAddon().NativeProvider)(authorizedConfig(base));
+    const repo = `repo-${recipe}-reset`;
+    provider.codeRegisterJson(JSON.stringify({ scope, repo, path: repoPath }));
+    provider.codeBindJson(JSON.stringify({ scope, repo, branchRef: "refs/heads/main" }));
+    provider.scanRepositoryJson(JSON.stringify({ scope, repo }));
+
+    const preview = JSON.parse(provider.codeResetPreviewJson(JSON.stringify({ scope, repo })));
+    expect(preview.previewHash).toHaveLength(64);
+    const journal = {
+      resetId: `native-reset-${recipe}`,
+      preview,
+      previewHash: preview.previewHash,
+      targetFingerprints: preview.targets.map((target) => [target.recordId, target.fingerprint]),
+      authorizingDecisions: ["task-020 native reset"],
+      checkpoints: [],
+      preservationDigests: preview.preservationDigests
+    };
+    const applied = JSON.parse(
+      provider.codeResetApplyJson(JSON.stringify({ journal, decision: "task-020 native reset" }))
+    );
+    expect(applied.previewHash).toBe(preview.previewHash);
+    expect(applied.checkpoints).toEqual(expect.arrayContaining([expect.stringMatching(/done$/)]));
+    console.log("preview/apply outcome", applied.resetId);
+  });
+
   it(`${recipe}: bound_source_fetch_exact_bytes`, () => {
     const { path: repoPath } = gitFixture(`${recipe}-source`);
     const base = mkdtempSync(join(tmpdir(), `task020-${recipe}-source-`));

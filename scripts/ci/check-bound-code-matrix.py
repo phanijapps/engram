@@ -130,7 +130,9 @@ def cargo_spec(package: str, target: str, filter_name: str, marker: str, backend
     argv = ["cargo", "test", "-p", package]
     if backend == "sqlite" and package == "engram-backend-sqlite":
         argv.extend(["--no-default-features"])
-    if backend == "pgvector" and package in {"engram-mcp", "engram-backend-pgvector"}:
+    if package == "engram-integration":
+        argv.extend(["--features", "sqlite"])
+    if package == "engram-mcp":
         argv.extend(["--features", "pgvector"])
     argv.extend(["--test", target, filter_name, "--", "--test-threads=1"])
     return CommandSpec(argv, marker)
@@ -165,7 +167,7 @@ def default_command(row: Row, sqlite_root: Path, pg_url_name: str) -> CommandSpe
         }
         if row.operation in native:
             test_file = f"code-binding.{row.backend}.test.ts"
-            return CommandSpec(["pnpm", "--filter", "@engram/node", "test", "--", test_file, "-t", native[row.operation]], native[row.operation])
+            return CommandSpec(["pnpm", "--filter", "@engram/node", "exec", "vitest", "run", test_file, "-t", native[row.operation], "--reporter", "verbose"], native[row.operation])
         package, target, filter_name, marker = rust[row.operation]
         return CommandSpec(cargo_spec(package, target, filter_name, marker, row.backend).argv, marker, "coordinator-equivalent", "pending-r5")
     mcp = {

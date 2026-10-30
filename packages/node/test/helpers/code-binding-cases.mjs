@@ -7,7 +7,7 @@
  * r6a-fix2 defect this split repairs).
  */
 import { expect, it } from "vitest";
-import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readdirSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { execFileSync } from "node:child_process";
@@ -56,6 +56,18 @@ export function gitFixture(tag) {
   const oid = run(["rev-parse", "HEAD"]).toString().trim();
   expect(oid).toHaveLength(40);
   return { path: base, oid };
+}
+
+/** Advances a fixture by one committed code revision. */
+export function advanceGitFixture(path) {
+  writeFileSync(join(path, "lib.rs"), "pub fn next_fixture() -> u32 { 2 }\n");
+  const options = {
+    cwd: path,
+    env: { ...process.env, GIT_CONFIG_GLOBAL: "/dev/null", GIT_CONFIG_SYSTEM: "/dev/null" }
+  };
+  execFileSync("git", ["add", "lib.rs"], options);
+  execFileSync("git", ["commit", "--no-gpg-sign", "-m", "next fixture"], options);
+  return execFileSync("git", ["rev-parse", "HEAD"], options).toString().trim();
 }
 
 /** Runs the full per-recipe case battery over ONE loaded getAddon(). The addon
@@ -171,6 +183,29 @@ export function describeCodeBindingCases(getAddon, recipe) {
     expect(() =>
       provider.scanRepositoryJson(JSON.stringify({ scope, repo, branchRef: "refs/heads/other" }))
     ).toThrow(/BindingConflict/);
+
+    // A POPULATED store reopened without host policy cannot use either the
+    // active-generation shortcut or a new commit to acquire or retain bytes.
+    const retained = join(base, "store", "retained");
+    const beforeDenied = readdirSync(retained).sort();
+    const denied = new (getAddon().NativeProvider)(configJson(base));
+    expect(() => denied.scanRepositoryJson(JSON.stringify({ scope, repo }))).toThrow(
+      /CodeAuthorizationRequired/
+    );
+    expect(readdirSync(retained).sort()).toEqual(beforeDenied);
+
+    const nextOid = advanceGitFixture(repoPath);
+    expect(() => denied.scanRepositoryJson(JSON.stringify({ scope, repo }))).toThrow(
+      /CodeAuthorizationRequired/
+    );
+    expect(readdirSync(retained).sort()).toEqual(beforeDenied);
+
+    // The authorized coordinator can then acquire and retain the new commit.
+    const afterDenied = new (getAddon().NativeProvider)(authorizedConfig(base));
+    const next = JSON.parse(afterDenied.scanRepositoryJson(JSON.stringify({ scope, repo })));
+    expect(next.idempotent).toBe(false);
+    expect(next.commitOid).toBe(nextOid);
+    expect(readdirSync(retained).sort()).not.toEqual(beforeDenied);
   });
 
   it(`${recipe}: legacy_lanes_never_ingest_code`, () => {

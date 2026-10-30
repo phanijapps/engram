@@ -2003,6 +2003,8 @@ struct ScanOutcome {
     payload: ScanPayload,
 }
 
+// clippy roll 2026-10: boxing this native payload changes the scan result contract.
+#[allow(clippy::large_enum_variant)]
 #[derive(Debug, Serialize)]
 #[serde(untagged)]
 enum ScanPayload {

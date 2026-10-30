@@ -255,8 +255,8 @@ fn publish_with_lineage(
 
 /// Real seeding: published repo-a (gen-a) + staged repo-b (gen-b), eligible
 /// + ineligible code chunks/entities, ordinary documents, a legacy unbound
-/// symbol, and a REAL Tantivy index fed with the same contributor keys the
-/// bound feed port uses.
+///   symbol, and a REAL Tantivy index fed with the same contributor keys the
+///   bound feed port uses.
 struct Fixture {
     memory: Arc<SqlMemoryService>,
     beliefs: Arc<SqlBeliefStore>,

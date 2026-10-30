@@ -9,9 +9,12 @@ capability_report
 change_impact
 code_bind
 code_health
-code_refresh
 code_rebuild
+code_refresh
 code_repo_register
+code_reset_apply
+code_reset_preview
+code_reset_resume
 code_staleness
 code_status
 consolidate

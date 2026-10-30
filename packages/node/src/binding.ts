@@ -279,6 +279,8 @@ export interface NativeProviderBinding {
   codeResetPreviewJson(requestJson: string): string;
   codeResetApplyJson(requestJson: string): string;
   codeResetResumeJson(requestJson: string): string;
+  /** Explicit embedding backfill, distinct from bound-code scan or rebuild. */
+  backfillEmbeddingsJson(requestJson: string): string;
   /** Optional for compatibility with older injected test bindings. */
   requireEmbeddingProviderApi?(): NativeEmbeddingProviderApiBinding;
   requireMemoryApi(): NativeMemoryApiBinding;

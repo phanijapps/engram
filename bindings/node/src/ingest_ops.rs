@@ -125,6 +125,15 @@ impl IngestOps {
         self.code_reset_preview_json(String::new())
     }
 
+    pub fn backfill_embeddings_json(&self, _request_json: String) -> Result<String> {
+        Err(to_napi_error(
+            engram_runtime::CoreError::CapabilityUnsupported {
+                capability: "legacy-embedding-backfill".into(),
+                reason: "LegacyEmbeddingBackfillUnsupported: use NativeProvider".into(),
+            },
+        ))
+    }
+
     /// TASK-020 binding gate REMOVED (review r6 finding 2): binding-existence
     /// was never authorization for ingesting code bytes, and the legacy
     /// engine no longer ingests code at all — see [`Self::start_scan_job_json`].

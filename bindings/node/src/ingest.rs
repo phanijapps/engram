@@ -63,6 +63,12 @@ impl NativeIngestEngine {
         self.ops.code_reset_resume_json(request_json)
     }
 
+    /// Legacy engines cannot select a host-configured embedding lane.
+    #[napi(js_name = "backfillEmbeddingsJson")]
+    pub fn backfill_embeddings_json(&self, request_json: String) -> Result<String> {
+        self.ops.backfill_embeddings_json(request_json)
+    }
+
     /// Starts a background repository scan; returns `{ jobId }` immediately.
     /// Progress is read via `getScanJobJson`. The request carries
     /// `{ root, scope, repo, branchRef?, policy, actor, sourceName, maxBytes, manifestPath }`.

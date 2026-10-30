@@ -278,6 +278,22 @@ export function describeCodeBindingCases(getAddon, recipe) {
     console.log("preview/apply outcome", applied.resetId);
   });
 
+  it(`${recipe}: bound_embedding_backfill_outcome`, () => {
+    const { path: repoPath } = gitFixture(`${recipe}-backfill`);
+    const base = mkdtempSync(join(tmpdir(), `task020-${recipe}-backfill-`));
+    const provider = new (getAddon().NativeProvider)(authorizedConfig(base));
+    const repo = `repo-${recipe}-backfill`;
+    provider.codeRegisterJson(JSON.stringify({ scope, repo, path: repoPath }));
+    provider.codeBindJson(JSON.stringify({ scope, repo, branchRef: "refs/heads/main" }));
+    const before = provider.codeStatusJson(JSON.stringify({ scope, repo }));
+
+    expect(() => provider.backfillEmbeddingsJson(JSON.stringify(scope))).toThrow(
+      /no embedding provider wired/
+    );
+    expect(provider.codeStatusJson(JSON.stringify({ scope, repo }))).toBe(before);
+    console.log("backfill outcome binding unchanged");
+  });
+
   it(`${recipe}: bound_source_fetch_exact_bytes`, () => {
     const { path: repoPath } = gitFixture(`${recipe}-source`);
     const base = mkdtempSync(join(tmpdir(), `task020-${recipe}-source-`));

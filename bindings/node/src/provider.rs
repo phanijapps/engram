@@ -544,6 +544,27 @@ impl NativeProvider {
         encode(&resumed)
     }
 
+    /// Explicit embedding backfill remains distinct from code scan and rebuild.
+    ///
+    /// The MCP `backfill-embeddings` operation uses the same provider-backed
+    /// embedding lane.  A configured native provider without that lane reports
+    /// the identical typed diagnosis rather than mutating a code binding.
+    #[napi(js_name = "backfillEmbeddingsJson")]
+    pub fn backfill_embeddings_json(&self, request_json: String) -> Result<String> {
+        let scope: Scope = decode(&request_json)?;
+        let _ = scope;
+        let _embedding = self.inner.require_embedding_provider().map_err(|_| {
+            to_napi_error(CoreError::CapabilityUnsupported {
+                capability: "embedding-backfill".into(),
+                reason: "reindex: no embedding provider wired. Run without --slim/--no-vector and check embedding setup. If the space changed, use the documented vector-only rebuild. Backlog not assessed.".into(),
+            })
+        })?;
+        Err(to_napi_error(CoreError::CapabilityUnsupported {
+            capability: "embedding-backfill".into(),
+            reason: "EmbeddingBackfillUnsupported: native embedding backfill requires the shared MCP embedding-backfill core".into(),
+        }))
+    }
+
     /// Returns an export-import handle, or throws if not wired.
     #[napi(js_name = "requireExportImportApi")]
     pub fn require_export_import_api(&self) -> Result<NativeExportImportApi> {

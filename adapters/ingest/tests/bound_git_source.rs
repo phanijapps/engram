@@ -1,3 +1,5 @@
+// clippy roll 2026-10: fixture setup mutates only the exercised default limit.
+#![allow(clippy::field_reassign_with_default)]
 use engram_ingest::git_source::{
     GitResourceLimits, RemotePolicy, acquire_local_branch, acquire_local_branch_with_limits,
     acquire_remote_branch, read_resolved_commit, resolve_local_branch, retain_snapshot,
@@ -663,12 +665,8 @@ mod task_008 {
     fn resource_limits_fail_before_snapshot_staging() {
         let (_guard, local) = repo();
         let mut limits = GitResourceLimits::default();
-        // clippy roll 2026-10: staged fixture defaults make only the exercised limit explicit.
-        #[allow(clippy::field_reassign_with_default)]
         limits.max_snapshot_bytes = 1;
         assert!(acquire_local_branch_with_limits(&local, "refs/heads/main", &limits).is_err());
-        // clippy roll 2026-10: staged fixture defaults make only the exercised limit explicit.
-        #[allow(clippy::field_reassign_with_default)]
         limits.max_snapshot_bytes = usize::MAX;
         limits.max_source_files = 0;
         assert!(acquire_local_branch_with_limits(&local, "refs/heads/main", &limits).is_err());

@@ -1,4 +1,6 @@
 //! Git v0 smart transport with application-owned pack storage, not `git fetch`/`index-pack`.
+// clippy roll 2026-10: fixture setup mutates only the exercised default limit.
+#![allow(clippy::field_reassign_with_default)]
 use super::{
     CommittedFile, ResolvedCommit,
     acquire::{RemotePolicy, RemoteSnapshot},
@@ -678,8 +680,6 @@ mod recovery_tests {
     use std::time::Duration;
     fn test_policy(path: &Path) -> RemotePolicy {
         let mut limits = super::super::GitResourceLimits::default();
-        // clippy roll 2026-10: staged fixture defaults make only the exercised limit explicit.
-        #[allow(clippy::field_reassign_with_default)]
         limits.subprocess_timeout = Duration::from_millis(200);
         RemotePolicy {
             endpoint_allowlist: vec![],

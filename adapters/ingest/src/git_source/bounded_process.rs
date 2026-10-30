@@ -1,3 +1,5 @@
+// clippy roll 2026-10: fixture setup mutates only the exercised default limit.
+#![allow(clippy::field_reassign_with_default)]
 use engram_knowledge::{CoreError, CoreResult};
 use std::{
     io::Read,
@@ -536,8 +538,6 @@ mod task_008 {
     #[test]
     fn child_timeout_is_killed_and_reaped() {
         let mut limits = GitResourceLimits::default();
-        // clippy roll 2026-10: staged fixture defaults make only the exercised limit explicit.
-        #[allow(clippy::field_reassign_with_default)]
         limits.subprocess_timeout = Duration::from_millis(50);
         let mut command = Command::new(fixture_python());
         command.args(["-c", "import time; time.sleep(10)"]);
@@ -552,8 +552,6 @@ mod task_008 {
     #[test]
     fn concurrent_pipe_drain_caps_output_before_allocation() {
         let mut limits = GitResourceLimits::default();
-        // clippy roll 2026-10: staged fixture defaults make only the exercised limit explicit.
-        #[allow(clippy::field_reassign_with_default)]
         limits.subprocess_timeout = Duration::from_secs(2);
         limits.max_stderr_bytes = 64;
         let mut stdout = Command::new(fixture_python());
@@ -577,8 +575,6 @@ mod task_008 {
         let temp = tempfile::tempdir().unwrap();
         let marker = temp.path().join("descendant.pid");
         let mut limits = GitResourceLimits::default();
-        // clippy roll 2026-10: staged fixture defaults make only the exercised limit explicit.
-        #[allow(clippy::field_reassign_with_default)]
         limits.subprocess_timeout = Duration::from_millis(700);
         let mut command = Command::new(fixture_python());
         command.args(["-c","import subprocess,sys; p=subprocess.Popen([sys.executable,'-c','import time; time.sleep(30)']); open(sys.argv[1],'w').write(str(p.pid))"]).arg(&marker);
@@ -671,8 +667,6 @@ mod task_008 {
         let mut command = Command::new(fixture_python());
         command.args(["-c", "import os,sys,time; p=os.fork();\nif p==0:\n os.setsid(); open(sys.argv[1],'w').write(str(os.getpid())); time.sleep(30)\nelse:\n time.sleep(30)"]).arg(&pid_path);
         let mut limits = GitResourceLimits::default();
-        // clippy roll 2026-10: staged fixture defaults make only the exercised limit explicit.
-        #[allow(clippy::field_reassign_with_default)]
         limits.subprocess_timeout = Duration::from_millis(300);
         let started = Instant::now();
         let result = run_limited(&mut command, &limits, 128);
@@ -697,8 +691,6 @@ mod task_008 {
         let mut command = Command::new(fixture_python());
         command.args(["-c", "import time; time.sleep(30)"]);
         let mut limits = GitResourceLimits::default();
-        // clippy roll 2026-10: staged fixture defaults make only the exercised limit explicit.
-        #[allow(clippy::field_reassign_with_default)]
         limits.subprocess_timeout = Duration::from_millis(50);
         let admitted = run_limited_input(&mut command, &limits, 128, Some(vec![0; 512]), || Ok(()));
         assert!(
@@ -753,14 +745,10 @@ mod task_008 {
         let primaries: &[(&str, fn(&mut Command, &mut GitResourceLimits))] = &[
             ("time limit", |command, limits| {
                 command.args(["-c", "import time; time.sleep(30)"]);
-                // clippy roll 2026-10: staged fixture defaults make only the exercised limit explicit.
-                #[allow(clippy::field_reassign_with_default)]
                 limits.subprocess_timeout = Duration::from_millis(50);
             }),
             ("output exceeded", |command, limits| {
                 command.args(["-c", "import sys; sys.stdout.write('x'*10000000)"]);
-                // clippy roll 2026-10: staged fixture defaults make only the exercised limit explicit.
-                #[allow(clippy::field_reassign_with_default)]
                 limits.subprocess_timeout = Duration::from_secs(2);
                 limits.max_stderr_bytes = 64;
             }),

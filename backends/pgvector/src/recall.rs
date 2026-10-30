@@ -15,6 +15,8 @@
 //! SQLite fuses BM25 there; Postgres deployments run recall degraded for
 //! keyword until the tsvector lane ships (pgvector-backend spec, PS2 note).
 
+// clippy roll 2026-10: test-only graph lane helpers remain available to conditional test builds.
+#![allow(dead_code)]
 use std::sync::Arc;
 
 use engram_belief::{BeliefQuery, BeliefRepository};

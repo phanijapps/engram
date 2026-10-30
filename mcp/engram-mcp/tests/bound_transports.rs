@@ -9,6 +9,8 @@
 //! exit code for one-shot. Non-JSON startup/checkpoint lines on stdout are
 //! skipped; every response is parsed as a JSON-RPC envelope.
 
+// clippy roll 2026-10: server fixture retains its storage path for scenario construction.
+#![allow(dead_code)]
 use std::io::{BufRead, BufReader, Write};
 use std::process::{Child, Command, Stdio};
 use std::sync::mpsc;

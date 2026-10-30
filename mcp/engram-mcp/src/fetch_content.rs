@@ -21,6 +21,9 @@
 //! `location.path`. Multi-repo scopes disambiguate via the `repository`
 //! filter.
 
+// clippy roll 2026-10: test fixture helpers and tuple input preserve existing transport cases.
+#![allow(dead_code)]
+#![allow(clippy::type_complexity)]
 use engram_domain::KnowledgeChunkKind;
 use futures::executor::block_on;
 use serde_json::{Value, json};

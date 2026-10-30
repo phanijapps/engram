@@ -7,6 +7,8 @@
 //! over a REAL file-backed store — no port doubles. The pgvector twin lives
 //! in `backends/pgvector/tests/bound_recipe.rs` with the same case names.
 
+// clippy roll 2026-10: temporary test fixture clears readonly permissions.
+#![allow(clippy::permissions_set_readonly_false)]
 use std::path::Path;
 
 use engram_domain::types::ScopeMappingStrategy;
@@ -16,7 +18,6 @@ use engram_domain::{
     Sensitivity, SourceDocument, SourceDocumentKind, SourceKind, Visibility,
 };
 use engram_integration::{CapabilityPolicy, EmbeddingProviderConfig, EngramConfig, MigrationMode};
-use engram_knowledge::{CodeBindingRepository, KnowledgeRepository};
 use engram_runtime::CoreError;
 use futures::executor::block_on;
 

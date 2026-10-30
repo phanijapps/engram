@@ -11,6 +11,9 @@
 //! validation), and the REAL authorized provider chain
 //! `code_fetch_exact`/`code_fetch_exact_at`.
 
+// clippy roll 2026-10: test fixture record shape and publish helper preserve scenario inputs.
+#![allow(dead_code)]
+#![allow(clippy::too_many_arguments)]
 use std::sync::Arc;
 
 use async_trait::async_trait;

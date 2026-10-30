@@ -7,7 +7,7 @@
 use engram_domain::{CodeAttempt, CodeBinding, CodeGeneration, RepoId, Scope};
 use engram_knowledge::{CodeBindingRepository, CodeEligibilityGate};
 use engram_store_pgvector::PgCodeBindingRepository;
-use std::io::{BufRead, BufReader, Read};
+use std::io::{BufRead, BufReader};
 use std::process::{Command, Stdio};
 
 fn url() -> String {

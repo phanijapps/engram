@@ -12,7 +12,9 @@ serde.workspace = true
 serde_json.workspace = true
 engram-domain = { path = "../../core/domain", version = "0.1.0" }
 engram-runtime = { path = "../../core/runtime", version = "0.1.0" }
-engram-integration = { path = "../../core/integration", version = "0.1.0" }
+engram-integration = { path = "../../core/integration", version = "0.1.0", features = [
+    "code-lanes",
+] }
 engram-store-pgvector = { path = "../../adapters/pgvector", version = "0.1.0" }
 engram-belief = { path = "../../core/belief", version = "0.1.0" }
 engram-memory = { path = "../../core/memory", version = "0.1.0" }

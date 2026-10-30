@@ -15,8 +15,9 @@ export interface EngramTransport {
   // TASK-020: the code-binding surface is OPTIONAL — a transport without it
   // fails typed (`EngramCodeBindingUnsupportedError`), never silently.
   codeBind?(request: CodeBindRequest): Promise<CodeBindingRecord>;
+  codeRegister?(request: CodeRegisterRequest): Promise<unknown>;
   codeStatus?(request: { scope: unknown; repo: string }): Promise<CodeBindingStatusResult>;
-  codeObserveRef?(request: CodeObserveRefRequest): Promise<CodeRefObservation>;
+  codeRefresh?(request: CodeRefreshRequest): Promise<CodeRefObservation>;
   scanCode?(request: CodeScanRequest): Promise<unknown>;
 }
 
@@ -26,7 +27,8 @@ import type {
   CodeBindRequest,
   CodeBindingRecord,
   CodeBindingStatusResult,
-  CodeObserveRefRequest,
+  CodeRefreshRequest,
+  CodeRegisterRequest,
   CodeRefObservation,
   CodeScanRequest
 } from "./code-binding.js";
@@ -34,7 +36,8 @@ import type {
 /** The required code-binding surface (what `EngramCodeBindingClient` uses). */
 export interface CodeBindingTransport {
   codeBind(request: CodeBindRequest): Promise<CodeBindingRecord>;
+  codeRegister(request: CodeRegisterRequest): Promise<unknown>;
   codeStatus(request: { scope: unknown; repo: string }): Promise<CodeBindingStatusResult>;
-  codeObserveRef(request: CodeObserveRefRequest): Promise<CodeRefObservation>;
+  codeRefresh(request: CodeRefreshRequest): Promise<CodeRefObservation>;
   scanCode(request: CodeScanRequest): Promise<unknown>;
 }

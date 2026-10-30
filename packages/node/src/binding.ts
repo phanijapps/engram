@@ -267,10 +267,13 @@ export interface NativeProviderBinding {
   exploreJson(requestJson: string): string;
   consolidateJson(requestJson: string): string;
   scanRepositoryJson(requestJson: string): string;
-  /** TASK-020 bound code operations over the neutral coordinator. */
+  /** TASK-020 bound code operations over the neutral coordinator — the
+   *  SAME shared handlers the MCP stdio/one-shot surfaces forward to
+   *  (register → bind → status → registered-locator refresh). */
   codeBindJson(requestJson: string): string;
   codeStatusJson(requestJson: string): string;
-  codeObserveRefJson(requestJson: string): string;
+  codeRegisterJson(requestJson: string): string;
+  codeRefreshJson(requestJson: string): string;
   /** Optional for compatibility with older injected test bindings. */
   requireEmbeddingProviderApi?(): NativeEmbeddingProviderApiBinding;
   requireMemoryApi(): NativeMemoryApiBinding;

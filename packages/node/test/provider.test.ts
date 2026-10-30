@@ -25,7 +25,8 @@ function mockProvider(): {
     scanRepositoryJson: capture("scan"),
     codeBindJson: capture("codeBind"),
     codeStatusJson: capture("codeStatus"),
-    codeObserveRefJson: capture("codeObserveRef"),
+    codeRegisterJson: capture("codeRegister"),
+    codeRefreshJson: capture("codeRefresh"),
     requireMemoryApi: () => ({
       searchJson: capture("search"),
       writeJson: capture("write"),

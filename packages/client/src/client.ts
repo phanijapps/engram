@@ -13,7 +13,8 @@ import {
   type CodeBindRequest,
   type CodeBindingRecord,
   type CodeBindingStatusResult,
-  type CodeObserveRefRequest,
+  type CodeRefreshRequest,
+  type CodeRegisterRequest,
   type CodeRefObservation,
   type CodeScanRequest
 } from "./code-binding.js";
@@ -66,20 +67,23 @@ function codeTransport(
   transport: EngramTransport
 ): {
   codeBind(request: CodeBindRequest): Promise<CodeBindingRecord>;
+  codeRegister(request: CodeRegisterRequest): Promise<unknown>;
   codeStatus(request: { scope: unknown; repo: string }): Promise<CodeBindingStatusResult>;
-  codeObserveRef(request: CodeObserveRefRequest): Promise<CodeRefObservation>;
+  codeRefresh(request: CodeRefreshRequest): Promise<CodeRefObservation>;
   scanCode(request: CodeScanRequest): Promise<unknown>;
 } {
   const candidate = transport as {
     codeBind?: (request: CodeBindRequest) => Promise<CodeBindingRecord>;
+    codeRegister?: (request: CodeRegisterRequest) => Promise<unknown>;
     codeStatus?: (request: { scope: unknown; repo: string }) => Promise<CodeBindingStatusResult>;
-    codeObserveRef?: (request: CodeObserveRefRequest) => Promise<CodeRefObservation>;
+    codeRefresh?: (request: CodeRefreshRequest) => Promise<CodeRefObservation>;
     scanCode?: (request: CodeScanRequest) => Promise<unknown>;
   };
   if (
     !candidate.codeBind ||
+    !candidate.codeRegister ||
     !candidate.codeStatus ||
-    !candidate.codeObserveRef ||
+    !candidate.codeRefresh ||
     !candidate.scanCode
   ) {
     throw new EngramCodeBindingUnsupportedError();
@@ -107,9 +111,15 @@ export class EngramCodeBindingClient {
     return this.#transport.codeStatus(request);
   }
 
-  /** Records one on-request ref observation. */
-  codeObserveRef(request: CodeObserveRefRequest): Promise<CodeRefObservation> {
-    return this.#transport.codeObserveRef(request);
+  /** Registers a repository's acquisition locator (r6 finding 5). */
+  codeRegister(request: CodeRegisterRequest): Promise<unknown> {
+    return this.#transport.codeRegister(request);
+  }
+
+  /** ONE on-request refresh of the bound branch ref, resolved from the
+   *  REGISTERED locator (r6 finding 5) — never a caller-supplied OID. */
+  codeRefresh(request: CodeRefreshRequest): Promise<CodeRefObservation> {
+    return this.#transport.codeRefresh(request);
   }
 
   /** Scans a BOUND repository (persisted binding mandatory — no direct-ingest

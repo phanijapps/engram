@@ -30,7 +30,9 @@ const denyingTransport: EngramTransport = {
       )
     ),
   codeStatus: () => Promise.reject(new Error("BindingRequired")),
-  codeObserveRef: () =>
+  codeRegister: () =>
+    Promise.reject(new Error("PolicyDenied: CodeAuthorizationRequired")),
+  codeRefresh: () =>
     Promise.reject(new Error("BindingConflict: asserted branch does not match the bound ref")),
   scanCode: () =>
     Promise.reject(
@@ -53,6 +55,12 @@ const workingTransport: EngramTransport = {
       version: 1,
       activeGeneration: null,
       epoch: 0
+    }),
+  codeRegister: (request) =>
+    Promise.resolve({
+      repoId: request.repo,
+      locatorId: request.path,
+      acquisition: request.mode === "configured-remote" ? "configured_remote" : "local_only"
     }),
   codeStatus: () =>
     Promise.resolve({
@@ -82,10 +90,10 @@ const workingTransport: EngramTransport = {
         generation: null
       }
     } satisfies CodeBindingStatusResult),
-  codeObserveRef: (request) =>
+  codeRefresh: () =>
     Promise.resolve({
       branchRef: "refs/heads/main",
-      observedOid: request.observedOid,
+      observedOid: "c".repeat(40),
       observedAt: "2026-10-30T00:00:00Z",
       policy: "on_request"
     }),
@@ -108,12 +116,16 @@ describe("task_020", () => {
     expect(status.checkpoint.repoId).toBe("repo-client");
     expect(status.indexedCommitOid).toBeNull();
 
-    const observed = await code.codeObserveRef({
+    const registration = await code.codeRegister({
       scope,
       repo: "repo-client",
-      observedOid: "b".repeat(40)
+      path: "/repos/repo-client",
+      mode: "local-only"
     });
-    expect(observed.observedOid).toBe("b".repeat(40));
+    expect(registration).toMatchObject({ repoId: "repo-client" });
+
+    const observed = await code.codeRefresh({ scope, repo: "repo-client" });
+    expect(observed.observedOid).toBe("c".repeat(40));
     expect(observed.policy).toBe("on_request");
 
     const scan = await code.scanCode({ path: "/repo", scope, repo: "repo-client" });
@@ -131,9 +143,7 @@ describe("task_020", () => {
     await expect(
       code.codeBind({ scope, repo: "repo-x", branchRef: "refs/heads/other" })
     ).rejects.toThrow(/BindingRequired/);
-    await expect(
-      code.codeObserveRef({ scope, repo: "repo-x", observedOid: "a".repeat(40) })
-    ).rejects.toThrow(/BindingConflict/);
+    await expect(code.codeRefresh({ scope, repo: "repo-x" })).rejects.toThrow(/BindingConflict/);
   });
 
   it("direct_retrieval_denied", async () => {

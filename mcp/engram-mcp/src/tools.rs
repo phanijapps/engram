@@ -2560,17 +2560,20 @@ impl Store {
 
 // --- TASK-021: scoped bound-code operations through stdio ---------------------
 //
-// The MCP surface mirrors the Rust SDK / native N-API / TS code operations:
-// register → bind → status (binding-keyed freshness + checkpoint) → refresh
-// (on-request ref observation resolved from the REGISTERED locator, never a
-// checkout HEAD). Every failure is a TYPED, inspectable diagnosis — the
-// JSON-RPC error message begins with the stable kind (`BindingRequired`,
-// `BindingConflict`, `CapabilityUnsupported`, …) so transports can branch
-// without parsing prose.
+// NOT an independent implementation: every operation forwards to the SAME
+// shared handlers the Rust facade, native N-API binding, and TypeScript
+// surfaces use — the coordinator's `register`/`bind`/`status`/
+// `refresh_from_registration` (review r6 finding 5 closed the parity gap:
+// register + registered-locator refresh are now callable on every surface,
+// and the native `codeObserveRef` OID-supplying shortcut is gone). Every
+// failure is a TYPED, inspectable diagnosis — the JSON-RPC error message
+// begins with the stable kind (`BindingRequired`, `BindingConflict`,
+// `CapabilityUnsupported`, …) so transports can branch without parsing
+// prose.
 
 use engram_domain::RepoId;
 use engram_integration::code_binding::CodeBindingStatus;
-use engram_knowledge::{AcquisitionMode, CodeBindingRepository, RepositoryRegistration};
+use engram_knowledge::{AcquisitionMode, RepositoryRegistration};
 
 /// Maps a coordinator/provider failure onto the typed tool-error envelope:
 /// the message carries the CoreError's own text (which begins with the
@@ -2666,35 +2669,18 @@ pub fn code_status(app: &App, args: &Value) -> Result<Value, ToolError> {
 }
 
 /// `code_refresh`: ONE on-request observation of the bound branch ref,
-/// resolved from the REGISTERED repository locator (local git only — no
-/// fetch, no checkout mutation). The observed OID/time is recorded
-/// separately from the indexed generation OID.
+/// delegated to the SHARED registered-locator refresh
+/// (`CodeBindingCoordinator::refresh_from_registration`) — the same handler
+/// the native N-API/TS surfaces call. The observed OID/time is resolved from
+/// the REGISTERED locator's local git (no fetch, no checkout mutation, never
+/// a caller-supplied OID) and recorded separately from the indexed
+/// generation OID.
 pub fn code_refresh(app: &App, args: &Value) -> Result<Value, ToolError> {
     let repo = req_repo(args)?;
     let coordinator = app.provider.code_bindings().map_err(code_authority_error)?;
-    let store = coordinator.store();
-    let registration = block_on(store.get_registration(&repo))
-        .map_err(code_authority_error)?
-        .ok_or_else(|| {
-            invalid("BindingRequired: no registered repository — register a locator first")
-        })?;
-    let AcquisitionMode::LocalOnly = registration.acquisition else {
-        return Err(invalid(
-            "configured-remote acquisition requires the remote refresh path (not this tool)",
-        ));
-    };
-    let binding = block_on(store.get_binding(&app.scope, &repo))
-        .map_err(code_authority_error)?
-        .ok_or_else(|| invalid("BindingRequired: bind the repository before refreshing its ref"))?;
-    let resolved = engram_ingest::git_source::resolve_local_branch(
-        std::path::Path::new(&registration.locator_id),
-        &binding.branch_ref,
-    )
-    .map_err(code_authority_error)?;
     let actor = system_actor();
-    let observation =
-        block_on(coordinator.record_ref_observation(&actor, &app.scope, &repo, &resolved.oid))
-            .map_err(code_authority_error)?;
+    let observation = block_on(coordinator.refresh_from_registration(&actor, &app.scope, &repo))
+        .map_err(code_authority_error)?;
     Ok(protocol::text_content(format!(
         "OBSERVED {} {} at {} (policy {})",
         observation.branch_ref,

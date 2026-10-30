@@ -62,7 +62,8 @@ class StubNativeProvider {
     return '{"repoId":"repo-stub","branchRef":"refs/heads/main","version":1,"activeGeneration":null,"epoch":0}';
   }
   codeStatusJson(): string { return "{}"; }
-  codeObserveRefJson(): string { return "{}"; }
+  codeRegisterJson(): string { return "{}"; }
+  codeRefreshJson(): string { return "{}"; }
   requireMemoryApi() {
     return {
       searchJson(): string {

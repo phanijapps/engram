@@ -301,18 +301,53 @@ impl NativeProvider {
         encode(&status)
     }
 
-    /// Records one on-request ref observation: `{ scope, repo, observedOid }`
-    /// → the serialized observation (policy on_request; stamped with the
-    /// coordinator clock; stored separately from the indexed OID).
-    #[napi(js_name = "codeObserveRefJson")]
-    pub fn code_observe_ref_json(&self, request_json: String) -> Result<String> {
-        let request: CodeObserveRefRequest = decode(&request_json)?;
+    /// Registers a repository's acquisition locator: `{ scope, repo, path,
+    /// mode? }` → the serialized registration. `mode` is `local-only` (the
+    /// default) or `configured-remote`; an unknown mode is a typed
+    /// `InvalidRequest`. The SAME shared coordinator seam the MCP and
+    /// one-shot surfaces use (authorize before store).
+    #[napi(js_name = "codeRegisterJson")]
+    pub fn code_register_json(&self, request_json: String) -> Result<String> {
+        let request: CodeRegisterRequest = decode(&request_json)?;
+        let acquisition = match request.mode.as_deref() {
+            None | Some("local-only") => engram_knowledge::AcquisitionMode::LocalOnly,
+            Some("configured-remote") => engram_knowledge::AcquisitionMode::ConfiguredRemote,
+            Some(other) => {
+                return Err(to_napi_error(engram_runtime::CoreError::InvalidRequest {
+                    reason: format!(
+                        "unknown acquisition mode {other:?} (local-only | configured-remote)"
+                    ),
+                }));
+            }
+        };
         let coordinator = self.inner.code_bindings().map_err(to_napi_error)?.clone();
-        let observation = futures::executor::block_on(coordinator.record_ref_observation(
+        let registration = futures::executor::block_on(coordinator.register(
+            &system_code_actor(),
+            &request.scope,
+            engram_knowledge::RepositoryRegistration {
+                repo_id: request.repo.clone(),
+                locator_id: request.path,
+                acquisition,
+            },
+        ))
+        .map_err(to_napi_error)?;
+        encode(&registration)
+    }
+
+    /// ONE on-request refresh of the bound branch ref: `{ scope, repo }` →
+    /// the serialized observation. Delegates to the SAME shared
+    /// registered-locator refresh as stdio/one-shot — the OID is resolved
+    /// from the REGISTERED locator's local git, never supplied by the caller
+    /// (the former `codeObserveRefJson` accepted arbitrary syntactically
+    /// valid OIDs; review r6 finding 5 removed it).
+    #[napi(js_name = "codeRefreshJson")]
+    pub fn code_refresh_json(&self, request_json: String) -> Result<String> {
+        let request: CodeStatusRequest = decode(&request_json)?;
+        let coordinator = self.inner.code_bindings().map_err(to_napi_error)?.clone();
+        let observation = futures::executor::block_on(coordinator.refresh_from_registration(
             &system_code_actor(),
             &request.scope,
             &request.repo,
-            &request.observed_oid,
         ))
         .map_err(to_napi_error)?;
         encode(&observation)
@@ -1714,7 +1749,8 @@ struct CodeBindRequest {
     branch_ref: String,
 }
 
-/// `{ scope, repo }` for [`NativeProvider::code_status_json`].
+/// `{ scope, repo }` for [`NativeProvider::code_status_json`] and
+/// [`NativeProvider::code_refresh_json`].
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct CodeStatusRequest {
@@ -1722,14 +1758,15 @@ struct CodeStatusRequest {
     repo: engram_domain::RepoId,
 }
 
-/// `{ scope, repo, observed_oid }` for
-/// [`NativeProvider::code_observe_ref_json`].
+/// `{ scope, repo, path, mode? }` for
+/// [`NativeProvider::code_register_json`].
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct CodeObserveRefRequest {
+struct CodeRegisterRequest {
     scope: Scope,
     repo: engram_domain::RepoId,
-    observed_oid: String,
+    path: String,
+    mode: Option<String>,
 }
 
 /// System actor attributed to bound code operations performed through the

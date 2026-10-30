@@ -109,17 +109,23 @@ export interface NativeProviderTransport {
   /** Bind a repository branch (TASK-020): same-ref idempotent, other branch
    *  BindingConflict. */
   codeBind(request: { scope: unknown; repo: string; branchRef: string }): Promise<unknown>;
+  /** Register a repository's acquisition locator (r6 finding 5): the SAME
+   *  shared seam as stdio/one-shot — `mode` is `local-only` (default) or
+   *  `configured-remote`. */
+  codeRegister(request: {
+    scope: unknown;
+    repo: string;
+    path: string;
+    mode?: "local-only" | "configured-remote";
+  }): Promise<unknown>;
   /** Binding-keyed status: indexed OID, on-request ref freshness (unknown
    *  until an explicit observation — never checkout-HEAD-derived), and the
    *  binding-keyed checkpoint. */
   codeStatus(request: { scope: unknown; repo: string }): Promise<unknown>;
-  /** Record one on-request ref observation (observed OID, on-request
-   *  policy; stored separately from the indexed OID). */
-  codeObserveRef(request: {
-    scope: unknown;
-    repo: string;
-    observedOid: string;
-  }): Promise<unknown>;
+  /** ONE on-request refresh of the bound branch ref, resolved from the
+   *  REGISTERED locator's local git (r6 finding 5) — the caller never
+   *  supplies an OID; the former codeObserveRef surface is gone. */
+  codeRefresh(request: { scope: unknown; repo: string }): Promise<unknown>;
   /** Run a consolidation cycle (reflection + decay). A system requester is
    *  injected; callers pass only `scope` + optional `dryRun` / `since` / `until`. */
   consolidate(request: {
@@ -284,12 +290,17 @@ class JsonNativeProviderTransport implements NativeProviderTransport {
     return decode(this.provider.codeStatusJson(encode(request)));
   }
 
-  async codeObserveRef(request: {
+  async codeRegister(request: {
     scope: unknown;
     repo: string;
-    observedOid: string;
+    path: string;
+    mode?: "local-only" | "configured-remote";
   }): Promise<unknown> {
-    return decode(this.provider.codeObserveRefJson(encode(request)));
+    return decode(this.provider.codeRegisterJson(encode(request)));
+  }
+
+  async codeRefresh(request: { scope: unknown; repo: string }): Promise<unknown> {
+    return decode(this.provider.codeRefreshJson(encode(request)));
   }
 
   async consolidate(request: {

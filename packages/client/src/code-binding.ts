@@ -84,11 +84,18 @@ export interface CodeStatusRequest {
   repo: string;
 }
 
-/** Observe request (`{ scope, repo, observedOid }`). */
-export interface CodeObserveRefRequest {
+/** Registration request (`{ scope, repo, path, mode? }`). */
+export interface CodeRegisterRequest {
   scope: unknown;
   repo: string;
-  observedOid: string;
+  path: string;
+  mode?: "local-only" | "configured-remote";
+}
+
+/** Refresh request (`{ scope, repo }`) — the registered-locator refresh. */
+export interface CodeRefreshRequest {
+  scope: unknown;
+  repo: string;
 }
 
 /** Bound code-scan request (persisted binding mandatory). */

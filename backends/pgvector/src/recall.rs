@@ -645,8 +645,18 @@ mod authority_tests {
         std::env::var("ENGRAM_TEST_PG_URL").expect("marked disposable PostgreSQL URL required")
     }
 
-    /// The approved disposable-fixture marker: refuse any other database.
-    fn marker_assert(conn: &PgConnection) {
+    const DISPOSABLE_FIXTURE_MARKER: &str =
+        "engram.factory.job=010-project-bound-branch-indexing; disposable=true";
+
+    #[derive(Debug)]
+    enum ResetVectorStoreRefusal {
+        ConnectionUnavailable,
+        MarkerQueryFailed,
+        DisposableMarkerMismatch,
+        ResetFailed,
+    }
+
+    fn marker_assert(conn: &PgConnection) -> Result<(), ResetVectorStoreRefusal> {
         let marker = conn
             .block_on(async {
                 conn.client
@@ -657,28 +667,27 @@ mod authority_tests {
                     )
                     .await
             })
-            .expect("marker query");
-        assert_eq!(
-            marker.get::<_, Option<String>>(0).as_deref(),
-            Some("engram.factory.job=010-project-bound-branch-indexing; disposable=true"),
-            "disposable fixture marker mismatch — refusing to touch any other database"
-        );
+            .map_err(|_| ResetVectorStoreRefusal::MarkerQueryFailed)?
+            .get::<_, Option<String>>(0);
+        if marker.as_deref() != Some(DISPOSABLE_FIXTURE_MARKER) {
+            return Err(ResetVectorStoreRefusal::DisposableMarkerMismatch);
+        }
+        Ok(())
     }
 
     /// Reset only vector state after verifying the exact disposable marker.
     ///
     /// The authority fixture owns its embedding dimensions and must not inherit
     /// an identity written by another ignored Pg test in the shared fixture.
-    fn reset_vector_store(conn: &PgConnection) {
-        marker_assert(conn);
-        conn.block_on(async {
-            conn.client
-                .batch_execute(
-                    "DROP TABLE IF EXISTS vectors; DROP TABLE IF EXISTS vector_embedding_space;",
-                )
-                .await
-        })
-        .expect("reset disposable vector state");
+    fn reset_vector_store() -> Result<(), ResetVectorStoreRefusal> {
+        let connection = PgConnection::connect(&url())
+            .map_err(|_| ResetVectorStoreRefusal::ConnectionUnavailable)?;
+        marker_assert(&connection)?;
+        connection
+            .block_on(connection.client.batch_execute(
+                "DROP TABLE IF EXISTS vectors; DROP TABLE IF EXISTS vector_embedding_space;",
+            ))
+            .map_err(|_| ResetVectorStoreRefusal::ResetFailed)
     }
 
     fn scope(run: &str) -> engram_domain::Scope {
@@ -860,7 +869,7 @@ mod authority_tests {
         use engram_knowledge::CodeEligibility;
         let run = scope_run();
         let conn = PgConnection::connect(&url()).expect("connect disposable fixture");
-        marker_assert(&conn);
+        marker_assert(&conn).expect("typed refusal protects unmarked databases");
         conn.block_on(async {
             conn.client
                 .batch_execute(&engram_store_pgvector::schema::schema_sql(2))
@@ -1099,8 +1108,8 @@ mod authority_tests {
     #[ignore = "requires ENGRAM_TEST_PG_URL against the approved marked disposable fixture"]
     fn pg_authority_failure_preserves_ordinary_and_denies_code_dependent() {
         let run = scope_run();
+        reset_vector_store().expect("typed refusal protects unmarked databases from vector reset");
         let conn = PgConnection::connect(&url()).expect("connect disposable fixture");
-        reset_vector_store(&conn);
         conn.block_on(async {
             conn.client
                 .batch_execute(&engram_store_pgvector::schema::schema_sql(2))

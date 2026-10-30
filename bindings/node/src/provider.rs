@@ -2166,7 +2166,27 @@ mod tests {
             matches!(&neither, Err(CoreError::InvalidRequest { reason }) if reason.contains("BindingRequired")),
             "neither lane selected must deny typed, got {neither:?}"
         );
-        // Code intent without a registration: the pipeline's typed denial.
+        // Code intent defaults to a typed host-authority denial.
+        let unauthorized = scan_via_provider(
+            &provider,
+            &ScanRepoRequest {
+                path: None,
+                scope: scope.clone(),
+                repo: Some(engram_domain::RepoId("repo-unregistered".to_owned())),
+                branch_ref: None,
+                scan_filter: None,
+            },
+        );
+        assert!(
+            matches!(&unauthorized, Err(CoreError::PolicyDenied { reason }) if reason.contains("CodeAuthorizationRequired")),
+            "code ingestion defaults to typed host-authority denial, got {unauthorized:?}"
+        );
+        let provider = provider
+            .with_code_authorizer(std::sync::Arc::new(
+                engram_integration::code_binding::ScopeSetAuthorizer::new(vec![scope.clone()]),
+            ))
+            .expect("host authorizer installs");
+        // An authorized code request without a registration reaches the pipeline's typed denial.
         let unregistered = scan_via_provider(
             &provider,
             &ScanRepoRequest {

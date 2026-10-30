@@ -208,8 +208,12 @@ impl GraphExtractor {
                 aliases: Vec::new(),
                 scope: source.scope.clone(),
                 source_refs: vec![EvidenceRef {
-                    target_type: EvidenceTargetType::Document,
-                    target_id: Some(document.id.to_string()),
+                    // Entity evidence must resolve through the canonical
+                    // scoped source port. Documents have no keyed read port,
+                    // so a Document reference makes every code entity
+                    // unresolved in the recall serving guard.
+                    target_type: EvidenceTargetType::Source,
+                    target_id: Some(source.id.to_string()),
                     uri: None,
                     quote: None,
                     location: Some(SourceLocation {

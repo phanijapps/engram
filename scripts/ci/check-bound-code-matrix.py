@@ -125,11 +125,29 @@ def default_command(row: Row, sqlite_root: Path, pg_url_name: str) -> list[str]:
         return ["cargo", "test", "-p", "engram-backend-pgvector", "--test", "bound_recipe", "--", "--test-threads=1"]
     if row.transport == "native":
         return native_helper_argv(row.backend)
-    storage = str(sqlite_root / row.operation / row.backend / row.transport)
-    command = ["cargo", "run", "-q", "-p", "engram-mcp", "--", "--storage", storage, "--no-vector"]
-    if row.backend == "pgvector":
-        command.extend(["--backend", "pgvector", "--pg-connection-string-env", pg_url_name])
-    return command + (["status"] if row.transport == "mcp-oneshot" else [])
+    # The real transport harness starts the stdio server and executes its
+    # register -> bind -> status -> refresh flow, or invokes the one-shot
+    # code subcommands in that same authorized order.  It carries the PG URL
+    # only through the child environment, never through receipt argv.
+    test_name = (
+        "task_021::stdio_dispatch_parity"
+        if row.transport == "mcp-stdio"
+        else "task_022::oneshot_dispatch_parity"
+    )
+    return [
+        "cargo",
+        "test",
+        "-p",
+        "engram-mcp",
+        "--no-default-features",
+        "--features",
+        "pgvector",
+        "--test",
+        "bound_transports",
+        test_name,
+        "--",
+        "--test-threads=1",
+    ]
 
 
 class MatrixRunner:

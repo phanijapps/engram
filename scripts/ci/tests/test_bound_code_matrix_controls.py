@@ -80,6 +80,15 @@ class BoundCodeMatrixControls(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "custody"):
                 matrix.load_private_pg_env(str(fixture), "ENGRAM_TEST_PG_URL")
 
+    def test_mcp_rows_execute_authorized_real_transport_harnesses(self):
+        root = Path("/tmp/matrix-control")
+        stdio = matrix.default_command(matrix.Row("binding", "sqlite", "mcp-stdio", True), root, "ENGRAM_TEST_PG_URL")
+        oneshot = matrix.default_command(matrix.Row("binding", "pgvector", "mcp-oneshot", True), root, "ENGRAM_TEST_PG_URL")
+        self.assertEqual(stdio[:10], ["cargo", "test", "-p", "engram-mcp", "--no-default-features", "--features", "pgvector", "--test", "bound_transports", "task_021::stdio_dispatch_parity"])
+        self.assertIn("task_021::stdio_dispatch_parity", stdio)
+        self.assertIn("task_022::oneshot_dispatch_parity", oneshot)
+        self.assertNotIn("--pg-connection-string-env", oneshot)
+
     def test_helper_argument_assembles_selected_recipe_only(self):
         argv = matrix.native_helper_argv("pgvector")
         self.assertEqual(argv[:3], ["node", "--input-type=module", "--eval"])

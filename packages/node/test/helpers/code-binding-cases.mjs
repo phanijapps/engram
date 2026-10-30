@@ -38,6 +38,28 @@ export function authorizedConfig(base, extra = {}, of = scope) {
   return configJson(base, { ...extra, codeAuthority: { launchScopes: [of] } });
 }
 
+/** Selects the actual backend recipe for every fixture, never the SDK default. */
+export function recipeConfig(recipe, base, extra = {}) {
+  if (recipe !== "pgvector") return configJson(base, extra);
+  const connection = process.env.ENGRAM_TEST_PG_URL;
+  if (!connection) throw new Error("ENGRAM_TEST_PG_URL is required for the pgvector recipe");
+  return configJson(base, { ...extra, pgvector_connection_string: connection });
+}
+
+export function authorizedRecipeConfig(recipe, base, extra = {}, of = scope) {
+  return recipeConfig(recipe, base, { ...extra, codeAuthority: { launchScopes: [of] } });
+}
+
+/** Makes durable Pg bindings collision-free across cases and matrix invocations. */
+export function recipeCase(recipe, operation) {
+  const nonce = `${process.pid}-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+  return {
+    scope: { tenant: "task-020", workspace: `${recipe}-${operation}-${nonce}` },
+    foreignScope: { tenant: "task-020", workspace: `${recipe}-${operation}-foreign-${nonce}` },
+    repo: `repo-${recipe}-${operation}-${nonce}`
+  };
+}
+
 /** Creates a real local git repository with one commit on `main`. */
 export function gitFixture(tag) {
   const base = mkdtempSync(join(tmpdir(), `task020-git-${tag}-`));
@@ -91,8 +113,11 @@ export function advanceGitFixture(path) {
  * describe body has already registered these cases. */
 export function describeCodeBindingCases(getAddon, recipe) {
   it(`${recipe}: deny_by_default_and_authorized_surface`, () => {
+    const fixture = recipeCase(recipe, "deny_by_default_and_authorized_surface");
+    const caseScope = fixture.scope;
+    const caseForeignScope = fixture.foreignScope;
     const base = mkdtempSync(join(tmpdir(), `task020-${recipe}-matrix-`));
-    const caps = JSON.parse(new (getAddon().NativeProvider)(configJson(base)).capabilitiesJson());
+    const caps = JSON.parse(new (getAddon().NativeProvider)(recipeConfig(recipe, base)).capabilitiesJson());
     expect(caps.code_binding).toBe("Supported");
     expect(caps.code_source).toBe("Supported");
     expect(caps.code_reset).toBe("Supported");
@@ -100,18 +125,18 @@ export function describeCodeBindingCases(getAddon, recipe) {
     // DENY-BY-DEFAULT through the native provider (r6 finding 1): without a
     // host policy, EVERY code operation denies with the typed envelope.
     mkdirSync(base + "-deny");
-    const provider = new (getAddon().NativeProvider)(configJson(base + "-deny"));
+    const provider = new (getAddon().NativeProvider)(recipeConfig(recipe, base + "-deny"));
     const deniedActions = [
       () =>
         provider.codeBindJson(
-          JSON.stringify({ scope, repo: "repo-matrix", branchRef: "refs/heads/main" })
+          JSON.stringify({ scope: caseScope, repo: fixture.repo, branchRef: "refs/heads/main" })
         ),
       () =>
         provider.codeRegisterJson(
-          JSON.stringify({ scope, repo: "repo-matrix", path: "/somewhere/repo" })
+          JSON.stringify({ scope: caseScope, repo: fixture.repo, path: "/somewhere/repo" })
         ),
-      () => provider.codeStatusJson(JSON.stringify({ scope, repo: "repo-matrix" })),
-      () => provider.codeRefreshJson(JSON.stringify({ scope, repo: "repo-matrix" }))
+      () => provider.codeStatusJson(JSON.stringify({ scope: caseScope, repo: fixture.repo })),
+      () => provider.codeRefreshJson(JSON.stringify({ scope: caseScope, repo: fixture.repo }))
     ];
     for (const action of deniedActions) {
       expect(action).toThrow(/CodeAuthorizationRequired/);
@@ -121,19 +146,19 @@ export function describeCodeBindingCases(getAddon, recipe) {
     // findings 1/5) — the SAME shared seam stdio/one-shot use.
     const { path: repoPath, oid: headOid } = gitFixture(`${recipe}-matrix`);
     mkdirSync(base + "-auth");
-    const authorized = new (getAddon().NativeProvider)(authorizedConfig(base + "-auth"));
+    const authorized = new (getAddon().NativeProvider)(authorizedRecipeConfig(recipe, base + "-auth", {}, caseScope));
     const registration = JSON.parse(
       authorized.codeRegisterJson(
-        JSON.stringify({ scope, repo: "repo-matrix", path: repoPath, mode: "local-only" })
+        JSON.stringify({ scope: caseScope, repo: fixture.repo, path: repoPath, mode: "local-only" })
       )
     );
-    expect(registration.repo_id).toBe("repo-matrix");
+    expect(registration.repo_id).toBe(fixture.repo);
     expect(registration.locator_id).toBe(repoPath);
     expect(registration.acquisition).toBe("local_only");
 
     const providerBinding = JSON.parse(
       authorized.codeBindJson(
-        JSON.stringify({ scope, repo: "repo-matrix", branchRef: "refs/heads/main" })
+        JSON.stringify({ scope: caseScope, repo: fixture.repo, branchRef: "refs/heads/main" })
       )
     );
     expect(providerBinding.branchRef).toBe("refs/heads/main");
@@ -141,40 +166,43 @@ export function describeCodeBindingCases(getAddon, recipe) {
     expect(providerBinding.activeGeneration).toBeNull();
 
     const observed = JSON.parse(
-      authorized.codeRefreshJson(JSON.stringify({ scope, repo: "repo-matrix" }))
+      authorized.codeRefreshJson(JSON.stringify({ scope: caseScope, repo: fixture.repo }))
     );
     expect(observed.observedOid).toBe(headOid);
     expect(observed.policy).toBe("on_request");
 
     const after = JSON.parse(
-      authorized.codeStatusJson(JSON.stringify({ scope, repo: "repo-matrix" }))
+      authorized.codeStatusJson(JSON.stringify({ scope: caseScope, repo: fixture.repo }))
     );
     expect(after.freshness.observedOid).toBe(headOid);
     expect(after.freshness.state).toEqual({ observed: { matchesIndexed: null } });
-    expect(after.checkpoint.repoId).toBe("repo-matrix");
+    expect(after.checkpoint.repoId).toBe(fixture.repo);
     // Foreign scope isolation (the host policy allows only the launch scope).
     expect(() =>
-      authorized.codeStatusJson(JSON.stringify({ scope: foreignScope, repo: "repo-matrix" }))
+      authorized.codeStatusJson(JSON.stringify({ scope: caseForeignScope, repo: fixture.repo }))
     ).toThrow(/CodeAuthorizationRequired/);
   });
 
   it(`${recipe}: bound_ingestion_pipeline`, () => {
+    const fixture = recipeCase(recipe, "bound_ingestion_pipeline");
+    const caseScope = fixture.scope;
+    const caseForeignScope = fixture.foreignScope;
     const { path: repoPath, oid: headOid } = gitFixture(`${recipe}-pipeline`);
     const base = mkdtempSync(join(tmpdir(), `task020-${recipe}-pipeline-`));
-    const provider = new (getAddon().NativeProvider)(authorizedConfig(base));
-    const repo = `repo-${recipe}-pipeline`;
+    const provider = new (getAddon().NativeProvider)(authorizedRecipeConfig(recipe, base, {}, caseScope));
+    const repo = fixture.repo;
 
-    provider.codeRegisterJson(JSON.stringify({ scope, repo, path: repoPath }));
-    provider.codeBindJson(JSON.stringify({ scope, repo, branchRef: "refs/heads/main" }));
+    provider.codeRegisterJson(JSON.stringify({ scope: caseScope, repo, path: repoPath }));
+    provider.codeBindJson(JSON.stringify({ scope: caseScope, repo, branchRef: "refs/heads/main" }));
 
     // Supplying a path alongside repo is a typed rejection.
     expect(() =>
       provider.scanRepositoryJson(
-        JSON.stringify({ path: repoPath, scope, repo, branchRef: "refs/heads/main" })
+        JSON.stringify({ path: repoPath, scope: caseScope, repo, branchRef: "refs/heads/main" })
       )
     ).toThrow(/path is not an input/);
 
-    const ingested = JSON.parse(provider.scanRepositoryJson(JSON.stringify({ scope, repo })));
+    const ingested = JSON.parse(provider.scanRepositoryJson(JSON.stringify({ scope: caseScope, repo })));
     expect(ingested.mode).toBe("bound");
     expect(ingested.generationId).toMatch(/^gen-/);
     expect(ingested.commitOid).toBe(headOid);
@@ -183,7 +211,7 @@ export function describeCodeBindingCases(getAddon, recipe) {
     expect(ingested.documents).toBeGreaterThan(0);
     expect(ingested.entities).toBeGreaterThan(0);
 
-    const status = JSON.parse(provider.codeStatusJson(JSON.stringify({ scope, repo })));
+    const status = JSON.parse(provider.codeStatusJson(JSON.stringify({ scope: caseScope, repo })));
     expect(status.indexedCommitOid).toBe(headOid);
     expect(status.binding.activeGeneration).toBe(ingested.generationId);
 
@@ -191,40 +219,43 @@ export function describeCodeBindingCases(getAddon, recipe) {
     // change what a re-ingest publishes — same commit is idempotent.
     writeFileSync(join(repoPath, "lib.rs"), "pub fn evil() -> u32 { 2 }\n");
     writeFileSync(join(repoPath, "untracked.rs"), "pub fn rogue() -> u32 { 3 }\n");
-    const again = JSON.parse(provider.scanRepositoryJson(JSON.stringify({ scope, repo })));
+    const again = JSON.parse(provider.scanRepositoryJson(JSON.stringify({ scope: caseScope, repo })));
     expect(again.idempotent).toBe(true);
     expect(again.generationId).toBe(ingested.generationId);
     expect(again.commitOid).toBe(headOid);
 
     expect(() =>
-      provider.scanRepositoryJson(JSON.stringify({ scope, repo, branchRef: "refs/heads/other" }))
+      provider.scanRepositoryJson(JSON.stringify({ scope: caseScope, repo, branchRef: "refs/heads/other" }))
     ).toThrow(/BindingConflict/);
 
     // A POPULATED store reopened without host policy cannot use either the
     // active-generation shortcut or a new commit to acquire or retain bytes.
     const retained = join(base, "store", "retained");
     const beforeDenied = readdirSync(retained).sort();
-    const denied = new (getAddon().NativeProvider)(configJson(base));
-    expect(() => denied.scanRepositoryJson(JSON.stringify({ scope, repo }))).toThrow(
+    const denied = new (getAddon().NativeProvider)(recipeConfig(recipe, base));
+    expect(() => denied.scanRepositoryJson(JSON.stringify({ scope: caseScope, repo }))).toThrow(
       /CodeAuthorizationRequired/
     );
     expect(readdirSync(retained).sort()).toEqual(beforeDenied);
 
     const nextOid = advanceGitFixture(repoPath);
-    expect(() => denied.scanRepositoryJson(JSON.stringify({ scope, repo }))).toThrow(
+    expect(() => denied.scanRepositoryJson(JSON.stringify({ scope: caseScope, repo }))).toThrow(
       /CodeAuthorizationRequired/
     );
     expect(readdirSync(retained).sort()).toEqual(beforeDenied);
 
     // The authorized coordinator can then acquire and retain the new commit.
-    const afterDenied = new (getAddon().NativeProvider)(authorizedConfig(base));
-    const next = JSON.parse(afterDenied.scanRepositoryJson(JSON.stringify({ scope, repo })));
+    const afterDenied = new (getAddon().NativeProvider)(authorizedRecipeConfig(recipe, base, {}, caseScope));
+    const next = JSON.parse(afterDenied.scanRepositoryJson(JSON.stringify({ scope: caseScope, repo })));
     expect(next.idempotent).toBe(false);
     expect(next.commitOid).toBe(nextOid);
     expect(readdirSync(retained).sort()).not.toEqual(beforeDenied);
   });
 
   it(`${recipe}: bound_retrieval_eligible_results`, () => {
+    const fixture = recipeCase(recipe, "bound_retrieval_eligible_results");
+    const caseScope = fixture.scope;
+    const caseForeignScope = fixture.foreignScope;
     const eligible = gitFixtureWithContent(
       `${recipe}-retrieval-eligible`,
       "pub fn eligible_fixture_record() -> u32 { 1 }\n"
@@ -234,22 +265,22 @@ export function describeCodeBindingCases(getAddon, recipe) {
       "pub fn ineligible_fixture_record() -> u32 { 2 }\n"
     );
     const base = mkdtempSync(join(tmpdir(), `task020-${recipe}-retrieval-`));
-    const provider = new (getAddon().NativeProvider)(authorizedConfig(base));
-    const repo = `repo-${recipe}-retrieval-eligible`;
-    provider.codeRegisterJson(JSON.stringify({ scope, repo, path: eligible.path }));
-    provider.codeBindJson(JSON.stringify({ scope, repo, branchRef: "refs/heads/main" }));
-    provider.scanRepositoryJson(JSON.stringify({ scope, repo }));
-    const foreign = new (getAddon().NativeProvider)(authorizedConfig(base, {}, foreignScope));
+    const provider = new (getAddon().NativeProvider)(authorizedRecipeConfig(recipe, base, {}, caseScope));
+    const repo = fixture.repo;
+    provider.codeRegisterJson(JSON.stringify({ scope: caseScope, repo, path: eligible.path }));
+    provider.codeBindJson(JSON.stringify({ scope: caseScope, repo, branchRef: "refs/heads/main" }));
+    provider.scanRepositoryJson(JSON.stringify({ scope: caseScope, repo }));
+    const foreign = new (getAddon().NativeProvider)(authorizedRecipeConfig(recipe, base, {}, caseForeignScope));
     const foreignRepo = `repo-${recipe}-retrieval-ineligible`;
-    foreign.codeRegisterJson(JSON.stringify({ scope: foreignScope, repo: foreignRepo, path: ineligible.path }));
-    foreign.codeBindJson(JSON.stringify({ scope: foreignScope, repo: foreignRepo, branchRef: "refs/heads/main" }));
-    foreign.scanRepositoryJson(JSON.stringify({ scope: foreignScope, repo: foreignRepo }));
+    foreign.codeRegisterJson(JSON.stringify({ scope: caseForeignScope, repo: foreignRepo, path: ineligible.path }));
+    foreign.codeBindJson(JSON.stringify({ scope: caseForeignScope, repo: foreignRepo, branchRef: "refs/heads/main" }));
+    foreign.scanRepositoryJson(JSON.stringify({ scope: caseForeignScope, repo: foreignRepo }));
 
     const recalled = JSON.parse(
       provider.requireRecallApi().recallJson(
         JSON.stringify({
           query: "eligible_fixture_record",
-          scope,
+          scope: caseScope,
           requester: { actor: { id: "task-020", kind: "agent", displayName: "task-020" }, roles: [], permissions: [] },
           modes: ["graph"],
           cues: [],
@@ -267,6 +298,9 @@ export function describeCodeBindingCases(getAddon, recipe) {
   });
 
   it(`${recipe}: bound_graph_traversal_answer`, () => {
+    const fixture = recipeCase(recipe, "bound_graph_traversal_answer");
+    const caseScope = fixture.scope;
+    const caseForeignScope = fixture.foreignScope;
     const eligible = gitFixtureWithContent(
       `${recipe}-graph-eligible`,
       "pub fn eligible_graph_record() -> u32 { 1 }\n"
@@ -276,19 +310,19 @@ export function describeCodeBindingCases(getAddon, recipe) {
       "pub fn ineligible_graph_record() -> u32 { 2 }\n"
     );
     const base = mkdtempSync(join(tmpdir(), `task020-${recipe}-graph-`));
-    const provider = new (getAddon().NativeProvider)(authorizedConfig(base));
-    const repo = `repo-${recipe}-graph-eligible`;
-    provider.codeRegisterJson(JSON.stringify({ scope, repo, path: eligible.path }));
-    provider.codeBindJson(JSON.stringify({ scope, repo, branchRef: "refs/heads/main" }));
-    provider.scanRepositoryJson(JSON.stringify({ scope, repo }));
-    const foreign = new (getAddon().NativeProvider)(authorizedConfig(base, {}, foreignScope));
+    const provider = new (getAddon().NativeProvider)(authorizedRecipeConfig(recipe, base, {}, caseScope));
+    const repo = fixture.repo;
+    provider.codeRegisterJson(JSON.stringify({ scope: caseScope, repo, path: eligible.path }));
+    provider.codeBindJson(JSON.stringify({ scope: caseScope, repo, branchRef: "refs/heads/main" }));
+    provider.scanRepositoryJson(JSON.stringify({ scope: caseScope, repo }));
+    const foreign = new (getAddon().NativeProvider)(authorizedRecipeConfig(recipe, base, {}, caseForeignScope));
     const foreignRepo = `repo-${recipe}-graph-ineligible`;
-    foreign.codeRegisterJson(JSON.stringify({ scope: foreignScope, repo: foreignRepo, path: ineligible.path }));
-    foreign.codeBindJson(JSON.stringify({ scope: foreignScope, repo: foreignRepo, branchRef: "refs/heads/main" }));
-    foreign.scanRepositoryJson(JSON.stringify({ scope: foreignScope, repo: foreignRepo }));
+    foreign.codeRegisterJson(JSON.stringify({ scope: caseForeignScope, repo: foreignRepo, path: ineligible.path }));
+    foreign.codeBindJson(JSON.stringify({ scope: caseForeignScope, repo: foreignRepo, branchRef: "refs/heads/main" }));
+    foreign.scanRepositoryJson(JSON.stringify({ scope: caseForeignScope, repo: foreignRepo }));
 
     const answer = JSON.parse(
-      provider.exploreJson(JSON.stringify({ scope, query: "eligible_graph_record", includeCodeArtifacts: true }))
+      provider.exploreJson(JSON.stringify({ scope: caseScope, query: "eligible_graph_record", includeCodeArtifacts: true }))
     );
     expect(Array.isArray(answer)).toBe(true);
     expect(answer.length).toBeGreaterThan(0);
@@ -299,15 +333,18 @@ export function describeCodeBindingCases(getAddon, recipe) {
   });
 
   it(`${recipe}: bound_reset_preview_apply_outcome`, () => {
+    const fixture = recipeCase(recipe, "bound_reset_preview_apply_outcome");
+    const caseScope = fixture.scope;
+    const caseForeignScope = fixture.foreignScope;
     const { path: repoPath } = gitFixture(`${recipe}-reset`);
     const base = mkdtempSync(join(tmpdir(), `task020-${recipe}-reset-`));
-    const provider = new (getAddon().NativeProvider)(authorizedConfig(base));
-    const repo = `repo-${recipe}-reset`;
-    provider.codeRegisterJson(JSON.stringify({ scope, repo, path: repoPath }));
-    provider.codeBindJson(JSON.stringify({ scope, repo, branchRef: "refs/heads/main" }));
-    provider.scanRepositoryJson(JSON.stringify({ scope, repo }));
+    const provider = new (getAddon().NativeProvider)(authorizedRecipeConfig(recipe, base, {}, caseScope));
+    const repo = fixture.repo;
+    provider.codeRegisterJson(JSON.stringify({ scope: caseScope, repo, path: repoPath }));
+    provider.codeBindJson(JSON.stringify({ scope: caseScope, repo, branchRef: "refs/heads/main" }));
+    provider.scanRepositoryJson(JSON.stringify({ scope: caseScope, repo }));
 
-    const preview = JSON.parse(provider.codeResetPreviewJson(JSON.stringify({ scope, repo })));
+    const preview = JSON.parse(provider.codeResetPreviewJson(JSON.stringify({ scope: caseScope, repo })));
     expect(preview.previewHash).toHaveLength(64);
     const journal = {
       resetId: `native-reset-${recipe}`,
@@ -327,31 +364,37 @@ export function describeCodeBindingCases(getAddon, recipe) {
   });
 
   it(`${recipe}: bound_embedding_backfill_outcome`, () => {
+    const fixture = recipeCase(recipe, "bound_embedding_backfill_outcome");
+    const caseScope = fixture.scope;
+    const caseForeignScope = fixture.foreignScope;
     const { path: repoPath } = gitFixture(`${recipe}-backfill`);
     const base = mkdtempSync(join(tmpdir(), `task020-${recipe}-backfill-`));
-    const provider = new (getAddon().NativeProvider)(authorizedConfig(base));
-    const repo = `repo-${recipe}-backfill`;
-    provider.codeRegisterJson(JSON.stringify({ scope, repo, path: repoPath }));
-    provider.codeBindJson(JSON.stringify({ scope, repo, branchRef: "refs/heads/main" }));
-    const before = provider.codeStatusJson(JSON.stringify({ scope, repo }));
+    const provider = new (getAddon().NativeProvider)(authorizedRecipeConfig(recipe, base, {}, caseScope));
+    const repo = fixture.repo;
+    provider.codeRegisterJson(JSON.stringify({ scope: caseScope, repo, path: repoPath }));
+    provider.codeBindJson(JSON.stringify({ scope: caseScope, repo, branchRef: "refs/heads/main" }));
+    const before = provider.codeStatusJson(JSON.stringify({ scope: caseScope, repo }));
 
-    expect(() => provider.backfillEmbeddingsJson(JSON.stringify(scope))).toThrow(
+    expect(() => provider.backfillEmbeddingsJson(JSON.stringify(caseScope))).toThrow(
       /no embedding provider wired/
     );
-    expect(provider.codeStatusJson(JSON.stringify({ scope, repo }))).toBe(before);
+    expect(provider.codeStatusJson(JSON.stringify({ scope: caseScope, repo }))).toBe(before);
     console.log("backfill outcome binding unchanged");
   });
 
   it(`${recipe}: bound_source_fetch_exact_bytes`, () => {
+    const fixture = recipeCase(recipe, "bound_source_fetch_exact_bytes");
+    const caseScope = fixture.scope;
+    const caseForeignScope = fixture.foreignScope;
     const { path: repoPath } = gitFixture(`${recipe}-source`);
     const base = mkdtempSync(join(tmpdir(), `task020-${recipe}-source-`));
-    const provider = new (getAddon().NativeProvider)(authorizedConfig(base));
-    const repo = `repo-${recipe}-source`;
-    provider.codeRegisterJson(JSON.stringify({ scope, repo, path: repoPath }));
-    provider.codeBindJson(JSON.stringify({ scope, repo, branchRef: "refs/heads/main" }));
-    provider.scanRepositoryJson(JSON.stringify({ scope, repo }));
+    const provider = new (getAddon().NativeProvider)(authorizedRecipeConfig(recipe, base, {}, caseScope));
+    const repo = fixture.repo;
+    provider.codeRegisterJson(JSON.stringify({ scope: caseScope, repo, path: repoPath }));
+    provider.codeBindJson(JSON.stringify({ scope: caseScope, repo, branchRef: "refs/heads/main" }));
+    provider.scanRepositoryJson(JSON.stringify({ scope: caseScope, repo }));
 
-    const fetched = JSON.parse(provider.codeFetchJson(JSON.stringify({ scope, path: "lib.rs" })));
+    const fetched = JSON.parse(provider.codeFetchJson(JSON.stringify({ scope: caseScope, path: "lib.rs" })));
     expect(fetched.repoId).toBe(repo);
     expect(fetched.generationId).toMatch(/^gen-/);
     expect(Buffer.from(fetched.bytes)).toEqual(Buffer.from("pub fn fixture() -> u32 { 1 }\n"));
@@ -361,7 +404,7 @@ export function describeCodeBindingCases(getAddon, recipe) {
 
   it(`${recipe}: legacy_lanes_never_ingest_code`, () => {
     const base = mkdtempSync(join(tmpdir(), `task020-${recipe}-legacy-`));
-    const provider = new (getAddon().NativeProvider)(authorizedConfig(base));
+    const provider = new (getAddon().NativeProvider)(authorizedRecipeConfig(recipe, base));
     const repoDir = join(base, "repo");
     mkdirSync(repoDir, { recursive: true });
     writeFileSync(join(repoDir, "lib.rs"), "pub fn a() -> u32 { 1 }\n");
@@ -457,7 +500,7 @@ export function describeCodeBindingCases(getAddon, recipe) {
     // Compile-time literals live in the .ts files; the runtime proof here is
     // the authorized bind result satisfying the generated CodeBinding shape.
     const base = mkdtempSync(join(tmpdir(), `task020-${recipe}-shapes-`));
-    const provider = new (getAddon().NativeProvider)(authorizedConfig(base));
+    const provider = new (getAddon().NativeProvider)(authorizedRecipeConfig(recipe, base));
     const runtime = JSON.parse(
       provider.codeBindJson(
         JSON.stringify({

@@ -13,7 +13,12 @@ impl CodeBindingCoordinator {
         registration: RepositoryRegistration,
     ) -> CoreResult<RepositoryRegistration> {
         self.authorizer
-            .authorize(actor, scope, &registration.repo_id, CodeAuthorityAction::Register)
+            .authorize(
+                actor,
+                scope,
+                &registration.repo_id,
+                CodeAuthorityAction::Register,
+            )
             .await?;
         self.store.register(registration).await
     }

@@ -13,10 +13,10 @@
  *   - pgvector : the same plus `,pgvector` (routes pgvector configs to the
  *                backends/pgvector recipe).
  *
- * Freshness: an artifact is rebuilt when missing, when any Rust source under
- * `bindings/node/` (or its Cargo.toml / the workspace Cargo.lock) is newer
- * than the artifact, or when TASK020_FORCE_BUILD=1. Stale artifacts are never
- * silently reused.
+ * Freshness: every invocation asks Cargo to validate the complete workspace
+ * dependency graph for each recipe before copying its artifact. Cargo shares
+ * `target/debug` between the feature invocations, so the helper copies each
+ * validated result immediately into its recipe-specific destination.
  *
  * Selection honesty: tests assert the SELECTED recipe through the addon's own
  * behavior (the sqlite artifact refuses a pgvector config with the exact
@@ -24,7 +24,7 @@
  * that gate), never by trusting the directory name.
  */
 import { execFileSync } from "node:child_process";
-import { copyFileSync, existsSync, mkdirSync, readdirSync, statSync, utimesSync } from "node:fs";
+import { copyFileSync, existsSync, mkdirSync, utimesSync } from "node:fs";
 import { createRequire } from "node:module";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -59,34 +59,8 @@ function featuresFor(recipe) {
   }
 }
 
-/** Newest mtime across the binding's Rust sources + manifests (freshness
- *  fingerprint for stale-artifact rejection). */
-function newestSourceMtime() {
-  let newest = 0;
-  const walk = (dir) => {
-    for (const entry of readdirSync(dir, { withFileTypes: true })) {
-      const path = join(dir, entry.name);
-      if (entry.isDirectory()) {
-        walk(path);
-      } else if (/\.(rs|toml)$/.test(entry.name) || entry.name === "Cargo.lock") {
-        newest = Math.max(newest, statSync(path).mtimeMs);
-      }
-    }
-  };
-  walk(join(repoRoot, "bindings", "node"));
-  newest = Math.max(newest, statSync(join(repoRoot, "Cargo.lock")).mtimeMs);
-  return newest;
-}
-
 function artifactPath(recipe) {
   return join(artifactsRoot, recipe, "engram_node.node");
-}
-
-function isFresh(recipe) {
-  const artifact = artifactPath(recipe);
-  if (!existsSync(artifact)) return false;
-  if (process.env.TASK020_FORCE_BUILD === "1") return false;
-  return statSync(artifact).mtimeMs >= newestSourceMtime();
 }
 
 function buildRecipe(recipe) {
@@ -106,14 +80,12 @@ function buildRecipe(recipe) {
   console.log(`[task_020 helper] placed ${recipe} artifact: ${dest}`);
 }
 
-/** Ensures both recipe artifacts exist and are fresh (building what is
- *  missing/stale). Returns the artifact paths keyed by recipe. */
+/** Validates and rebuilds both recipe artifacts through Cargo. Returns the
+ *  recipe-specific copies after each validated feature build. */
 export function ensureRecipeArtifacts() {
   const paths = {};
   for (const recipe of RECIPES) {
-    if (!isFresh(recipe)) {
-      buildRecipe(recipe);
-    }
+    buildRecipe(recipe);
     paths[recipe] = artifactPath(recipe);
   }
   return paths;

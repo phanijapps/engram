@@ -166,7 +166,14 @@ impl CodeBindingCoordinator {
         self.authorizer
             .authorize(actor, scope, repo, CodeAuthorityAction::Reset)
             .await?;
-        self.store.preview_reset(scope, repo).await
+        let mut preview = self.store.preview_reset(scope, repo).await?;
+        preview.preservation_inventory = self.preservation_source.inventory(scope).await?;
+        preview.preservation_digests = vec![preview.preservation_inventory.digest.clone()];
+        preview.preview_hash = preview.content_hash().map_err(|_| CoreError::Adapter {
+            adapter: "engram-preservation".into(),
+            message: "cannot hash reset preview".into(),
+        })?;
+        Ok(preview)
     }
 
     /// Applies/resumes the complete reset state machine.
@@ -185,6 +192,20 @@ impl CodeBindingCoordinator {
             .authorize(actor, &scope, &repo, CodeAuthorityAction::Reset)
             .await?;
         let mut durable = self.store.apply_reset(journal).await?;
+        let inventory = self.preservation_source.inventory(&scope).await?;
+        if inventory != durable.preview.preservation_inventory {
+            durable.checkpoints.retain(|checkpoint| {
+                checkpoint != "preservation:verified" && checkpoint != "preservation-verified"
+            });
+            durable
+                .checkpoints
+                .retain(|checkpoint| checkpoint != "preservation:failed");
+            durable.checkpoints.push("preservation:failed".into());
+            self.store.save_reset_journal(durable).await?;
+            return Err(CoreError::Conflict {
+                reason: "ResetPreservationFailed: knowledge preservation inventory changed".into(),
+            });
+        }
         let retired = durable.preview.targets.clone();
         let preserved = durable.preview.preservation_inventory.records.clone();
         let mut failed = false;

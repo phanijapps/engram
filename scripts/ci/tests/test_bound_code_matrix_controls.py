@@ -128,13 +128,29 @@ class BoundCodeMatrixControls(unittest.TestCase):
             self.assertIn("selected suite executed zero tests", receipt["output"])
 
     def test_stale_artifact_invalidation_and_loaded_recipe_selection_are_synthetic(self):
-        root = Path("/tmp/matrix-control")
-        sqlite = matrix.default_command(matrix.Row("scan", "sqlite", "native", True), root, "ENGRAM_TEST_PG_URL")
-        pg = matrix.default_command(matrix.Row("scan", "pgvector", "native", True), root, "ENGRAM_TEST_PG_URL")
-        self.assertIn("code-binding.sqlite.test.ts", sqlite.argv)
-        self.assertIn("code-binding.pgvector.test.ts", pg.argv)
-        self.assertIn("bound_ingestion_pipeline", sqlite.argv)
-        self.assertNotEqual(sqlite.argv, pg.argv)
+        calls = []
+        stale = matrix.NativeRecipeArtifact("sqlite", "/artifacts/sqlite.node", "old-content")
+        rebuilt = matrix.NativeRecipeArtifact("sqlite", "/artifacts/sqlite.node", "new-content")
+        loaded = matrix.NativeRecipeArtifact("sqlite", "/artifacts/sqlite.node", "new-content")
+        selected = matrix.resolve_native_recipe_artifact(
+            "sqlite",
+            "new-content",
+            lambda recipe: stale,
+            lambda recipe: calls.append(recipe) or rebuilt,
+            lambda path: loaded,
+        )
+        self.assertEqual(calls, ["sqlite"], "content drift rebuilds despite an unchanged path")
+        self.assertEqual(selected, loaded)
+
+        wrong_loaded = matrix.NativeRecipeArtifact("pgvector", "/artifacts/sqlite.node", "new-content")
+        with self.assertRaisesRegex(ValueError, "loaded native recipe identity"):
+            matrix.resolve_native_recipe_artifact(
+                "sqlite",
+                "new-content",
+                lambda recipe: rebuilt,
+                lambda recipe: self.fail("fresh artifact must not rebuild"),
+                lambda path: wrong_loaded,
+            )
 
     def test_helper_argument_assembles_selected_recipe_only(self):
         argv = matrix.native_helper_argv("pgvector")

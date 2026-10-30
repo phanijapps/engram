@@ -92,11 +92,36 @@ def validate_pg_url(url: str) -> None:
         raise ValueError("PG fixture URL has unsupported query parameter")
 
 
+@dataclass(frozen=True)
+class NativeRecipeArtifact:
+    recipe: str
+    path: str
+    digest: str
+
+
+def resolve_native_recipe_artifact(
+    recipe: str,
+    expected_digest: str,
+    inspect: Callable[[str], NativeRecipeArtifact],
+    rebuild: Callable[[str], NativeRecipeArtifact],
+    load: Callable[[str], NativeRecipeArtifact],
+) -> NativeRecipeArtifact:
+    """Invalidate stale content and verify the loaded artifact's exact identity."""
+    artifact = inspect(recipe)
+    if artifact.recipe != recipe or artifact.digest != expected_digest:
+        artifact = rebuild(recipe)
+    if artifact.recipe != recipe or artifact.digest != expected_digest:
+        raise ValueError("native recipe rebuild did not produce the selected identity")
+    loaded = load(artifact.path)
+    if loaded.recipe != recipe or loaded.digest != expected_digest:
+        raise ValueError("loaded native recipe identity does not match selection")
+    return loaded
+
+
 def native_helper_argv(recipe: str) -> list[str]:
     """Invoke the TASK-020 immutable artifact helper instead of rebuilding here."""
     if recipe not in {"sqlite", "pgvector"}:
         raise ValueError(f"unknown native recipe: {recipe}")
-    helper = ROOT / "packages/node/test/helpers/build-native-recipes.mjs"
     program = (
         "import {withRecipeArtifacts} from './packages/node/test/helpers/build-native-recipes.mjs';"
         f"withRecipeArtifacts((a) => process.stdout.write(JSON.stringify({{recipe:{json.dumps(recipe)},path:a.paths[{json.dumps(recipe)}],digest:a.digests[{json.dumps(recipe)}]}})));"

@@ -10,7 +10,7 @@
 use std::path::Path;
 
 use engram_domain::types::ScopeMappingStrategy;
-use engram_domain::{Actor, ActorKind, Id, RepoId, Scope};
+use engram_domain::{Actor, ActorKind, CodeResetJournal, Id, RepoId, Scope};
 use engram_integration::{
     CapabilityPolicy, EmbeddingProviderConfig, EngramConfig, EngramProvider, MigrationMode,
 };
@@ -380,6 +380,80 @@ mod task_019 {
             ))
             .is_err()
         );
+    }
+
+    /// recipe_composes_reset_lanes: the opened SQLite recipe injects the real
+    /// reset bundle, so an authorized reset persists completion for every lane.
+    #[test]
+    fn recipe_composes_reset_lanes() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let repository = dir.path().join("repository");
+        std::fs::create_dir_all(&repository).expect("mkdir repository");
+        let git = |args: &[&str]| {
+            let status = std::process::Command::new("git")
+                .args(args)
+                .current_dir(&repository)
+                .env("GIT_CONFIG_GLOBAL", "/dev/null")
+                .env("GIT_CONFIG_SYSTEM", "/dev/null")
+                .status()
+                .expect("run git");
+            assert!(status.success(), "git {args:?}");
+        };
+        git(&["init", "--initial-branch=main", "."]);
+        git(&["config", "user.email", "recipe@example.test"]);
+        git(&["config", "user.name", "recipe"]);
+        std::fs::write(repository.join("lib.rs"), "pub fn reset_recipe() {}\n")
+            .expect("write fixture");
+        git(&["add", "."]);
+        git(&["commit", "--no-gpg-sign", "-m", "fixture"]);
+        std::fs::create_dir_all(dir.path().join("storage")).expect("mkdir storage");
+        let provider = engram_backend_sqlite::open(&config(dir.path())).expect("open recipe");
+        let coordinator = provider
+            .code_bindings()
+            .expect("binding handle")
+            .with_authorizer(host_policy());
+        let repo = repo();
+        block_on(coordinator.register(
+            &actor(),
+            &scope(),
+            engram_knowledge::RepositoryRegistration {
+                repo_id: repo.clone(),
+                locator_id: repository.to_string_lossy().to_string(),
+                acquisition: engram_knowledge::AcquisitionMode::LocalOnly,
+            },
+        ))
+        .expect("register");
+        block_on(coordinator.bind(&actor(), &scope(), &repo, "refs/heads/main")).expect("bind");
+        let lanes = provider.code_ingestion().expect("ingestion lanes");
+        block_on(coordinator.ingest_registered(&actor(), &scope(), &repo, None, None, &lanes))
+            .expect("ingest");
+        let preview = block_on(coordinator.preview_reset(&actor(), &scope(), &repo))
+            .expect("authorized preview");
+        let journal = CodeResetJournal {
+            reset_id: "recipe-reset".into(),
+            preview_hash: preview.preview_hash.clone(),
+            target_fingerprints: preview
+                .targets
+                .iter()
+                .map(|target| (target.record_id.clone(), target.fingerprint.clone()))
+                .collect(),
+            authorizing_decisions: vec!["recipe-test-approved".into()],
+            checkpoints: vec!["authorized".into()],
+            preservation_digests: preview.preservation_digests.clone(),
+            preview,
+        };
+        let approved =
+            block_on(coordinator.journal_reset(&actor(), journal, "recipe-test-approved".into()))
+                .expect("journal");
+        let applied = block_on(coordinator.apply_reset(&actor(), approved)).expect("apply");
+        for lane in ["lexical", "vector", "associative", "community", "source"] {
+            assert!(
+                applied
+                    .checkpoints
+                    .iter()
+                    .any(|checkpoint| checkpoint == &format!("reset-lane:{lane}:done"))
+            );
+        }
     }
 
     /// unavailable_optional_capabilities: optional lanes the recipe did NOT

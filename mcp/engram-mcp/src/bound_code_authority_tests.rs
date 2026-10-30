@@ -449,7 +449,7 @@ mod finding_4_staleness {
         );
 
         // The codegraph annotation: same isolation.
-        let note = crate::changes::staleness_note(&app);
+        let note = crate::changes::staleness_note(&app).expect("bound annotation");
         assert!(
             !note.contains(&legacy_head),
             "the annotation never reports the legacy root's HEAD: {note}"
@@ -457,6 +457,61 @@ mod finding_4_staleness {
         assert!(
             note.contains("binding-keyed") || note.is_empty(),
             "annotation is durable-record driven: {note}"
+        );
+    }
+
+    /// `bound_unpublished_staleness_ignores_legacy_checkpoint`: an
+    /// unpublished binding reports its durable unknown state instead of an
+    /// unrelated legacy root's recorded HEAD.
+    #[test]
+    fn bound_unpublished_staleness_ignores_legacy_checkpoint() {
+        let app = unpublished_bound_app();
+        let legacy_head = "f".repeat(40);
+        let checkpoints = app.provider.require_checkpoints().expect("checkpoints");
+        block_on(checkpoints.put_checkpoint(engram_domain::ScanCheckpoint {
+            scope: app.scope.clone(),
+            git_ref: Some("refs/heads/main".to_owned()),
+            stable_source_key: "unrelated-legacy-root".to_owned(),
+            scan_root: None,
+            scan_run_id: "scan-legacy".to_owned(),
+            started_at: chrono::Utc::now(),
+            completed_at: Some(chrono::Utc::now()),
+            indexed_revision: Some(legacy_head.clone()),
+            status: engram_domain::ScanStatus::Completed,
+            dirty: Some(false),
+            errors: 0,
+        }))
+        .expect("put checkpoint");
+        let answer = crate::changes::code_staleness(&app, &json!({}))
+            .expect("unpublished binding has durable freshness");
+        let text = answer["content"][0]["text"].as_str().unwrap_or_default();
+        assert!(!text.contains(&legacy_head), "legacy HEAD leaked: {text}");
+        assert!(
+            text.contains("repo-gate") && text.contains("freshness unknown"),
+            "{text}"
+        );
+        let note = crate::changes::staleness_note(&app).expect("bound annotation");
+        assert!(!note.contains(&legacy_head), "legacy HEAD leaked: {note}");
+    }
+
+    /// `authority_error_is_not_legacy_freshness`: a missing binding authority
+    /// is typed for both default freshness and codegraph annotation paths.
+    #[test]
+    fn authority_error_is_not_legacy_freshness() {
+        let app = app_without_binding_authority();
+        let staleness = crate::changes::code_staleness(&app, &json!({}))
+            .expect_err("authority failure must not use legacy freshness");
+        assert!(
+            staleness
+                .message
+                .contains("capability unsupported: code-binding")
+        );
+        let annotation = crate::changes::staleness_note(&app)
+            .expect_err("authority failure must not suppress the annotation error");
+        assert!(
+            annotation
+                .message
+                .contains("capability unsupported: code-binding")
         );
     }
 
@@ -490,7 +545,7 @@ mod finding_4_staleness {
         };
         // No checkpoints at all: the legacy note is simply absent (nothing
         // to be stale against) — and never a binding-keyed claim.
-        let note = crate::changes::staleness_note(&app);
+        let note = crate::changes::staleness_note(&app).expect("unbound annotation");
         assert!(
             !note.contains("binding-keyed"),
             "unbound scopes do not claim bound freshness: {note}"

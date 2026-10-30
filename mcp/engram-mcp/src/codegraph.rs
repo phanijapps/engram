@@ -2220,7 +2220,7 @@ pub fn symbol_context(app: &App, args: &Value) -> Result<Value, ToolError> {
             .collect();
         let ctx = union_symbol_context(ctxs);
         let evidence = render_edge_evidence_with_paths(&rels, &seeds, &paths);
-        let staleness = crate::changes::staleness_note(app);
+        let staleness = crate::changes::staleness_note(app)?;
         let empty_neighborhood = ctx.ctx.callers.is_empty()
             && ctx.ctx.callees.is_empty()
             && ctx.ctx.implementers.is_empty();
@@ -2267,7 +2267,7 @@ pub fn symbol_context(app: &App, args: &Value) -> Result<Value, ToolError> {
             .collect();
         let ctx = union_symbol_context(ctxs);
         let evidence = render_edge_evidence_with_paths(&rels, &seeds, &paths);
-        let staleness = crate::changes::staleness_note(app);
+        let staleness = crate::changes::staleness_note(app)?;
         let empty = ctx.ctx.callers.is_empty()
             && ctx.ctx.callees.is_empty()
             && ctx.ctx.implementers.is_empty();

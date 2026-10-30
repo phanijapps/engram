@@ -68,20 +68,13 @@ pub fn subscribe_changes(app: &App, args: &Value) -> Result<Value, ToolError> {
     )))
 }
 
-/// The scope's published bound repositories (empty = no bound code). This is
-/// the review r6 finding 4 boundary: bound-code answers NEVER consult a
-/// legacy checkpoint's checkout HEAD — when ANY repository is published, the
-/// binding-keyed durable path is the only path.
-fn published_bound_repos(app: &App) -> Vec<String> {
-    app.provider
-        .code_bindings()
-        .ok()
-        .and_then(|coordinator| {
-            block_on(coordinator.store().eligibility(&app.scope))
-                .ok()
-                .map(|eligibility| eligibility.repository_ids)
-        })
-        .unwrap_or_default()
+/// The scope's durable bindings, including unpublished bindings. This is the
+/// review r6 finding 4 boundary: a binding closes legacy freshness fallback,
+/// and an authority failure remains a typed failure rather than becoming an
+/// unbound answer.
+fn scope_bindings(app: &App) -> Result<Vec<engram_domain::CodeBinding>, ToolError> {
+    let coordinator = app.provider.code_bindings().map_err(internal)?;
+    block_on(coordinator.store().bindings(&app.scope)).map_err(internal)
 }
 
 /// `code_staleness`: truthful freshness for the project's code graph.
@@ -90,16 +83,17 @@ fn published_bound_repos(app: &App) -> Vec<String> {
 /// RepoId) names a BOUND repository, the answer comes from the DURABLE
 /// binding record — the CONFIGURED ref, the indexed generation OID, and the
 /// last on-request ref observation — and NEVER consults a checkout HEAD, the
-/// worktree, or any scan-root checkpoint. With no `repo` and ANY published
-/// repository in scope, the answer is the binding-keyed summary over the
-/// published set (durable records only). The LEGACY checkpoint path below is
-/// explicitly reserved for scopes with NO bound code and labeled as such.
+/// worktree, or any scan-root checkpoint. With no `repo` and ANY bound
+/// repository in scope, the answer is the binding-keyed summary over every
+/// binding, including unpublished bindings. The LEGACY checkpoint path below
+/// is explicitly reserved for genuinely unbound scopes and labeled as such.
 pub fn code_staleness(app: &App, args: &Value) -> Result<Value, ToolError> {
     if let Some(repo) = args["repo"].as_str() {
         return binding_keyed_freshness(app, repo);
     }
-    if !published_bound_repos(app).is_empty() {
-        return bound_scope_freshness(app);
+    let bindings = scope_bindings(app)?;
+    if !bindings.is_empty() {
+        return bound_scope_freshness(app, bindings);
     }
     let log = app.provider.require_change_log().map_err(internal)?;
     // Explicit source_key wins; otherwise the FRESHEST checkpoint in this
@@ -181,25 +175,22 @@ pub fn render_staleness(s: &engram_domain::CodeGraphStaleness) -> String {
 }
 
 /// R5: visible staleness line for codegraph answers. Review r6 finding 4:
-/// when the scope has ANY published bound repository, the note is the
-/// BINDING-KEYED durable summary (configured ref, indexed OID, on-request
-/// observation) — an unrelated legacy scan checkpoint's HEAD NEVER leaks
-/// into a bound scope's answer. The checkpoint path below serves only
-/// UNBOUND legacy scopes.
-pub fn staleness_note(app: &App) -> String {
-    if !published_bound_repos(app).is_empty() {
-        return bound_scope_freshness(app)
-            .map(|value| Server::text_of_note(&value))
-            .unwrap_or_default();
+/// when the scope has ANY bound repository, the note is the BINDING-KEYED
+/// durable summary (configured ref, indexed OID, on-request observation) —
+/// an unrelated legacy scan checkpoint's HEAD NEVER leaks into a bound
+/// scope's answer. Authority failures remain typed failures. The checkpoint
+/// path below serves only genuinely UNBOUND legacy scopes.
+pub fn staleness_note(app: &App) -> Result<String, ToolError> {
+    let bindings = scope_bindings(app)?;
+    if !bindings.is_empty() {
+        return bound_scope_freshness(app, bindings).map(|value| Server::text_of_note(&value));
     }
-    let Ok(log) = app.provider.require_change_log() else {
-        return String::new();
-    };
+    let log = app.provider.require_change_log().map_err(internal)?;
     let latest = block_on(log.latest_checkpoints(&app.scope))
         .ok()
         .and_then(|all| all.first().cloned());
     let Some(cp) = latest else {
-        return String::new();
+        return Ok(String::new());
     };
     let (current, behind, dirty) = git_facts(Some(&cp));
     let staleness = engram_domain::derive_staleness(
@@ -210,15 +201,15 @@ pub fn staleness_note(app: &App) -> String {
         dirty,
     );
     if staleness.status == StalenessStatus::Current {
-        String::new()
+        Ok(String::new())
     } else {
-        format!(
+        Ok(format!(
             "\n{}",
             render_staleness(&staleness)
                 .lines()
                 .next()
                 .unwrap_or("STALENESS: unknown")
-        )
+        ))
     }
 }
 
@@ -285,22 +276,21 @@ fn binding_keyed_freshness(app: &App, repo: &str) -> Result<Value, ToolError> {
 }
 
 /// Renders the binding-keyed durable freshness summary for a scope with
-/// PUBLISHED bound code (review r6 finding 4). Durable records only — the
-/// configured ref, the indexed generation OID, and the last on-request
-/// observation per repository; checkout HEAD, worktrees, and scan-root
-/// checkpoints are never read.
-fn bound_scope_freshness(app: &App) -> Result<Value, ToolError> {
+/// bound code (review r6 finding 4). Durable records only — the configured
+/// ref, the indexed generation OID, and the last on-request observation per
+/// repository; checkout HEAD, worktrees, and scan-root checkpoints are never
+/// read.
+fn bound_scope_freshness(
+    app: &App,
+    bindings: Vec<engram_domain::CodeBinding>,
+) -> Result<Value, ToolError> {
     use engram_domain::RepoId;
     let coordinator = app.provider.code_bindings().map_err(internal)?;
     let actor = crate::tools::requester().actor;
     let mut out =
         String::from("FRESHNESS (binding-keyed, durable records only — never checkout HEAD):");
-    let repos = published_bound_repos(app);
-    if repos.is_empty() {
-        out.push_str("\n  no published bound code in this scope");
-        return Ok(protocol::text_content(out));
-    }
-    for repo in repos {
+    for binding in bindings {
+        let repo = binding.repo_id.0;
         let status = block_on(coordinator.status(&actor, &app.scope, &RepoId(repo.clone()), None))
             .map_err(internal)?;
         out.push_str(&format!(

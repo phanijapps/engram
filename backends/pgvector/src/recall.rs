@@ -39,7 +39,6 @@ const CHUNK_TEXT_CAP: usize = 2 * 1024;
 
 #[cfg(test)]
 mod tests {
-    use super::*;
 
     /// Pure classification slice of the constrained-lane contract (corrective
     /// r2, finding 4): classification is durable-lineage driven — a lineage
@@ -627,7 +626,7 @@ mod authority_tests {
     //! behind `--ignored` + `ENGRAM_TEST_PG_URL` like the accepted PG suites.
 
     use super::*;
-    use async_trait::async_trait;
+
     use engram_domain::{
         Actor, ActorKind, AllowedUse, Belief, BeliefId, BeliefStatus, BeliefSubject, DeleteMode,
         EntityKind, EvidenceRef, EvidenceTargetType, Id, KnowledgeChunk, KnowledgeChunkKind,
@@ -800,7 +799,7 @@ mod authority_tests {
         KnowledgeChunk {
             id: Id::from(id),
             document_id: Id::from(format!("{run}-doc")),
-            source_id: Id::from(run_source_id(run)),
+            source_id: run_source_id(run),
             kind,
             text: text.to_string(),
             summary: None,
@@ -1136,7 +1135,7 @@ mod authority_tests {
         // ordinary/code entities (with real durable lineage on the code one),
         // an ordinary memory, a code-DERIVED memory and an ordinary belief.
         let source = KnowledgeSource {
-            id: Id::from(run_source_id(&run)),
+            id: run_source_id(&run),
             kind: SourceKind::Upload,
             scope: test_scope.clone(),
             name: "r3 pg source".to_string(),
@@ -1161,7 +1160,7 @@ mod authority_tests {
                 &knowledge,
                 engram_domain::SourceDocument {
                     id: Id::from(format!("{run}-doc")),
-                    source_id: Id::from(run_source_id(&run)),
+                    source_id: run_source_id(&run),
                     kind: engram_domain::SourceDocumentKind::Text,
                     uri: None,
                     path: Some("fixture.rs".to_string()),

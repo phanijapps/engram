@@ -161,21 +161,21 @@ pub fn attempt(
 
     // [js-apex-boundary] Salesforce Apex import aliasing — deterministic
     // name-table binding.
-    if let Some(stripped) = reference.strip_prefix("@salesforce/apex/") {
-        if let Some((class, method)) = stripped.rsplit_once('.') {
-            let qualified = format!("{class}::{method}");
-            if let Resolution::Resolved(c) = index.resolve(&qualified, from_path, from_repo) {
-                return AttemptOutcome {
-                    resolution: Resolution::Resolved(c),
-                    branch: Some(ResolutionBranch::NameTable),
-                };
-            }
-            if let Resolution::Resolved(c) = index.resolve(method, from_path, from_repo) {
-                return AttemptOutcome {
-                    resolution: Resolution::Resolved(c),
-                    branch: Some(ResolutionBranch::NameTable),
-                };
-            }
+    if let Some(stripped) = reference.strip_prefix("@salesforce/apex/")
+        && let Some((class, method)) = stripped.rsplit_once('.')
+    {
+        let qualified = format!("{class}::{method}");
+        if let Resolution::Resolved(c) = index.resolve(&qualified, from_path, from_repo) {
+            return AttemptOutcome {
+                resolution: Resolution::Resolved(c),
+                branch: Some(ResolutionBranch::NameTable),
+            };
+        }
+        if let Resolution::Resolved(c) = index.resolve(method, from_path, from_repo) {
+            return AttemptOutcome {
+                resolution: Resolution::Resolved(c),
+                branch: Some(ResolutionBranch::NameTable),
+            };
         }
     }
 
@@ -249,10 +249,10 @@ fn resolve_one(
     from_path: Option<&str>,
     from_repo: Option<&str>,
 ) -> Resolution {
-    if let Some(path) = from_path {
-        if let Resolution::Resolved(c) = index.resolve(name, Some(path), from_repo) {
-            return Resolution::Resolved(c);
-        }
+    if let Some(path) = from_path
+        && let Resolution::Resolved(c) = index.resolve(name, Some(path), from_repo)
+    {
+        return Resolution::Resolved(c);
     }
     index.resolve(name, from_path, from_repo)
 }

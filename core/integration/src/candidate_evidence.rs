@@ -665,7 +665,7 @@ impl WalkState {
     /// charge. Each budgeted construction is instrumented.
     fn admits_synthetic_ref(&self, counters: &WalkCounters, id_len: usize) -> bool {
         counters.synthetic_refs.fetch_add(1, Ordering::Relaxed);
-        self.bytes + id_len + 1 <= MAX_DEPENDENCY_BYTES
+        self.bytes + id_len < MAX_DEPENDENCY_BYTES
     }
 
     /// Admits one code-dependency id against the byte budget BEFORE the
@@ -1259,10 +1259,10 @@ impl RepositoryCandidateEvidence {
                 // — verification finding 3). An ID-less endpoint allocates
                 // nothing and stays unresolvable identity.
                 for endpoint in [&record.subject, &record.object] {
-                    if let Some(id) = endpoint.id.as_ref() {
-                        if !state.admits_synthetic_ref(&self.counters, id.as_str().len()) {
-                            return Ok((MemberEvidence::Exhausted, Vec::new()));
-                        }
+                    if let Some(id) = endpoint.id.as_ref()
+                        && !state.admits_synthetic_ref(&self.counters, id.as_str().len())
+                    {
+                        return Ok((MemberEvidence::Exhausted, Vec::new()));
                     }
                 }
                 let provenance_frame =

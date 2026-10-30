@@ -36,10 +36,10 @@ pub enum WrapperKind {
 /// `describe.skip`, `it.concurrent`, `it.todo`).
 pub fn wrapper_kind(callee: &str) -> Option<WrapperKind> {
     let mut name = callee.trim();
-    if let Some((base, modifier)) = name.rsplit_once('.') {
-        if matches!(modifier, "each" | "only" | "skip" | "todo" | "concurrent") {
-            name = base;
-        }
+    if let Some((base, modifier)) = name.rsplit_once('.')
+        && matches!(modifier, "each" | "only" | "skip" | "todo" | "concurrent")
+    {
+        name = base;
     }
     match name {
         "describe" => Some(WrapperKind::Describe),

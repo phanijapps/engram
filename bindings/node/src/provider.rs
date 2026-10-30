@@ -158,7 +158,7 @@ impl NativeProvider {
             .get("codeAuthority")
             .and_then(|authority| authority.get("launchScopes"))
             .cloned()
-            .map(|scopes| serde_json::from_value(scopes))
+            .map(serde_json::from_value)
             .transpose()
             .map_err(|error| {
                 to_napi_error(engram_runtime::CoreError::InvalidRequest {

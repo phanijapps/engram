@@ -176,14 +176,13 @@ impl RetrievalIndex for CommunitySummaryIndex {
                 let relationships = relationships
                     .into_iter()
                     .filter(|relationship| {
-                        let both_authorized = [
+                        [
                             relationship.subject.id.as_ref().map(|id| id.as_str()),
                             relationship.object.id.as_ref().map(|id| id.as_str()),
                         ]
                         .into_iter()
                         .flatten()
-                        .all(|id| authorized_ids.contains(id));
-                        both_authorized
+                        .all(|id| authorized_ids.contains(id))
                     })
                     .collect::<Vec<_>>();
                 (entities, relationships)

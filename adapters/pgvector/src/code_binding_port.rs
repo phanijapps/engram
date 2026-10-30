@@ -956,7 +956,7 @@ impl CodeEligibilityGate for PgCodeBindingRepository {
                     })?;
                     match found {
                         Some(row) => authorized.push(row.get::<_, String>(0)),
-                        None => return Err(foreign_target(&[id.clone()])),
+                        None => return Err(foreign_target(std::slice::from_ref(id))),
                     }
                 }
                 authorized

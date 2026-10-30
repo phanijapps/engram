@@ -26,7 +26,9 @@ fn unhex(s: &[u8]) -> CoreResult<Vec<u8>> {
     if !matches!(s.len(), 40 | 64) {
         return Err(invalid());
     }
-    s.chunks_exact(2)
+    s.as_chunks::<2>()
+        .0
+        .iter()
         .map(|p| {
             std::str::from_utf8(p)
                 .ok()
@@ -132,10 +134,10 @@ fn select_ref(
             return Err(invalid());
         }
         width = Some(oid.len());
-        if name == branch.as_bytes() {
-            if oid.iter().all(|b| *b == 0) || selected.replace(oid).is_some() {
-                return Err(invalid());
-            }
+        if name == branch.as_bytes()
+            && (oid.iter().all(|b| *b == 0) || selected.replace(oid).is_some())
+        {
+            return Err(invalid());
         }
     }
     if !final_flush || service_flush || at != advertisement.len() {
@@ -143,10 +145,10 @@ fn select_ref(
     }
     let mut format = None;
     for cap in &capabilities {
-        if let Some(value) = cap.strip_prefix("object-format=") {
-            if !matches!(value, "sha1" | "sha256") || format.replace(value).is_some() {
-                return Err(invalid());
-            }
+        if let Some(value) = cap.strip_prefix("object-format=")
+            && (!matches!(value, "sha1" | "sha256") || format.replace(value).is_some())
+        {
+            return Err(invalid());
         }
     }
     if matches!(
@@ -548,7 +550,7 @@ fn source_files(
             }
             files.push(CommittedFile {
                 path,
-                oid: hex(&child),
+                oid: hex(child),
                 mode: mode.into(),
                 bytes: blob.bytes.clone(),
             });

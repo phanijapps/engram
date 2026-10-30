@@ -308,10 +308,10 @@ impl TreeSitterChunker {
                     }
                 }
             }
-            if let Some((_, _, caller)) = best {
-                if caller != callee {
-                    edges.push((caller.clone(), callee.clone()));
-                }
+            if let Some((_, _, caller)) = best
+                && caller != callee
+            {
+                edges.push((caller.clone(), callee.clone()));
             }
         }
         Ok(edges)
@@ -529,49 +529,49 @@ fn walk_declarations_with_receivers(
     // can never emit it — the `arrow_function` kind-map entry alone was dead
     // code. Resolve the declaration name from the enclosing
     // variable_declarator and emit the function under that name.
-    if kind == "variable_declarator" {
-        if let (Some(name_node), Some(value_node)) = (
+    if kind == "variable_declarator"
+        && let (Some(name_node), Some(value_node)) = (
             node.child_by_field_name("name"),
             node.child_by_field_name("value"),
-        ) {
-            let is_function_value = kind_map
-                .get(value_node.kind())
-                .is_some_and(|kw| *kw == "function");
-            if is_function_value {
-                let name_text = extract_name(&name_node, source);
-                if !name_text.is_empty() {
-                    push_declaration_chunk(
-                        node, source, "function", &name_text, receivers, kind_map, chunks,
-                    );
-                    let mut child_receivers = receivers.to_vec();
-                    child_receivers.push(name_text);
-                    let mut cursor = node.walk();
-                    for child in node.named_children(&mut cursor) {
-                        walk_declarations_with_receivers(
-                            &child,
-                            source,
-                            kind_map,
-                            &child_receivers,
-                            chunks,
-                        );
-                    }
-                    return;
-                }
-            } else {
-                // Variable binding (ADR-0030's Variable class): emit the
-                // const/let binding as a `variable NAME` declaration chunk
-                // so it becomes an EntityKind::Variable entity. Suppressed
-                // from search RESULTS by default (is_code_artifact) but a
-                // first-class graph + lexical participant — the previously
-                // vacuous suppression class becomes real. Fall through to
-                // the generic recursion so object-literal method children
-                // are still walked.
-                let name_text = extract_name(&name_node, source);
-                if !name_text.is_empty() {
-                    push_declaration_chunk(
-                        node, source, "variable", &name_text, receivers, kind_map, chunks,
+        )
+    {
+        let is_function_value = kind_map
+            .get(value_node.kind())
+            .is_some_and(|kw| *kw == "function");
+        if is_function_value {
+            let name_text = extract_name(&name_node, source);
+            if !name_text.is_empty() {
+                push_declaration_chunk(
+                    node, source, "function", &name_text, receivers, kind_map, chunks,
+                );
+                let mut child_receivers = receivers.to_vec();
+                child_receivers.push(name_text);
+                let mut cursor = node.walk();
+                for child in node.named_children(&mut cursor) {
+                    walk_declarations_with_receivers(
+                        &child,
+                        source,
+                        kind_map,
+                        &child_receivers,
+                        chunks,
                     );
                 }
+                return;
+            }
+        } else {
+            // Variable binding (ADR-0030's Variable class): emit the
+            // const/let binding as a `variable NAME` declaration chunk
+            // so it becomes an EntityKind::Variable entity. Suppressed
+            // from search RESULTS by default (is_code_artifact) but a
+            // first-class graph + lexical participant — the previously
+            // vacuous suppression class becomes real. Fall through to
+            // the generic recursion so object-literal method children
+            // are still walked.
+            let name_text = extract_name(&name_node, source);
+            if !name_text.is_empty() {
+                push_declaration_chunk(
+                    node, source, "variable", &name_text, receivers, kind_map, chunks,
+                );
             }
         }
     }
@@ -804,15 +804,16 @@ fn import_aliases(source: &str, ext: &str) -> std::collections::HashMap<String, 
             }
         } else if is_ts && line.starts_with("import ") {
             // import { a as b, c } from '...'
-            if line.contains('{') && line.contains('}') {
-                if let Some(braces) = line.split_once('{').and_then(|(_, r)| r.split_once('}')) {
-                    for item in braces.0.split(',') {
-                        let item = item.trim();
-                        if let Some((orig, alias)) = item.split_once(" as ") {
-                            let (orig, alias) = (orig.trim(), alias.trim());
-                            if !orig.is_empty() && !alias.is_empty() {
-                                map.insert(alias.to_owned(), orig.to_owned());
-                            }
+            if line.contains('{')
+                && line.contains('}')
+                && let Some(braces) = line.split_once('{').and_then(|(_, r)| r.split_once('}'))
+            {
+                for item in braces.0.split(',') {
+                    let item = item.trim();
+                    if let Some((orig, alias)) = item.split_once(" as ") {
+                        let (orig, alias) = (orig.trim(), alias.trim());
+                        if !orig.is_empty() && !alias.is_empty() {
+                            map.insert(alias.to_owned(), orig.to_owned());
                         }
                     }
                 }
@@ -838,32 +839,31 @@ fn collect_fn_spans(
     fn_spans: &mut Vec<(usize, usize, String)>,
 ) {
     let kind = node.kind();
-    if kind_map.contains_key(kind) {
-        if let Some(name_node) = node
+    if kind_map.contains_key(kind)
+        && let Some(name_node) = node
             .child_by_field_name("name")
             .or_else(|| node.child_by_field_name("declarator"))
             .or_else(|| node.child_by_field_name("type"))
-        {
-            let name = extract_name(&name_node, source);
-            if !name.is_empty() {
-                let qualified = if receivers.is_empty() {
-                    name.clone()
-                } else {
-                    format!("{}::{}", receivers.join("::"), name)
-                };
-                fn_spans.push((
-                    node.start_position().row,
-                    node.end_position().row,
-                    qualified,
-                ));
-                let mut child_receivers = receivers.to_vec();
-                child_receivers.push(name);
-                let mut cursor = node.walk();
-                for child in node.named_children(&mut cursor) {
-                    collect_fn_spans(&child, source, kind_map, &child_receivers, fn_spans);
-                }
-                return;
+    {
+        let name = extract_name(&name_node, source);
+        if !name.is_empty() {
+            let qualified = if receivers.is_empty() {
+                name.clone()
+            } else {
+                format!("{}::{}", receivers.join("::"), name)
+            };
+            fn_spans.push((
+                node.start_position().row,
+                node.end_position().row,
+                qualified,
+            ));
+            let mut child_receivers = receivers.to_vec();
+            child_receivers.push(name);
+            let mut cursor = node.walk();
+            for child in node.named_children(&mut cursor) {
+                collect_fn_spans(&child, source, kind_map, &child_receivers, fn_spans);
             }
+            return;
         }
     }
     let mut cursor = node.walk();
@@ -1248,14 +1248,14 @@ fn extract_inheritance(
 ) {
     match ext {
         "py" => {
-            if node.kind() == "class_definition" {
-                if let Some(supers) = node.child_by_field_name("superclasses") {
-                    let text = supers.utf8_text(source).unwrap_or("");
-                    for base in text.split(',') {
-                        let base = base.trim().trim_start_matches('(').trim_end_matches(')');
-                        if !base.is_empty() {
-                            edges.extends.push((qualified.to_owned(), base.to_owned()));
-                        }
+            if node.kind() == "class_definition"
+                && let Some(supers) = node.child_by_field_name("superclasses")
+            {
+                let text = supers.utf8_text(source).unwrap_or("");
+                for base in text.split(',') {
+                    let base = base.trim().trim_start_matches('(').trim_end_matches(')');
+                    if !base.is_empty() {
+                        edges.extends.push((qualified.to_owned(), base.to_owned()));
                     }
                 }
             }

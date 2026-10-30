@@ -795,10 +795,9 @@ impl CodeBindingCoordinator {
                     .get_source_descriptor(scope, &repo, &resolved, path)
                     .await?
                     .ok_or_else(|| CoreError::InvalidRequest {
-                        reason: format!(
-                            "ExactSourceUnavailable: no durable indexed-source \
+                        reason: "ExactSourceUnavailable: no durable indexed-source \
                                  descriptor for the requested path"
-                        ),
+                            .to_string(),
                     })?;
                 if descriptor.commit_oid != generation.commit_oid {
                     return Err(generation_denied(&resolved));
@@ -859,7 +858,7 @@ impl crate::EngramProvider {
         let coordinator = self.code_bindings()?;
         let retained = self.retained_code_source()?;
         coordinator
-            .exact_source(actor, scope, repo_id, None, None, path, span, &retained)
+            .exact_source(actor, scope, repo_id, None, None, path, span, retained)
             .await
     }
 
@@ -906,7 +905,7 @@ impl crate::EngramProvider {
                 historical_lease,
                 path,
                 span,
-                &retained,
+                retained,
             )
             .await
     }
@@ -936,7 +935,7 @@ impl crate::EngramProvider {
             return Ok(ParticipantExactSource::Unbound);
         };
         coordinator
-            .exact_participant_source(actor, scope, path, candidates, symbol, &retained)
+            .exact_participant_source(actor, scope, path, candidates, symbol, retained)
             .await
     }
 }

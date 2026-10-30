@@ -77,19 +77,19 @@ pub fn predict_context(app: &App, args: &Value) -> Result<Value, ToolError> {
     let state = state_from_args(args);
 
     // If no recent_queries provided, pull from recent memories
-    if state.recent_queries.is_empty() {
-        if let Ok(memory) = app.provider.require_memory() {
-            let scope = app.scope.clone();
-            let recent = block_on(async { memory.list_memories_paged(&scope, None, 5).await });
-            if let Ok(records) = recent {
-                let queries: Vec<String> = records
-                    .items
-                    .iter()
-                    .map(|r| r.content.text.chars().take(60).collect::<String>())
-                    .collect();
-                if !queries.is_empty() {
-                    enriched["recent_queries"] = serde_json::json!(queries);
-                }
+    if state.recent_queries.is_empty()
+        && let Ok(memory) = app.provider.require_memory()
+    {
+        let scope = app.scope.clone();
+        let recent = block_on(async { memory.list_memories_paged(&scope, None, 5).await });
+        if let Ok(records) = recent {
+            let queries: Vec<String> = records
+                .items
+                .iter()
+                .map(|r| r.content.text.chars().take(60).collect::<String>())
+                .collect();
+            if !queries.is_empty() {
+                enriched["recent_queries"] = serde_json::json!(queries);
             }
         }
     }

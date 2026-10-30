@@ -149,11 +149,10 @@ fn extract_express_or_nestjs(text: &str) -> FrameworkFacts {
                 word,
                 "Get" | "Post" | "Put" | "Delete" | "Patch" | "All" | "Head" | "Options"
             ) && !tail.is_empty()
+                && let Some(path) = first_quoted(tail)
             {
-                if let Some(path) = first_quoted(tail) {
-                    pending_decorator = Some((word.to_uppercase(), path));
-                    continue;
-                }
+                pending_decorator = Some((word.to_uppercase(), path));
+                continue;
             }
         }
         // Decorators/comments/blank lines after a route decorator do NOT
@@ -162,14 +161,14 @@ fn extract_express_or_nestjs(text: &str) -> FrameworkFacts {
         if line.starts_with('@') || line.starts_with("//") || line.is_empty() {
             continue;
         }
-        if let Some((method, path)) = pending_decorator.take() {
-            if let Some(handler) = declaration_name(line) {
-                facts.routes.push(RouteFact {
-                    method,
-                    path,
-                    handler,
-                });
-            }
+        if let Some((method, path)) = pending_decorator.take()
+            && let Some(handler) = declaration_name(line)
+        {
+            facts.routes.push(RouteFact {
+                method,
+                path,
+                handler,
+            });
         }
     }
     facts
@@ -251,14 +250,14 @@ fn extract_python_routes(text: &str) -> FrameworkFacts {
         if line.starts_with('#') || line.starts_with("//") || line.is_empty() {
             continue;
         }
-        if let Some((method, path)) = pending.take() {
-            if let Some(handler) = declaration_name(line) {
-                facts.routes.push(RouteFact {
-                    method,
-                    path,
-                    handler,
-                });
-            }
+        if let Some((method, path)) = pending.take()
+            && let Some(handler) = declaration_name(line)
+        {
+            facts.routes.push(RouteFact {
+                method,
+                path,
+                handler,
+            });
         }
     }
     facts
@@ -275,17 +274,17 @@ fn extract_react_callbacks(text: &str) -> (Vec<RouteFact>, Vec<(String, String)>
         let line = raw_line.trim();
         // Track the enclosing component (function Name / const Name =).
         if let Some(rest) = line.strip_prefix("function ") {
-            if let Some(name) = rest.split(['(', ' ', '<']).next() {
-                if !name.is_empty() {
-                    component = name.to_owned();
-                }
+            if let Some(name) = rest.split(['(', ' ', '<']).next()
+                && !name.is_empty()
+            {
+                component = name.to_owned();
             }
-        } else if let Some(rest) = line.strip_prefix("const ") {
-            if let Some(name) = rest.split([' ', '=']).next() {
-                if !name.is_empty() && name.chars().next().is_some_and(|c| c.is_uppercase()) {
-                    component = name.to_owned();
-                }
-            }
+        } else if let Some(rest) = line.strip_prefix("const ")
+            && let Some(name) = rest.split([' ', '=']).next()
+            && !name.is_empty()
+            && name.chars().next().is_some_and(|c| c.is_uppercase())
+        {
+            component = name.to_owned();
         }
         // on<Event>={handler} where handler is a bare identifier.
         for attr in [
@@ -474,12 +473,11 @@ fn collect_fn_spans(
     if matches!(
         kind,
         "function_declaration" | "method_definition" | "function_expression" | "arrow_function"
-    ) {
-        if let Some(name_node) = node.child_by_field_name("name") {
-            let name = name_node.utf8_text(source).unwrap_or("").trim().to_owned();
-            if !name.is_empty() {
-                spans.push((node.start_byte(), node.end_byte(), name));
-            }
+    ) && let Some(name_node) = node.child_by_field_name("name")
+    {
+        let name = name_node.utf8_text(source).unwrap_or("").trim().to_owned();
+        if !name.is_empty() {
+            spans.push((node.start_byte(), node.end_byte(), name));
         }
     }
     let mut cursor = node.walk();
@@ -495,21 +493,21 @@ fn walk_consumer_calls(
     out: &mut Vec<ConsumeFact>,
 ) {
     let kind = node.kind();
-    if matches!(kind, "call_expression" | "new_expression") {
-        if let Some((method, path)) = classify_consumer_call(node, source) {
-            let at = node.start_byte();
-            if let Some(caller) = spans
-                .iter()
-                .filter(|(s, e, _)| at >= *s && at <= *e)
-                .max_by_key(|(s, _, _)| *s)
-                .map(|(_, _, n)| n.clone())
-            {
-                out.push(ConsumeFact {
-                    caller,
-                    method,
-                    path,
-                });
-            }
+    if matches!(kind, "call_expression" | "new_expression")
+        && let Some((method, path)) = classify_consumer_call(node, source)
+    {
+        let at = node.start_byte();
+        if let Some(caller) = spans
+            .iter()
+            .filter(|(s, e, _)| at >= *s && at <= *e)
+            .max_by_key(|(s, _, _)| *s)
+            .map(|(_, _, n)| n.clone())
+        {
+            out.push(ConsumeFact {
+                caller,
+                method,
+                path,
+            });
         }
     }
     let mut cursor = node.walk();
@@ -593,16 +591,16 @@ fn classify_consumer_call(node: tree_sitter::Node, source: &[u8]) -> Option<(Str
                         .child_by_field_name("key")
                         .map(|k| k.utf8_text(source).unwrap_or(""))
                         .unwrap_or("");
-                    if key == "method" {
-                        if let Some(v) = prop.child_by_field_name("value") {
-                            let m = v
-                                .utf8_text(source)
-                                .unwrap_or("")
-                                .trim_matches(['\'', '"'])
-                                .to_uppercase();
-                            if !m.is_empty() {
-                                resolved_method = m;
-                            }
+                    if key == "method"
+                        && let Some(v) = prop.child_by_field_name("value")
+                    {
+                        let m = v
+                            .utf8_text(source)
+                            .unwrap_or("")
+                            .trim_matches(['\'', '"'])
+                            .to_uppercase();
+                        if !m.is_empty() {
+                            resolved_method = m;
                         }
                     }
                 }

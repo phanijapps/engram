@@ -122,10 +122,10 @@ pub(crate) fn source_matches_repository(source: &str, repository: &str) -> bool 
     if short.len() < 2 || short.contains('/') {
         return false;
     }
-    if let Some(label) = extract_repo_label(source) {
-        if label.rsplit('/').next() == Some(short.as_str()) {
-            return true;
-        }
+    if let Some(label) = extract_repo_label(source)
+        && label.rsplit('/').next() == Some(short.as_str())
+    {
+        return true;
     }
     let bare = source
         .split_once('[')
@@ -276,11 +276,11 @@ fn load_manifest(path: &std::path::Path) -> HashMap<String, String> {
 /// leaves either the old or the new file, never a truncated one. Write
 /// failures are non-fatal (next scan degrades to full) but surfaced.
 fn save_manifest(path: &std::path::Path, manifest: &HashMap<String, String>) {
-    if let Some(parent) = path.parent() {
-        if let Err(e) = std::fs::create_dir_all(parent) {
-            eprintln!("engram-mcp: scan manifest dir warning: {e}");
-            return;
-        }
+    if let Some(parent) = path.parent()
+        && let Err(e) = std::fs::create_dir_all(parent)
+    {
+        eprintln!("engram-mcp: scan manifest dir warning: {e}");
+        return;
     }
     let tmp = path.with_extension("json.tmp");
     match serde_json::to_string(manifest) {
@@ -405,20 +405,18 @@ fn embed_pending(
         if let Some(twin) = hash
             .strip_prefix("hash:")
             .and_then(|h| embedded_twin_by_hash.get(h))
+            && let Ok(Some(vector)) = block_on(vector_index.vector_for_target(twin))
+            && !vector.is_empty()
         {
-            if let Ok(Some(vector)) = block_on(vector_index.vector_for_target(twin)) {
-                if !vector.is_empty() {
-                    for id in &ids {
-                        if let Err(e) = block_on(vector_index.insert(id, &space, vector.clone())) {
-                            eprintln!("engram-mcp: embed reuse warning for {id}: {e}");
-                        } else {
-                            embedded += 1;
-                            reused += 1;
-                        }
-                    }
-                    continue;
+            for id in &ids {
+                if let Err(e) = block_on(vector_index.insert(id, &space, vector.clone())) {
+                    eprintln!("engram-mcp: embed reuse warning for {id}: {e}");
+                } else {
+                    embedded += 1;
+                    reused += 1;
                 }
             }
+            continue;
         }
         if let Some(text) = text_by_hash.get(&hash) {
             model_batches.push((text.clone(), ids));
@@ -2330,19 +2328,19 @@ fn expand_type_members(
             if !is_call_family {
                 continue;
             }
-            if r.object.name.as_deref() == Some(member.as_str()) && r.object.id.is_some() {
-                if let Some(s) = r.subject.name.clone() {
-                    if !callers.contains(&s) {
-                        callers.push(s);
-                    }
-                }
+            if r.object.name.as_deref() == Some(member.as_str())
+                && r.object.id.is_some()
+                && let Some(s) = r.subject.name.clone()
+                && !callers.contains(&s)
+            {
+                callers.push(s);
             }
-            if r.subject.name.as_deref() == Some(member.as_str()) && r.object.id.is_some() {
-                if let Some(o) = r.object.name.clone() {
-                    if !callees.contains(&o) {
-                        callees.push(o);
-                    }
-                }
+            if r.subject.name.as_deref() == Some(member.as_str())
+                && r.object.id.is_some()
+                && let Some(o) = r.object.name.clone()
+                && !callees.contains(&o)
+            {
+                callees.push(o);
             }
         }
         let weight = callers.len() + callees.len();

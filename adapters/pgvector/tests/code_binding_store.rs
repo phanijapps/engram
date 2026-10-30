@@ -432,13 +432,13 @@ mod maintenance_retirement_contract {
         let repository = repository();
         let epoch = publish(&repository, &workspace, "repo-r", "gen-1", &["rec-a"]);
         assert_eq!(epoch, 1);
-        let retired_once = block_on(repository.retire_lineage_targets(
+        block_on(repository.retire_lineage_targets(
             &scope(&workspace),
             &[(RepoId("repo-r".into()), 1)],
             &[target("repo-r", "gen-1", "rec-a")],
         ))
         .expect("first retirement commits");
-        assert_eq!(retired_once, ());
+        assert_eq!((), ());
         let after_first = binding_epoch(&repository, &workspace, "repo-r");
         let scope_after_first = scope_epoch(&repository, &workspace);
         assert!(after_first > 1, "the real retirement advanced the epoch");

@@ -49,10 +49,10 @@ fn validate_request_shape(request: &ConsolidationRequest) -> CoreResult<()> {
         return invalid("requester.actor.id is required");
     }
 
-    if let (Some(since), Some(until)) = (request.since, request.until) {
-        if since > until {
-            return invalid("since must be before or equal to until");
-        }
+    if let (Some(since), Some(until)) = (request.since, request.until)
+        && since > until
+    {
+        return invalid("since must be before or equal to until");
     }
 
     Ok(())

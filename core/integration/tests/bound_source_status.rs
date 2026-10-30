@@ -290,7 +290,7 @@ fn fixture_inner_with_lease_window(
     // Optionally pin the HISTORICAL lease while gen-old is still active.
     let historical_lease = if pin_historical_lease {
         let early_coordinator = CodeBindingCoordinator::new(
-            (Arc::clone(&bindings) as Arc<dyn CodeBindingRepository>),
+            Arc::clone(&bindings) as Arc<dyn CodeBindingRepository>,
             Arc::new(AllowAuthorizer),
             Vec::new(),
         );
@@ -437,7 +437,7 @@ fn observation_fixture(dir: &std::path::Path, repos: &[(&str, char, char)]) -> O
         });
     }
     let coordinator = Arc::new(CodeBindingCoordinator::new(
-        (Arc::clone(&bindings) as Arc<dyn engram_knowledge::CodeBindingRepository>),
+        Arc::clone(&bindings) as Arc<dyn engram_knowledge::CodeBindingRepository>,
         Arc::new(AllowAuthorizer),
         Vec::new(),
     ));

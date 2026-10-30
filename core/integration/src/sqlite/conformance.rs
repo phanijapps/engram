@@ -1368,7 +1368,7 @@ pub(crate) fn code_binding_ok() -> bool {
         branch_ref: "refs/heads/other".to_string(),
         ..binding.clone()
     };
-    if !matches!(block_on(store.bind(conflict)), Err(_)) {
+    if !block_on(store.bind(conflict)).is_err() {
         return false;
     }
     matches!(

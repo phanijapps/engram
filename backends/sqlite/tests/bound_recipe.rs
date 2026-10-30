@@ -15,9 +15,7 @@ use engram_domain::{
     KnowledgeSource, Policy, Provenance, RepoId, Requester, Retention, RetrievalRequest, Scope,
     Sensitivity, SourceDocument, SourceDocumentKind, SourceKind, Visibility,
 };
-use engram_integration::{
-    CapabilityPolicy, EmbeddingProviderConfig, EngramConfig, EngramProvider, MigrationMode,
-};
+use engram_integration::{CapabilityPolicy, EmbeddingProviderConfig, EngramConfig, MigrationMode};
 use engram_knowledge::{CodeBindingRepository, KnowledgeRepository};
 use engram_runtime::CoreError;
 use futures::executor::block_on;
@@ -414,15 +412,9 @@ mod task_019 {
         block_on(coordinator.register(&actor(), &scope(), registration)).expect("register");
         block_on(coordinator.bind(&actor(), &scope(), &repo(), "refs/heads/main"))
             .expect("bind primary scope");
-        let first = block_on(coordinator.ingest_registered(
-            &actor(),
-            &scope(),
-            &repo(),
-            None,
-            None,
-            &lanes,
-        ))
-        .expect("first ingestion");
+        let first =
+            block_on(coordinator.ingest_registered(&actor(), &scope(), &repo(), None, None, lanes))
+                .expect("first ingestion");
 
         let changed_filter = engram_ingest::ScanFilterConfig::default();
         let changed = block_on(coordinator.ingest_registered(
@@ -431,7 +423,7 @@ mod task_019 {
             &repo(),
             None,
             Some(&changed_filter),
-            &lanes,
+            lanes,
         ))
         .expect("changed filter reuses retained snapshot");
         assert_ne!(changed.generation_id, first.generation_id);
@@ -445,7 +437,7 @@ mod task_019 {
             &repo(),
             None,
             None,
-            &lanes,
+            lanes,
         ))
         .expect("cross-scope ingestion reuses retained snapshot");
         assert_ne!(cross_scope.generation_id, first.generation_id);
@@ -473,7 +465,7 @@ mod task_019 {
                 &repo(),
                 None,
                 Some(&another_filter),
-                &lanes,
+                lanes,
             ))
             .is_err()
         );
@@ -522,7 +514,7 @@ mod task_019 {
         .expect("register");
         block_on(coordinator.bind(&actor(), &scope(), &repo, "refs/heads/main")).expect("bind");
         let lanes = provider.code_ingestion().expect("ingestion lanes");
-        block_on(coordinator.ingest_registered(&actor(), &scope(), &repo, None, None, &lanes))
+        block_on(coordinator.ingest_registered(&actor(), &scope(), &repo, None, None, lanes))
             .expect("ingest");
         let preview = block_on(coordinator.preview_reset(&actor(), &scope(), &repo))
             .expect("authorized preview");

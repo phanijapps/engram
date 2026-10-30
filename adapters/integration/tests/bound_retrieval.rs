@@ -1558,7 +1558,7 @@ mod task_013 {
 
         #[test]
         fn denying_owning_authorizer_degrades_to_unknown() {
-            let dir = tempfile::tempdir().expect("tempdir");
+            let _dir = tempfile::tempdir().expect("tempdir");
             // The REAL owning construction path: with_dependencies carries a
             // record-sensitive denying authorizer; the evidence path must
             // receive the SAME decisions through the accessor.
@@ -1723,7 +1723,7 @@ mod task_013 {
             let fixture = fixture(dir.path());
             // A denied-SOURCE variant: same chunk bytes, source carrying a
             // High-sensitivity policy the owning authorizer denies.
-            let mut denied_source: engram_domain::KnowledgeSource = {
+            let denied_source: engram_domain::KnowledgeSource = {
                 let mut source = engram_domain::KnowledgeSource {
                     id: Id::from("source-denied"),
                     kind: engram_domain::SourceKind::Upload,

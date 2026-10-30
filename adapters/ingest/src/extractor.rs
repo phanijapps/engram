@@ -872,10 +872,10 @@ fn local_qualify(
     // qualified symbol, before the unique-tail rule.
     if reference.contains("::") {
         let tail = reference.rsplit("::").next().unwrap_or(reference);
-        if let Some(candidates) = bare_to_qualified.get(tail) {
-            if let Some(exact) = candidates.iter().find(|q| q.as_str() == reference) {
-                return Some(exact.clone());
-            }
+        if let Some(candidates) = bare_to_qualified.get(tail)
+            && let Some(exact) = candidates.iter().find(|q| q.as_str() == reference)
+        {
+            return Some(exact.clone());
         }
     }
     let candidates = bare_to_qualified.get(reference)?;

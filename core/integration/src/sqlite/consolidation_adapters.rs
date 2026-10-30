@@ -51,17 +51,16 @@ impl ActiveMemorySource for ActiveMemorySourceAdapter {
         for event in &events {
             if let Some(mid) = &event.memory_id {
                 let mid_str = mid.to_string();
-                if seen.insert(mid_str) {
-                    if let Ok(Some(record)) = self.0.get_memory(mid, scope).await {
-                        if record.status == MemoryStatus::Active {
-                            evidence.push(engram_reflection::ActiveMemoryEvidence {
-                                memory_id: record.id.clone(),
-                                text: record.content.text.clone(),
-                                policy: record.policy.clone(),
-                                observed_at: record.provenance.observed_at,
-                            });
-                        }
-                    }
+                if seen.insert(mid_str)
+                    && let Ok(Some(record)) = self.0.get_memory(mid, scope).await
+                    && record.status == MemoryStatus::Active
+                {
+                    evidence.push(engram_reflection::ActiveMemoryEvidence {
+                        memory_id: record.id.clone(),
+                        text: record.content.text.clone(),
+                        policy: record.policy.clone(),
+                        observed_at: record.provenance.observed_at,
+                    });
                 }
             }
         }
@@ -81,14 +80,14 @@ impl DecayMemorySource for DecayMemorySourceAdapter {
         for event in &events {
             if let Some(mid) = &event.memory_id {
                 let mid_str = mid.to_string();
-                if seen.insert(mid_str) {
-                    if let Ok(Some(record)) = self.0.get_memory(mid, scope).await {
-                        result.push(DecayCandidate {
-                            id: mid.clone(),
-                            status: record.status,
-                            policy: record.policy.clone(),
-                        });
-                    }
+                if seen.insert(mid_str)
+                    && let Ok(Some(record)) = self.0.get_memory(mid, scope).await
+                {
+                    result.push(DecayCandidate {
+                        id: mid.clone(),
+                        status: record.status,
+                        policy: record.policy.clone(),
+                    });
                 }
             }
         }

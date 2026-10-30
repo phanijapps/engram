@@ -413,17 +413,15 @@ pub(crate) fn private_directory(path: &Path) -> CoreResult<PrivateDirectory> {
     match outcome {
         Ok(dir) => Ok(dir),
         Err(error) => {
-            if created {
-                if let Err(cleanup) = parent.remove_dir(name) {
-                    return Err(pending_error(
-                        "private-directory-bootstrap",
-                        "remove-empty-directory",
-                        &root,
-                        None,
-                        &error,
-                        &cleanup,
-                    ));
-                }
+            if created && let Err(cleanup) = parent.remove_dir(name) {
+                return Err(pending_error(
+                    "private-directory-bootstrap",
+                    "remove-empty-directory",
+                    &root,
+                    None,
+                    &error,
+                    &cleanup,
+                ));
             }
             Err(storage_error())
         }

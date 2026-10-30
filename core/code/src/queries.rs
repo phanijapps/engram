@@ -312,7 +312,7 @@ pub fn explore_by_id(
         return Vec::new();
     }
     let mut adjacency: std::collections::HashMap<&str, Vec<&str>> = Default::default();
-    for (subject, object, predicate) in edges
+    for (subject, object, _predicate) in edges
         .iter()
         .filter(|(_, _, predicate)| *predicate == "calls" || *predicate == "contains")
     {
@@ -411,10 +411,7 @@ pub fn file_dependencies_resolved(
 #[cfg(test)]
 mod r2_tests {
     use super::*;
-    use engram_domain::{
-        Actor, ActorKind, AllowedUse, EntityRef, Id, Policy, Provenance, Retention, Scope,
-        Visibility,
-    };
+    use engram_domain::{Actor, ActorKind, EntityRef, Id, Provenance, Scope};
 
     fn rel(
         id: &str,
@@ -474,7 +471,7 @@ mod r2_tests {
     /// stay distinct explore nodes because traversal keys on entity ids.
     #[test]
     fn same_name_different_file_symbols_stay_distinct() {
-        let edge_records = vec![
+        let edge_records = [
             ("e1", "calls", "fn-1", "render", "hub", "hub"),
             ("e2", "calls", "fn-2", "render", "hub", "hub"),
         ];

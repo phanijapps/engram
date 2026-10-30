@@ -50,10 +50,10 @@ pub fn scan_dependencies(app: &App, args: &Value) -> Result<Value, ToolError> {
             if let Some(name) = name {
                 graph.entry(name).or_default().extend(deps);
             }
-        } else if rel.ends_with("package.json") {
-            if let Some((name, deps)) = parse_package_json_deps(text) {
-                graph.entry(name).or_default().extend(deps);
-            }
+        } else if rel.ends_with("package.json")
+            && let Some((name, deps)) = parse_package_json_deps(text)
+        {
+            graph.entry(name).or_default().extend(deps);
         }
     }
 
@@ -246,17 +246,17 @@ fn walk_manifests_dir(root: &Path, dir: &Path, files: &mut Vec<(String, String)>
             walk_manifests_dir(root, &path, files);
         } else if path.is_file() {
             let base = path.file_name().and_then(|n| n.to_str()).unwrap_or("");
-            if base == "Cargo.toml" || base == "package.json" {
-                if let Ok(text) = std::fs::read_to_string(&path) {
-                    if text.len() > 512 * 1024 {
-                        continue;
-                    }
-                    let rel = path
-                        .strip_prefix(root)
-                        .map(|p| p.to_string_lossy().to_string())
-                        .unwrap_or_default();
-                    files.push((rel, text));
+            if (base == "Cargo.toml" || base == "package.json")
+                && let Ok(text) = std::fs::read_to_string(&path)
+            {
+                if text.len() > 512 * 1024 {
+                    continue;
                 }
+                let rel = path
+                    .strip_prefix(root)
+                    .map(|p| p.to_string_lossy().to_string())
+                    .unwrap_or_default();
+                files.push((rel, text));
             }
         }
     }

@@ -286,15 +286,14 @@ impl CodeBindingRepository for SqlCodeBindingRepository {
         let key = json(scope)?;
         let reset_progress =
             reset_progress.map(|(reset_id, record_ids)| (reset_id.to_owned(), record_ids.to_vec()));
-        if let Some((_, record_ids)) = &reset_progress {
-            if record_ids
+        if let Some((_, record_ids)) = &reset_progress
+            && record_ids
                 .iter()
                 .any(|record_id| !targets.iter().any(|target| &target.record_id == record_id))
-            {
-                return Err(CoreError::InvalidRequest {
-                    reason: "reset progress must name retired targets".into(),
-                });
-            }
+        {
+            return Err(CoreError::InvalidRequest {
+                reason: "reset progress must name retired targets".into(),
+            });
         }
         store.connection.execute_batch("CREATE TABLE IF NOT EXISTS code_stage_lineage(scope_key TEXT NOT NULL,record_id TEXT NOT NULL,repo_id TEXT NOT NULL,generation_id TEXT NOT NULL,record_json TEXT NOT NULL,PRIMARY KEY(scope_key,record_id)); CREATE TABLE IF NOT EXISTS code_stage_lineage_retirements(scope_key TEXT NOT NULL,record_id TEXT NOT NULL,PRIMARY KEY(scope_key,record_id)); CREATE TABLE IF NOT EXISTS code_reset_journal_progress(reset_id TEXT NOT NULL,record_id TEXT NOT NULL,checkpoint TEXT NOT NULL,PRIMARY KEY(reset_id,record_id))")
             .map_err(|_| storage_error())?;
@@ -1084,7 +1083,7 @@ impl engram_knowledge::CodeEligibilityGate for SqlCodeBindingRepository {
                     match found {
                         Some(record_id) => authorized.push(record_id),
                         None => {
-                            return Err(foreign_target(&[id.clone()]));
+                            return Err(foreign_target(std::slice::from_ref(id)));
                         }
                     }
                 }

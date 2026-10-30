@@ -3,7 +3,7 @@
 //! These checks mirror the in-memory baseline so adapter conformance does not
 //! depend on which persistence backend receives the request.
 
-use engram_domain::{AllowedUse, ForgetRequest, RetrievalRequest, Verdict, WriteMemoryRequest};
+use engram_domain::{ForgetRequest, RetrievalRequest, WriteMemoryRequest};
 use engram_memory::{CoreError, CoreResult};
 
 /// Validates behavior-level constraints for v1 memory writes.

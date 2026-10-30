@@ -250,17 +250,17 @@ impl IngestOps {
                 scan_filter: engram_ingest::ScanFilter::document_only(),
             };
             let progress = |p: engram_ingest::ScanProgress| {
-                if let Ok(mut jobs) = jobs.lock() {
-                    if let Some(state) = jobs.get_mut(&job_id_for_thread) {
-                        state.current_file = Some(p.file);
-                        state.processed += 1;
-                        match p.status {
-                            "ingested" => state.ingested += 1,
-                            "unchanged" => state.unchanged += 1,
-                            "skipped" => state.skipped += 1,
-                            "error" => state.errors += 1,
-                            _ => {}
-                        }
+                if let Ok(mut jobs) = jobs.lock()
+                    && let Some(state) = jobs.get_mut(&job_id_for_thread)
+                {
+                    state.current_file = Some(p.file);
+                    state.processed += 1;
+                    match p.status {
+                        "ingested" => state.ingested += 1,
+                        "unchanged" => state.unchanged += 1,
+                        "skipped" => state.skipped += 1,
+                        "error" => state.errors += 1,
+                        _ => {}
                     }
                 }
             };
@@ -268,10 +268,10 @@ impl IngestOps {
             // Cross-file resolution: after the parallel scan, connect entities
             // that share a name across different graphs so the Q&A + explorer
             // see cross-file/cross-repo edges.
-            if let Ok((ref summary, _)) = result {
-                if summary.ingested > 0 {
-                    resolve_cross_file_edges(&store, &opts.scope);
-                }
+            if let Ok((ref summary, _)) = result
+                && summary.ingested > 0
+            {
+                resolve_cross_file_edges(&store, &opts.scope);
             }
             let final_state = match result {
                 Ok((summary, new_manifest)) => {

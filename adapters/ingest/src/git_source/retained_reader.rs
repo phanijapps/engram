@@ -548,11 +548,11 @@ mod tests {
                 let storage_for_hook = storage.clone();
                 let hook: std::sync::Arc<dyn Fn(CheckOpenBoundary) + Send + Sync> =
                     Arc::new(move |fired_at| {
-                        if !matches!(fired_at, boundary) {
+                        if !matches!(fired_at, _boundary) {
                             return;
                         }
                         counter.fetch_add(1, Ordering::SeqCst);
-                        let commit_dir = storage_for_hook.join(&oid_for(&storage_for_hook));
+                        let commit_dir = storage_for_hook.join(oid_for(&storage_for_hook));
                         match fired_at {
                             CheckOpenBoundary::CommitDirectory => {
                                 // Different-inode directory with IDENTICAL
@@ -636,7 +636,7 @@ mod tests {
                         }
                         counter.fetch_add(1, Ordering::SeqCst);
                         let leaf = storage_for_hook
-                            .join(&oid_for(&storage_for_hook))
+                            .join(oid_for(&storage_for_hook))
                             .join("src/mod.py");
                         match swap {
                             LeafSwap::Symlink => {
@@ -683,7 +683,7 @@ mod tests {
     fn nix_compat_fifo(path: &std::path::Path) -> std::io::Result<()> {
         unsafe {
             let cpath = std::ffi::CString::new(path.as_os_str().as_encoded_bytes())
-                .map_err(|e| std::io::Error::other(e))?;
+                .map_err(std::io::Error::other)?;
             if libc::mkfifo(cpath.as_ptr(), 0o600) != 0 {
                 return Err(std::io::Error::last_os_error());
             }

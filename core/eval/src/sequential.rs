@@ -168,14 +168,15 @@ impl SequentialHarness {
 
                     // Interference: a capability that passed before and fails
                     // now (on the stateful arm) regressed after a write.
-                    if let Some(prev) = last_success.get(&step.capability) {
-                        if *prev && !stateful_ok {
-                            interference.push(InterferenceEntry {
-                                capability: step.capability.clone(),
-                                after_write_index: last_write_index,
-                                detected_at_checkpoint: checkpoint_index,
-                            });
-                        }
+                    if let Some(prev) = last_success.get(&step.capability)
+                        && *prev
+                        && !stateful_ok
+                    {
+                        interference.push(InterferenceEntry {
+                            capability: step.capability.clone(),
+                            after_write_index: last_write_index,
+                            detected_at_checkpoint: checkpoint_index,
+                        });
                     }
                     last_success.insert(step.capability.clone(), stateful_ok);
 

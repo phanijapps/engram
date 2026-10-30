@@ -66,7 +66,7 @@ fn config(dir: &Path) -> EngramConfig {
         MigrationMode::DryRun,
         CapabilityPolicy::FailClosed,
     )
-    .with_pgvector(&url());
+    .with_pgvector(url());
     value.enable_vector = false;
     value
 }

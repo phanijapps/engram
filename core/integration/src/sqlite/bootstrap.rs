@@ -345,12 +345,12 @@ pub(crate) fn bootstrap_sqlite(config: &EngramConfig) -> CoreResult<EngramProvid
     }
 
     // Procedures (RFC-0016 Layer 6).
-    if conformance::procedures_ok() {
-        if let Ok(store) = SqlProcedureStore::open_file(&paths.procedures) {
-            let store: Arc<SqlProcedureStore> = Arc::new(store);
-            procedures = Some(store);
-            procedures_state = CapabilityState::Supported;
-        }
+    if conformance::procedures_ok()
+        && let Ok(store) = SqlProcedureStore::open_file(&paths.procedures)
+    {
+        let store: Arc<SqlProcedureStore> = Arc::new(store);
+        procedures = Some(store);
+        procedures_state = CapabilityState::Supported;
     }
 
     // Operator proposal queue (enhancements adoption, slice 2): the queue
@@ -484,31 +484,30 @@ pub(crate) fn bootstrap_sqlite(config: &EngramConfig) -> CoreResult<EngramProvid
     );
     // The same configured provider supplies query and passage embeddings.
     // Reopening an incompatible index never exposes an old-space query lane.
-    if config.enable_vector {
-        if let (Some(provider), Some(knowledge_handle), Some(path)) = (
+    if config.enable_vector
+        && let (Some(provider), Some(knowledge_handle), Some(path)) = (
             embedding_provider.as_ref(),
             &knowledge_store,
             paths.vectors.to_str(),
-        ) {
-            let space = config.embedding_provider.embedding_space();
-            let index =
-                engram_store_sqlite::SqliteVectorIndex::open_with_embedding_space(path, space)?;
-            if index.requires_reindex() {
-                embedding_provider = None;
-                vectors_state = CapabilityState::RequiresReindex {
-                    reason: CapabilityReason::EmbeddingSpaceMismatch,
-                };
-            } else {
-                let index = Arc::new(index);
-                let resolver = recall_lanes::KnowledgeVectorResolver::new(knowledge_handle.clone());
-                retrieval_lanes.push(Arc::new(engram_store_sqlite::VectorRetrievalIndex::new(
-                    (*index).clone(),
-                    Arc::new(recall_lanes::EmbeddingQueryProvider(provider.clone())),
-                    Arc::new(resolver),
-                )));
-                vectors = Some(index as Arc<dyn engram_retrieval::VectorIndex>);
-                vectors_state = CapabilityState::Supported;
-            }
+        )
+    {
+        let space = config.embedding_provider.embedding_space();
+        let index = engram_store_sqlite::SqliteVectorIndex::open_with_embedding_space(path, space)?;
+        if index.requires_reindex() {
+            embedding_provider = None;
+            vectors_state = CapabilityState::RequiresReindex {
+                reason: CapabilityReason::EmbeddingSpaceMismatch,
+            };
+        } else {
+            let index = Arc::new(index);
+            let resolver = recall_lanes::KnowledgeVectorResolver::new(knowledge_handle.clone());
+            retrieval_lanes.push(Arc::new(engram_store_sqlite::VectorRetrievalIndex::new(
+                (*index).clone(),
+                Arc::new(recall_lanes::EmbeddingQueryProvider(provider.clone())),
+                Arc::new(resolver),
+            )));
+            vectors = Some(index as Arc<dyn engram_retrieval::VectorIndex>);
+            vectors_state = CapabilityState::Supported;
         }
     }
     if let (Some(memory_handle), Some(belief_handle)) = (&memory_store, &belief_store)
@@ -641,21 +640,19 @@ pub(crate) fn bootstrap_sqlite(config: &EngramConfig) -> CoreResult<EngramProvid
         let space = config.embedding_provider.embedding_space();
         if let Ok(path_str) = path.to_str().ok_or_else(|| CoreError::InvalidRequest {
             reason: "vector db path is not valid unicode".to_string(),
-        }) {
-            if let Ok(index) =
-                engram_store_sqlite::SqliteVectorIndex::open_with_embedding_space(path_str, space)
-            {
-                if index.requires_reindex() {
-                    // The index was built under a different embedding space than
-                    // the configuration requests: existing vectors are
-                    // incompatible and must be rebuilt before use.
-                    vectors_state = CapabilityState::RequiresReindex {
-                        reason: CapabilityReason::EmbeddingSpaceMismatch,
-                    };
-                } else {
-                    vectors = Some(Arc::new(index));
-                    vectors_state = CapabilityState::Supported;
-                }
+        }) && let Ok(index) =
+            engram_store_sqlite::SqliteVectorIndex::open_with_embedding_space(path_str, space)
+        {
+            if index.requires_reindex() {
+                // The index was built under a different embedding space than
+                // the configuration requests: existing vectors are
+                // incompatible and must be rebuilt before use.
+                vectors_state = CapabilityState::RequiresReindex {
+                    reason: CapabilityReason::EmbeddingSpaceMismatch,
+                };
+            } else {
+                vectors = Some(Arc::new(index));
+                vectors_state = CapabilityState::Supported;
             }
         }
     }
@@ -740,50 +737,49 @@ pub(crate) fn bootstrap_sqlite(config: &EngramConfig) -> CoreResult<EngramProvid
     // Wired only when BOTH the binding cell and the knowledge store are
     // healthy — otherwise the lane stays absent (typed unavailable).
     let mut code_ingestion: Option<Arc<crate::code_binding::CodeIngestionLanes>> = None;
-    if conformance::code_binding_ok() {
-        if let Ok(bindings) =
+    if conformance::code_binding_ok()
+        && let Ok(bindings) =
             engram_store_sqlite::knowledge::SqlCodeBindingRepository::open(&paths.code_bindings)
-        {
-            let reset_lanes = Arc::new(crate::code_binding::RecipeResetLaneLifecycle::new(
-                lexical_feed.clone(),
-                vectors.clone(),
-                graph_cache.clone(),
-            ));
-            let bindings: Arc<dyn engram_knowledge::CodeBindingRepository> = Arc::new(bindings);
-            let coordinator = crate::code_binding::CodeBindingCoordinator::new(
-                bindings.clone(),
-                Arc::new(crate::code_binding::RecipeDefaultAuthorizer),
-                Vec::new(),
-            )
-            .with_reset_lanes(reset_lanes);
-            let coordinator = if let Some(knowledge_handle) = &knowledge_store {
-                coordinator.with_preservation_source(Arc::new(
-                    crate::code_binding::KnowledgePreservationRecordSource::new(
-                        knowledge_handle.clone() as Arc<dyn engram_knowledge::KnowledgeRepository>,
-                        knowledge_handle.clone() as Arc<dyn crate::KnowledgeQuery>,
-                        bindings,
-                    ),
-                ))
-            } else {
-                coordinator
-            };
-            let retained_root = config.storage_path.join("retained");
-            code_source = Some(Arc::new(
-                engram_ingest::git_source::RetainedSnapshotReader::new(retained_root.clone()),
-            ));
-            if let (Some(knowledge_handle), Some(graph_handle)) = (&knowledge_store, &graph) {
-                code_ingestion = Some(Arc::new(crate::code_binding::CodeIngestionLanes {
-                    knowledge: knowledge_handle.clone()
-                        as Arc<dyn engram_knowledge::KnowledgeRepository>,
-                    graph: Arc::clone(graph_handle),
-                    retained_root,
-                }));
-            }
-            code_coordinator = Some(Arc::new(coordinator));
-            code_binding_state = CapabilityState::Supported;
-            code_source_state = CapabilityState::Supported;
-            code_reset_state = CapabilityState::Supported;
+    {
+        let reset_lanes = Arc::new(crate::code_binding::RecipeResetLaneLifecycle::new(
+            lexical_feed.clone(),
+            vectors.clone(),
+            graph_cache.clone(),
+        ));
+        let bindings: Arc<dyn engram_knowledge::CodeBindingRepository> = Arc::new(bindings);
+        let coordinator = crate::code_binding::CodeBindingCoordinator::new(
+            bindings.clone(),
+            Arc::new(crate::code_binding::RecipeDefaultAuthorizer),
+            Vec::new(),
+        )
+        .with_reset_lanes(reset_lanes);
+        let coordinator = if let Some(knowledge_handle) = &knowledge_store {
+            coordinator.with_preservation_source(Arc::new(
+                crate::code_binding::KnowledgePreservationRecordSource::new(
+                    knowledge_handle.clone() as Arc<dyn engram_knowledge::KnowledgeRepository>,
+                    knowledge_handle.clone() as Arc<dyn crate::KnowledgeQuery>,
+                    bindings,
+                ),
+            ))
+        } else {
+            coordinator
+        };
+        let retained_root = config.storage_path.join("retained");
+        code_source = Some(Arc::new(
+            engram_ingest::git_source::RetainedSnapshotReader::new(retained_root.clone()),
+        ));
+        if let (Some(knowledge_handle), Some(graph_handle)) = (&knowledge_store, &graph) {
+            code_ingestion = Some(Arc::new(crate::code_binding::CodeIngestionLanes {
+                knowledge: knowledge_handle.clone()
+                    as Arc<dyn engram_knowledge::KnowledgeRepository>,
+                graph: Arc::clone(graph_handle),
+                retained_root,
+            }));
         }
+        code_coordinator = Some(Arc::new(coordinator));
+        code_binding_state = CapabilityState::Supported;
+        code_source_state = CapabilityState::Supported;
+        code_reset_state = CapabilityState::Supported;
     }
 
     let report = CapabilityReport::builder()

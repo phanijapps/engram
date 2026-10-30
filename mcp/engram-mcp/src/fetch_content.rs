@@ -688,7 +688,7 @@ mod tests {
     // ---------- task_017: bound-code exact retained source ---------------
 
     use crate::ontology::{OntologyConfig, TaxonomyConfig};
-    use engram_domain::{CodeGeneration, SourceDocument, SourceDocumentKind};
+    use engram_domain::CodeGeneration;
     use engram_ingest::git_source::{
         CommittedFile, ResolvedCommit, RetainedSnapshotReader, retain_snapshot,
     };
@@ -696,7 +696,7 @@ mod tests {
     use engram_integration::code_binding::{
         CodeAuthorityAction, CodeBindingAuthorizer, CodeBindingCoordinator,
     };
-    use engram_knowledge::{CodeBindingRepository, KnowledgeRepository};
+    use engram_knowledge::CodeBindingRepository;
     use engram_knowledge::{CoreError, CoreResult};
 
     struct PermissiveAuthorizer;
@@ -1169,9 +1169,11 @@ mod tests {
         ) -> CoreResult<engram_knowledge::CodeEligibility> {
             let binding = self.effective_binding();
             let published = scope == &self.binding.scope;
-            let mut generations = published
-                .then(|| vec![self.active_generation().id])
-                .unwrap_or_default();
+            let mut generations = if published {
+                vec![self.active_generation().id]
+            } else {
+                Default::default()
+            };
             if let Some(old) = &self.retained_old {
                 generations.push(old.id.clone());
             }
@@ -1179,9 +1181,11 @@ mod tests {
                 scope: scope.clone(),
                 epoch: if published { binding.epoch } else { 1 },
                 generations,
-                repository_ids: published
-                    .then(|| vec![self.binding.repo_id.0.clone()])
-                    .unwrap_or_default(),
+                repository_ids: if published {
+                    vec![self.binding.repo_id.0.clone()]
+                } else {
+                    Default::default()
+                },
             })
         }
         async fn preview_reset(
@@ -1240,7 +1244,7 @@ mod tests {
     }
 
     fn bound_knowledge_impl(
-        scope: &engram_domain::Scope,
+        _scope: &engram_domain::Scope,
         source: Vec<u8>,
         symbol_name: &str,
         start_line: u32,
@@ -1563,7 +1567,7 @@ mod tests {
 
     /// Two same-named symbol chunks with DIFFERENT spans (ambiguous).
     fn ambiguous_knowledge(
-        scope: &engram_domain::Scope,
+        _scope: &engram_domain::Scope,
     ) -> std::sync::Arc<dyn engram_integration::KnowledgeQuery> {
         let chunk = |id: &str, start: u32, end: u32| engram_domain::KnowledgeChunk {
             id: engram_domain::Id::from(id),

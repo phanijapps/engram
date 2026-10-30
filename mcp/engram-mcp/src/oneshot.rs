@@ -359,10 +359,10 @@ fn run_status(argv: &[String]) -> i32 {
                     last_index_at = Some(mtime);
                 }
             }
-            if let Ok(text) = std::fs::read_to_string(&path) {
-                if let Ok(map) = serde_json::from_str::<serde_json::Map<String, Value>>(&text) {
-                    indexed_files += map.len();
-                }
+            if let Ok(text) = std::fs::read_to_string(&path)
+                && let Ok(map) = serde_json::from_str::<serde_json::Map<String, Value>>(&text)
+            {
+                indexed_files += map.len();
             }
         }
     }

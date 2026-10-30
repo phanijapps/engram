@@ -306,7 +306,7 @@ fn run_limited_faulted(
     stdout_limit: usize,
     input: Option<Vec<u8>>,
     mut check_storage: impl FnMut() -> CoreResult<()>,
-    finish_fault: FinishFault,
+    _finish_fault: FinishFault,
 ) -> CoreResult<Output> {
     #[cfg(not(any(unix, windows)))]
     return Err(CoreError::InvalidRequest {
@@ -581,35 +581,33 @@ mod task_008 {
         let mut keeper = None;
         let start = Instant::now();
         let result = run_limited_checked(&mut command, &limits, 128, || {
-            if !observed {
-                if let Ok(pid) = std::fs::read_to_string(&marker)
+            if !observed
+                && let Ok(pid) = std::fs::read_to_string(&marker)
                     .unwrap_or_default()
                     .parse::<u32>()
+            {
+                #[cfg(windows)]
                 {
-                    #[cfg(windows)]
-                    {
-                        use std::os::windows::io::FromRawHandle;
-                        use windows_sys::Win32::System::Threading::*;
-                        let handle = unsafe {
-                            OpenProcess(
-                                PROCESS_QUERY_LIMITED_INFORMATION | PROCESS_SYNCHRONIZE,
-                                0,
-                                pid,
-                            )
-                        };
-                        if handle.is_null() {
-                            return Err(operation_failed(StageFailure::os(
-                                "descendant.open_process",
-                            )));
-                        }
-                        keeper = Some(unsafe {
-                            std::os::windows::io::OwnedHandle::from_raw_handle(handle)
-                        });
+                    use std::os::windows::io::FromRawHandle;
+                    use windows_sys::Win32::System::Threading::*;
+                    let handle = unsafe {
+                        OpenProcess(
+                            PROCESS_QUERY_LIMITED_INFORMATION | PROCESS_SYNCHRONIZE,
+                            0,
+                            pid,
+                        )
+                    };
+                    if handle.is_null() {
+                        return Err(operation_failed(StageFailure::os(
+                            "descendant.open_process",
+                        )));
                     }
-                    #[cfg(unix)]
-                    let _ = pid;
-                    observed = true;
+                    keeper =
+                        Some(unsafe { std::os::windows::io::OwnedHandle::from_raw_handle(handle) });
                 }
+                #[cfg(unix)]
+                let _ = pid;
+                observed = true;
             }
             Ok(())
         });

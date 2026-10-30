@@ -54,16 +54,15 @@ pub fn collect_evidence(
             if let Some(body) = body {
                 let mut cursor = body.walk();
                 for child in body.named_children(&mut cursor) {
-                    if child.kind() == "function_item" {
-                        if let Some(anchor_owner) =
+                    if child.kind() == "function_item"
+                        && let Some(anchor_owner) =
                             method_anchor(child, source, &child_receivers, "name")
-                        {
-                            let evidence = child
-                                .child_by_field_name("return_type")
-                                .map(|r| normalize_return(text(r), &owner_path))
-                                .unwrap_or(ReturnEvidence::Unsupported);
-                            builder.declare_method(&anchor_owner, evidence);
-                        }
+                    {
+                        let evidence = child
+                            .child_by_field_name("return_type")
+                            .map(|r| normalize_return(text(r), &owner_path))
+                            .unwrap_or(ReturnEvidence::Unsupported);
+                        builder.declare_method(&anchor_owner, evidence);
                     }
                     collect_evidence(child, source, ext, &child_receivers, builder);
                 }
@@ -164,10 +163,10 @@ pub fn collect_evidence(
                             let ftype = child
                                 .child_by_field_name("type")
                                 .and_then(|t| clean_type(text(t)));
-                            if let (f, Some(t)) = (fname, ftype) {
-                                if !f.is_empty() {
-                                    builder.declare_struct_field(&name, &f, &t);
-                                }
+                            if let (f, Some(t)) = (fname, ftype)
+                                && !f.is_empty()
+                            {
+                                builder.declare_struct_field(&name, &f, &t);
                             }
                         }
                         _ => {}

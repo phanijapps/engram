@@ -77,10 +77,9 @@ fn spawn_server(backend: &str, tag: &str) -> Server {
             let Ok(line) = line else { break };
             if let Ok(value) = serde_json::from_str::<Value>(&line)
                 && value.get("jsonrpc").is_some()
+                && sender.send(value).is_err()
             {
-                if sender.send(value).is_err() {
-                    break;
-                }
+                break;
             }
             // Non-JSON startup/diagnostic lines are skipped, never parsed.
         }
@@ -123,7 +122,7 @@ impl Server {
 
 /// Creates a real local git repository with one commit on `main` and returns
 /// (path, full commit oid).
-fn git_fixture(tag: &str) -> (std::path::PathBuf, String) {
+fn git_fixture(_tag: &str) -> (std::path::PathBuf, String) {
     let dir = tempfile::tempdir().expect("tempdir");
     let path = dir.keep();
     let run = |args: &[&str]| {
@@ -176,7 +175,7 @@ fn pg_available() -> bool {
 }
 
 fn pg_required() -> bool {
-    std::env::var("ENGRAM_TEST_REQUIRE_PG").map_or(false, |value| value == "1")
+    std::env::var("ENGRAM_TEST_REQUIRE_PG").is_ok_and(|value| value == "1")
 }
 
 /// Convert the real preview document into the exact owner-approved journal
@@ -657,7 +656,7 @@ mod task_022 {
         args
     }
 
-    fn storage_for(tag: &str) -> std::path::PathBuf {
+    fn storage_for(_tag: &str) -> std::path::PathBuf {
         let dir = tempfile::tempdir().expect("tempdir");
         let storage = dir.path().join("storage");
         std::fs::create_dir_all(&storage).expect("mkdir storage");

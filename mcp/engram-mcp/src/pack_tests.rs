@@ -464,7 +464,7 @@ fn pack_widen_without_cache_is_an_honest_offline_error() {
 /// FIRST occurrence's parent.
 #[test]
 fn pack_label_collisions_wire_hierarchy_by_id() {
-    use engram_packs::{ConvertedPack, convert_pack};
+    use engram_packs::convert_pack;
 
     // Two "Shared" classes under different parents, plus the parents.
     let turtle = br#"@prefix owl:  <http://www.w3.org/2002/07/owl#> .

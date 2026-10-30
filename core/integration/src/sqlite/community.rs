@@ -43,7 +43,6 @@ pub async fn overview_eligible(
     limit: usize,
     view: &BoundCodeView,
 ) -> CoreResult<CommunityOverview> {
-    use engram_knowledge::KnowledgeRepository as _;
     let entities = store.list_entities(scope).await?;
     // Build the authorized canonical vertex set first.  An endpoint is never
     // admitted by its display name: it must carry an id and that id must name
@@ -163,29 +162,25 @@ impl CommunityQuery for SqlKnowledgeStore {
         let is_symbol = |id: &str| !id.starts_with("graph-") && !id.starts_with("repo-");
         for (sn, si, on, oi) in &rels {
             // subject endpoint — push entity id if not already in the community
-            if let Some(key) = endpoint_key(sn, si) {
-                if let Some(&label) = name_to_label.get(&key) {
-                    if let Some(eid) = si {
-                        if is_symbol(eid) {
-                            let b = label_to_ids.entry(label).or_default();
-                            if b.len() < MEMBER_CAP && !b.contains(eid) {
-                                b.push(eid.clone());
-                            }
-                        }
-                    }
+            if let Some(key) = endpoint_key(sn, si)
+                && let Some(&label) = name_to_label.get(&key)
+                && let Some(eid) = si
+                && is_symbol(eid)
+            {
+                let b = label_to_ids.entry(label).or_default();
+                if b.len() < MEMBER_CAP && !b.contains(eid) {
+                    b.push(eid.clone());
                 }
             }
             // object endpoint
-            if let Some(key) = endpoint_key(on, oi) {
-                if let Some(&label) = name_to_label.get(&key) {
-                    if let Some(eid) = oi {
-                        if is_symbol(eid) {
-                            let b = label_to_ids.entry(label).or_default();
-                            if b.len() < MEMBER_CAP && !b.contains(eid) {
-                                b.push(eid.clone());
-                            }
-                        }
-                    }
+            if let Some(key) = endpoint_key(on, oi)
+                && let Some(&label) = name_to_label.get(&key)
+                && let Some(eid) = oi
+                && is_symbol(eid)
+            {
+                let b = label_to_ids.entry(label).or_default();
+                if b.len() < MEMBER_CAP && !b.contains(eid) {
+                    b.push(eid.clone());
                 }
             }
         }

@@ -286,7 +286,7 @@ impl AuthorizedKnowledgeQuery {
         for id in requested {
             if view.is_code_record(id) {
                 if !view.allows(id, true) {
-                    return Err(foreign_target(&[id.clone()]));
+                    return Err(foreign_target(std::slice::from_ref(id)));
                 }
                 authorized.push(id.clone());
             } else {
@@ -297,10 +297,10 @@ impl AuthorizedKnowledgeQuery {
                     if self.ordinary_authorized(actor, &entity).await? {
                         authorized.push(id.clone());
                     } else {
-                        return Err(foreign_target(&[id.clone()]));
+                        return Err(foreign_target(std::slice::from_ref(id)));
                     }
                 } else {
-                    return Err(foreign_target(&[id.clone()]));
+                    return Err(foreign_target(std::slice::from_ref(id)));
                 }
             }
         }
@@ -344,7 +344,7 @@ impl AuthorizedKnowledgeQuery {
                         let mut authorized = Vec::with_capacity(requested.len());
                         for id in &requested {
                             if !view.is_code_record(id) || !view.allows(id, true) {
-                                return Err(foreign_target(&[id.clone()]));
+                                return Err(foreign_target(std::slice::from_ref(id)));
                             }
                             authorized.push(id.clone());
                         }
@@ -393,7 +393,7 @@ impl AuthorizedKnowledgeQuery {
                         let mut authorized = Vec::with_capacity(requested.len());
                         for id in &requested {
                             if !view.is_code_record(id) || !view.allows(id, true) {
-                                return Err(foreign_target(&[id.clone()]));
+                                return Err(foreign_target(std::slice::from_ref(id)));
                             }
                             authorized.push(id.clone());
                         }
@@ -405,18 +405,20 @@ impl AuthorizedKnowledgeQuery {
                             let Some(binding_record) =
                                 coordinator.store().get_binding(scope, &repo).await?
                             else {
-                                return Err(foreign_target(&[binding.repo_id.clone()]));
+                                return Err(foreign_target(std::slice::from_ref(&binding.repo_id)));
                             };
                             binding_epochs.push((repo, binding_record.epoch));
                         }
-                        let lineage = coordinator.store().target_lineage(&scope).await?;
+                        let lineage = coordinator.store().target_lineage(scope).await?;
                         let targets = authorized
                             .iter()
                             .map(|record_id| {
                                 let entry = lineage
                                     .iter()
                                     .find(|entry| entry.record_id == *record_id && !entry.retired)
-                                    .ok_or_else(|| foreign_target(&[record_id.clone()]))?;
+                                    .ok_or_else(|| {
+                                        foreign_target(std::slice::from_ref(record_id))
+                                    })?;
                                 Ok(MaintenanceTarget {
                                     scope: scope.clone(),
                                     repo_id: engram_domain::RepoId(entry.repo_id.clone()),
@@ -473,7 +475,7 @@ impl AuthorizedKnowledgeQuery {
                 for target in &targets {
                     if target.scope != scope || !view.allows(&target.record_id, true)
                         || !lineage.iter().any(|entry| !entry.retired && entry.record_id == target.record_id && entry.repo_id == target.repo_id.0 && entry.generation_id == target.generation_id) {
-                        return Err(foreign_target(&[target.record_id.clone()]));
+                        return Err(foreign_target(std::slice::from_ref(&target.record_id)));
                     }
                 }
                 Ok(())
@@ -629,7 +631,7 @@ impl AuthorizedKnowledgeQuery {
                         for id in &requested {
                             if view.is_code_record(id) {
                                 if !view.allows(id, true) {
-                                    return Err(foreign_target(&[id.clone()]));
+                                    return Err(foreign_target(std::slice::from_ref(id)));
                                 }
                                 authorized.insert(id.clone());
                             } else if let Some(entity) =
@@ -645,10 +647,10 @@ impl AuthorizedKnowledgeQuery {
                                 {
                                     authorized.insert(id.clone());
                                 } else {
-                                    return Err(foreign_target(&[id.clone()]));
+                                    return Err(foreign_target(std::slice::from_ref(id)));
                                 }
                             } else {
-                                return Err(foreign_target(&[id.clone()]));
+                                return Err(foreign_target(std::slice::from_ref(id)));
                             }
                         }
                         Ok(entities

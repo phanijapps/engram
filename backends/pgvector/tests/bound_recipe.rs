@@ -43,7 +43,7 @@ fn config(dir: &Path) -> EngramConfig {
         MigrationMode::DryRun,
         CapabilityPolicy::FailClosed,
     )
-    .with_pgvector(&url());
+    .with_pgvector(url());
     // TASK-019 proves the BINDING/SOURCE/RESET handles, not the vector lane:
     // keep it disabled (no model init, and no embedding-identity coupling to
     // whatever vectors the disposable database already carries from prior

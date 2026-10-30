@@ -134,7 +134,7 @@ impl IngestOps {
     /// TASK-020 binding gate REMOVED (review r6 finding 2): binding-existence
     /// was never authorization for ingesting code bytes, and the legacy
     /// engine no longer ingests code at all — see [`Self::start_scan_job_json`].
-
+    ///
     /// Starts a background repository scan; returns `{ jobId }` immediately.
     /// Progress is read via `getScanJobJson`. The request carries
     /// `{ root, scope, documentOnly, policy, actor, sourceName, maxBytes, manifestPath }`.

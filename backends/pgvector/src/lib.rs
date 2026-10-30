@@ -112,18 +112,16 @@ pub fn open(config: &EngramConfig) -> CoreResult<EngramProvider> {
             knowledge_query.clone(),
             code_eligibility.clone(),
         ))),
-        // Canonical repository evidence for degraded code-authority handling:
-        // shares the memory service's OWNING authorizer. The durable code
-        // ownership reader stays unconfigured here — full default code-catalog
-        // activation is Task018+, so entity evidence honestly returns
-        // Unknown rather than inventing a catalog.
+        // Canonical repository evidence shares the memory service's owning
+        // authorizer and the same durable binding cell as eligibility, so
+        // bound code candidates can prove their record-level lineage.
         candidate_evidence: Some(Arc::new(
             engram_integration::candidate_evidence::RepositoryCandidateEvidence::new(
                 memory.clone() as Arc<dyn engram_memory::MemoryRepository>,
                 beliefs.clone() as Arc<dyn engram_belief::BeliefRepository>,
                 knowledge.clone() as Arc<dyn engram_knowledge::KnowledgeRepository>,
                 memory.retrieval_authorizer(),
-                None,
+                Some(reset_bindings.clone()),
                 Some(knowledge.clone() as Arc<dyn engram_knowledge::KnowledgeGraphRepository>),
             ),
         )),

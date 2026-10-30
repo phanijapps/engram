@@ -171,7 +171,6 @@ pub trait CodeBindingRepository: crate::CodeReadLeases + Send + Sync {
                         message: "cannot hash durable preservation contributors".into(),
                     })?;
                 Ok(engram_domain::PreservationRecord {
-                    record_class: "lineage".into(),
                     record_id: entry.record_id,
                     content_digest: Sha256::digest(content)
                         .iter()

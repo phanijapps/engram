@@ -34,6 +34,62 @@ pub fn retain_snapshot(
 ) -> CoreResult<RetainedSnapshot> {
     retain_snapshot_with_limits(storage, commit, files, &GitResourceLimits::default())
 }
+/// Validate and reuse a retained snapshot for the same immutable commit.
+///
+/// Reuse validates each retained blob against the newly acquired committed
+/// inventory before returning its digest. A collision is therefore never an
+/// authority to trust pre-existing bytes.
+pub fn validate_retained_snapshot(
+    storage: &Path,
+    commit: ResolvedCommit,
+    files: &[CommittedFile],
+) -> CoreResult<RetainedSnapshot> {
+    validate_branch_ref(&commit.branch_ref)?;
+    if !valid_oid(&commit.oid, &commit.object_format) {
+        return Err(invalid(
+            "snapshot requires a full object-format-matching commit ID",
+        ));
+    }
+    let reader = super::RetainedSnapshotReader::new(storage);
+    let mut inventory = files.iter().collect::<Vec<_>>();
+    inventory.sort_by(|left, right| left.path.cmp(&right.path));
+    let mut hash = Sha256::new();
+    for file in inventory {
+        let path = file
+            .path
+            .to_str()
+            .ok_or_else(|| invalid("snapshot path is not UTF-8"))?;
+        let expected_digest = engram_knowledge::content_digest(&file.bytes);
+        let retained = engram_knowledge::RetainedSourceReader::read_span(
+            &reader,
+            &commit.oid,
+            path,
+            None,
+            &expected_digest,
+        )
+        .map_err(|_| invalid("retained snapshot failed committed-byte validation"))?;
+        if retained.bytes != file.bytes {
+            return Err(invalid(
+                "retained snapshot failed committed-byte validation",
+            ));
+        }
+        hash.update((path.len() as u64).to_le_bytes());
+        hash.update(path.as_bytes());
+        hash.update(file.mode.as_bytes());
+        hash.update((file.bytes.len() as u64).to_le_bytes());
+        hash.update(&file.bytes);
+    }
+    Ok(RetainedSnapshot {
+        root: storage.join(&commit.oid),
+        digest: hash
+            .finalize()
+            .iter()
+            .map(|byte| format!("{byte:02x}"))
+            .collect(),
+        commit,
+    })
+}
+
 pub fn retain_snapshot_with_limits(
     storage: &Path,
     commit: ResolvedCommit,
@@ -307,6 +363,21 @@ mod tests {
             mode: "100644".into(),
             bytes: bytes.into(),
         }
+    }
+    #[test]
+    fn task_008_retained_snapshot_reuse_validates_committed_bytes() {
+        let temp = tempfile::tempdir().unwrap();
+        let storage = temp.path().join("retained");
+        let files = vec![file("src/lib.rs", b"pub fn original() {}\n")];
+        let retained = retain_snapshot(&storage, commit(), &files).unwrap();
+        let reused = validate_retained_snapshot(&storage, commit(), &files).unwrap();
+        assert_eq!(reused.digest, retained.digest);
+        let retained_file = retained.root.join("src/lib.rs");
+        let mut permissions = std::fs::metadata(&retained_file).unwrap().permissions();
+        permissions.set_readonly(false);
+        std::fs::set_permissions(&retained_file, permissions).unwrap();
+        std::fs::write(&retained_file, b"pub fn corrupted() {}\n").unwrap();
+        assert!(validate_retained_snapshot(&storage, commit(), &files).is_err());
     }
     #[test]
     fn task_008_retention_reopens_exact_bytes_with_order_independent_portable_digest() {

@@ -63,11 +63,18 @@ fn invalid(reason: &str) -> CoreError {
 }
 
 /// Deterministic generation identity BEFORE retention: derived from the
-/// pinned commit, the binding version, and the parser/filter fingerprints —
+/// pinned commit, scope, binding version, and parser/filter fingerprints —
 /// identical inputs always address the same generation (idempotent retries).
-fn generation_id(commit_oid: &str, binding_version: u64, fingerprints: &str) -> String {
-    let identity =
-        engram_ingest::content_hash(format!("{commit_oid}:{binding_version}:{fingerprints}"));
+fn generation_id(
+    commit_oid: &str,
+    scope: &Scope,
+    binding_version: u64,
+    fingerprints: &str,
+) -> String {
+    let scope = serde_json::to_string(scope).expect("scope serialization is infallible");
+    let identity = engram_ingest::content_hash(format!(
+        "{commit_oid}:{scope}:{binding_version}:{fingerprints}"
+    ));
     let identity = identity.trim_start_matches("sha256:");
     format!(
         "gen-{}-v{binding_version}",
@@ -235,7 +242,7 @@ impl CodeBindingCoordinator {
         };
         let fingerprints = format!("code-symbol-v1:{filter_fingerprint}");
         let generation = CodeGeneration {
-            id: generation_id(&commit.oid, binding.version, &fingerprints),
+            id: generation_id(&commit.oid, scope, binding.version, &fingerprints),
             binding_version: binding.version,
             commit_oid: commit.oid.clone(),
             snapshot_digest: String::new(),
@@ -266,10 +273,11 @@ impl CodeBindingCoordinator {
                 binding,
             });
         }
-        // Retain the exact snapshot (immutable committed bytes). A prior
-        // retention for THIS commit is the same bytes (content-addressed by
-        // oid): recover the digest from the durable generation record; a
-        // snapshot without one is a crash-window repair state, denied typed.
+        // Retain the exact snapshot (immutable committed bytes). Retention is
+        // keyed by commit, while generations also include the filter, so a
+        // changed filter or another scope can legitimately need a new
+        // generation for an existing snapshot. Reuse only after validating
+        // the retained bytes against this independently acquired inventory.
         let snapshot_digest = match engram_ingest::git_source::retain_snapshot(
             &lanes.retained_root,
             commit.clone(),
@@ -279,15 +287,12 @@ impl CodeBindingCoordinator {
             Err(CoreError::Conflict { reason })
                 if reason.contains("snapshot for this commit already exists") =>
             {
-                self.store
-                    .get_generation(scope, repo, &generation.id)
-                    .await?
-                    .ok_or_else(|| CoreError::Conflict {
-                        reason: "retained snapshot exists without a durable generation record \
-                                 — repair required"
-                            .into(),
-                    })?
-                    .snapshot_digest
+                engram_ingest::git_source::validate_retained_snapshot(
+                    &lanes.retained_root,
+                    commit.clone(),
+                    &files,
+                )?
+                .digest
             }
             Err(error) => return Err(error),
         };

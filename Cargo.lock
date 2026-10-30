@@ -933,6 +933,7 @@ name = "engram-backend-sqlite"
 version = "0.1.0"
 dependencies = [
  "engram-domain",
+ "engram-ingest",
  "engram-integration",
  "engram-knowledge",
  "engram-runtime",

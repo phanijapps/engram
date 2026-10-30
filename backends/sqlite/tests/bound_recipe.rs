@@ -256,6 +256,113 @@ mod task_019 {
         assert!(report.code_reset.is_supported(), "code_reset capability");
     }
 
+    /// retained_snapshot_reuse: the SQLite recipe creates distinct
+    /// generations for a changed filter and another scope at the same commit,
+    /// while revalidating retained bytes before every reuse and rejecting
+    /// corruption instead of trusting a collision.
+    #[test]
+    fn retained_snapshot_reuse() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let repository = dir.path().join("repository");
+        std::fs::create_dir_all(&repository).expect("mkdir repository");
+        let git = |args: &[&str]| {
+            let status = std::process::Command::new("git")
+                .args(args)
+                .current_dir(&repository)
+                .env("GIT_CONFIG_GLOBAL", "/dev/null")
+                .env("GIT_CONFIG_SYSTEM", "/dev/null")
+                .status()
+                .expect("run git");
+            assert!(status.success(), "git {args:?}");
+        };
+        git(&["init", "--initial-branch=main", "."]);
+        git(&["config", "user.email", "recipe@example.test"]);
+        git(&["config", "user.name", "recipe"]);
+        std::fs::write(repository.join("lib.rs"), "pub fn retained_snapshot() {}\n")
+            .expect("write fixture");
+        git(&["add", "."]);
+        git(&["commit", "--no-gpg-sign", "-m", "fixture"]);
+
+        std::fs::create_dir_all(dir.path().join("storage")).expect("mkdir storage");
+        let provider = engram_backend_sqlite::open(&config(dir.path())).expect("open recipe");
+        let coordinator = provider
+            .code_bindings()
+            .expect("binding handle")
+            .with_authorizer(host_policy());
+        let lanes = provider.code_ingestion().expect("ingestion lanes");
+        let registration = engram_knowledge::RepositoryRegistration {
+            repo_id: repo(),
+            locator_id: repository.to_string_lossy().to_string(),
+            acquisition: engram_knowledge::AcquisitionMode::LocalOnly,
+        };
+        block_on(coordinator.register(&actor(), &scope(), registration)).expect("register");
+        block_on(coordinator.bind(&actor(), &scope(), &repo(), "refs/heads/main"))
+            .expect("bind primary scope");
+        let first = block_on(coordinator.ingest_registered(
+            &actor(),
+            &scope(),
+            &repo(),
+            None,
+            None,
+            &lanes,
+        ))
+        .expect("first ingestion");
+
+        let changed_filter = engram_ingest::ScanFilterConfig::default();
+        let changed = block_on(coordinator.ingest_registered(
+            &actor(),
+            &scope(),
+            &repo(),
+            None,
+            Some(&changed_filter),
+            &lanes,
+        ))
+        .expect("changed filter reuses retained snapshot");
+        assert_ne!(changed.generation_id, first.generation_id);
+        assert_eq!(changed.snapshot_digest, first.snapshot_digest);
+
+        block_on(coordinator.bind(&actor(), &foreign_scope(), &repo(), "refs/heads/main"))
+            .expect("bind foreign scope");
+        let cross_scope = block_on(coordinator.ingest_registered(
+            &actor(),
+            &foreign_scope(),
+            &repo(),
+            None,
+            None,
+            &lanes,
+        ))
+        .expect("cross-scope ingestion reuses retained snapshot");
+        assert_ne!(cross_scope.generation_id, first.generation_id);
+        assert_eq!(cross_scope.snapshot_digest, first.snapshot_digest);
+
+        let retained_file = lanes.retained_root.join(&first.commit_oid).join("lib.rs");
+        let mut permissions = std::fs::metadata(&retained_file)
+            .expect("retained metadata")
+            .permissions();
+        permissions.set_readonly(false);
+        std::fs::set_permissions(&retained_file, permissions).expect("make retained file writable");
+        std::fs::write(&retained_file, "pub fn corrupted_snapshot() {}\n")
+            .expect("corrupt retained snapshot");
+        let another_filter = engram_ingest::ScanFilterConfig {
+            concepts: engram_ingest::ConceptFilterConfig {
+                min_name_length: Some(9),
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+        assert!(
+            block_on(coordinator.ingest_registered(
+                &actor(),
+                &scope(),
+                &repo(),
+                None,
+                Some(&another_filter),
+                &lanes,
+            ))
+            .is_err()
+        );
+    }
+
     /// unavailable_optional_capabilities: optional lanes the recipe did NOT
     /// configure report UNAVAILABLE — vectors disabled at runtime stays
     /// `Unsupported`/`FeatureDisabled`, and the hybrid-composition lane is

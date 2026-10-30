@@ -20,4 +20,6 @@ pub use objects::{
 pub(crate) use private_storage::private_directory;
 pub use retained_reader::RetainedSnapshotReader;
 pub use safety::{validate_branch_ref, validate_repo_path};
-pub use snapshot::{RetainedSnapshot, retain_snapshot, retain_snapshot_with_limits};
+pub use snapshot::{
+    RetainedSnapshot, retain_snapshot, retain_snapshot_with_limits, validate_retained_snapshot,
+};

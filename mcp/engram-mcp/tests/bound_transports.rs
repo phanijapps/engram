@@ -332,6 +332,23 @@ mod task_021 {
                 rebuilt.get("error").is_none() && rebuilt_text.contains("generationId"),
                 "{backend} registered-locator rebuild publishes: {rebuilt}"
             );
+            let source = server.tool(61, "fetch_content", json!({ "path": "lib.rs" }));
+            let source_text = Server::text_of(&source);
+            assert!(
+                source.get("error").is_none()
+                    && source_text.contains("pub fn fixture() -> u32 { 1 }"),
+                "{backend} bound exact source: {source}"
+            );
+            let graph = server.tool(
+                62,
+                "symbol_context",
+                json!({ "symbol": "fixture", "depth": 1 }),
+            );
+            let graph_text = Server::text_of(&graph);
+            assert!(
+                graph.get("error").is_none() && graph_text.contains("fixture"),
+                "{backend} bound graph answer: {graph}"
+            );
             let preview_response = server.tool(
                 7,
                 "code_reset_preview",
@@ -683,6 +700,29 @@ mod task_022 {
             assert!(
                 text.contains("generationId"),
                 "{backend} rebuild publishes: {text}"
+            );
+
+            let mut source_args = oneshot_args(&storage, &format!("oneshot-{tag}"), &extra);
+            source_args.insert(0, "fetch-content".into());
+            source_args.extend(["--path", "lib.rs"].iter().map(|s| (*s).to_owned()));
+            let (code, text) = oneshot(&oneshot_refs(&source_args), &envs);
+            assert_eq!(code, 0, "{backend} one-shot source: {text}");
+            assert!(
+                text.contains("\"ok\":true") && text.contains("pub fn fixture() -> u32 { 1 }"),
+                "{backend} bound exact-byte envelope: {text}"
+            );
+            let mut graph_args = oneshot_args(&storage, &format!("oneshot-{tag}"), &extra);
+            graph_args.insert(0, "symbol-context".into());
+            graph_args.extend(
+                ["--symbol", "fixture", "--depth", "1"]
+                    .iter()
+                    .map(|s| (*s).to_owned()),
+            );
+            let (code, text) = oneshot(&oneshot_refs(&graph_args), &envs);
+            assert_eq!(code, 0, "{backend} one-shot graph: {text}");
+            assert!(
+                text.contains("\"ok\":true") && text.contains("fixture"),
+                "{backend} bound graph envelope: {text}"
             );
 
             let mut args = base.clone();

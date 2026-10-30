@@ -44,6 +44,8 @@ pub fn run(argv: &[String]) -> i32 {
         "recall" => run_recall(rest),
         "status" => run_status(rest),
         "code" => run_code(rest),
+        "fetch-content" => run_fetch_content(rest),
+        "symbol-context" => run_symbol_context(rest),
         "backfill-embeddings" => run_backfill_embeddings(rest),
         "reindex" => {
             // TASK-022: the ambiguous alias is DEPRECATED with a diagnostic —
@@ -61,7 +63,7 @@ pub fn run(argv: &[String]) -> i32 {
         other => {
             eprintln!(
                 "engram-mcp: unknown one-shot subcommand {other:?} \
-                 (recall | status | code | backfill-embeddings)"
+                 (recall | status | code | fetch-content | symbol-context | backfill-embeddings)"
             );
             2
         }
@@ -76,6 +78,8 @@ pub fn is_oneshot(argv: &[String]) -> bool {
         Some("recall")
             | Some("status")
             | Some("code")
+            | Some("fetch-content")
+            | Some("symbol-context")
             | Some("backfill-embeddings")
             | Some("reindex")
     )
@@ -557,6 +561,108 @@ fn run_code(argv: &[String]) -> i32 {
 /// behavior (the stdio `reindex` tool's semantics). DISTINCT semantics:
 /// this embeds un-embedded document chunks and NEVER rebuilds a bound code
 /// index, never touches a binding, and never fetches from a remote.
+/// `engram-mcp fetch-content` exposes the same retained-byte read operation as
+/// the stdio `fetch_content` tool without starting a JSON-RPC server.
+/// Read failures use the hook-safe `{ok:false}` envelope and exit zero.
+fn run_fetch_content(argv: &[String]) -> i32 {
+    let mut path = None;
+    let mut mode = None;
+    let mut symbol = None;
+    let mut rest = Vec::new();
+    let mut it = argv.iter();
+    while let Some(arg) = it.next() {
+        match arg.as_str() {
+            "--help" | "-h" => {
+                println!(
+                    "usage: engram-mcp fetch-content --path <path> [--mode auto|verbatim|chunks] [--symbol <name>] [--storage <path>] [--project <name>]\\n\\nOne-shot exact retained-source read. JSON output and read errors use the hook envelope."
+                );
+                return 0;
+            }
+            "--path" => path = it.next().cloned(),
+            "--mode" => mode = it.next().cloned(),
+            "--symbol" => symbol = it.next().cloned(),
+            _ => rest.push(arg.clone()),
+        }
+    }
+    let Some(path) = path else {
+        return fail_open_json("fetch-content", "--path <path> is required");
+    };
+    let (app, _) = match one_shot_app(&rest) {
+        Ok(app) => app,
+        Err(error) => return fail_open_json("fetch-content", &error),
+    };
+    let mut args = serde_json::Map::new();
+    args.insert("path".to_owned(), json!(path));
+    if let Some(mode) = mode {
+        args.insert("mode".to_owned(), json!(mode));
+    }
+    if let Some(symbol) = symbol {
+        args.insert("symbol".to_owned(), json!(symbol));
+    }
+    match crate::fetch_content::fetch_content(&app, &Value::Object(args)) {
+        Ok(value) => {
+            println!(
+                "{}",
+                json!({"ok": true, "command": "fetch-content", "output": text_payload(&value)})
+            );
+            0
+        }
+        Err(error) => fail_open_json("fetch-content", &error.message),
+    }
+}
+
+/// `engram-mcp symbol-context` exposes the same bounded graph read operation
+/// as the stdio `symbol_context` tool without starting a JSON-RPC server.
+/// Read failures use the hook-safe `{ok:false}` envelope and exit zero.
+fn run_symbol_context(argv: &[String]) -> i32 {
+    let mut symbol = None;
+    let mut depth = None;
+    let mut rest = Vec::new();
+    let mut it = argv.iter();
+    while let Some(arg) = it.next() {
+        match arg.as_str() {
+            "--help" | "-h" => {
+                println!(
+                    "usage: engram-mcp symbol-context --symbol <name> [--depth N] [--storage <path>] [--project <name>]\\n\\nOne-shot bounded code-graph read. JSON output and read errors use the hook envelope."
+                );
+                return 0;
+            }
+            "--symbol" => symbol = it.next().cloned(),
+            "--depth" => depth = it.next().cloned(),
+            _ => rest.push(arg.clone()),
+        }
+    }
+    let Some(symbol) = symbol else {
+        return fail_open_json("symbol-context", "--symbol <name> is required");
+    };
+    let (app, _) = match one_shot_app(&rest) {
+        Ok(app) => app,
+        Err(error) => return fail_open_json("symbol-context", &error),
+    };
+    let mut args = serde_json::Map::new();
+    args.insert("symbol".to_owned(), json!(symbol));
+    if let Some(depth) = depth {
+        match depth.parse::<u32>() {
+            Ok(depth) => {
+                args.insert("depth".to_owned(), json!(depth));
+            }
+            Err(_) => {
+                return fail_open_json("symbol-context", "--depth must be an unsigned integer");
+            }
+        }
+    }
+    match crate::codegraph::symbol_context(&app, &Value::Object(args)) {
+        Ok(value) => {
+            println!(
+                "{}",
+                json!({"ok": true, "command": "symbol-context", "output": text_payload(&value)})
+            );
+            0
+        }
+        Err(error) => fail_open_json("symbol-context", &error.message),
+    }
+}
+
 fn run_backfill_embeddings(argv: &[String]) -> i32 {
     let mut json_out = false;
     let mut rest: Vec<String> = Vec::with_capacity(argv.len());

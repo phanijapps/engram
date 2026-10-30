@@ -153,6 +153,29 @@ impl CodeBindingRepository for PgCodeBindingRepository {
             .await
     }
 
+    async fn bindings(&self, scope: &Scope) -> CoreResult<Vec<CodeBinding>> {
+        let scope = scope.clone();
+        self.blocking(move |store| {
+            let key = crate::code_binding::scope_key(&scope).map_err(error)?;
+            crate::connection::runtime().block_on(async {
+                let rows = store
+                    .connection
+                    .client
+                    .query(
+                        "SELECT record_json FROM code_repo_bindings \
+                         WHERE tenant=$1 AND scope_key=$2 ORDER BY repo_id",
+                        &[&scope.tenant, &key],
+                    )
+                    .await
+                    .map_err(|_| storage_error())?;
+                rows.into_iter()
+                    .map(|row| serde_json::from_value(row.get(0)).map_err(|_| storage_error()))
+                    .collect()
+            })
+        })
+        .await
+    }
+
     async fn begin_attempt(
         &self,
         scope: &Scope,

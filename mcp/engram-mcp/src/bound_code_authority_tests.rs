@@ -134,13 +134,9 @@ fn published_cell() -> Arc<SqlCodeBindingRepository> {
 /// A bound MCP app over a REAL knowledge store + the published binding cell
 /// (the permissive authorizer mirrors `bootstrap::open_provider`'s host
 /// launch-policy injection).
-fn bound_app() -> App {
+fn app_with_bindings(bindings: Arc<dyn CodeBindingRepository>) -> App {
     let knowledge = Arc::new(SqlKnowledgeStore::open_in_memory().expect("open knowledge"));
-    let coordinator = CodeBindingCoordinator::new(
-        published_cell() as Arc<dyn CodeBindingRepository>,
-        Arc::new(AllowAuthorizer),
-        Vec::new(),
-    );
+    let coordinator = CodeBindingCoordinator::new(bindings, Arc::new(AllowAuthorizer), Vec::new());
     let provider = engram_integration::EngramProviderBuilder::new(
         engram_integration::CapabilityReport::new(engram_domain::CapabilityState::Supported),
     )
@@ -150,6 +146,40 @@ fn bound_app() -> App {
     .change_log(knowledge.clone() as Arc<dyn engram_knowledge::KnowledgeChangeLog>)
     .checkpoints(knowledge.clone() as Arc<dyn engram_knowledge::ScanCheckpointStore>)
     .code_bindings(Arc::new(coordinator))
+    .build();
+    App {
+        provider,
+        scope: scope(),
+        ontology: OntologyConfig::default(),
+        taxonomy: TaxonomyConfig::default(),
+        storage_dir: std::env::temp_dir(),
+    }
+}
+
+fn bound_app() -> App {
+    app_with_bindings(published_cell() as Arc<dyn CodeBindingRepository>)
+}
+
+fn unpublished_bound_app() -> App {
+    let cell = Arc::new(SqlCodeBindingRepository::open(":memory:").expect("open cell"));
+    let coordinator = CodeBindingCoordinator::new(
+        cell.clone() as Arc<dyn CodeBindingRepository>,
+        Arc::new(AllowAuthorizer),
+        Vec::new(),
+    );
+    block_on(coordinator.bind(&actor(), &scope(), &repo(), "refs/heads/main"))
+        .expect("bind unpublished fixture");
+    app_with_bindings(cell as Arc<dyn CodeBindingRepository>)
+}
+
+fn app_without_binding_authority() -> App {
+    let knowledge = Arc::new(SqlKnowledgeStore::open_in_memory().expect("open knowledge"));
+    let provider = engram_integration::EngramProviderBuilder::new(
+        engram_integration::CapabilityReport::new(engram_domain::CapabilityState::Supported),
+    )
+    .knowledge_query(knowledge.clone())
+    .knowledge(knowledge.clone())
+    .graph(knowledge)
     .build();
     App {
         provider,
@@ -203,6 +233,65 @@ mod finding_2_scan_gate {
         let knowledge = app.provider.require_knowledge_query().unwrap();
         let entities = block_on(knowledge.list_entities(&app.scope)).expect("list");
         assert!(entities.is_empty(), "denied scan must not ingest bytes");
+    }
+
+    /// `bound_unpublished_code_blocks_legacy_scan`: binding existence closes
+    /// arbitrary-path code ingestion before publication.
+    #[test]
+    fn bound_unpublished_code_blocks_legacy_scan() {
+        let app = unpublished_bound_app();
+        let root = scan_fixture();
+        let error = crate::codegraph::scan_repo(
+            &app,
+            &json!({ "path": root.to_string_lossy(), "force": true }),
+        )
+        .expect_err("an unpublished binding must deny arbitrary-path code scanning");
+        assert!(error.message.contains("BoundCodeScanDenied"), "{error:?}");
+        let value = crate::codegraph::scan_repo(
+            &app,
+            &json!({
+                "path": root.to_string_lossy(),
+                "documentOnly": true,
+                "force": true
+            }),
+        )
+        .expect("the document-only lane remains available");
+        assert!(
+            value["content"][0]["text"]
+                .as_str()
+                .unwrap_or_default()
+                .contains("MODE: legacy document-only scan")
+        );
+    }
+
+    /// `authority_error_does_not_reopen_legacy_scan`: absence of the binding
+    /// authority surfaces its typed capability failure before any scan.
+    #[test]
+    fn authority_error_does_not_reopen_legacy_scan() {
+        let app = app_without_binding_authority();
+        let root = scan_fixture();
+        let error = crate::codegraph::scan_repo(
+            &app,
+            &json!({ "path": root.to_string_lossy(), "force": true }),
+        )
+        .expect_err("authority lookup failure must not reopen the code lane");
+        assert!(
+            error
+                .message
+                .contains("capability unsupported: code-binding"),
+            "{error:?}"
+        );
+        let entities = block_on(
+            app.provider
+                .require_knowledge_query()
+                .expect("knowledge")
+                .list_entities(&app.scope),
+        )
+        .expect("list");
+        assert!(
+            entities.is_empty(),
+            "authority failure must not scan code bytes"
+        );
     }
 
     /// `document_only_lane_is_labeled_and_code_free`: the explicit

@@ -95,6 +95,15 @@ pub trait CodeBindingRepository: crate::CodeReadLeases + Send + Sync {
         scope: &Scope,
         repo_id: &engram_domain::RepoId,
     ) -> CoreResult<Option<CodeBinding>>;
+    /// All repository bindings in one scope, including bindings without a
+    /// published generation. Callers use this authority boundary to keep
+    /// legacy arbitrary-path lanes closed after binding.
+    async fn bindings(&self, _scope: &Scope) -> CoreResult<Vec<CodeBinding>> {
+        Err(CoreError::CapabilityUnsupported {
+            capability: "code-binding-scope-list".into(),
+            reason: "this cell does not expose scope binding records".into(),
+        })
+    }
     async fn begin_attempt(
         &self,
         scope: &Scope,

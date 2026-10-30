@@ -501,6 +501,26 @@ impl CodeBindingRepository for SqlCodeBindingRepository {
         Ok(result)
     }
 
+    async fn bindings(&self, scope: &Scope) -> CoreResult<Vec<CodeBinding>> {
+        let store = self.lock()?;
+        let key = json(scope)?;
+        let mut statement = store
+            .connection
+            .prepare(
+                "SELECT record_json FROM code_repo_bindings \
+                 WHERE tenant=?1 AND scope_key=?2 ORDER BY repo_id",
+            )
+            .map_err(|_| storage_error())?;
+        statement
+            .query_map(params![scope.tenant, key], |row| row.get::<_, String>(0))
+            .map_err(|_| storage_error())?
+            .map(|row| {
+                let record = row.map_err(|_| storage_error())?;
+                serde_json::from_str(&record).map_err(|_| storage_error())
+            })
+            .collect()
+    }
+
     async fn get_generation(
         &self,
         scope: &Scope,

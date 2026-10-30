@@ -561,12 +561,12 @@ pub(crate) fn reindex_outcome(
 /// routed through the provider via the fan-in adapter. Feeds code-symbol names
 /// to the lexical lane so `search`/`recall` find them.
 ///
-/// Review r6 finding 2: when the scope has PUBLISHED bound code, arbitrary
+/// Review r6 finding 2: when the scope has ANY bound repository, arbitrary
 /// `path` scanning for CODE is DENIED — code bytes flow exclusively through
 /// the bound registered-locator pipeline (register + bind + ingest). The
 /// explicit `documentOnly: true` lane always scans documents only (code files
 /// excluded by the document-only filter) and labels its result as the legacy
-/// document-only lane. A scope with no published code keeps the historical
+/// document-only lane. Only a genuinely unbound scope keeps the historical
 /// legacy scanner (the unbound pre-binding lane).
 pub fn scan_repo(app: &App, args: &Value) -> Result<Value, ToolError> {
     let path = req_str(args, "path")?;
@@ -574,26 +574,23 @@ pub fn scan_repo(app: &App, args: &Value) -> Result<Value, ToolError> {
     let graph = app.provider.require_graph().map_err(internal)?.clone();
     let repo = KnowledgeRepoGraph::new(knowledge, graph);
 
-    // Bound-code gate (review r6 finding 2): published bound code in this
-    // scope closes the arbitrary-path code lane.
+    // Bound-code gate (review r6 finding 2): binding existence, not
+    // publication eligibility, closes the arbitrary-path code lane. A failed
+    // authority lookup is a typed failure, never evidence that the scope is
+    // unbound. The document-only lane has no code-ingestion authority to
+    // resolve and remains explicitly available.
     let document_only = args["documentOnly"].as_bool().unwrap_or(false);
-    let bound_code_published = app
-        .provider
-        .code_bindings()
-        .ok()
-        .and_then(|coordinator| {
-            block_on(coordinator.store().eligibility(&app.scope))
-                .ok()
-                .map(|eligibility| !eligibility.repository_ids.is_empty())
-        })
-        .unwrap_or(false);
-    if bound_code_published && !document_only {
-        return Err(invalid(
-            "BoundCodeScanDenied: this scope has published bound code — code bytes are \
-             ingested only through the registered-locator pipeline (code_repo_register + \
-             code_bind, then the bound ingestion surface); pass documentOnly=true for the \
-             explicitly labeled document-only legacy scan",
-        ));
+    if !document_only {
+        let coordinator = app.provider.code_bindings().map_err(internal)?;
+        let bindings = block_on(coordinator.store().bindings(&app.scope)).map_err(internal)?;
+        if !bindings.is_empty() {
+            return Err(invalid(
+                "BoundCodeScanDenied: this scope has bound code — code bytes are ingested \
+                 only through the registered-locator pipeline (code_repo_register + code_bind, \
+                 then the bound ingestion surface); pass documentOnly=true for the explicitly \
+                 labeled document-only legacy scan",
+            ));
+        }
     }
 
     // scan-manifest-persistence: load the prior manifest for this root so the

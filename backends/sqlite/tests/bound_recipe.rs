@@ -237,13 +237,32 @@ mod task_019 {
             .require_knowledge_query()
             .expect("knowledge query handle");
 
-        // Reset seam injection (TASK-023 pending): the reset PORT is reachable
-        // through the coordinator's durable store — its answer is the cell's
-        // typed outcome, never the provider-level "not configured" denial.
-        let reset = block_on(coordinator.store().preview_reset(&scope(), &repo()));
+        // The reset seam is binding-required after TASK-023/024.
+        // Prove the unbound denial separately, then create an authorized
+        // registration and binding before checking the bound cell outcome.
+        let repo = repo();
+        let unbound = block_on(coordinator.store().preview_reset(&scope(), &repo));
         assert!(
-            matches!(&reset, Err(CoreError::CapabilityUnsupported { capability, .. }) if capability == "code-reset"),
-            "reset seam must be injected with the cell's typed outcome, got {reset:?}"
+            matches!(&unbound, Err(CoreError::InvalidRequest { reason }) if reason == "BindingRequired"),
+            "unbound reset preview must require a binding, got {unbound:?}"
+        );
+        let authorized = coordinator.with_authorizer(host_policy());
+        block_on(authorized.register(
+            &actor(),
+            &scope(),
+            engram_knowledge::RepositoryRegistration {
+                repo_id: repo.clone(),
+                locator_id: dir.path().to_string_lossy().to_string(),
+                acquisition: engram_knowledge::AcquisitionMode::LocalOnly,
+            },
+        ))
+        .expect("register through injected host policy");
+        block_on(authorized.bind(&actor(), &scope(), &repo, "refs/heads/main"))
+            .expect("bind through injected host policy");
+        let reset = block_on(authorized.store().preview_reset(&scope(), &repo));
+        assert!(
+            matches!(&reset, Err(CoreError::InvalidRequest { reason }) if reason == "invalid code binding state"),
+            "bound reset preview must preserve the cell's typed outcome, got {reset:?}"
         );
 
         // Capability states: binding/source/reset supported on this recipe.

@@ -139,6 +139,7 @@ pub fn read_resolved_commit_with_limits(
     )?
     .stdout;
     let mut files = Vec::new();
+    let mut skipped_oversized_files: usize = 0;
     let mut total_bytes = 0usize;
     for item in raw.split(|b| *b == 0).filter(|b| !b.is_empty()) {
         let separator =
@@ -211,14 +212,21 @@ pub fn read_resolved_commit_with_limits(
             .ok_or(CoreError::InvalidRequest {
                 reason: "invalid Git blob size".into(),
             })?;
-        if size > limits.max_file_bytes
-            || total_bytes
-                .checked_add(size)
-                .is_none_or(|n| n > limits.max_snapshot_bytes)
+        // Per-file overflow SKIPS the file (parity with the legacy checkout
+        // scanner, which silently skipped oversized files — real repositories
+        // carry vendored/generated blobs like tree-sitter parser.c). The skip
+        // is surfaced via `skipped_oversized_files` so callers can report it;
+        // the AGGREGATE snapshot cap remains fail-closed below.
+        if size > limits.max_file_bytes {
+            skipped_oversized_files += 1;
+            continue;
+        }
+        if total_bytes
+            .checked_add(size)
+            .is_none_or(|n| n > limits.max_snapshot_bytes)
         {
             return Err(CoreError::InvalidRequest {
-                reason: "source file or aggregate snapshot exceeded its configured byte limit"
-                    .into(),
+                reason: "aggregate snapshot exceeded its configured byte limit".into(),
             });
         }
         let bytes = git_with_limits(
@@ -249,6 +257,12 @@ pub fn read_resolved_commit_with_limits(
         });
     }
     files.sort_by(|a, b| a.path.cmp(&b.path));
+    if skipped_oversized_files > 0 {
+        eprintln!(
+            "engram-ingest-git: skipped {skipped_oversized_files} committed file(s) exceeding the per-file byte limit ({} KiB); they are not in the bound index",
+            limits.max_file_bytes / 1024
+        );
+    }
     Ok(files)
 }
 pub fn acquire_local_branch(

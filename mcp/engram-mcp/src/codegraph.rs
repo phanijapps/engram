@@ -500,20 +500,41 @@ fn flush_batch(
 /// matches) and for fresh stores after a backend switch (vectors start
 /// empty). Keyed on the vector index's embedded-set, not per-scan scope.
 /// Capped per call (`limit`, default 256, max 1024); re-run to continue.
+/// The typed embedding-lane-unwired message (TASK-022): the one-shot
+/// `backfill-embeddings` surfaces this as a NONZERO failure; the stdio
+/// `reindex` tool preserves its historical text envelope.
+pub(crate) const EMBEDDING_LANE_UNWIRED: &str = "reindex: no embedding provider wired. Run without --slim/--no-vector and check embedding setup. If the space changed, use the documented vector-only rebuild. Backlog not assessed.";
+
 pub fn reindex(app: &App, args: &Value) -> Result<Value, ToolError> {
     // scope defaults to the launch scope when absent (same contract as the
     // maintenance tools — the AC2 fix).
     let scope = crate::maintenance::scope_from_args(app, args)?;
     let limit = args["limit"].as_u64().unwrap_or(256).clamp(1, 1024) as usize;
+    match reindex_outcome(app, &scope, limit) {
+        Ok(text) => Ok(protocol::text_content(text)),
+        // Historical stdio envelope for the un-wired lane (unchanged).
+        Err(error) if error.message == EMBEDDING_LANE_UNWIRED => {
+            Ok(protocol::text_content(EMBEDDING_LANE_UNWIRED))
+        }
+        Err(error) => Err(error),
+    }
+}
+
+/// The embedding-backfill core (TASK-022): returns the summary text on
+/// success and a TYPED failure otherwise — the one-shot twin maps failures
+/// to a nonzero exit, the stdio tool keeps its historical envelope.
+pub(crate) fn reindex_outcome(
+    app: &App,
+    scope: &engram_domain::Scope,
+    limit: usize,
+) -> Result<String, ToolError> {
     if app.provider.embedding_provider().is_none() {
-        return Ok(protocol::text_content(
-            "reindex: no embedding provider wired. Run without --slim/--no-vector and check embedding setup. If the space changed, use the documented vector-only rebuild. Backlog not assessed.",
-        ));
+        return Err(internal(EMBEDDING_LANE_UNWIRED));
     }
     app.provider.require_vectors().map_err(internal)?;
     app.provider.require_knowledge_query().map_err(internal)?;
     let t0 = std::time::Instant::now();
-    let (embedded, remaining) = embed_pending(app, &scope, None, limit)?;
+    let (embedded, remaining) = embed_pending(app, scope, None, limit)?;
     eprintln!(
         "engram-mcp: reindex done ({embedded} embedded, {remaining} pending) in {:.1}s",
         t0.elapsed().as_secs_f32()
@@ -531,9 +552,9 @@ pub fn reindex(app: &App, args: &Value) -> Result<Value, ToolError> {
     } else {
         String::new()
     };
-    Ok(protocol::text_content(format!(
+    Ok(format!(
         "reindex: embedded {embedded} chunks (limit {limit}){dedup_note}{note}"
-    )))
+    ))
 }
 
 /// `scan_repo`: treesitter-index a code repository into the project workspace,

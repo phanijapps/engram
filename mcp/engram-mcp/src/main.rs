@@ -93,6 +93,10 @@ USAGE
   engram-mcp [flags]                    start the stdio MCP server
   engram-mcp recall --query <text> [...]  one-shot recall (no handshake)
   engram-mcp status [...]               one-shot store status
+  engram-mcp code --op <register|bind|status|refresh> [...]  one-shot scoped
+                                         code operations (same handlers as stdio)
+  engram-mcp backfill-embeddings [...]   one-shot embedding backfill (document
+                                         chunks; NEVER a code rescan/rebuild)
 
 LAUNCH FLAGS
   --storage <path>            Store directory (required; env ENGRAM_STORAGE)
@@ -211,6 +215,7 @@ fn main() {
              [--pg-connection-string <url>] \
              [--tools core|full|all|consolidated] [--slim|--no-vector|--vector] [--rebuild-vectors] \
              one-shot: engram-mcp recall --query <text> [--json] [--limit N] | status [--json] \
+             | code --op register|bind|status|refresh | backfill-embeddings \
              (full contract: mcp/engram-mcp/HOW-TO.md#launch--runtime-arguments--the-contract)"
         );
         std::process::exit(2);

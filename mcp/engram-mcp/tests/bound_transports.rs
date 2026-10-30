@@ -160,6 +160,17 @@ fn git_fixture(tag: &str) -> (std::path::PathBuf, String) {
     (path, oid)
 }
 
+/// Run-unique suffix for RepoIds: the disposable PostgreSQL database
+/// persists across test runs and durable registrations key by RepoId alone —
+/// static ids would collide with an earlier run's different locator.
+fn unique_suffix() -> String {
+    let nanos = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_nanos())
+        .unwrap_or(0);
+    format!("{}-{}", std::process::id(), nanos)
+}
+
 fn pg_available() -> bool {
     std::env::var("ENGRAM_TEST_PG_URL").is_ok()
 }
@@ -186,6 +197,7 @@ mod task_021 {
     #[test]
     fn stdio_dispatch_parity() {
         let (repo_path, head_oid) = git_fixture("parity");
+        let run = unique_suffix();
         let mut observed: Vec<String> = Vec::new();
         for (backend, tag) in backends() {
             let mut server = spawn_server(backend, &format!("parity-{tag}"));
@@ -199,13 +211,13 @@ mod task_021 {
             server.tool(
                 2,
                 "code_repo_register",
-                json!({ "repo": format!("repo-{tag}"), "mode": "local-only",
+                json!({ "repo": format!("repo-{tag}-{run}"), "mode": "local-only",
                         "path": repo_path.to_str().unwrap() }),
             );
             let bound = server.tool(
                 3,
                 "code_bind",
-                json!({ "repo": format!("repo-{tag}"), "branchRef": "refs/heads/main" }),
+                json!({ "repo": format!("repo-{tag}-{run}"), "branchRef": "refs/heads/main" }),
             );
             assert!(bound.get("error").is_none(), "{backend} bind: {bound}");
             let bound_text = Server::text_of(&bound);
@@ -214,7 +226,11 @@ mod task_021 {
                 "{backend} bound text: {bound_text}"
             );
 
-            let status = server.tool(4, "code_status", json!({ "repo": format!("repo-{tag}") }));
+            let status = server.tool(
+                4,
+                "code_status",
+                json!({ "repo": format!("repo-{tag}-{run}") }),
+            );
             let status_text = Server::text_of(&status);
             assert!(
                 status_text.contains("FRESHNESS: unknown"),
@@ -225,7 +241,11 @@ mod task_021 {
                 "{backend} no published generation yet: {status_text}"
             );
 
-            let refresh = server.tool(5, "code_refresh", json!({ "repo": format!("repo-{tag}") }));
+            let refresh = server.tool(
+                5,
+                "code_refresh",
+                json!({ "repo": format!("repo-{tag}-{run}") }),
+            );
             assert!(
                 refresh.get("error").is_none(),
                 "{backend} refresh: {refresh}"
@@ -236,7 +256,11 @@ mod task_021 {
                 "{backend} refresh observes the real ref: {refreshed}"
             );
 
-            let after = server.tool(6, "code_status", json!({ "repo": format!("repo-{tag}") }));
+            let after = server.tool(
+                6,
+                "code_status",
+                json!({ "repo": format!("repo-{tag}-{run}") }),
+            );
             let after_text = Server::text_of(&after);
             assert!(
                 after_text.contains(&head_oid) && after_text.contains("FRESHNESS-STATE:"),
@@ -257,6 +281,7 @@ mod task_021 {
     /// capability report exposes the bound-code states.
     #[test]
     fn typed_errors_capabilities() {
+        let run = unique_suffix();
         for (backend, tag) in backends() {
             let mut server = spawn_server(backend, &format!("typed-{tag}"));
 
@@ -287,18 +312,18 @@ mod task_021 {
             server.tool(
                 4,
                 "code_repo_register",
-                json!({ "repo": format!("typed-{tag}"),
+                json!({ "repo": format!("typed-{tag}-{run}"),
                         "path": repo_path.to_str().unwrap() }),
             );
             server.tool(
                 5,
                 "code_bind",
-                json!({ "repo": format!("typed-{tag}"), "branchRef": "refs/heads/main" }),
+                json!({ "repo": format!("typed-{tag}-{run}"), "branchRef": "refs/heads/main" }),
             );
             let conflict = server.tool(
                 6,
                 "code_bind",
-                json!({ "repo": format!("typed-{tag}"), "branchRef": "refs/heads/other" }),
+                json!({ "repo": format!("typed-{tag}-{run}"), "branchRef": "refs/heads/other" }),
             );
             let message = conflict["error"]["message"]
                 .as_str()
@@ -355,6 +380,394 @@ mod task_021 {
                 text.contains("pgvector feature"),
                 "featureless refusal must be typed: {text}"
             );
+        }
+    }
+}
+
+// ---------- task_022 focused cases ------------------------------------------
+
+mod task_022 {
+    use super::*;
+
+    /// One one-shot invocation of the binary; returns (exit code, stdout).
+    fn oneshot(args: &[&str], envs: &[(&str, &str)]) -> (i32, String) {
+        let mut command = Command::new(env!("CARGO_BIN_EXE_engram-mcp"));
+        command
+            .args(args)
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped());
+        for (key, value) in envs {
+            command.env(key, value);
+        }
+        let output = command.output().expect("spawn one-shot");
+        let text = String::from_utf8_lossy(&output.stdout).to_string()
+            + &String::from_utf8_lossy(&output.stderr);
+        (output.status.code().unwrap_or(-1), text)
+    }
+
+    fn oneshot_args(storage: &std::path::Path, tag: &str, rest: &[&str]) -> Vec<String> {
+        let mut args: Vec<String> = vec![
+            "--storage".into(),
+            storage.to_str().unwrap().into(),
+            "--org".into(),
+            "task-transports".into(),
+            "--project".into(),
+            tag.into(),
+            "--no-vector".into(),
+        ];
+        args.extend(rest.iter().map(|s| (*s).to_owned()));
+        args
+    }
+
+    fn storage_for(tag: &str) -> std::path::PathBuf {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let storage = dir.path().join("storage");
+        std::fs::create_dir_all(&storage).expect("mkdir storage");
+        std::mem::forget(dir);
+        storage
+    }
+
+    fn oneshot_refs(args: &[String]) -> Vec<&str> {
+        args.iter().map(String::as_str).collect()
+    }
+
+    /// oneshot_dispatch_parity: the one-shot `code` subcommands return the
+    /// SAME bound-revision facts the stdio tools produce, on every recipe.
+    #[test]
+    fn oneshot_dispatch_parity() {
+        let (repo_path, head_oid) = git_fixture("oneshot");
+        let run = unique_suffix();
+        for (backend, tag) in backends() {
+            let storage = storage_for(&format!("oneshot-{tag}"));
+            let mut envs: Vec<(&str, &str)> = Vec::new();
+            let mut extra: Vec<&str> = Vec::new();
+            if backend == "pgvector" {
+                let url = std::env::var("ENGRAM_TEST_PG_URL").expect("pg url");
+                envs.push(("ENGRAM_PG_CONNECTION_STRING", url.leak()));
+                extra = vec!["--backend", "pgvector"];
+            }
+            let base = {
+                let mut args = oneshot_args(&storage, &format!("oneshot-{tag}"), &extra);
+                args.insert(0, "code".into());
+                args
+            };
+            let mut args = base.clone();
+            args.extend(
+                [
+                    "--op",
+                    "register",
+                    "--repo",
+                    &format!("repo-{tag}-{run}"),
+                    "--path",
+                    repo_path.to_str().unwrap(),
+                ]
+                .iter()
+                .map(|s| (*s).to_owned()),
+            );
+            let (code, text) = oneshot(&oneshot_refs(&args), &envs);
+            assert_eq!(code, 0, "{backend} register: {text}");
+            assert!(text.contains("REGISTERED"), "{backend} register: {text}");
+
+            let mut args = base.clone();
+            args.extend(
+                [
+                    "--op",
+                    "bind",
+                    "--repo",
+                    &format!("repo-{tag}-{run}"),
+                    "--branch-ref",
+                    "refs/heads/main",
+                ]
+                .iter()
+                .map(|s| (*s).to_owned()),
+            );
+            let (code, text) = oneshot(&oneshot_refs(&args), &envs);
+            assert_eq!(code, 0, "{backend} bind: {text}");
+            assert!(
+                text.contains("BOUND repo-") && text.contains("refs/heads/main"),
+                "{backend} one-shot bind parity: {text}"
+            );
+
+            let mut args = base.clone();
+            args.extend(
+                ["--op", "status", "--repo", &format!("repo-{tag}-{run}")]
+                    .iter()
+                    .map(|s| (*s).to_owned()),
+            );
+            let (code, text) = oneshot(&oneshot_refs(&args), &envs);
+            assert_eq!(code, 0, "{backend} status: {text}");
+            assert!(
+                text.contains("FRESHNESS: unknown") && text.contains("INDEXED: none"),
+                "{backend} one-shot status parity: {text}"
+            );
+
+            let mut args = base.clone();
+            args.extend(
+                ["--op", "refresh", "--repo", &format!("repo-{tag}-{run}")]
+                    .iter()
+                    .map(|s| (*s).to_owned()),
+            );
+            let (code, text) = oneshot(&oneshot_refs(&args), &envs);
+            assert_eq!(code, 0, "{backend} refresh: {text}");
+            assert!(
+                text.contains(&head_oid),
+                "{backend} one-shot refresh observes the real ref: {text}"
+            );
+
+            // Same status facts as stdio afterward (observed at HEAD).
+            let mut args = base;
+            args.extend(
+                ["--op", "status", "--repo", &format!("repo-{tag}-{run}")]
+                    .iter()
+                    .map(|s| (*s).to_owned()),
+            );
+            let (code, text) = oneshot(&oneshot_refs(&args), &envs);
+            assert_eq!(code, 0);
+            assert!(
+                text.contains(&head_oid) && text.contains("refs/heads/main"),
+                "{backend} one-shot/stdio dispatch parity: {text}"
+            );
+        }
+    }
+
+    /// backfill_not_rescan: the EXPLICIT embedding-backfill name carries
+    /// distinct semantics — it never touches the binding (status byte-equal
+    /// before/after), its help says it is NOT a code rebuild, and the
+    /// ambiguous `reindex` alias is a deprecation diagnostic naming both.
+    #[test]
+    fn backfill_not_rescan() {
+        let run = unique_suffix();
+        let repo_id = format!("repo-backfill-{run}");
+        let (repo_path, _oid) = git_fixture("backfill");
+        let storage = storage_for("backfill");
+        let mut base = oneshot_args(&storage, "backfill", &[]);
+        base.insert(0, "code".into());
+        base.extend(
+            [
+                "--op",
+                "bind",
+                "--repo",
+                repo_id.as_str(),
+                "--branch-ref",
+                "refs/heads/main",
+            ]
+            .iter()
+            .map(|s| (*s).to_owned()),
+        );
+        // Register first so bind is legitimate.
+        let mut reg = oneshot_args(&storage, "backfill", &[]);
+        reg.insert(0, "code".into());
+        reg.extend(
+            ["--op", "register", "--repo", repo_id.as_str(), "--path"]
+                .iter()
+                .map(|s| (*s).to_owned()),
+        );
+        reg.push(repo_path.to_str().unwrap().to_owned());
+        let (code, text) = oneshot(&oneshot_refs(&reg), &[]);
+        assert_eq!(code, 0, "register: {text}");
+        let (code, text) = oneshot(&oneshot_refs(&base), &[]);
+        assert_eq!(code, 0, "bind: {text}");
+
+        let mut status_args = oneshot_args(&storage, "backfill", &[]);
+        status_args.insert(0, "code".into());
+        status_args.extend(
+            ["--op", "status", "--repo", repo_id.as_str()]
+                .iter()
+                .map(|s| (*s).to_owned()),
+        );
+        let (_, before) = oneshot(&oneshot_refs(&status_args), &[]);
+
+        // Help: the explicit distinction, in the operator surface.
+        let (code, help) = oneshot(&["backfill-embeddings", "--help"], &[]);
+        assert_eq!(code, 0);
+        assert!(
+            help.contains("NOT a code rescan") && help.contains("NOT a branch rebuild"),
+            "help must distinguish semantics: {help}"
+        );
+
+        // The run itself (no vector lane in this build): a typed NONZERO
+        // failure about the embedding lane — never a binding mutation.
+        let mut backfill = oneshot_args(&storage, "backfill", &[]);
+        backfill.insert(0, "backfill-embeddings".into());
+        let (code, text) = oneshot(&oneshot_refs(&backfill), &[]);
+        assert_ne!(code, 0, "a failed mutation must exit nonzero: {text}");
+        assert!(
+            text.contains("no embedding provider wired"),
+            "typed embedding-lane diagnosis: {text}"
+        );
+
+        // The binding is byte-equal: backfill NEVER rescans/rebuilds code.
+        let (_, after) = oneshot(&oneshot_refs(&status_args), &[]);
+        assert_eq!(
+            before, after,
+            "embedding backfill must not touch the binding"
+        );
+
+        // The ambiguous alias is deprecated with the distinction spelled out.
+        let (code, diagnostic) = oneshot(&["reindex"], &[]);
+        assert_eq!(code, 2, "deprecated alias exits 2: {diagnostic}");
+        assert!(
+            diagnostic.contains("deprecated")
+                && diagnostic.contains("backfill-embeddings")
+                && diagnostic.contains("NEVER a branch rebuild"),
+            "alias diagnostic names both semantics: {diagnostic}"
+        );
+    }
+
+    /// read_error_envelope: the read-hook fail-open contract is preserved —
+    /// `recall --json` / `status --json` report `{ok:false, error}` and exit
+    /// ZERO even when the store cannot open.
+    #[test]
+    fn read_error_envelope() {
+        // A storage path that cannot exist (its parent is a FILE).
+        let dir = tempfile::tempdir().unwrap();
+        let blocker = dir.path().join("blocker");
+        std::fs::write(&blocker, b"not a directory").unwrap();
+        let impossible = blocker.join("storage");
+
+        let (code, text) = oneshot(
+            &[
+                "recall",
+                "--json",
+                "--query",
+                "anything",
+                "--storage",
+                impossible.to_str().unwrap(),
+                "--org",
+                "task-transports",
+                "--project",
+                "envelope",
+                "--no-vector",
+            ],
+            &[],
+        );
+        assert_eq!(code, 0, "read-hook fail-open stays exit 0: {text}");
+        let envelope: Value = serde_json::from_str(
+            text.lines()
+                .rev()
+                .find(|line| line.starts_with('{'))
+                .expect("a JSON envelope line"),
+        )
+        .expect("envelope parses");
+        assert_eq!(envelope["ok"], false, "envelope: {envelope}");
+        assert_eq!(envelope["command"], "recall");
+        assert!(
+            envelope["error"]
+                .as_str()
+                .is_some_and(|error| !error.is_empty()),
+            "envelope carries the error: {envelope}"
+        );
+
+        let (code, text) = oneshot(
+            &[
+                "status",
+                "--json",
+                "--storage",
+                impossible.to_str().unwrap(),
+                "--org",
+                "task-transports",
+                "--project",
+                "envelope",
+                "--no-vector",
+            ],
+            &[],
+        );
+        assert_eq!(code, 0, "status fail-open stays exit 0: {text}");
+        let envelope: Value = serde_json::from_str(
+            text.lines()
+                .rev()
+                .find(|line| line.starts_with('{'))
+                .expect("a JSON envelope line"),
+        )
+        .expect("envelope parses");
+        assert_eq!(envelope["ok"], false);
+        assert_eq!(envelope["command"], "status");
+    }
+
+    /// mutation_nonzero: the NEW mutating one-shot operations exit NONZERO on
+    /// failure — conflicting bind, unregistered refresh, missing arguments.
+    #[test]
+    fn mutation_nonzero() {
+        let run = unique_suffix();
+        for (backend, tag) in backends() {
+            let storage = storage_for(&format!("mut-{tag}"));
+            let mut envs: Vec<(&str, &str)> = Vec::new();
+            let mut extra: Vec<&str> = Vec::new();
+            if backend == "pgvector" {
+                let url = std::env::var("ENGRAM_TEST_PG_URL").expect("pg url");
+                envs.push(("ENGRAM_PG_CONNECTION_STRING", url.leak()));
+                extra = vec!["--backend", "pgvector"];
+            }
+            let (repo_path, _oid) = git_fixture(&format!("mut-{tag}"));
+            let mut base = oneshot_args(&storage, &format!("mut-{tag}"), &extra);
+            base.insert(0, "code".into());
+
+            // register + bind main
+            let mut reg = base.clone();
+            reg.extend(
+                [
+                    "--op",
+                    "register",
+                    "--repo",
+                    &format!("repo-{tag}-{run}"),
+                    "--path",
+                ]
+                .iter()
+                .map(|s| (*s).to_owned()),
+            );
+            reg.push(repo_path.to_str().unwrap().to_owned());
+            assert_eq!(oneshot(&oneshot_refs(&reg), &envs).0, 0);
+            let mut bind = base.clone();
+            bind.extend(
+                [
+                    "--op",
+                    "bind",
+                    "--repo",
+                    &format!("repo-{tag}-{run}"),
+                    "--branch-ref",
+                    "refs/heads/main",
+                ]
+                .iter()
+                .map(|s| (*s).to_owned()),
+            );
+            let (code, text) = oneshot(&oneshot_refs(&bind), &envs);
+            assert_eq!(code, 0, "{backend} bind: {text}");
+
+            // Conflicting branch: nonzero, typed BindingConflict.
+            let mut conflict = base.clone();
+            conflict.extend(
+                [
+                    "--op",
+                    "bind",
+                    "--repo",
+                    &format!("repo-{tag}-{run}"),
+                    "--branch-ref",
+                    "refs/heads/other",
+                ]
+                .iter()
+                .map(|s| (*s).to_owned()),
+            );
+            let (code, text) = oneshot(&oneshot_refs(&conflict), &envs);
+            assert_ne!(code, 0, "{backend} conflict must be nonzero: {text}");
+            assert!(text.contains("BindingConflict"), "{backend}: {text}");
+
+            // Unregistered refresh: nonzero, typed.
+            let mut refresh = base.clone();
+            refresh.extend(
+                ["--op", "refresh", "--repo", "never-registered"]
+                    .iter()
+                    .map(|s| (*s).to_owned()),
+            );
+            let (code, text) = oneshot(&oneshot_refs(&refresh), &envs);
+            assert_ne!(code, 0, "{backend} unregistered refresh: {text}");
+            assert!(
+                text.contains("no registered repository"),
+                "{backend}: {text}"
+            );
+
+            // Missing required arguments: nonzero usage failure.
+            let (code, text) = oneshot(&oneshot_refs(&base), &envs);
+            assert_ne!(code, 0, "{backend} missing op: {text}");
         }
     }
 }

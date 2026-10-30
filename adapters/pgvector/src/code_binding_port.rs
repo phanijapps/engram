@@ -380,6 +380,30 @@ impl CodeBindingRepository for PgCodeBindingRepository {
                     tx.commit().await.map_err(|_| storage_error())?;
                     return Ok(());
                 }
+                // A lease can be acquired after the caller's preview. Check
+                // it while this transaction owns the advisory and binding-row
+                // fences, before the first mutation retires any generation.
+                let lease_rows = tx
+                    .query(
+                        "SELECT record_json FROM code_read_leases WHERE scope_key=$1 AND expires_ms>$2",
+                        &[&key, &chrono::Utc::now().timestamp_millis()],
+                    )
+                    .await
+                    .map_err(|_| storage_error())?;
+                for row in lease_rows {
+                    let lease: CodeReadLease =
+                        serde_json::from_value(row.get(0)).map_err(|_| storage_error())?;
+                    if targets.iter().any(|target| {
+                        lease
+                            .eligibility
+                            .generations
+                            .contains(&target.generation_id)
+                    }) {
+                        return Err(CoreError::Conflict {
+                            reason: "ResetLeaseActive: a live read lease protects a target snapshot".into(),
+                        });
+                    }
+                }
                 // (2) FIRST SIDE EFFECT: advance every involved binding's
                 // epoch inside the same transaction so a racing publication
                 // CAS fails against the mutated state.

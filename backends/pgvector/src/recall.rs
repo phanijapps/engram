@@ -19,11 +19,11 @@ use std::sync::Arc;
 
 use engram_belief::{BeliefQuery, BeliefRepository};
 use engram_domain::{
-    ContextPayload, Metadata, RetrievalRequest, RetrievalResult, RetrievalScore,
-    RetrievalSourceFailure, RetrievalTargetType, SourceFailureSeverity,
+    ContextPayload, RetrievalRequest, RetrievalResult, RetrievalScore, RetrievalSourceFailure,
+    RetrievalTargetType, SourceFailureSeverity,
 };
 use engram_integration::{EmbeddingProvider, KnowledgeQuery, UnifiedRecall};
-use engram_knowledge::{CodeBindingRepository as _, KnowledgeRepository as _};
+use engram_knowledge::KnowledgeRepository as _;
 use engram_memory::MemoryService;
 use engram_retrieval::{
     CodeEligibilityResolver, ReciprocalRankFusion, RetrievalCompositionInput, VectorIndex as _,
@@ -451,6 +451,7 @@ impl UnifiedRecall for PgUnifiedRecall {
 pub(crate) struct PgGraphLane {
     query: Arc<dyn KnowledgeQuery>,
     default_limit: u32,
+    eligibility: Option<Arc<dyn CodeEligibilityResolver>>,
 }
 
 impl PgGraphLane {
@@ -458,6 +459,18 @@ impl PgGraphLane {
         Self {
             query,
             default_limit: 20,
+            eligibility: None,
+        }
+    }
+
+    pub(crate) fn with_eligibility(
+        query: Arc<dyn KnowledgeQuery>,
+        eligibility: Arc<dyn CodeEligibilityResolver>,
+    ) -> Self {
+        Self {
+            query,
+            default_limit: 20,
+            eligibility: Some(eligibility),
         }
     }
 }
@@ -474,6 +487,12 @@ impl engram_retrieval::RetrievalIndex for PgGraphLane {
             .unwrap_or(self.default_limit) as usize;
         let entities = self.query.list_entities(&request.scope).await?;
         let chunks = self.query.list_chunks(&request.scope).await?;
+        let view = match &self.eligibility {
+            Some(eligibility) => Some(engram_retrieval::BoundCodeView::from_eligibility(
+                &eligibility.resolve(&request.scope).await?,
+            )),
+            None => None,
+        };
         let tokens: Vec<String> = request
             .query
             .to_lowercase()
@@ -526,6 +545,18 @@ impl engram_retrieval::RetrievalIndex for PgGraphLane {
             ));
         }
         for chunk in chunks {
+            let code_kind = matches!(
+                chunk.kind,
+                engram_domain::KnowledgeChunkKind::CodeSymbol
+                    | engram_domain::KnowledgeChunkKind::CodeBlock
+                    | engram_domain::KnowledgeChunkKind::DiffHunk
+            );
+            if view
+                .as_ref()
+                .is_some_and(|view| !view.allows(chunk.id.as_str(), code_kind))
+            {
+                continue;
+            }
             let hay = chunk.text.to_lowercase();
             let score: f32 = tokens
                 .iter()

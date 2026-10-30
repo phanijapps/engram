@@ -89,6 +89,11 @@ pub fn open(config: &EngramConfig) -> CoreResult<EngramProvider> {
     // before the recall so the bound vector lane can resolve its eligible
     // target set.
     let knowledge_query = Arc::new(PgKnowledgeQuery::new(mk_conn()?));
+    let reset_bindings: Arc<dyn engram_knowledge::CodeBindingRepository> =
+        Arc::new(PgCodeBindingRepository::new(mk_conn()?)?);
+    let code_eligibility: Arc<dyn engram_retrieval::CodeEligibilityResolver> = Arc::new(
+        engram_integration::code_binding::RepositoryEligibilitySource::new(reset_bindings.clone()),
+    );
 
     // Unified recall: composes memory.retrieve + beliefs + the vector lane
     // (PS2) via RRF. Lexical (tsvector) is a documented gap on this engine.
@@ -101,9 +106,12 @@ pub fn open(config: &EngramConfig) -> CoreResult<EngramProvider> {
         knowledge: knowledge.clone(),
         vectors: vectors.clone(),
         embedder: embedding_provider.clone(),
-        code_eligibility: None,
+        code_eligibility: Some(code_eligibility.clone()),
         knowledge_query: Some(knowledge_query.clone()),
-        graph_lane: Some(Arc::new(recall::PgGraphLane::new(knowledge_query.clone()))),
+        graph_lane: Some(Arc::new(recall::PgGraphLane::with_eligibility(
+            knowledge_query.clone(),
+            code_eligibility.clone(),
+        ))),
         // Canonical repository evidence for degraded code-authority handling:
         // shares the memory service's OWNING authorizer. The durable code
         // ownership reader stays unconfigured here — full default code-catalog
@@ -146,8 +154,6 @@ pub fn open(config: &EngramConfig) -> CoreResult<EngramProvider> {
             reset_graph_cache.clone(),
         ),
     );
-    let reset_bindings: Arc<dyn engram_knowledge::CodeBindingRepository> =
-        Arc::new(PgCodeBindingRepository::new(mk_conn()?)?);
     let code_coordinator = Arc::new(
         engram_integration::code_binding::CodeBindingCoordinator::new(
             reset_bindings.clone(),

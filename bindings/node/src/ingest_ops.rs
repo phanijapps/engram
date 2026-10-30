@@ -165,20 +165,18 @@ impl IngestOps {
             .and_then(|v| v.as_str())
             .map(PathBuf::from);
         let scope: Scope = scope_field(&value)?;
-        let policy: Policy = serde_json::from_value(
-            value
-                .get("policy")
-                .cloned()
-                .unwrap_or(serde_json::Value::Null),
-        )
-        .unwrap_or_else(|_| default_scan_policy());
-        let actor: Actor = serde_json::from_value(
-            value
-                .get("actor")
-                .cloned()
-                .unwrap_or(serde_json::Value::Null),
-        )
-        .unwrap_or_else(|_| default_scan_actor());
+        let policy: Policy = match value.get("policy") {
+            None => default_scan_policy(),
+            Some(policy) => serde_json::from_value(policy.clone()).map_err(|error| {
+                Error::from_reason(format!("InvalidPolicy: {error}"))
+            })?,
+        };
+        let actor: Actor = match value.get("actor") {
+            None => default_scan_actor(),
+            Some(actor) => serde_json::from_value(actor.clone()).map_err(|error| {
+                Error::from_reason(format!("InvalidActor: {error}"))
+            })?,
+        };
 
         // TASK-020: persisted binding is mandatory for code scans.
         let repo = value

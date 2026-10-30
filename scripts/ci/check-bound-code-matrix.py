@@ -164,6 +164,7 @@ def default_command(row: Row, sqlite_root: Path, pg_url_name: str) -> CommandSpe
         native = {
             "binding": "deny_by_default_and_authorized_surface",
             "scan": "bound_ingestion_pipeline",
+            "source": "bound_source_fetch_exact_bytes",
         }
         if row.operation in native:
             test_file = f"code-binding.{row.backend}.test.ts"

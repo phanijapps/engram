@@ -1186,6 +1186,7 @@ dependencies = [
  "engram-domain",
  "engram-runtime",
  "serde",
+ "serde_json",
  "sha2",
  "tokio",
 ]

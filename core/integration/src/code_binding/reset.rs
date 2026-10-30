@@ -20,6 +20,22 @@ impl CodeBindingCoordinator {
         self.store.preview_reset(scope, repo).await
     }
 
+    /// Applies or resumes an immutable reset journal after reset authorization.
+    /// The durable cell revalidates targets and leases and returns checkpoints.
+    /// It never claims rollback of a successfully completed external store.
+    pub async fn apply_reset(
+        &self,
+        actor: &Actor,
+        journal: CodeResetJournal,
+    ) -> CoreResult<CodeResetJournal> {
+        let scope = journal.preview.binding.scope.clone();
+        let repo = journal.preview.binding.repo_id.clone();
+        self.authorizer
+            .authorize(actor, &scope, &repo, CodeAuthorityAction::Reset)
+            .await?;
+        self.store.apply_reset(journal).await
+    }
+
     /// Creates an immutable journal only through the reset-authorized seam.
     /// The cell replays its current preview before persistence, so a stale
     /// preview, substituted fingerprint, or subset authorization is denied.

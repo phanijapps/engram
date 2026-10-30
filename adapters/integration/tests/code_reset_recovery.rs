@@ -2,7 +2,9 @@ use engram_domain::{
     CodeAttempt, CodeAttemptState, CodeBinding, CodeGeneration, CodeLineage, CodeReceiptKind,
     CodeResetJournal, RepoId, Scope,
 };
-use engram_knowledge::{CodeBindingRepository, RepositoryRegistration};
+use engram_knowledge::{
+    CodeBindingRepository, CodeReadLease, CodeReadLeases, RepositoryRegistration, RetirementTarget,
+};
 use engram_store_sqlite::knowledge::SqlCodeBindingRepository;
 use futures::executor::block_on;
 
@@ -76,6 +78,19 @@ fn setup() -> SqlCodeBindingRepository {
     .expect("lineage");
     store
 }
+fn setup_active() -> SqlCodeBindingRepository {
+    let store = setup();
+    block_on(store.record_receipt(engram_knowledge::StageReceipt {
+        attempt_id: "reset-attempt".into(),
+        generation_id: generation().id,
+        lane: "knowledge".into(),
+        digest: "receipt".into(),
+    }))
+    .expect("receipt");
+    block_on(store.mark_ready(&scope(), &repo(), "reset-attempt", 1)).expect("ready");
+    block_on(store.publish(&scope(), &repo(), "reset-attempt", 0)).expect("published");
+    store
+}
 fn journal(preview: engram_domain::CodeResetPreview) -> CodeResetJournal {
     CodeResetJournal {
         reset_id: "reset-1".into(),
@@ -91,6 +106,21 @@ fn journal(preview: engram_domain::CodeResetPreview) -> CodeResetJournal {
         preview,
     }
 }
+fn add_target(store: &SqlCodeBindingRepository, id: &str) {
+    block_on(store.put_lineage(
+        &scope(),
+        id,
+        CodeLineage {
+            repo_id: repo(),
+            generation_id: generation().id,
+            source_path: format!("src/{id}.rs"),
+            contributors: vec!["durable-lineage".into()],
+            span: None,
+        },
+    ))
+    .expect("additional lineage");
+}
+
 mod task_023 {
     use super::*;
     #[test]
@@ -148,5 +178,136 @@ mod task_023 {
         let value = journal(preview.clone());
         assert_eq!(value.preview_hash, preview.preview_hash);
         assert!(block_on(store.journal_reset(value)).is_ok());
+    }
+}
+
+mod task_024 {
+    use super::*;
+
+    #[test]
+    fn interrupted_journal_resumes_exact_ids() {
+        let store = setup();
+        add_target(&store, "target-b");
+        let preview = block_on(store.preview_reset(&scope(), &repo())).expect("preview");
+        let mut value = journal(preview);
+        block_on(store.retire_lineage_targets(
+            &scope(),
+            &[(repo(), 0)],
+            &[RetirementTarget {
+                repo_id: repo().0,
+                generation_id: generation().id,
+                record_id: "target-a".into(),
+            }],
+        ))
+        .expect("first target");
+        value.checkpoints.push("completed:target-a".into());
+        let resumed = block_on(store.apply_reset(value)).expect("resume");
+        assert!(
+            resumed
+                .checkpoints
+                .iter()
+                .any(|item| item == "completed:target-b")
+        );
+        assert_eq!(
+            resumed
+                .checkpoints
+                .iter()
+                .filter(|item| *item == "completed:target-a")
+                .count(),
+            1
+        );
+    }
+
+    #[test]
+    fn unrelated_records_preserved() {
+        let store = setup();
+        let preview = block_on(store.preview_reset(&scope(), &repo())).expect("preview");
+        let result = block_on(store.apply_reset(journal(preview))).expect("apply");
+        assert!(
+            result
+                .checkpoints
+                .iter()
+                .any(|item| item == "completed:target-a")
+        );
+        assert!(
+            !result
+                .checkpoints
+                .iter()
+                .any(|item| item == "completed:ordinary-record")
+        );
+    }
+
+    #[test]
+    fn leased_snapshot_not_deleted() {
+        let store = setup_active();
+        let now = chrono::Utc::now();
+        let eligibility = block_on(store.eligibility(&scope())).expect("eligibility");
+        block_on(store.acquire_read_lease(
+            CodeReadLease {
+                id: "live-reset-lease".into(),
+                eligibility,
+                fencing_token: 1,
+                expires_at: now + chrono::Duration::minutes(5),
+            },
+            now,
+        ))
+        .expect("lease");
+        let preview = block_on(store.preview_reset(&scope(), &repo())).expect("preview");
+        let error = block_on(store.apply_reset(journal(preview))).expect_err("lease denial");
+        assert!(format!("{error:?}").contains("ResetLeaseActive"));
+    }
+
+    #[test]
+    fn stale_preview_rejected_at_apply() {
+        let store = setup();
+        let preview = block_on(store.preview_reset(&scope(), &repo())).expect("preview");
+        block_on(store.retire_lineage_targets(
+            &scope(),
+            &[(repo(), 0)],
+            &[RetirementTarget {
+                repo_id: repo().0,
+                generation_id: generation().id,
+                record_id: "target-a".into(),
+            }],
+        ))
+        .expect("advance epoch");
+        assert!(block_on(store.apply_reset(journal(preview))).is_err());
+    }
+
+    #[test]
+    fn target_substitution_rejected_at_apply() {
+        let store = setup();
+        let preview = block_on(store.preview_reset(&scope(), &repo())).expect("preview");
+        let mut value = journal(preview);
+        value.preview.targets[0].fingerprint = "0".repeat(64);
+        assert!(block_on(store.apply_reset(value)).is_err());
+    }
+
+    #[test]
+    fn preservation_digests_revalidated_after_apply() {
+        let store = setup();
+        let preview = block_on(store.preview_reset(&scope(), &repo())).expect("preview");
+        let applied = block_on(store.apply_reset(journal(preview))).expect("apply");
+        assert!(
+            applied
+                .checkpoints
+                .iter()
+                .any(|item| item == "preservation-verified")
+        );
+    }
+
+    #[test]
+    fn cross_store_failure_is_best_effort_surfaced() {
+        // Completed IDs are durable-resume evidence, not a cross-store ACID
+        // rollback claim; a later cell failure resumes from this checkpoint.
+        let store = setup();
+        let preview = block_on(store.preview_reset(&scope(), &repo())).expect("preview");
+        let applied = block_on(store.apply_reset(journal(preview))).expect("local apply");
+        assert!(
+            applied
+                .checkpoints
+                .iter()
+                .any(|item| item == "completed:target-a")
+        );
     }
 }

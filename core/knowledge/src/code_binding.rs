@@ -5,6 +5,7 @@ use engram_domain::{
     IndexedSource, Scope,
 };
 use engram_runtime::{CoreError, CoreResult};
+use sha2::{Digest, Sha256};
 
 #[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct RepositoryRegistration {
@@ -258,6 +259,133 @@ pub trait CodeBindingRepository: crate::CodeReadLeases + Send + Sync {
         repo_id: &engram_domain::RepoId,
     ) -> CoreResult<CodeResetPreview>;
     async fn journal_reset(&self, journal: CodeResetJournal) -> CoreResult<CodeResetJournal>;
+    /// Applies only the journal's unfinished exact targets.
+    /// Each cell inherits this neutral, fenced operation and supplies the
+    /// durable retirement and lease primitives behind it.
+    /// Successful local-store work is never rolled back when a later store
+    /// reports an error; callers receive the returned checkpoints to resume.
+    async fn apply_reset(&self, mut journal: CodeResetJournal) -> CoreResult<CodeResetJournal> {
+        journal.validate().map_err(|_| CoreError::InvalidRequest {
+            reason: "InvalidResetPreview: journal does not bind the complete preview".into(),
+        })?;
+        let scope = &journal.preview.binding.scope;
+        let repo = &journal.preview.binding.repo_id;
+        let binding = self
+            .get_binding(scope, repo)
+            .await?
+            .ok_or_else(|| CoreError::Conflict {
+                reason: "ResetPreviewStale: binding no longer exists".into(),
+            })?;
+        let completed: std::collections::BTreeSet<String> = journal
+            .checkpoints
+            .iter()
+            .filter_map(|checkpoint| checkpoint.strip_prefix("completed:").map(str::to_owned))
+            .collect();
+        let remaining: Vec<_> = journal
+            .preview
+            .targets
+            .iter()
+            .filter(|target| !completed.contains(&target.record_id))
+            .collect();
+        if remaining.is_empty() {
+            return Ok(journal);
+        }
+        // Recompute the complete target fingerprint from CURRENT durable
+        // lineage and generation before the first mutation.
+        for target in &remaining {
+            let lineage = self
+                .record_lineage(scope, &target.record_id)
+                .await?
+                .ok_or_else(|| CoreError::Conflict {
+                    reason: "ResetTargetSubstituted: target is absent".into(),
+                })?;
+            if lineage.retired
+                || lineage.repo_id != repo.0
+                || lineage.generation_id != target.lineage.generation_id
+            {
+                return Err(CoreError::Conflict {
+                    reason: "ResetTargetSubstituted: durable lineage changed".into(),
+                });
+            }
+            let generation = self
+                .get_generation(scope, repo, &lineage.generation_id)
+                .await?
+                .ok_or_else(|| CoreError::Conflict {
+                    reason: "ResetTargetSubstituted: generation is absent".into(),
+                })?;
+            let durable_lineage = engram_domain::CodeLineage {
+                repo_id: repo.clone(),
+                generation_id: lineage.generation_id,
+                source_path: lineage.source_path,
+                contributors: target.lineage.contributors.clone(),
+                span: lineage.span,
+            };
+            let material = serde_json::to_vec(&(
+                target.record_id.clone(),
+                &durable_lineage,
+                &generation.snapshot_digest,
+                target.binding_version,
+                target.code_epoch,
+            ))
+            .map_err(|_| CoreError::Adapter {
+                adapter: "engram-code-binding".into(),
+                message: "cannot validate reset target".into(),
+            })?;
+            let fingerprint: String = Sha256::digest(material)
+                .iter()
+                .map(|byte| format!("{byte:02x}"))
+                .collect();
+            if fingerprint != target.fingerprint || target.binding_version != binding.version {
+                return Err(CoreError::Conflict {
+                    reason: "ResetPreviewStale: target fingerprint or binding version changed"
+                        .into(),
+                });
+            }
+        }
+        let leased = self.leased_generations(scope, chrono::Utc::now()).await?;
+        if remaining
+            .iter()
+            .any(|target| leased.contains(&target.lineage.generation_id))
+        {
+            return Err(CoreError::Conflict {
+                reason: "ResetLeaseActive: a live read lease protects a target snapshot".into(),
+            });
+        }
+        // A partial journal necessarily advanced the fencing epoch.  It may
+        // resume only from its own durable completed checkpoints; a fresh
+        // journal must still match its preview epoch exactly.
+        if completed.is_empty() && binding.epoch != journal.preview.code_epoch {
+            return Err(CoreError::Conflict {
+                reason: "ResetPreviewStale: code epoch changed".into(),
+            });
+        }
+        let expected_epoch = binding.epoch;
+        let targets = remaining
+            .iter()
+            .map(|target| crate::RetirementTarget {
+                repo_id: repo.0.clone(),
+                generation_id: target.lineage.generation_id.clone(),
+                record_id: target.record_id.clone(),
+            })
+            .collect::<Vec<_>>();
+        self.retire_lineage_targets(scope, &[(repo.clone(), expected_epoch)], &targets)
+            .await?;
+        for target in remaining {
+            journal
+                .checkpoints
+                .push(format!("completed:{}", target.record_id));
+        }
+        // The preview's ordinary-data digest is deliberately stable over the
+        // exact preservation set.  It is rechecked after retirement rather
+        // than treating target deletion as permission to alter ordinary data.
+        if journal.preservation_digests != journal.preview.preservation_digests {
+            return Err(CoreError::Conflict {
+                reason: "ResetPreservationFailed: ordinary preservation digest changed".into(),
+            });
+        }
+        journal.checkpoints.push("preservation-verified".into());
+        Ok(journal)
+    }
 }
 
 /// One durable target-lineage association (corrective r2, finding 4): the

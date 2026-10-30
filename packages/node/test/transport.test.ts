@@ -68,6 +68,7 @@ class StubNativeProvider {
   codeResetPreviewJson(): string { return "{}"; }
   codeResetApplyJson(): string { return "{}"; }
   codeResetResumeJson(): string { return "{}"; }
+  backfillEmbeddingsJson(): string { return "{}"; }
   requireMemoryApi() {
     return {
       searchJson(): string {

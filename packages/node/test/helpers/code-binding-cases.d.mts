@@ -8,6 +8,7 @@ export declare function authorizedConfig(
   of?: { tenant: string; workspace: string }
 ): string;
 export declare function gitFixture(tag: string): { path: string; oid: string };
+export declare function assertPgDurableBinding(repo: string): void;
 export declare function describeCodeBindingCases(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   getAddon: () => any,

@@ -7,9 +7,10 @@ description: ORCHESTRATOR-run skill — the main session conducts this interacti
 
 Turn a wish into a brief the factory can run on. YOU are the orchestrator
 holding this skill — no child agent has the owner channel. You interview the
-owner (a Product Engineer, technical or functional), capture intent, never
+owner (a Product Engineer, technical or functional), capture intent — never
 design. The brief is the human-to-factory contract: everything the analyzer
-would otherwise guess.
+would otherwise guess. (Narrative; the Contract below carries the BCP 14
+normative force.)
 
 The failure this skill exists to prevent: a factory job where consequential
 choices are decided downstream with no recorded human decision, discovered by
@@ -26,17 +27,28 @@ the human only at the approval gate.
    tiering table) and flows into every artifact. Ask the tier question LAST,
    after scope is known: "S, M, or L?" with the one-line definitions.
 
-1. Capture intent, not design — no solutioning in the brief.
+1. The brief MUST capture intent, not design — no solutioning.
 2. **The brief is functional**: what the system must do, for whom, and why it
-   matters — language a functional reader can verify. Implementation belongs
-   to analysis and plan, even for technical owners.
-3. The owner speaks in quotes; decisions are `[HUMAN-DECIDED]` only with an
-   explicit selection or verbatim statement. Silence is never consent.
-4. Every consequential choice lands in the decision ledger: decided by the
+   matters — language a functional reader can verify. Implementation MUST NOT
+   appear in the brief; it belongs to analysis and plan, even for technical owners.
+3. The owner speaks in quotes; decisions MUST be recorded `[HUMAN-DECIDED]`
+   only with an explicit selection or verbatim statement. Silence MUST NOT be
+   treated as consent.
+4. Every consequential choice MUST land in the decision ledger: decided by the
    human, or explicitly delegated with a boundary and a revisit trigger.
-5. The ask is the owner's words, verbatim, any length.
-6. Stop interviewing when a different answer would no longer change what
-   analysis does.
+5. The ask MUST be the owner's words, verbatim, any length.
+6. You MUST stop interviewing when a different answer would no longer change
+   what analysis does.
+
+   Keywords follow BCP 14 (RFC 2119/RFC 8174): MUST/MUST NOT/SHOULD/SHOULD NOT/MAY
+   carry normative force; everything else is guidance.
+
+7. **Prime EARS-able outcomes**: outcome measures SHOULD be phrased as
+   trigger/response pairs — "when <condition>, <observable success>" — so the
+   spec can lift them verbatim into EARS requirements
+   (`When <trigger>, the system shall <response>`). If the owner's phrasing is
+   looser, record it verbatim AND offer the EARS-able restatement for
+   confirmation; you MUST NOT substitute silently.
 
 ## Question format (use everywhere)
 
@@ -46,18 +58,18 @@ Every question is easy to answer:
 <short stem> — A) <option>  B) <option>  C) <option>  D) freeform
 ```
 
-- Options are grounded in repo context and prior answers, never generic
-  filler. **Options describe behavior and outcomes, not mechanisms.**
+- Options MUST be grounded in repo context and prior answers; they MUST NOT be
+  generic filler. **Options describe behavior and outcomes, not mechanisms.**
 - **Translate-and-confirm technical answers**: when the owner answers with a
   mechanism ("add a queue"), restate the functional intent and confirm: "the
   behavior you want is X — is the mechanism fixed, or a suggestion?" Fixed →
   owner-fixed constraint; suggestion → non-binding suggestions.
 - One-word answers are valid: "B", "B but capped at 500", "none — …".
-- You may recommend: "I'd pick B because <reason> — pick or correct." Disclose
+- You MAY recommend: "I'd pick B because <reason> — pick or correct." Disclose
   the assumption behind any consequential option ("option A assumes <X> —
   correct me if not"), and record the owner's REJECTION verbatim — a refusal
   is intent, not noise.
-- Never exceed four substantive questions per round ("anything else?" is a
+- You MUST NOT exceed four substantive questions per round ("anything else?" is a
   transition, not a question). Caps: two rounds per area, eight rounds total;
   past a cap the request is not ready — say so and stop.
 
@@ -81,7 +93,7 @@ ceremony. Fill the ledger, write the brief, done.
 
 One area per round, in this order; ≤ 4 option-based questions per round;
 each area closes with "anything else?" and moves on. Hesitation on any
-choice → park it `[OPEN]` immediately; never push a third time.
+choice → park it `[OPEN]` immediately; you MUST NOT push a third time.
 
 1. **Problem** — offer candidate framings from context:
    "Which hurts most? A) … B) … C) several — rank them."
@@ -96,15 +108,15 @@ choice → park it `[OPEN]` immediately; never push a third time.
    "Keep as-is, or move items / strike lines." Must → outcome core;
    Should → in scope; Could → follow-ups; Won't → non-goals. One round, no
    item-by-item interrogation.
-4. **Boundaries by strike-list** — never blank-page. Propose what you believe
+4. **Boundaries by strike-list** — you MUST NOT ask blank-page questions here. Propose what you believe
    is OUT (from repo context): "Strike any that should stay IN; add what's
    missing." Same for constraints: propose the known standards, owner edits.
 5. **Decisions as tradeoff pairs** — each consequential choice as a
    functional either/or, the tradeoff stated in behavior terms:
    "A) <reversible behavior> B) <faster but riskier behavior>
    C) delegate to analysis within <boundary> D) leave OPEN."
-   The owner's pick — including C or D — is the ledger row. **C and D require
-   an explicit selection**: never record DELEGATED because the owner hesitated
+   The owner's pick — including C or D — is the ledger row. **C and D REQUIRE an
+   explicit selection**: you MUST NOT record DELEGATED because the owner hesitated
    or because you judged the choice mechanical. Without a pick: OPEN, which
    blocks analysis.
 
@@ -135,25 +147,26 @@ its ledger. The interview is over; the factory asks questions now, not you.
 ## When it fails
 
 - Owner unavailable → tag open decisions `[BLOCKED: owner needed]` and stop.
-- Two owners disagree → record both verbatim under one open decision; never average.
+- Two owners disagree → you MUST record both verbatim under one open decision;
+  you MUST NOT average them.
 - No checkable outcome and no owner signal → outcome stays OPEN; the brief is
-  NOT factory-ready. Request changes mid-interview → restart that area only.
+  NOT factory-ready. Request changes mid-interview → you MUST restart only that area.
 - More rounds than the caps allow → not ready; stop.
 
 ## Anti-patterns
 
-- Blank-page questions ("what do you want?") — always offer grounded options.
+- Blank-page questions ("what do you want?") — you MUST offer grounded options instead.
 - Solutioning in the brief — including an owner's own mechanism recorded as
   intent instead of translated to behavior or parked as a suggestion.
 - Owner-fixed constraints without an external source — internal preferences
-  are suggestions or delegations, never constraints.
+  MUST be recorded as suggestions or delegations, never as constraints.
 - Recording DELEGATED on hesitation, or downgrading an OPEN row without a
   verbatim owner-approved deferral in the row.
 - A technical owner turning the brief into a design doc: if a statement names
   how instead of what, it does not belong here.
 - Interrogation drift: more than four questions a round, or a third push on a
   parked choice.
-- Shortening or paraphrasing the ask — quoted owner text is never compressed.
+- Shortening or paraphrasing the ask — quoted owner text MUST NOT be compressed.
 - Inventing outcome measures, selections, or ratification quotes.
 - Marking `[DELEGATED]` without a boundary and revisit trigger.
 - Converting an `[OPEN]` row into a decision to make the brief look complete.

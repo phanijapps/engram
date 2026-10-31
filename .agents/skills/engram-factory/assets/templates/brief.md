@@ -21,7 +21,7 @@ constitution_rules_touched: []
 
 # Brief: <one-line title, the owner's words>
 
-## Ask (verbatim)
+## The ask (verbatim)
 
 > Owner words only, any length. Becomes the factory feature text unchanged; do
 > not paraphrase elsewhere. If the owner replaced an earlier ask, quote the

@@ -1,9 +1,14 @@
 <!--
-PROPOSED (not landed) — owner verification copy from 06-redesigned-templates.md.
-Integration: frontmatter must keep the union keys factory.py validates
-(schema_version 2, artifact/job_id/cycle/status/author_role/profiles/
-source_snapshot/input_artifacts/updated_at) with {{render}} placeholders;
-REQ IDs in EARS + AC/GATE tables satisfy check_job_artifacts.py regexes.
+PROPOSED v3 (not landed) — spec.md, rewritten after competitive study:
+- github/spec-kit spec-template.md: prioritized independently-testable user
+  scenarios, [NEEDS CLARIFICATION] inline honesty, edge cases, key entities,
+  measurable success criteria, assumptions
+- Fission-AI/OpenSpec: Requirement-as-named-section + WHEN/THEN scenario
+  bullets; delta framing (ADDED/MODIFIED/REMOVED) against a living spec catalog
+- merged with engram's contracts: union frontmatter (JSON-per-line, {{render}}
+  placeholders), EARS + BCP 14, REQ/AC/GATE IDs, gate evidence tables.
+Integration: same frontmatter union contract as v2; IDs literal for
+check_job_artifacts.py; S-tier = one user scenario + one requirement block.
 -->
 
 ---
@@ -18,54 +23,81 @@ source_snapshot: null
 input_artifacts: []
 updated_at: "FILL: ISO-8601 with timezone"
 size_tier: "S"
-constitution_rules_touched: []
 brief_ref: null
+constitution_rules_touched: []
 required_reviewers: ["code", "security", "platform"]
 ---
 
 # Spec: <short observable outcome>
 
-## What problem are we solving, and why will this work?
+## The case in sixty seconds
 
-<Open with the brief’s problem, the narrow behavioral bet, and the consequence of being wrong. Cite the brief IDs; do not repeat the brief wholesale.>
-For example, consuming `MOS-001` by rejecting a missing declared path closes the silent-enforcement gap without expanding the set of gated layers.
+<Problem → consequence → desired outcome, with the bet this work makes.
+Source links for load-bearing claims; name uncertainty explicitly.>
 
-## What did we learn, and what did we decide?
+For example: a declared engine-neutrality path can disappear and silently
+stop being scanned (`tools/ci/check_engine_neutrality.py` missing-path skip).
+We make that loss fail CI loudly (REQ-001) before a prohibited engine
+reference can ship.
 
-`EVD-001` proves <one falsifiable claim> at `<path:line-range or immutable source>`.
-For example, `EVD-001` proves `scan()` skips a nonexistent declared path at `tools/ci/check_engine_neutrality.py:74`.
-`DEC-001` [DELEGATED: <brief authority>] chooses <choice> over <rejected alternative> because <evidence-based reason>; the observable consequence is <effect>.
-If the brief made the choice, say that no new `DEC-*` is needed rather than inventing one.
+## User scenarios
 
-## What behavior MUST hold?
+Prioritized, independently testable journeys. At S-tier one scenario
+suffices; M/L add journeys down the priority order. If a scenario cannot be
+tested alone, it is not a scenario — split or merge it.
 
-Requirements are the canonical behavior source. Use one EARS sentence per row and BCP 14 keywords only for normative obligations.
+### Scenario U-1 (P1): <who does what, in plain language>
 
-| ID | Priority | Testable statement | Rules | Evidence |
-|---|---|---|---|---|
-| REQ-001 | MUST | When a declared `GATED_PATH` does not exist on disk, the gate SHALL exit 1 and name the missing path. | EN-004 | EVD-001 |
+**Why this priority**: <value if only this ships>.
+**Independent test**: <how to verify this journey alone>.
+**Acceptance**:
+1. **Given** <initial state>, **When** <action>, **Then** <observable outcome>.
+2. **Given** <boundary state>, **When** <action>, **Then** <failure behavior>.
 
-Explain any interaction, ordering, or denial semantics the row cannot safely carry in prose: `REQ-001` fails before a missing path can be silently excluded from scanning.
+## Requirements
 
-## How will a reviewer recognize success or failure?
+Each requirement is a named section: EARS statement with BCP 14 force,
+scenarios as WHEN/THEN bullets. Tag deltas against living contracts:
+`(added)` / `(modifies REQ-014)` / `(removes REQ-003)` — a spec that changes
+an existing behavior MUST say so, never silently redefine it.
 
-`AC-001` links `REQ-001`: given a path list containing a missing directory, when the gate runs, then it exits 1 and names that directory; with present-only paths, it exits 0.
-Do not hide failure behavior: each `AC-*` MUST state the relevant denial, error, or regression case.
+### REQ-001: <short name> (added)
 
-| Gate ID | Command or fixture | Proves AC IDs | Expected evidence |
+**MUST** — When <trigger>, the system shall <observable response>.
+- **WHEN** <concrete trigger> **THEN** <concrete response> (proves AC-001)
+- **WHEN** <denial/boundary trigger> **THEN** <failure behavior> (negative case)
+
+Unresolved points are honest, inline, and block `status: "ready"`:
+**REQ-002**: When <trigger>, the system shall [NEEDS CLARIFICATION: <exactly
+what is unknown and who answers>].
+
+## Edge cases
+
+- <Boundary condition> → <expected handling> (owner: REQ ID or explicit
+  deferred-with-trigger entry).
+- What happens when <error scenario>? → <behavior>.
+
+## Key entities <(only when the domain model moves)>
+
+- **<Entity>**: what it represents, key attributes, relationships — deltas
+  against `docs/architecture/domain-data-model.md`, no implementation.
+
+## Acceptance and gates
+
+| AC | Scenarios / REQ | Gate | Expected evidence |
 |---|---|---|---|
-| GATE-001 | `python3 tools/ci/tests/test_engine_neutrality.py` | AC-001 | two passing fixture cases, including missing-path failure |
+| AC-001 | U-1, REQ-001 | GATE-001: `<exact command>` | exit/result (raw output lands in verification.md) |
 
-## What remains outside this change?
+## What we learned, what we decided, what we assumed
 
-**In:** `REQ-001` in `<named paths>`.
-**Out:** <named behavior, path, or `MOS-*` ID>; `none` is valid.
-**Deferred:** <owner, trigger, and `DEV-*` or `LED-*` ID>; never use an unnamed omission.
-State compatibility directly: <public/internal/none> is <compatible/breaking/none> because <consumer or migration consequence>.
+- Evidence: <claim> — <`path:line` citation or command>, status proven/assumed.
+- Decisions: `LED-*` disposition from the brief, one line each (resolved /
+  delegated with boundary). New decisions discovered here get DEC-* with the
+  rejected alternative and consequence.
+- Assumptions: <defaults chosen because the brief was silent — each with a
+  revisit trigger>.
 
-## What could invalidate the plan, and who must review it?
+## Outside this change
 
-`RISK-001`: <scenario>; owner <role>; escalate when <observable trigger>.
-Declare `required_reviewers` in frontmatter and justify every applicable discipline in prose.
-For example, code reviews the changed gate, security confirms fail-closed enforcement, and platform confirms the fixture works in supported checkouts.
-Add terms or environment facts only when they change requirement interpretation or verification.
+<Explicit out-list with Won't IDs from the brief; `none` is a valid answer.
+Deferred items carry owner + trigger.>

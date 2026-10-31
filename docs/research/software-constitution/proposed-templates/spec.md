@@ -1,14 +1,17 @@
 <!--
-PROPOSED v3 (not landed) — spec.md, rewritten after competitive study:
-- github/spec-kit spec-template.md: prioritized independently-testable user
-  scenarios, [NEEDS CLARIFICATION] inline honesty, edge cases, key entities,
-  measurable success criteria, assumptions
-- Fission-AI/OpenSpec: Requirement-as-named-section + WHEN/THEN scenario
-  bullets; delta framing (ADDED/MODIFIED/REMOVED) against a living spec catalog
-- merged with engram's contracts: union frontmatter (JSON-per-line, {{render}}
-  placeholders), EARS + BCP 14, REQ/AC/GATE IDs, gate evidence tables.
-Integration: same frontmatter union contract as v2; IDs literal for
-check_job_artifacts.py; S-tier = one user scenario + one requirement block.
+PROPOSED v4 (not landed) — the spec template, focused and final.
+Synthesis of: github/spec-kit (prioritized independently-testable user
+scenarios, [NEEDS CLARIFICATION], edge cases, key entities, assumptions),
+Fission-AI/OpenSpec (named requirements + WHEN/THEN scenario bullets, delta
+framing against living contracts), IEEE 830-1998/ISO 29148 (requirement
+rubric: necessary/singular/implementation-free/feasible/verifiable/conforming;
+interfaces section), RFC 7322 (mandatory-when-empty discipline, tier-marked
+sections), ISO 25010 (quality-attribute vocabulary), engram's own contracts
+(union frontmatter JSON-per-line + {{render}} placeholders, EARS + BCP 14,
+REQ/AC/GATE IDs, gate-evidence tables, S/M/L scaling).
+Section markers: (mandatory) at every tier · (M/L) added at larger tiers.
+Integration unchanged: frontmatter union contract; IDs literal for
+check_job_artifacts.py; S-tier = one scenario + one requirement.
 -->
 
 ---
@@ -30,23 +33,23 @@ required_reviewers: ["code", "security", "platform"]
 
 # Spec: <short observable outcome>
 
-## The case in sixty seconds
+## The case in sixty seconds (mandatory)
 
-<Problem → consequence → desired outcome, with the bet this work makes.
+<Problem → consequence → desired outcome, and the bet this work makes.
 Source links for load-bearing claims; name uncertainty explicitly.>
 
 For example: a declared engine-neutrality path can disappear and silently
 stop being scanned (`tools/ci/check_engine_neutrality.py` missing-path skip).
-We make that loss fail CI loudly (REQ-001) before a prohibited engine
-reference can ship.
+This change makes that loss fail CI loudly (REQ-001) before a prohibited
+engine reference can ship.
 
-## User scenarios
+## User scenarios (mandatory)
 
-Prioritized, independently testable journeys. At S-tier one scenario
-suffices; M/L add journeys down the priority order. If a scenario cannot be
-tested alone, it is not a scenario — split or merge it.
+Prioritized, independently testable journeys. S-tier: one scenario. M/L add
+journeys down the priority order. A scenario that cannot be tested alone is
+not a scenario — split or merge it.
 
-### Scenario U-1 (P1): <who does what, in plain language>
+### U-1 (P1): <who does what, in plain language>
 
 **Why this priority**: <value if only this ships>.
 **Independent test**: <how to verify this journey alone>.
@@ -54,50 +57,75 @@ tested alone, it is not a scenario — split or merge it.
 1. **Given** <initial state>, **When** <action>, **Then** <observable outcome>.
 2. **Given** <boundary state>, **When** <action>, **Then** <failure behavior>.
 
-## Requirements
+## Requirements (mandatory)
 
-Each requirement is a named section: EARS statement with BCP 14 force,
-scenarios as WHEN/THEN bullets. Tag deltas against living contracts:
-`(added)` / `(modifies REQ-014)` / `(removes REQ-003)` — a spec that changes
-an existing behavior MUST say so, never silently redefine it.
+Named sections: EARS statement with BCP 14 force, scenarios as WHEN/THEN
+bullets. Tag deltas against living contracts — `(added)` / `(modifies
+REQ-014)` / `(removes REQ-003)`; a spec that changes existing behavior MUST
+declare it, never silently redefine it.
 
 ### REQ-001: <short name> (added)
 
 **MUST** — When <trigger>, the system shall <observable response>.
 - **WHEN** <concrete trigger> **THEN** <concrete response> (proves AC-001)
-- **WHEN** <denial/boundary trigger> **THEN** <failure behavior> (negative case)
+- **WHEN** <denial or boundary trigger> **THEN** <failure behavior>
 
-Unresolved points are honest, inline, and block `status: "ready"`:
-**REQ-002**: When <trigger>, the system shall [NEEDS CLARIFICATION: <exactly
-what is unknown and who answers>].
+Unresolved points are inline, honest, and block `status: "ready"`:
+### REQ-002: <name> — [NEEDS CLARIFICATION: <exactly what is unknown, who answers>]
 
-## Edge cases
+## Interfaces (mandatory when any public surface moves; else one line)
 
-- <Boundary condition> → <expected handling> (owner: REQ ID or explicit
-  deferred-with-trigger entry).
+- <API / CLI / N-API / MCP tool surface touched, direction of change, consumer
+  action required>. Example: `requireX` facade + `requireXApi` proxy (SP-001);
+  no breaking payload change — additive field only.
+- `none — gate-only change` is a complete answer.
+
+## Quality attributes (mandatory; ISO 25010 vocabulary)
+
+<Which characteristics this change moves beyond baseline — functional
+suitability, performance efficiency, compatibility, usability, reliability,
+security, maintainability, portability — each with its gate.>
+`none beyond baseline — gate-only change` is a complete answer.
+
+## Blast radius (mandatory — never silently absent)
+
+<Affected surfaces and failure shape if this lands wrong, or
+`none — <reason>`>. Example: tools/ci only; worst case a false-failing gate
+on stripped checkouts (RISK-001, maintainer-owned).
+
+## Edge cases (mandatory)
+
+- <Boundary condition> → <expected handling> (owns: REQ ID, or
+  deferred-with-owner-and-trigger).
 - What happens when <error scenario>? → <behavior>.
 
-## Key entities <(only when the domain model moves)>
+## Key entities (only when the domain model moves)
 
 - **<Entity>**: what it represents, key attributes, relationships — deltas
   against `docs/architecture/domain-data-model.md`, no implementation.
 
-## Acceptance and gates
+## Acceptance and gates (mandatory)
 
 | AC | Scenarios / REQ | Gate | Expected evidence |
 |---|---|---|---|
-| AC-001 | U-1, REQ-001 | GATE-001: `<exact command>` | exit/result (raw output lands in verification.md) |
+| AC-001 | U-1, REQ-001 | GATE-001: `<exact command>` | exit/result; raw output lands in verification.md |
 
-## What we learned, what we decided, what we assumed
+## Evidence, decisions, assumptions (mandatory)
 
-- Evidence: <claim> — <`path:line` citation or command>, status proven/assumed.
-- Decisions: `LED-*` disposition from the brief, one line each (resolved /
-  delegated with boundary). New decisions discovered here get DEC-* with the
-  rejected alternative and consequence.
-- Assumptions: <defaults chosen because the brief was silent — each with a
-  revisit trigger>.
+- **Evidence**: <claim> — `<path:line or command>`, proven|assumed.
+- **Decisions**: `LED-*` dispositions one line each; new decisions get `DEC-*`
+  with the rejected alternative and consequence.
+- **Assumptions**: <default chosen because the brief was silent — revisit
+  trigger>. Example: single-OS CI is assumed; revisit on Windows runners.
 
-## Outside this change
+## Outside this change (mandatory)
 
-<Explicit out-list with Won't IDs from the brief; `none` is a valid answer.
-Deferred items carry owner + trigger.>
+<Won't IDs from the brief, explicit exclusions; deferred items carry owner +
+trigger. `none` is a valid answer.>
+
+## Definition of ready (mandatory — the gate to `status: "ready"`)
+
+- Every REQ: necessary, singular, implementation-free, feasible, verifiable,
+  conforming (ISO 29148 rubric) — reviewed, not self-declared.
+- No `[NEEDS CLARIFICATION]` remains; every REQ has ≥1 negative case or a
+  stated reason; deltas tagged; every AC names a runnable gate.

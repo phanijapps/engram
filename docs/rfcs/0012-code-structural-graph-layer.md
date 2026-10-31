@@ -17,7 +17,7 @@ blast-radius analysis, cross-service API topology, a dashboard, and agent skills
 
 ## Key finding (this is why the plan is small, not large)
 
-The accepted engram domain model (`docs/domain-data-model.md`) and the existing
+The accepted engram domain model (`docs/architecture/domain-data-model.md`) and the existing
 ingest adapter **already cover the bulk of the structural substrate**:
 
 | Memtrace concept | Already in engram? | Where |

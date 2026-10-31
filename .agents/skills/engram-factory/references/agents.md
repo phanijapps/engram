@@ -24,7 +24,7 @@ verbatim, decide DELEGATED choices only inside their stated boundaries, and
 block on material OPEN rows instead of converting them. Mine
 the engram index first — past patterns, past failures, invariants, blast
 radius (recall + code-graph queries) — before judging anything new. Author
-analysis.md. Establish users, behavior, scope, requirements, quality, inventory,
+spec.md. Establish users, behavior, scope, requirements, quality, inventory,
 permissions, integrations/data impacts, review applicability, risks and open
 decisions. Triage before routing: classify severity and workload shape, don't
 fix. Label findings as evidence-backed or assumed. Identify actual product,

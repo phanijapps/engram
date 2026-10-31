@@ -17,6 +17,15 @@ the human only at the approval gate.
 
 ## Contract
 
+0. **The brief is v2** (2026-10-31): start it with the JSON-per-line frontmatter
+   from `.agents/skills/engram-factory/assets/templates/brief.md` —
+   `schema_version: 2`, `artifact: "brief"`, `size_tier` ("S" localized/reversible
+   one-surface · "M" several paths/one boundary · "L" cross-store/cross-surface),
+   `constitution_rules_touched` (rule IDs from `docs/constitution/` the wish
+   touches, `[]` if none). The tier scales downstream ceremony (factory SKILL.md
+   tiering table) and flows into every artifact. Ask the tier question LAST,
+   after scope is known: "S, M, or L?" with the one-line definitions.
+
 1. Capture intent, not design — no solutioning in the brief.
 2. **The brief is functional**: what the system must do, for whom, and why it
    matters — language a functional reader can verify. Implementation belongs

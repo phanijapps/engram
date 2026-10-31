@@ -139,7 +139,7 @@ flowchart LR
 - `docs/rfcs/0007-federated-assertion-reconciliation.md` + ADR-0012/0013 — the belief engine D4 reuses for *scalar* contract facts. Declared-over-inferred is **not** intrinsic to `AuthorityTier` (whose ordering is policy-supplied, `assertion.rs:18-20`; default `Primary`, `:32`); it is an `AuthorityPolicy` configured that way (`reconcile.rs:134`).
 - `core/domain/src/knowledge.rs:185` (`EntityKind::Api`, defined-but-unused), `:218-236` (free-predicate + `confidence` relationship), `core/belief/src/reconcile.rs:132-158` (authority-ranked survivorship) — the substrate this builds on.
 - `docs/specs/source-assertion-reconciliation/spec.md:52-53` ("Always do": reconcile over one scope, never mix scopes) — the belief-layer constraint motivating D2's single-scope choice. (This lives in the *spec*, not RFC-0007's body.)
-- `docs/domain-data-model.md:283` — the hard partition is *tenant*; `workspace` and below are optional narrowing filters (`adapters/knowledge/sqlite/src/scope.rs:8-14`), so cross-repo reads within a tenant are already permitted.
+- `docs/architecture/domain-data-model.md:283` — the hard partition is *tenant*; `workspace` and below are optional narrowing filters (`adapters/knowledge/sqlite/src/scope.rs:8-14`), so cross-repo reads within a tenant are already permitted.
 
 **External prior art** (all fetched and confirmed to contain the cited claim).
 - [Backstage — Well-known Relations](https://backstage.io/docs/features/software-catalog/well-known-relations/) — `providesApi`/`consumesApi` relate a Component to a standalone `API` entity via `spec.providesApis`/`spec.consumesApis`. Grounds D1's contract-node model.

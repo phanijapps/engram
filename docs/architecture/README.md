@@ -1,3 +1,5 @@
+> **Legacy entry point.** `docs/architecture.md` was folded into this README (2026-10-31); `docs/architecture/domain-data-model.md` is the domain SSOT; historical divergence tracking lives in [`history/arch_divergence.md`](../history/arch_divergence.md) (frozen).
+
 # Architecture
 
 How the code is *currently* organized. Not why (that's in

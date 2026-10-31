@@ -1,0 +1,101 @@
+{
+  "schema": "software-constitution.implementation_registry.v1",
+  "version": "1.0",
+  "adopted": "2026-10-31",
+  "constitution_ref": "docs/constitution/03-canonical-implementations.md",
+  "notes": [
+    "Seeded at adoption (L1 structural). The drift gate (check_implementation_registry.py, month 1) makes this blocking.",
+    "ssot_module paths are repo-relative crate roots or package entry points.",
+    "Domain truth remains docs/architecture/domain-data-model.md until Rust domain types become the generated-contract source (CI-004)."
+  ],
+  "concepts": [
+    {
+      "concept_id": "memory.service",
+      "name": "Memory service",
+      "plane": "core",
+      "ssot_module": "core/memory"
+    },
+    {
+      "concept_id": "knowledge.graph",
+      "name": "Knowledge, graph, ontology, source ingestion",
+      "plane": "core",
+      "ssot_module": "core/knowledge"
+    },
+    {
+      "concept_id": "retrieval.composition",
+      "name": "Retrieval composition and fusion ports",
+      "plane": "core",
+      "ssot_module": "core/retrieval"
+    },
+    {
+      "concept_id": "belief.synthesis",
+      "name": "Belief synthesis, contradiction, bi-temporal ports",
+      "plane": "core",
+      "ssot_module": "core/belief"
+    },
+    {
+      "concept_id": "hierarchy.build",
+      "name": "Hierarchy build, navigation, aggregate ports",
+      "plane": "core",
+      "ssot_module": "core/hierarchy"
+    },
+    {
+      "concept_id": "consolidation.planning",
+      "name": "Consolidation planning, gated mutation, decay, audit",
+      "plane": "core",
+      "ssot_module": "core/consolidation"
+    },
+    {
+      "concept_id": "procedures.memory",
+      "name": "Procedural memory: runbooks + success/failure counters",
+      "plane": "core",
+      "ssot_module": "core/procedures"
+    },
+    {
+      "concept_id": "code.indexing",
+      "name": "Deterministic code-indexing behavior (engram-code, ADR-0028)",
+      "plane": "core",
+      "ssot_module": "core/code"
+    },
+    {
+      "concept_id": "provider.facade",
+      "name": "SDK facade: EngramProvider, EngramConfig, CapabilityReport",
+      "plane": "core",
+      "ssot_module": "core/integration",
+      "transport_wrappers": [
+        { "module": "bindings/node", "transport": "napi", "must_import": "engram-integration" },
+        { "module": "mcp/engram-mcp", "transport": "mcp", "must_import": "engram-integration" }
+      ]
+    },
+    {
+      "concept_id": "mcp.server",
+      "name": "Unified agent MCP server (RFC-0015)",
+      "plane": "product",
+      "ssot_module": "mcp/engram-mcp"
+    },
+    {
+      "concept_id": "launcher.bundle",
+      "name": "MCP launcher + agent bundle installer (@engramlabs/mcp)",
+      "plane": "product",
+      "ssot_module": "packages/launcher"
+    },
+    {
+      "concept_id": "contracts.generated",
+      "name": "Generated portable contracts (JSON schemas + TS types)",
+      "plane": "contracts",
+      "ssot_module": "docs/contracts/v1"
+    },
+    {
+      "concept_id": "graph.analytics",
+      "name": "Pure graph algorithms (PageRank, betweenness, communities)",
+      "plane": "core",
+      "ssot_module": "core/graph-analytics"
+    },
+    {
+      "concept_id": "codegraph.queries",
+      "name": "On-top codegraph queries (RFC-0012: dead-code, blast-radius, dependency-path)",
+      "plane": "on-top",
+      "ssot_module": "codegraph/queries"
+    }
+  ]
+}

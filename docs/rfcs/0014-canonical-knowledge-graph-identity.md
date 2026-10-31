@@ -6,7 +6,7 @@
 - **Date opened:** 2026-07-21
 - **Date closed:**
 - **Decision weight:** heavy
-- **Related:** RFC-0009 (knowledge-graph retraction and convergence), ADR-0022 (engine neutrality), `docs/domain-data-model.md`, AgentZero RFC-0012 (Engram upstream risk reduction)
+- **Related:** RFC-0009 (knowledge-graph retraction and convergence), ADR-0022 (engine neutrality), `docs/architecture/domain-data-model.md`, AgentZero RFC-0012 (Engram upstream risk reduction)
 
 ## Reviewer brief
 
@@ -302,7 +302,7 @@ columns, hashes, constraints, and transaction strategy remain adapter-private.
 
 **Depends on:** RFC acceptance
 
-**Likely areas:** `docs/domain-data-model.md`, `docs/specs/`,
+**Likely areas:** `docs/architecture/domain-data-model.md`, `docs/specs/`,
 `core/domain/src/knowledge.rs`, `contracts/v1/`
 
 Define identity modes, normalization versioning, exact relationship identity,

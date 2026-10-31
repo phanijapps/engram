@@ -65,7 +65,7 @@ export paths are local filesystem paths.
 ```bash
 python3 "$SKILL_ROOT/scripts/factory.py" --repo "$REPO" create --feature-file /absolute/feature.txt --slug short-kebab-slug [--profiles full-stack] [--brief-file /absolute/brief.md]
 python3 "$SKILL_ROOT/scripts/factory.py" --repo "$REPO" status --job "$JOB"
-python3 "$SKILL_ROOT/scripts/factory.py" --repo "$REPO" complete --job "$JOB" --stage analyze --artifacts analysis.md
+python3 "$SKILL_ROOT/scripts/factory.py" --repo "$REPO" complete --job "$JOB" --stage analyze --artifacts spec.md
 python3 "$SKILL_ROOT/scripts/factory.py" --repo "$REPO" complete --job "$JOB" --stage plan --artifacts plan.md
 python3 "$SKILL_ROOT/scripts/factory.py" --repo "$REPO" complete --job "$JOB" --stage tasks --artifacts tasks.md verification.md release.md
 python3 "$SKILL_ROOT/scripts/factory.py" --repo "$REPO" snapshot --job "$JOB" --environment /absolute/environment.json --exports /absolute/package.zip

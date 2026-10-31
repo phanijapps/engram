@@ -11,7 +11,7 @@
 //! of a different shape) are deferred.
 //!
 //! ADR-0022: this port is engine-neutral — it names no engine type and holds no
-//! SQL (enforced by `.codex/hooks/check-engine-neutrality.sh`). The SQLite
+//! SQL (enforced by `.codex/hooks/check_engine_neutrality.py`). The SQLite
 //! implementation lives in the adapters layer (`engram-conformance`).
 
 use async_trait::async_trait;
@@ -35,7 +35,7 @@ use engram_runtime::CoreResult;
 /// `subject.key` (`BeliefQuery::live_subject` does an exact-match lookup).
 /// Free-text queries that do not verbatim match a stored subject key will yield
 /// `None` from this lane — fuzzy / entity-alias mapping is a follow-up (see
-/// `docs/backlog.md`, `unified-recall-taxonomy-episodes`).
+/// `docs/history/backlog.md`, `unified-recall-taxonomy-episodes`).
 #[allow(clippy::double_must_use)]
 // async_trait codegen stamps #[must_use] on the boxed-future helper; CoreResult is already must_use
 #[async_trait]

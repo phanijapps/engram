@@ -11,13 +11,24 @@ The implementation stack is accepted (`docs/adr/0003-implementation-stack.md`,
 Status: Accepted). Before implementation work, run:
 
 ```bash
-scripts/ci/check-contracts.sh && scripts/ci/check-engine-neutrality.sh
+tools/ci/check_contracts.py && tools/ci/check_engine_neutrality.py
 ```
+
+## Constitution (adopted 2026-10-31)
+
+CI-enforced rules live in `docs/constitution/` (rails 01-08, master index
+`docs/constitution/00-INDEX.md`); machine truth (implementation/gates/events/
+distributions/components registries + schemas) lives in
+`docs/contracts/docs/constitution/v1/`. Deviations are owner-approved and time-boxed
+(`docs/constitution/DEVIATIONS.md`, empty by default); temporal clauses live in
+`docs/constitution/DECAY-WINDOWS.md`. The SDD pipeline (factory brief/spec/plan/
+tasks) is governed by the same constitution — see the Constitution compliance
+section of the engram-factory skill.
 
 ## Target Repository Shape
 
 ```text
-contracts/                 Portable JSON schemas and generated contract outputs.
+docs/contracts/                 Portable JSON schemas and generated contract outputs.
 docs/                      Architecture, ADRs, RFCs, research, and domain model.
 examples/                  Scenario fixtures and usage sketches.
 
@@ -44,6 +55,8 @@ core/                      Storage-neutral Rust crates.
                            erlang, ocaml, haskell; legacy modernization:
                            COBOL, Fortran, SQL (COBOL+SQL grammars vendored
                            under lang/grammars/ — no linkable crates.io lib).
+  packs/                   Ontology/taxonomy packs (standard-domain vocabulary).
+  proposals/               Change proposal records and validation.
 
   code/                    Deterministic code-indexing behavior crate (engram-code, ADR-0028):
                            tree-sitter parsing, symbol identity, typed code edges,
@@ -54,11 +67,10 @@ core/                      Storage-neutral Rust crates.
 adapters/                  Replaceable infrastructure crates.
   ingest/                  Filesystem/Git ingestion adapter until split.
   embedding/http/          HTTP embedding provider cell (configurable models).
-  memory/sqlite/           SQLite memory persistence adapter.
-  knowledge/sqlite/        SQLite knowledge, graph, taxonomy, and ontology adapter.
-  hierarchy/sqlite/        SQLite hierarchy persistence adapter.
-  orchestration/belief-sqlite/  SQLite belief and contradiction persistence adapter.
-  retrieval/sqlite-vec/    sqlite-vec retrieval index adapter.
+  integration/             Backend recipe / conformance composition (SQLite wiring
+                           until backends/ split).
+  sqlite/                  SQLite adapter cells (memory, knowledge, belief, vector).
+  pgvector/                pgvector adapter cells.
   retrieval/tantivy-lexical/       BM25 lexical retrieval index adapter (keyword mode).
   retrieval/cross-encoder-rerank/  Cross-encoder reranker adapter.
   retrieval/mmr-rerank/           MMR (maximal marginal relevance) reranker adapter.
@@ -76,6 +88,12 @@ backends/                  Backend recipe crates (ADR-0022). A *backend* is one
 bindings/                  Native language bridges.
   node/                    N-API bridge for TypeScript.
 
+tools/                     All repository operations + agent hooks: Python-only,
+  lib/                     shared helpers (ROOT, git, fail/ok reporting).
+  ci/                      constitution gates-root (15 check_*.py gates).
+  contracts/               contract codegen + schema validation.
+  hooks/                   agent-session hooks (index-mining trio).
+  dev/, release/           developer workflows, release packaging.
 codegraph/                 On-top codegraph layer (RFC-0012): code-specific
   queries/                 crates built on engram (dead-code / blast-radius /
                            dependency-path over call edges).
@@ -91,7 +109,7 @@ mcp/                      Unified agent MCP server (RFC-0015): one EngramProvide
                            `memory/mcp-server` are both RETIRED (deleted).
 
 packages/                  TypeScript workspace.
-  contracts/               Generated TypeScript types and schemas.
+  docs/contracts/               Generated TypeScript types and schemas.
   client/                  Ergonomic application SDK.
   node/                    Native binding package.
   adapters/                JS-side framework and gateway integrations.
@@ -103,7 +121,7 @@ contracts, eval, node) now that the stack ADR (ADR-0003) is accepted.
 
 ## Boundary Rules
 
-- `docs/domain-data-model.md` is the source of truth until Rust domain types are
+- `docs/architecture/domain-data-model.md` is the source of truth until Rust domain types are
   accepted as the generated-contract source.
 - `engram-domain` must not depend on SQL, vector stores, embedding providers,
   async runtimes, Node, N-API, or TypeScript tooling.
@@ -228,12 +246,14 @@ contracts, eval, node) now that the stack ADR (ADR-0003) is accepted.
 - Put research notes, excerpts, and links under `docs/research/`.
 - Record durable technical decisions under `docs/adr/`.
 - Record design proposals under `docs/rfcs/`.
-- Update `docs/domain-data-model.md` before changing contracts, schemas, or
+- Update `docs/architecture/domain-data-model.md` before changing contracts, schemas, or
   generated public types.
 - Classify public contract changes as compatible or breaking.
-- Put accepted machine-readable contract artifacts under `contracts/v1/`.
-- Put spec-driven acceptance criteria under `docs/specs/`.
-- Do not treat `contracts/schemas/` as the source of truth; those files are
+- Put accepted machine-readable contract artifacts under `docs/contracts/v1/`.
+- Spec-driven acceptance criteria ride with the factory job artifacts
+  (`.engram-factory/jobs/`, v2 spec templates); the legacy `docs/specs/` tree was
+  retired 2026-10-31 (preserved in git history).
+- Do not treat `docs/contracts/schemas/` as the source of truth; those files are
   legacy pointers.
 
 ## Validation
@@ -246,10 +266,12 @@ cargo check --workspace
 pnpm run contracts:generate
 pnpm run typecheck
 pnpm run test
-scripts/ci/check-contracts.sh
-scripts/ci/check-docs.sh
-scripts/ci/check-engine-neutrality.sh     # ADR-0022 rule-1 gate (engine neutrality)
-scripts/ci/check-surface-parity.sh        # ADR-0022 surface-parity gate (Rust facade ↔ N-API binding)
+tools/ci/check_contracts.py
+tools/ci/check_docs.py
+tools/ci/check_engine_neutrality.py     # ADR-0022 rule-1 gate (engine neutrality)
+tools/ci/check_surface_parity.py        # ADR-0022 surface-parity gate (Rust facade ↔ N-API binding)
+tools/ci/check_constitution.py          # docs/constitution/ L1 + zero-deviation + registries (RULE-5)
+tools/ci/check_job_artifacts.py         # SDD artifact gate (advisory until 2026-11-28, DW-5)
 ```
 
 Run `pnpm run build` after TypeScript package surface changes.
@@ -260,7 +282,7 @@ Run `pnpm run build` after TypeScript package surface changes.
   were superseded by the agent-bundle refresh (2026-08-26). The generic
   workflow skills now present under `.codex/skills/` (`new-spec`, `new-adr`,
   `new-rcf`, `work-loop`, `new-guide`) cover the same loop; the CI gates under
-  `scripts/ci/` carry the enforcement the old hooks owned.
+  `tools/ci/` carry the enforcement the old hooks owned.
 - Install local Git hooks with `git config core.hooksPath .githooks` when this
   workspace should enforce checks on commit.
 

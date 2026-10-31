@@ -2,7 +2,7 @@
 
 Requests for comments — design proposals that need discussion before
 implementation. Accepted proposals are recorded as ADRs and implemented through
-specs under `docs/specs/`. See `docs/CONVENTIONS.md` for the RFC lifecycle.
+specs under `docs/specs/`. See `docs/guides/CONVENTIONS.md` for the RFC lifecycle.
 
 | Number | Title | Status | Date opened |
 | --- | --- | --- | --- |

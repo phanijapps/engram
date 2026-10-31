@@ -97,15 +97,17 @@ def validate_artifact(jobdir, path, job, kind=None, roles=None, required=(), sna
     # Template placeholders are lowercase words (render keys and <profile>_<phase>_evidence);
     # evidence quoting real Jinja/Handlebars syntax ({{ user.name }}, {{x|default}}) stays legal.
     require(not re.search(r"\{\{[a-z_][a-z0-9_-]*\}\}", absolute.read_text()), "Unresolved placeholders: " + path)
-    keys = {"schema_version", "artifact_type", "job_id", "cycle", "status", "author_role",
+    keys = {"schema_version", "job_id", "cycle", "status", "author_role",
             "profiles", "source_snapshot", "input_artifacts", "updated_at"}
     require(keys <= fields.keys(), "Missing common artifact metadata")
-    require(fields["schema_version"] == "1.0", "Unsupported artifact version")
+    require("artifact_type" in fields or "artifact" in fields, "Missing artifact identity")
+    require(fields["schema_version"] in ("1.0", 2, "2"), "Unsupported artifact version")
     require(fields["status"] == "ready", "Artifact is not ready: " + path)
     require(fields["job_id"] == job["job_id"], "Wrong artifact job")
     require(type(fields["cycle"]) is int and fields["cycle"] == job["cycle"], "Wrong artifact cycle")
     require(fields["profiles"] == job["profiles"], "Wrong artifact profiles")
-    require(not kind or fields["artifact_type"] == kind, "Wrong artifact type")
+    identity = fields.get("artifact_type") or fields.get("artifact")
+    require(not kind or identity == kind, "Wrong artifact type")
     require(not roles or fields["author_role"] in roles, "Wrong artifact author role")
     stamp = dt.datetime.fromisoformat(fields["updated_at"].replace("Z", "+00:00"))
     require(stamp.tzinfo is not None, "Timestamp needs timezone")
@@ -146,7 +148,7 @@ def render(name, job, **extra):
               "feature_title": job["feature"].splitlines()[0], "timestamp": now(), **extra}
     for key, value in values.items():
         text = text.replace("{{" + key + "}}", str(value))
-    if name in {"analysis", "plan", "tasks", "verification", "release"}:
+    if name in {"spec", "plan", "tasks", "verification", "release"}:
         for profile in job["profiles"]:
             source = (ROOT / "references" / (profile + ".md")).read_text()
             section = re.search(r"^## " + name.capitalize() + r"\n(.*?)(?=^## |\Z)", source, re.M | re.S)
@@ -159,7 +161,7 @@ def render(name, job, **extra):
 def scaffold(jobdir, job):
     # Render every document before writing any, so a bad template or profile
     # cannot leave a half-scaffolded job directory behind.
-    documents = [(name, render(name, job)) for name in ("analysis", "plan", "tasks", "verification", "release", "build", "decision")]
+    documents = [(name, render(name, job)) for name in ("spec", "plan", "tasks", "verification", "release", "build", "decision")]
     for name, text in documents:
         path = jobdir / (name + ".md")
         if not path.exists():
@@ -223,6 +225,23 @@ def source_check(repo, jobdir, job, check_target=True):
 def event(job, action, detail):
     job["updated_at"] = now()
     job["history"].append({"at": now(), "action": action, "detail": detail})
+
+
+def emit_evidence(jobdir, job, family, actor, **fields):
+    """L3 canonical evidence (rail 06): append one registered-family event to
+    <jobdir>/events.jsonl. Families are declared canonical-first in
+    docs/contracts/constitution/v1/events/registry.json; check-canonical-evidence.py
+    fails on undeclared families or malformed records."""
+    record_ = {
+        "schema": "engram.evidence.v1",
+        "family": family,
+        "job_id": job["job_id"],
+        "actor": actor,
+        "at": now(),
+        **fields,
+    }
+    with (jobdir / "events.jsonl").open("a", encoding="utf-8") as fh:
+        fh.write(json.dumps(record_, sort_keys=True) + "\n")
 
 
 def block(job, reason, code="manual"):
@@ -292,6 +311,9 @@ def execute(args, repo, state, board):
         # leaves at most an inspectable job directory, never an orphan worktree.
         git(repo, "worktree", "add", "-b", branch, str(worktree), base)
         event(job, "create", {"base_sha": base, "mode": mode, "mode_pinned": args.mode is not None})
+        emit_evidence(jobdir, job, "job.created", "agent",
+                      brief_sha256=(job["artifacts"]["brief"]["sha256"] if "brief" in job["artifacts"] else None),
+                      size_tier=job.get("size_tier"))
         board["jobs"].append(job)
         return job
     job = selected(board, args.job)
@@ -302,11 +324,11 @@ def execute(args, repo, state, board):
     if cmd == "complete":
         stage = args.stage
         require(job["stage"] == stage and job["status"] == "running", "Unexpected completion stage")
-        expected = {"analyze": ["analysis"], "plan": ["plan"], "tasks": ["tasks", "verification", "release"],
+        expected = {"analyze": ["spec"], "plan": ["plan"], "tasks": ["tasks", "verification", "release"],
                     "build": ["build", "tasks", "verification", "release"]}[stage]
         require(len(args.artifacts) == len(expected), "Wrong artifact count/order: " + str(expected))
-        upstream = {"analyze": ["feature"], "plan": ["analysis"], "tasks": ["analysis", "plan"],
-                    "build": ["analysis", "plan"]}[stage]
+        upstream = {"analyze": ["feature"], "plan": ["spec"], "tasks": ["spec", "plan"],
+                    "build": ["spec", "plan"]}[stage]
         if "rework" in job["artifacts"]:
             upstream = upstream + ["rework"]
         if stage == "analyze" and "brief" in job["artifacts"]:
@@ -456,6 +478,10 @@ def execute(args, repo, state, board):
                            "snapshot_sha256": job["snapshot"]["sha256"]}
         job["stage"], job["status"] = "merge", "approved"
         event(job, "human-approval", job["approval"])
+        emit_evidence(jobdir, job, "job.approved", "owner",
+                      cycle=job["cycle"],
+                      approver=str(job["approval"].get("approver", "owner")),
+                      artifact_hashes={k: v["sha256"] for k, v in job["artifacts"].items()})
     elif cmd == "merge":
         require(job["stage"] == "merge" and job["approval"], "No human approval")
         snap = source_check(repo, jobdir, job, check_target=False)
@@ -471,6 +497,9 @@ def execute(args, repo, state, board):
             git(repo, "merge", "--ff-only", snap["head_sha"])
         job["stage"], job["status"] = "merged", "complete"
         event(job, "merged", {"head_sha": snap["head_sha"], "platform_promoted": False})
+        emit_evidence(jobdir, job, "job.released", "owner",
+                      merge_commit=snap["head_sha"],
+                      release_notes_ref=str(job["artifacts"].get("release", {}).get("path", "")))
     elif cmd == "rework":
         require(job["stage"] in {"approve", "merge", "needs-human"}, "Human rework is allowed at a decision boundary")
         note = Path(args.note_file).read_text()
@@ -485,7 +514,7 @@ def execute(args, repo, state, board):
         # Rework conservatively revalidates all upstream contracts; preserve old bytes first.
         archive = jobdir / "history" / ("cycle-" + str(job["cycle"] - 1))
         archive.mkdir(parents=True, exist_ok=True)
-        for name in ("analysis", "plan", "tasks", "verification", "release", "build", "decision"):
+        for name in ("spec", "plan", "tasks", "verification", "release", "build", "decision"):
             path = jobdir / (name + ".md")
             if path.exists():
                 shutil.copyfile(path, archive / path.name)
@@ -498,6 +527,9 @@ def execute(args, repo, state, board):
         job["artifacts"]["rework"] = record(jobdir, path)
         scaffold(jobdir, job)
         event(job, "rework", {"previous": prior, "instruction": job["artifacts"]["rework"]})
+        emit_evidence(jobdir, job, "job.reworked", "owner",
+                      cycle=job["cycle"], note=note.strip(),
+                      review_refs=[r["path"] for r in job["artifacts"].values() if "rework" in str(r.get("path", ""))])
     elif cmd == "refresh-base":
         require(job["stage"] == "build" and job["round"] == 0, "Refresh base before first review of a cycle")
         clean(job["worktree"])

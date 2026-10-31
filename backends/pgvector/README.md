@@ -42,7 +42,7 @@ One Postgres holds the graph (entities/relationships/graphs), chunks/documents/
 sources, memory records, and embeddings (pgvector type). SQLite stays the
 local/single-user default; backend is chosen by config. Extracting
 `backends/sqlite` (full neutrality) is deferred — see
-`docs/backlog.md#backends-sqlite-extraction`. Reusing the conformance suite
+`docs/history/backlog.md#backends-sqlite-extraction`. Reusing the conformance suite
 against pgvector is also deferred (`ConformanceHarness::new()` is sqlite-coupled;
 it needs a provider-injection refactor — see
-`docs/backlog.md#pgvector-conformance-suite`).
+`docs/history/backlog.md#pgvector-conformance-suite`).

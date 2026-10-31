@@ -261,4 +261,4 @@ When accepted:
   - `docs/specs/provenance-confidence-viz/` (Slice 4)
   - `docs/specs/belief-contradiction-bitemporal/` (Slice 5, new belief adapter + consolidation + binding + UI)
   - `docs/specs/qa-over-knowledge/` (Slice 6)
-- No `docs/CONVENTIONS.md` change anticipated — `demo/` stays standalone and non-contract-bearing; the ontology reversal is recorded in ADR-0008, not a convention edit.
+- No `docs/guides/CONVENTIONS.md` change anticipated — `demo/` stays standalone and non-contract-bearing; the ontology reversal is recorded in ADR-0008, not a convention edit.

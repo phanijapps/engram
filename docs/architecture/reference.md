@@ -22,7 +22,7 @@
   from TypeScript only — never from Rust. **Deployment platform:** demo-scale
   local deployment today (Hono backend on `:8787`, Vite React frontend); no
   managed runtime or orchestrator yet — production targeting is a future ADR.
-- **Organizational / process constraints.** **Contract-first:** `docs/domain-data-model.md` is the source of truth until Rust domain types are accepted as the generated-contract source. **Boundary rules** in `AGENTS.md` outrank local preference (no god modules; crate roots are facades; store/vector/embedding/model/gateway integrations live in adapters). **ADR-gated:** no runtime manifests or implementation code until `docs/adr/0003-implementation-stack.md` exists; run `.codex/hooks/pre-implementation-check.sh` before implementation work. Compatible vs breaking contract changes are classified explicitly.
+- **Organizational / process constraints.** **Contract-first:** `docs/architecture/domain-data-model.md` is the source of truth until Rust domain types are accepted as the generated-contract source. **Boundary rules** in `AGENTS.md` outrank local preference (no god modules; crate roots are facades; store/vector/embedding/model/gateway integrations live in adapters). **ADR-gated:** no runtime manifests or implementation code until `docs/adr/0003-implementation-stack.md` exists; run `.codex/hooks/pre-implementation-check.sh` before implementation work. Compatible vs breaking contract changes are classified explicitly.
 - **Constraints you cannot change here.** `engram-domain` must not depend on SQL, vector stores, embedding providers, async runtimes, Node, N-API, or TypeScript tooling. The LLM client stays in TypeScript. Embeddings live behind traits so tests use deterministic stubs. The retrieval-composition seam (RFC-0005 / ADR-0009) is **read-path only** — distributed cross-store write consistency is out of scope.
 
 ## Solution strategy
@@ -43,7 +43,7 @@
   - **Runtime crate** (`engram-runtime`) — shared primitives: `CoreError`/`CoreResult`, clocks, id generation, scope matching, policy authorizer traits.
   - **Behavior crate** (`engram-memory`, `engram-knowledge`, `engram-retrieval`) — service + ports for one concern each. `engram-retrieval` owns fusion + composition ports and is **store-free**.
   - **Orchestration facade** (`engram-core`) — compatibility re-export layer above split behavior crates; must not re-become the canonical owner of memory/knowledge ports.
-  - **Adapter crate** — replaceable infrastructure behind traits (`adapters/memory/sqlite`, `adapters/knowledge/sqlite`, `adapters/retrieval/sqlite-vec`, `adapters/ingest`).
+  - **Adapter crate** — replaceable infrastructure behind traits (`adapters/sqlite`, `adapters/pgvector`, `adapters/retrieval/*`, `adapters/ingest`).
   - **Binding** (`engram-node`) — N-API JSON transport over Rust behavior.
   - **Package** (`packages/*`) — TypeScript facades; `index.ts` files are narrow public surfaces.
 - **Reusable building blocks.**

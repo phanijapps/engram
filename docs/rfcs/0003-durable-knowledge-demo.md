@@ -255,4 +255,4 @@ When accepted:
   - `docs/specs/knowledge-graph-extractor/` (Slice 2)
   - `docs/specs/fastembed-passage-embeddings/` (Slice 3)
   - `docs/specs/engram-demo-app/` (Slice 4, frontend/backend wiring + polish)
-- No `docs/CONVENTIONS.md` change anticipated — `demo/` is standalone and non-contract-bearing.
+- No `docs/guides/CONVENTIONS.md` change anticipated — `demo/` is standalone and non-contract-bearing.

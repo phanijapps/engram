@@ -16,7 +16,7 @@
 
 ## Context
 
-S2 shipped the **read half** of `episodes_evidence` (the `ProvenanceQuery` port). The **write half** — a dedicated *attach evidence to an existing record* operation — was deferred (logged in `docs/backlog.md` → `episode-evidence-write-side`). The deferred item's blocker was: "an ADR deciding the append-vs-rewrite storage model."
+S2 shipped the **read half** of `episodes_evidence` (the `ProvenanceQuery` port). The **write half** — a dedicated *attach evidence to an existing record* operation — was deferred (logged in `docs/history/backlog.md` → `episode-evidence-write-side`). The deferred item's blocker was: "an ADR deciding the append-vs-rewrite storage model."
 
 Records are stored losslessly as `record_json TEXT` blobs (ADR-0005). `Provenance.evidence` is a `Vec<EvidenceRef>` embedded inside the record JSON. Attaching evidence means modifying that array.
 
@@ -47,5 +47,5 @@ Attaching evidence to an existing record uses **port-level rewrite** (option 1).
 
 ## References
 
-- `docs/backlog.md` → `episode-evidence-write-side` (the deferred item this ADR unblocks).
+- `docs/history/backlog.md` → `episode-evidence-write-side` (the deferred item this ADR unblocks).
 - ADR-0018 (retraction/convergence — the same read-modify-write model for retraction).

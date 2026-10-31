@@ -70,7 +70,7 @@ class FactoryTests(unittest.TestCase):
                   "profiles": job["profiles"], "source_snapshot": snapshot,
                   "input_artifacts": [factory.ref(self.jobdir, p) for p in inputs],
                   "updated_at": factory.now(), **extra}
-        if kind == "analysis":
+        if kind == "spec":
             fields["required_reviewers"] = getattr(self, "analysis_reviewers", ["code", "security", "platform"])
         output = self.jobdir / path
         output.parent.mkdir(parents=True, exist_ok=True)
@@ -86,12 +86,12 @@ class FactoryTests(unittest.TestCase):
         extra = [job["artifacts"]["rework"]["path"]] if "rework" in job["artifacts"] else []
         brief = ["brief.md"] if "brief" in job["artifacts"] else []
         led = "Addresses LED-1: preserved verbatim." if brief else ""
-        self.fill("analysis", "engram-analyzer", ["feature.md"] + brief + extra, append=led)
-        self.run_cli("complete", "--job", self.job_id, "--stage", "analyze", "--artifacts", "analysis.md")
-        self.fill("plan", "engram-planner", ["analysis.md"] + extra)
+        self.fill("spec", "engram-analyzer", ["feature.md"] + brief + extra, append=led, path="spec.md")
+        self.run_cli("complete", "--job", self.job_id, "--stage", "analyze", "--artifacts", "spec.md")
+        self.fill("plan", "engram-planner", ["spec.md"] + extra)
         self.run_cli("complete", "--job", self.job_id, "--stage", "plan", "--artifacts", "plan.md")
         for kind in ("tasks", "verification", "release"):
-            self.fill(kind, "engram-tasks", ["analysis.md", "plan.md"] + extra)
+            self.fill(kind, "engram-tasks", ["spec.md", "plan.md"] + extra)
         self.run_cli("complete", "--job", self.job_id, "--stage", "tasks", "--artifacts", "tasks.md", "verification.md", "release.md")
 
     def build(self, exports=None, reviewers="code,security,platform", fail=False):
@@ -111,7 +111,7 @@ class FactoryTests(unittest.TestCase):
         self.run_cli(*args)
         job = self.job()
         snapshot = job["snapshot"]["path"]
-        upstream = ["analysis.md", "plan.md"]
+        upstream = ["spec.md", "plan.md"]
         if "rework" in job["artifacts"]:
             upstream += [job["artifacts"]["rework"]["path"]]
         for kind in ("tasks", "verification", "release"):
@@ -314,19 +314,19 @@ class FactoryTests(unittest.TestCase):
     def test_invalid_artifact_does_not_advance_or_increment_revision(self):
         self.create()
         before = self.run_cli("status")["revision"]
-        self.run_cli("complete", "--job", self.job_id, "--stage", "analyze", "--artifacts", "analysis.md", fail=True)
+        self.run_cli("complete", "--job", self.job_id, "--stage", "analyze", "--artifacts", "spec.md", fail=True)
         self.assertEqual(self.run_cli("status")["revision"], before)
-        self.fill("analysis", "engram-builder", ["feature.md"])
-        self.run_cli("complete", "--job", self.job_id, "--stage", "analyze", "--artifacts", "analysis.md", fail=True)
+        self.fill("spec", "engram-builder", ["feature.md"], path="spec.md")
+        self.run_cli("complete", "--job", self.job_id, "--stage", "analyze", "--artifacts", "spec.md", fail=True)
         self.assertEqual(self.job()["stage"], "analyze")
 
     def test_missing_or_stale_required_input_blocks_handoff(self):
         self.create()
-        self.fill("analysis", "engram-analyzer", [])
-        self.run_cli("complete", "--job", self.job_id, "--stage", "analyze", "--artifacts", "analysis.md", fail=True)
-        self.fill("analysis", "engram-analyzer", ["feature.md"])
+        self.fill("spec", "engram-analyzer", [])
+        self.run_cli("complete", "--job", self.job_id, "--stage", "analyze", "--artifacts", "spec.md", fail=True)
+        self.fill("spec", "engram-analyzer", ["feature.md"])
         (self.jobdir / "feature.md").write_text("tampered feature")
-        self.run_cli("complete", "--job", self.job_id, "--stage", "analyze", "--artifacts", "analysis.md", fail=True)
+        self.run_cli("complete", "--job", self.job_id, "--stage", "analyze", "--artifacts", "spec.md", fail=True)
 
     def valid_brief(self, ask=None):
         ask = ask or self.feature.read_text()
@@ -346,22 +346,22 @@ class FactoryTests(unittest.TestCase):
         self.job_id = result["result"]["job_id"]
         self.jobdir = self.repo / ".engram-factory" / "jobs" / self.job_id
         self.assertIn("brief", self.job()["artifacts"])
-        self.fill("analysis", "engram-analyzer", ["feature.md"], append="Notes: none.")
-        self.run_cli("complete", "--job", self.job_id, "--stage", "analyze", "--artifacts", "analysis.md", fail=True)
-        self.fill("analysis", "engram-analyzer", ["feature.md", "brief.md"], append="Ignores the rollout-owner decision entirely.")
-        self.run_cli("complete", "--job", self.job_id, "--stage", "analyze", "--artifacts", "analysis.md", fail=True)
-        self.fill("analysis", "engram-analyzer", ["feature.md", "brief.md"], append="Addresses LED-1: preserved verbatim.")
-        self.run_cli("complete", "--job", self.job_id, "--stage", "analyze", "--artifacts", "analysis.md")
+        self.fill("spec", "engram-analyzer", ["feature.md"], append="Notes: none.")
+        self.run_cli("complete", "--job", self.job_id, "--stage", "analyze", "--artifacts", "spec.md", fail=True)
+        self.fill("spec", "engram-analyzer", ["feature.md", "brief.md"], append="Ignores the rollout-owner decision entirely.")
+        self.run_cli("complete", "--job", self.job_id, "--stage", "analyze", "--artifacts", "spec.md", fail=True)
+        self.fill("spec", "engram-analyzer", ["feature.md", "brief.md"], append="Addresses LED-1: preserved verbatim.")
+        self.run_cli("complete", "--job", self.job_id, "--stage", "analyze", "--artifacts", "spec.md")
         self.assertEqual(self.job()["stage"], "plan")
         (self.jobdir / "brief.md").write_text("tampered")
-        self.fill("plan", "engram-planner", ["analysis.md"])
+        self.fill("plan", "engram-planner", ["spec.md"])
         self.run_cli("complete", "--job", self.job_id, "--stage", "plan", "--artifacts", "plan.md", fail=True)
 
     def test_brief_backward_compatible_without_one(self):
         self.create()  # no --brief-file
         self.assertNotIn("brief", self.job()["artifacts"])
-        self.fill("analysis", "engram-analyzer", ["feature.md"])
-        self.run_cli("complete", "--job", self.job_id, "--stage", "analyze", "--artifacts", "analysis.md")
+        self.fill("spec", "engram-analyzer", ["feature.md"])
+        self.run_cli("complete", "--job", self.job_id, "--stage", "analyze", "--artifacts", "spec.md")
         self.assertEqual(self.job()["stage"], "plan")
 
     def test_empty_brief_is_rejected_at_create(self):
@@ -393,10 +393,10 @@ class FactoryTests(unittest.TestCase):
         self.run_cli("rework", "--job", self.job_id, "--note-file", str(note))
         # cycle 2: analysis MUST still include feature + rework + brief
         rework_path = self.job()["artifacts"]["rework"]["path"]
-        self.fill("analysis", "engram-analyzer", ["feature.md", rework_path])
-        self.run_cli("complete", "--job", self.job_id, "--stage", "analyze", "--artifacts", "analysis.md", fail=True)
-        self.fill("analysis", "engram-analyzer", ["feature.md", rework_path, "brief.md"], append="Addresses LED-1: preserved verbatim.")
-        self.run_cli("complete", "--job", self.job_id, "--stage", "analyze", "--artifacts", "analysis.md")
+        self.fill("spec", "engram-analyzer", ["feature.md", rework_path])
+        self.run_cli("complete", "--job", self.job_id, "--stage", "analyze", "--artifacts", "spec.md", fail=True)
+        self.fill("spec", "engram-analyzer", ["feature.md", rework_path, "brief.md"], append="Addresses LED-1: preserved verbatim.")
+        self.run_cli("complete", "--job", self.job_id, "--stage", "analyze", "--artifacts", "spec.md")
         self.assertEqual(self.job()["stage"], "plan")
 
     def test_single_job_and_stale_revision_enforced(self):
@@ -428,8 +428,8 @@ class FactoryTests(unittest.TestCase):
         self.run_cli("snapshot", "--job", self.job_id, "--environment", str(env))
         snapshot = self.job()["snapshot"]["path"]
         for kind in ("tasks", "verification", "release"):
-            self.fill(kind, "engram-builder", ["analysis.md", "plan.md"], snapshot)
-        self.fill("build", "engram-builder", ["analysis.md", "plan.md", "tasks.md", "verification.md", "release.md"], snapshot)
+            self.fill(kind, "engram-builder", ["spec.md", "plan.md"], snapshot)
+        self.fill("build", "engram-builder", ["spec.md", "plan.md", "tasks.md", "verification.md", "release.md"], snapshot)
         self.run_cli("complete", "--job", self.job_id, "--stage", "build", "--snapshot", snapshot,
                      "--reviewers", "code,security", "--artifacts", "build.md", "tasks.md", "verification.md", "release.md", fail=True)
         self.assertEqual(self.job()["stage"], "build")
@@ -454,12 +454,12 @@ class FactoryTests(unittest.TestCase):
         self.create()
         archive = self.jobdir / self.job()["artifacts"]["feature"]["archive"]
         archive.write_text("tampered archive")
-        self.fill("analysis", "engram-analyzer", ["feature.md"])
-        self.run_cli("complete", "--job", self.job_id, "--stage", "analyze", "--artifacts", "analysis.md", fail=True)
+        self.fill("spec", "engram-analyzer", ["feature.md"])
+        self.run_cli("complete", "--job", self.job_id, "--stage", "analyze", "--artifacts", "spec.md", fail=True)
 
     def test_profiles_compose_into_phase_specific_templates(self):
         self.create("full-stack,salesforce,sap,servicenow,maximo")
-        for name in ("analysis", "plan", "tasks", "verification", "release"):
+        for name in ("spec", "plan", "tasks", "verification", "release"):
             text = (self.jobdir / (name + ".md")).read_text()
             for profile in factory.PROFILES:
                 self.assertIn("## Profile: " + profile, text)
@@ -544,8 +544,8 @@ class FactoryTests(unittest.TestCase):
         jsonschema.Draft202012Validator(schema).validate(board)
 
     def analyze_declaring(self, mode, extra=()):
-        self.fill("analysis", "engram-analyzer", ["feature.md", *extra], mode=mode)
-        self.run_cli("complete", "--job", self.job_id, "--stage", "analyze", "--artifacts", "analysis.md")
+        self.fill("spec", "engram-analyzer", ["feature.md", *extra], mode=mode)
+        self.run_cli("complete", "--job", self.job_id, "--stage", "analyze", "--artifacts", "spec.md")
 
     def test_mode_declaration_applies_on_unpinned_job(self):
         self.create_mode()
@@ -575,8 +575,8 @@ class FactoryTests(unittest.TestCase):
 
     def test_mode_declaration_invalid_value_is_rejected(self):
         self.create_mode()
-        self.fill("analysis", "engram-analyzer", ["feature.md"], mode="fast")
-        self.run_cli("complete", "--job", self.job_id, "--stage", "analyze", "--artifacts", "analysis.md", fail=True)
+        self.fill("spec", "engram-analyzer", ["feature.md"], mode="fast")
+        self.run_cli("complete", "--job", self.job_id, "--stage", "analyze", "--artifacts", "spec.md", fail=True)
         self.assertEqual(self.job()["mode"], "full")
 
     def test_mode_pin_superseded_by_rework_note(self):
@@ -597,10 +597,10 @@ class FactoryTests(unittest.TestCase):
     def upstream_light(self):
         self.create_mode("light")
         self.analyze_declaring("light")
-        self.fill("plan", "engram-planner", ["analysis.md"])
+        self.fill("plan", "engram-planner", ["spec.md"])
         self.run_cli("complete", "--job", self.job_id, "--stage", "plan", "--artifacts", "plan.md")
         for kind in ("tasks", "verification", "release"):
-            self.fill(kind, "engram-tasks", ["analysis.md", "plan.md"])
+            self.fill(kind, "engram-tasks", ["spec.md", "plan.md"])
         self.run_cli("complete", "--job", self.job_id, "--stage", "tasks", "--artifacts", "tasks.md", "verification.md", "release.md")
 
     def review_light(self, discipline, verdict="PASS", role="red-forman", attempt="", fail=False):

@@ -37,7 +37,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   conformance tests in the gate; the engine-neutrality and surface-parity
   lints are enforced in CI (they had been referenced but never wired, and the
   contract/docs jobs had been calling deleted hook scripts since the
-  agent-bundle refresh — all four gates now live under `scripts/ci/`).
+  agent-bundle refresh — all four gates now live under `tools/ci/`).
 - **SQLite → Postgres migration runbook**, executable as a Docker-gated test
   (export → import → recall parity on both engines) plus
   `docs/guides/how-to/migrate-sqlite-to-pg.md`.

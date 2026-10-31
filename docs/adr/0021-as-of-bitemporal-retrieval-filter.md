@@ -5,7 +5,7 @@
 - **Decision-makers:** phanijapps
 - **Supersedes:** none
 - **Related:** ADR-0019 (bi-temporal knowledge entities), RFC-0012 (codegraph layer),
-  `docs/domain-data-model.md` §Retrieval Model / §Timestamp
+  `docs/architecture/domain-data-model.md` §Retrieval Model / §Timestamp
 
 ## Decision summary
 

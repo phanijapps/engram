@@ -28,7 +28,7 @@ Per [ADR-0022](../../adr/0022-engine-grid-vs-backend-recipe.md) (amended):
   `core/*` port crates, `engram-integration`'s neutral facade files, and the
   N-API binding must never name `Sql*`, `Surreal*`, `pgvector`, … The only place
   an engine name may appear in those layers is as a config string. A neutrality
-  lint (`.codex/hooks/check-engine-neutrality.sh`) enforces this — and the
+  lint (`.codex/hooks/check_engine_neutrality.py`) enforces this — and the
   engine crate + its bootstrap submodule are exempt zones.
 
 A consumer then changes **one config line** (a `BackendProfile` + Cargo feature)
@@ -191,7 +191,7 @@ template. Then run the gates:
 ```bash
 cargo test -p engram-integration --features <engine>
 cargo check --workspace
-.codex/hooks/check-engine-neutrality.sh
+.codex/hooks/check_engine_neutrality.py
 ```
 
 Build the N-API binding + run the TS suite too — surface parity

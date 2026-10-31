@@ -4,7 +4,7 @@ Pin edition, API version, enabled features, namespace/package model and org stra
 Verify security behavior and deployment requirements for that version. Avoid fixed
 coverage or governor-limit numbers without a job-specific official source.
 
-## Analysis
+## Spec
 
 Inventory objects/fields, relationships, record types, validation rules, flows,
 Apex/triggers, Lightning components, permissions/sharing and integrations. Record

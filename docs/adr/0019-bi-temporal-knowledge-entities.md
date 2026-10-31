@@ -32,7 +32,7 @@ Add optional `validFrom` / `validUntil` (RFC 3339 `Timestamp`) to
 
 - Both optional (`None` = open interval / not bi-temporally tracked), so existing
   records and the frozen v1 wire contract are unaffected.
-- Semantics follow the existing `Timestamp` meanings in `docs/domain-data-model.md`:
+- Semantics follow the existing `Timestamp` meanings in `docs/architecture/domain-data-model.md`:
   `validFrom` = when this entity version became the authoritative representation;
   `validUntil` = when it stopped.
 - Stamping the intervals on ingest / re-ingest (tying `validUntil` to retracted

@@ -146,7 +146,7 @@ surface-parity rule.
 
 To be created under `docs/specs/` per slice once this brief is confirmed;
 domain-type additions (`DerivedEdge`, `DerivationRecord`, verdict enum,
-`CandidateKind` extensions) land in `docs/domain-data-model.md` **before**
+`CandidateKind` extensions) land in `docs/architecture/domain-data-model.md` **before**
 contract generation, per the contract-first rule.
 
 ## References
@@ -155,7 +155,7 @@ contract generation, per the contract-first rule.
   `docs/decisions/README.md` (failure-driven ADR discipline);
   `docs/explanation.md` (justification vs certificate substrate — the DAG
   distinction); `docs/modules-and-conservativity.md`; `docs/lifecycle.md`.
-- engram: `docs/domain-data-model.md`, `docs/product/engram.md`,
+- engram: `docs/architecture/domain-data-model.md`, `docs/product/engram.md`,
   `AGENTS.md` boundary rules (surface parity, memory-knowledge boundaries,
   no-god-modules).
 - Session artifacts: comparison analysis and dataflow diagram (`.archify/`),

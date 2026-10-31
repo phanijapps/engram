@@ -2,7 +2,7 @@
 
 A regression contract for engram's code-intel + mixed-mission retrieval:
 one mixed-shape fixture repo (`zbot/`), one case list (`cases.json`), one
-runner (`scripts/dev/golden_eval.py`). Every case encodes a behavior that
+runner (`tools/dev/golden_eval.py`). Every case encodes a behavior that
 was once broken (reproduced from a real defect) or a balance-doctrine
 guarantee that must never regress.
 
@@ -10,9 +10,9 @@ guarantee that must never regress.
 
 ```bash
 cargo build --release -p engram-mcp
-python3 scripts/dev/golden_eval.py            # exit 0 = all green
-python3 scripts/dev/golden_eval.py --keep     # keep the scratch store for inspection
-python3 scripts/dev/golden_eval.py --binary $(which engram-mcp)   # grade an installed build
+python3 tools/dev/golden_eval.py            # exit 0 = all green
+python3 tools/dev/golden_eval.py --keep     # keep the scratch store for inspection
+python3 tools/dev/golden_eval.py --binary $(which engram-mcp)   # grade an installed build
 ```
 
 The runner starts ONE server process, scans an ISOLATED COPY of the

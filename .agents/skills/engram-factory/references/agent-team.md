@@ -1,7 +1,7 @@
 ## Full Team
 | Stage | Agent | Writes or edits |
 | --- | --- | --- |
-| Analyze | engram-analyzer | analysis.md |
+| Analyze | engram-analyzer | spec.md |
 | Plan | engram-planner | plan.md |
 | Tasks | engram-tasks | tasks.md, verification.md, release.md |
 | Build | engram-builder | Source, tests, configuration exports, task progress, build.md |
@@ -12,7 +12,7 @@
 ## Light Mode
 | Stage | Agent | Writes or edits |
 | --- | --- | --- |
-| Analyze | engram-analyzer | analysis.md |
+| Analyze | engram-analyzer | spec.md |
 | Plan | engram-planner | plan.md |
 | Tasks | engram-tasks | tasks.md, verification.md, release.md |
 | Build | engram-builder | Source, tests, configuration exports, task progress, build.md |

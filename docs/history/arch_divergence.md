@@ -16,7 +16,7 @@ not, and must not be re-added as such:
   `synthesis.md:246-247`; `architecture-design-v2.md:794`), and leaves local
   storage choice as an open decision (`synthesis.md:296`). The SQLite
   adapters satisfy the interface requirement. A Postgres / Neo4j / pgvector
-  adapter is a deployment item in `docs/backlog.md` (`deployment-adapters`),
+  adapter is a deployment item in `docs/history/backlog.md` (`deployment-adapters`),
   not an architecture divergence from research.
 - **Belief / contradiction as a subsystem is beyond the research's explicit
   scope.** The research is silent on belief networks; it mandates only the
@@ -91,5 +91,5 @@ before adding behavior.
    retrieval-sqlite-vec).
 
 Deployment substrate work (Postgres / Neo4j / pgvector) is tracked in
-`docs/backlog.md` (`deployment-adapters`); it is intentionally not a closure
+`docs/history/backlog.md` (`deployment-adapters`); it is intentionally not a closure
 item here — see the Calibration note above.

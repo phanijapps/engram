@@ -582,7 +582,7 @@ seeds) lives under `packs/<pack>/`. The split is:
   `.claude/agents/<name>.md`, `.claude/commands/<name>.md`,
   `tools/hooks/<name>.<ext>`, and the `hooks` key of
   `.claude/settings.local.json`.
-- Seed-projected paths: `docs/CONVENTIONS.md`. (Other seed-projected
+- Seed-projected paths: `docs/guides/CONVENTIONS.md`. (Other seed-projected
   paths from earlier phases — `docs/CHARTER.md`, the seed READMEs
   under `docs/<area>/`, and `packages/_example/` — were reclassified
   as *Manual* with placeholder seeds; adopters receive the placeholder
@@ -706,7 +706,7 @@ the principle and the risk triggers, so the mechanics live in one place rather
 than two. Work escalates to full mode the moment it trips a risk trigger:
 
 <!-- risk-triggers:start — canonical wording lives here; copied verbatim
-     into AGENTS.md, packs/core/seeds/AGENTS.md, and docs/CONVENTIONS.md.
+     into AGENTS.md, packs/core/seeds/AGENTS.md, and docs/guides/CONVENTIONS.md.
      Keep all four byte-identical (grep-equality is an acceptance
      criterion of the work-loop-light-mode spec). -->
 **Risk triggers — any one routes the work to full mode:**
@@ -952,7 +952,7 @@ something forces them to fill.
 | --- | --- |
 | `AGENTS.md`, `CLAUDE.md` (symlink) | `packages/`, `apps/` (no monorepo split) |
 | `docs/CHARTER.md` (a few lines is fine) | `rfc/` (almost never fires at this size) |
-| `docs/CONVENTIONS.md` (trim aggressively) | `docs/architecture/` (the README is enough) |
+| `docs/guides/CONVENTIONS.md` (trim aggressively) | `docs/architecture/` (the README is enough) |
 | `docs/adr/` (write when you make a real tradeoff) | `docs/product/personas.md` |
 | `docs/specs/` (one spec at a time, or none) | Per-package `AGENTS.md` (no packages) |
 | `docs/product/changelog.md` | `.claude/agents/adversarial-reviewer.md` (overhead at this size) |

@@ -6,7 +6,7 @@
 //! config/crate change, not an application rewrite."* That promise is only as
 //! strong as its two halves, and this file is the second half:
 //!
-//! 1. **Neutrality gate (S1, `check-engine-neutrality.sh`).** Enforces that the
+//! 1. **Neutrality gate (S1, `check_engine_neutrality.py`).** Enforces that the
 //!    port-trait crates (`engram-domain`, `engram-memory`, `engram-knowledge`,
 //!    `engram-retrieval`, `engram-belief`, `engram-hierarchy`,
 //!    `engram-consolidation`, `engram-orchestration`) name ZERO engine symbols
@@ -774,7 +774,7 @@ fn stub_names_zero_engine_types() {
 
 /// Returns the first engine-symbol match found in `source`, or `None`.
 ///
-/// Mirrors the forbidden-type class from `check-engine-neutrality.sh`
+/// Mirrors the forbidden-type class from `check_engine_neutrality.py`
 /// (`\bSql[A-Z]...`) plus the bare engine-crate literals, scoped to identifier
 /// usages on code lines. Comment lines (`//!`, `//`, attributes) and string
 /// literals are stripped before scanning: the contract proof is allowed to
@@ -788,7 +788,7 @@ fn regex_lite_engine_token(source: &str) -> Option<String> {
     for (lineno, raw) in stripped.lines().enumerate() {
         // Skip comment and attribute lines — the proof is allowed to mention
         // engine symbols in documentation. The violation is a *type usage* on
-        // a code line, which `check-engine-neutrality.sh` also keys on.
+        // a code line, which `check_engine_neutrality.py` also keys on.
         let trimmed = raw.trim_start();
         if trimmed.starts_with("//!") || trimmed.starts_with("//") || trimmed.starts_with('#') {
             continue;

@@ -85,7 +85,7 @@ actually run its memory jobs through Engram.
   `gateway/src/http/{memory_search,ward_content,settings}.rs`, and
   `gateway/gateway-services/src/settings.rs`.
 - Engram domain and architecture:
-  `docs/domain-data-model.md`, `docs/architecture/reference.md`,
+  `docs/architecture/domain-data-model.md`, `docs/architecture/reference.md`,
   `core/domain/src/{memory,knowledge,ontology,belief,hierarchy,retrieval}.rs`,
   and `core/{memory,knowledge,belief,hierarchy,retrieval}/src/*.rs`.
 - Engram research architecture direction:

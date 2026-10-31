@@ -29,7 +29,7 @@ The hard partition in Engram is **tenant**: `scope_allows` requires `tenant` to 
 
 - Repo files, chunks, and contract nodes link to the `Repository` node (e.g. via a `belongs_to` edge) and carry the source's identity, so knowledge can be grouped and filtered by repo.
 - The canonical repo key is a normalized git remote URL (direction set by RFC-0008 D5; mechanics deferred to the implementing spec).
-- **Boundary:** this covers repository identity and partitioning within a tenant. Cross-*tenant* federation is out of scope (`docs/domain-data-model.md:283` reserves a future federated query type).
+- **Boundary:** this covers repository identity and partitioning within a tenant. Cross-*tenant* federation is out of scope (`docs/architecture/domain-data-model.md:283` reserves a future federated query type).
 
 ## Decision drivers
 
@@ -65,4 +65,4 @@ The hard partition in Engram is **tenant**: `scope_allows` requires `tenant` to 
 ## References
 
 - RFC-0008 (cross-repo linkage) and `docs/research/cross-repo-linkage.md`.
-- `adapters/knowledge/sqlite/src/scope.rs` (tenant-only hard match); `docs/specs/source-assertion-reconciliation/spec.md:52-53` (single-scope rule); `docs/domain-data-model.md:283` (tenant partition).
+- `adapters/knowledge/sqlite/src/scope.rs` (tenant-only hard match); `docs/specs/source-assertion-reconciliation/spec.md:52-53` (single-scope rule); `docs/architecture/domain-data-model.md:283` (tenant partition).

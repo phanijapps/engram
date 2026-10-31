@@ -56,7 +56,7 @@ Inject the allowed scopes through `codeAuthority.launchScopes` when constructing
 The legacy native `codeBindJson` entry point is removed for callers and returns the typed `LegacyCodeBindUnsupported` denial.
 Use the provider path with host authority injection instead.
 
-See [`HOW-TO.md`](HOW-TO.md#bound-code-operation-flow) for tool arguments and [`docs/operator-bound-code-runbook.md`](../../docs/operator-bound-code-runbook.md) for reset and matrix operations.
+See [`HOW-TO.md`](HOW-TO.md#bound-code-operation-flow) for tool arguments and [`docs/guides/operator-bound-code-runbook.md`](../../docs/guides/operator-bound-code-runbook.md) for reset and matrix operations.
 
 ## Status
 

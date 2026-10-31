@@ -4,7 +4,7 @@ First identify the product and deployment: SAP is not one platform. Pin relevant
 S/4HANA public/private/on-premise, BTP, ABAP or other product versions, clients and
 landscape. Treat examples below as applicable questions, not universal availability.
 
-## Analysis
+## Spec
 
 Record business process and organizational scope, modules, master/transaction data,
 released extension points/APIs, existing custom objects, integration consumers,

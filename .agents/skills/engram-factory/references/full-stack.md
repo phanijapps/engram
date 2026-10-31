@@ -4,7 +4,7 @@ Apply to browser/mobile clients, services, databases, messaging and infrastructu
 Combine with platform profiles for hybrid applications. Pin actual frameworks,
 versions and hosting model. These are design questions, not preselected technology.
 
-## Analysis
+## Spec
 
 Record client/service/data boundaries, service ownership, existing API consumers,
 authentication and tenant model, workload baseline, runtime/dependency versions,

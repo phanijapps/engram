@@ -80,12 +80,12 @@ cargo check --workspace
 pnpm run contracts:generate
 pnpm run typecheck
 pnpm run test
-.codex/hooks/check-contracts.sh
-.codex/hooks/check-docs.sh
-.codex/hooks/check-engine-neutrality.sh   # ADR-0022: no engine types in neutral layers
+.codex/hooks/check_contracts.py
+.codex/hooks/check_docs.py
+.codex/hooks/check_engine_neutrality.py   # ADR-0022: no engine types in neutral layers
 ```
 
-`check-engine-neutrality.sh` denies `Sql*` / `Surreal*` / `surrealdb` imports
+`check_engine_neutrality.py` denies `Sql*` / `Surreal*` / `surrealdb` imports
 and raw SQL in the neutral layers (`core/*` port crates, the `engram-integration`
 facade files, `bindings/node`). The engine crates + their bootstrap submodules
 are exempt.

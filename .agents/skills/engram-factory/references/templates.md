@@ -97,7 +97,7 @@ performance, or regulatory requirements.
 | --- | --- | --- |
 | feature.md | Orchestrator, verbatim input | Immutable |
 | brief.md | engram-frame with the human owner, before the job | Immutable once registered by create; required analysis input while pinned |
-| analysis.md | Analyzer | Freeze after acceptance |
+| spec.md | Analyzer | Freeze after acceptance |
 | plan.md | Planner | Freeze after acceptance |
 | tasks.md | Task author, then builder progress | Versioned handoffs |
 | verification.md | Task author, then builder results | Versioned handoffs |

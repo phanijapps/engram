@@ -1,7 +1,7 @@
 # Review rubrics
 
 Always require code, security and platform. Analyze every additional discipline;
-record applicability, scope evidence and rationale in analysis.md. Re-evaluate
+record applicability, scope evidence and rationale in spec.md. Re-evaluate
 after build. The reviewer set freezes at evidence freeze: a later rebuild may
 only add reviewers, and any other mid-round change requires blocking plus
 human rework, which starts a new cycle.

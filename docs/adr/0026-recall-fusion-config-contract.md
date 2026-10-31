@@ -87,7 +87,7 @@ The MCP server (`engram_mcp::bootstrap::open_provider`) resolves from the storag
 
 - Operators bias vector/BM25/graph + select a reranker by editing `.engram/recall.json` (or a profile section); no code change, no rebuild to activate vector (it is default-on for the MCP), and `--no-vector` skips the model load at boot without a rebuild.
 - The dormant weighted-fusion + reranker machinery is now reachable; engram's recall is a competent generic full-hybrid retriever.
-- The config ports to any future engine (pgvector's `PgUnifiedRecall` is the deferred follow-on — `docs/backlog.md` → `pgvector-recall-fusion`) because it is keyed on lane tags, not engine types.
+- The config ports to any future engine (pgvector's `PgUnifiedRecall` is the deferred follow-on — `docs/history/backlog.md` → `pgvector-recall-fusion`) because it is keyed on lane tags, not engine types.
 
 **Negative:**
 

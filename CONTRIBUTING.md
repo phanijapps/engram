@@ -1,6 +1,6 @@
 # Contributing
 
-Engram is contract-first. Public behavior starts in `contracts/v1/` and
+Engram is contract-first. Public behavior starts in `docs/contracts/v1/` and
 `docs/specs/`, then implementation follows.
 
 ## Development Setup
@@ -20,14 +20,14 @@ pnpm run contracts:check-generated
 pnpm run typecheck
 pnpm run test
 pnpm run build
-python3 tools/scripts/validate_contracts.py
+python3 tools/contracts/validate_contracts.py
 cargo check --workspace
 cargo clippy --workspace --all-targets -- -D warnings
 cargo test --workspace
 cargo check -p engram-store-vector --features fastembed-tests --tests
 cargo clippy -p engram-store-vector --features fastembed-tests --tests -- -D warnings
-.codex/hooks/check-contracts.sh
-.codex/hooks/check-docs.sh
+.codex/hooks/check_contracts.py
+.codex/hooks/check_docs.py
 ```
 
 Optional local Git hook:
@@ -39,14 +39,14 @@ git config core.hooksPath .githooks
 ## Contribution Flow
 
 1. Open an issue or discussion for non-trivial contract changes.
-2. Update `docs/domain-data-model.md` when changing accepted semantics.
-3. Update `contracts/v1/` for accepted wire contracts.
+2. Update `docs/architecture/domain-data-model.md` when changing accepted semantics.
+3. Update `docs/contracts/v1/` for accepted wire contracts.
 4. Update `docs/specs/` before implementation behavior.
 5. Add valid and invalid examples for contract changes.
 6. Run validation before opening a pull request.
 
 See `GOVERNANCE.md` for maintainer decision rules and conflict resolution.
-Release candidates must satisfy `docs/release-checklist.md`.
+Release candidates must satisfy `docs/guides/release-checklist.md`.
 
 ## Contract Rules
 

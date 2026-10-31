@@ -292,7 +292,7 @@ with a silent fallback. This is the brief's fail-closed principle (`FailClosed`)
 
 **Key principles:**
 - The port layer (`core/*`, `core/integration`) names **zero** engine types —
-  enforced by `.codex/hooks/check-engine-neutrality.sh`.
+  enforced by `.codex/hooks/check_engine_neutrality.py`.
 - A non-SQLite stub backend (S7) proves the traits are satisfiable without SQLite.
 - Adding a future engine (pg, SurrealDB, lance) is an additive adapter cell + a
   new recipe — no application code changes.

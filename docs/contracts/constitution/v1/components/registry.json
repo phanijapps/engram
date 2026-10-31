@@ -1,0 +1,297 @@
+{
+  "schema": "engram.components_registry.v1",
+  "version": "1.0",
+  "adopted": "2026-10-31",
+  "constitution_ref": "docs/constitution/08-coherent-integration.md",
+  "notes": "Bidirectional inventory (OR-001/OR-002): every declared component exists on disk; every on-disk component is declared. Generated-diff gate planned month 1. roles: core | adapter | backend | binding | on-top | product | contracts | vendor | examples.",
+  "components": [
+    {
+      "path": "core/domain",
+      "kind": "crate",
+      "role": "core",
+      "name": "engram-domain"
+    },
+    {
+      "path": "core/runtime",
+      "kind": "crate",
+      "role": "core",
+      "name": "engram-runtime"
+    },
+    {
+      "path": "core/memory",
+      "kind": "crate",
+      "role": "core",
+      "name": "engram-memory"
+    },
+    {
+      "path": "core/knowledge",
+      "kind": "crate",
+      "role": "core",
+      "name": "engram-knowledge"
+    },
+    {
+      "path": "core/retrieval",
+      "kind": "crate",
+      "role": "core",
+      "name": "engram-retrieval"
+    },
+    {
+      "path": "core/belief",
+      "kind": "crate",
+      "role": "core",
+      "name": "engram-belief"
+    },
+    {
+      "path": "core/hierarchy",
+      "kind": "crate",
+      "role": "core",
+      "name": "engram-hierarchy"
+    },
+    {
+      "path": "core/consolidation",
+      "kind": "crate",
+      "role": "core",
+      "name": "engram-consolidation"
+    },
+    {
+      "path": "core/reflection",
+      "kind": "crate",
+      "role": "core",
+      "name": "engram-reflection"
+    },
+    {
+      "path": "core/procedures",
+      "kind": "crate",
+      "role": "core",
+      "name": "engram-procedures"
+    },
+    {
+      "path": "core/proposals",
+      "kind": "crate",
+      "role": "core",
+      "name": "engram-proposals"
+    },
+    {
+      "path": "core/code",
+      "kind": "crate",
+      "role": "core",
+      "name": "engram-code"
+    },
+    {
+      "path": "core/lang",
+      "kind": "crate",
+      "role": "core",
+      "name": "engram-lang"
+    },
+    {
+      "path": "core/packs",
+      "kind": "crate",
+      "role": "core",
+      "name": "engram-packs"
+    },
+    {
+      "path": "core/integration",
+      "kind": "crate",
+      "role": "core",
+      "name": "engram-integration"
+    },
+    {
+      "path": "core/eval",
+      "kind": "crate",
+      "role": "core",
+      "name": "engram-eval"
+    },
+    {
+      "path": "core/graph-analytics",
+      "kind": "crate",
+      "role": "core",
+      "name": "engram-graph-analytics"
+    },
+    {
+      "path": "adapters/embedding/http",
+      "kind": "crate",
+      "role": "adapter",
+      "name": "engram-embedding-http"
+    },
+    {
+      "path": "adapters/ingest",
+      "kind": "crate",
+      "role": "adapter",
+      "name": "engram-adapter-ingest"
+    },
+    {
+      "path": "adapters/integration",
+      "kind": "crate",
+      "role": "adapter",
+      "name": "engram-adapter-integration"
+    },
+    {
+      "path": "adapters/sqlite",
+      "kind": "crate",
+      "role": "adapter",
+      "name": "engram-adapter-sqlite"
+    },
+    {
+      "path": "adapters/pgvector",
+      "kind": "crate",
+      "role": "adapter",
+      "name": "engram-adapter-pgvector"
+    },
+    {
+      "path": "adapters/retrieval/tantivy-lexical",
+      "kind": "crate",
+      "role": "adapter",
+      "name": "engram-store-lexical"
+    },
+    {
+      "path": "adapters/retrieval/cross-encoder-rerank",
+      "kind": "crate",
+      "role": "adapter",
+      "name": "engram-rerank-cross-encoder"
+    },
+    {
+      "path": "adapters/retrieval/mmr-rerank",
+      "kind": "crate",
+      "role": "adapter",
+      "name": "engram-rerank-mmr"
+    },
+    {
+      "path": "adapters/retrieval/associative-graph",
+      "kind": "crate",
+      "role": "adapter",
+      "name": "engram-retrieval-associative-graph"
+    },
+    {
+      "path": "adapters/retrieval/community-summary",
+      "kind": "crate",
+      "role": "adapter",
+      "name": "engram-retrieval-community-summary"
+    },
+    {
+      "path": "adapters/consolidation/decay",
+      "kind": "crate",
+      "role": "adapter",
+      "name": "engram-consolidation-decay"
+    },
+    {
+      "path": "backends/sqlite",
+      "kind": "crate",
+      "role": "backend",
+      "name": "engram-backend-sqlite"
+    },
+    {
+      "path": "backends/pgvector",
+      "kind": "crate",
+      "role": "backend",
+      "name": "engram-backend-pgvector"
+    },
+    {
+      "path": "bindings/node",
+      "kind": "crate",
+      "role": "binding",
+      "name": "engram-napi"
+    },
+    {
+      "path": "codegraph/queries",
+      "kind": "crate",
+      "role": "on-top",
+      "name": "codegraph-queries"
+    },
+    {
+      "path": "codegraph/temporal",
+      "kind": "crate",
+      "role": "on-top",
+      "name": "codegraph-temporal"
+    },
+    {
+      "path": "mcp/engram-mcp",
+      "kind": "crate",
+      "role": "product",
+      "name": "engram-mcp"
+    },
+    {
+      "path": "examples/rust-integration",
+      "kind": "crate",
+      "role": "examples",
+      "name": "engram-examples"
+    },
+    {
+      "path": "vendor/tantivy-sstable",
+      "kind": "vendor",
+      "role": "vendor",
+      "name": "tantivy-sstable"
+    },
+    {
+      "path": "packages/adapters",
+      "kind": "package",
+      "role": "product",
+      "name": "@engramlabs/adapters"
+    },
+    {
+      "path": "packages/client",
+      "kind": "package",
+      "role": "product",
+      "name": "@engramlabs/client"
+    },
+    {
+      "path": "packages/contracts",
+      "kind": "package",
+      "role": "contracts",
+      "name": "@engramlabs/contracts"
+    },
+    {
+      "path": "packages/launcher",
+      "kind": "package",
+      "role": "product",
+      "name": "@engramlabs/mcp"
+    },
+    {
+      "path": "packages/node",
+      "kind": "package",
+      "role": "binding",
+      "name": "@engramlabs/node"
+    },
+    {
+      "path": "packages/runtime",
+      "kind": "package",
+      "role": "product",
+      "name": "@engramlabs/runtime"
+    },
+    {
+      "path": "docs/contracts/v1",
+      "kind": "contracts",
+      "role": "contracts",
+      "name": "portable-contracts"
+    },
+    {
+      "path": "docs/contracts/constitution/v1",
+      "kind": "contracts",
+      "role": "contracts",
+      "name": "constitution-spec-root"
+    },
+    {
+      "path": "tools",
+      "kind": "scripts",
+      "role": "repo-ops",
+      "name": "tools-tree (ci/contracts/dev/release gates, lib, hooks)"
+    },
+    {
+      "path": "tools/lib",
+      "kind": "dir",
+      "role": "core",
+      "name": "shared repo-ops helpers"
+    },
+    {
+      "path": "tools/contracts",
+      "kind": "dir",
+      "role": "contracts",
+      "name": "contract generation + validation"
+    },
+    {
+      "path": "tools/hooks",
+      "kind": "dir",
+      "role": "product",
+      "name": "agent-harness hooks (index-mining trio)"
+    }
+  ]
+}

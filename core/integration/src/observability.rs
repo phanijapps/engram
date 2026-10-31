@@ -17,7 +17,7 @@
 //!   instrumentation is deferred (requires adapter-level timing).
 //!
 //! ADR-0022: this port is engine-neutral — it names no engine type and holds no
-//! SQL (enforced by `.codex/hooks/check-engine-neutrality.sh`). The SQLite
+//! SQL (enforced by `.codex/hooks/check_engine_neutrality.py`). The SQLite
 //! implementation lives in the adapters layer (`engram-conformance`).
 
 use async_trait::async_trait;

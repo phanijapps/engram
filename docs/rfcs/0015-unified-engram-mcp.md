@@ -8,7 +8,7 @@ servers. Ontology/taxonomy are multi-layer and passed as MCP launch config. -->
 - **Approver:** phanijapps *(solo project)*
 - **Date opened:** 2026-07-28
 - **Decision weight:** standard
-- **Related:** RFC-0012 (code-structural graph layer), RFC-0013 (context-graph packets), RFC-0014 (canonical KG identity), ADR-0008 (OntologyRepository), ADR-0009 (retrieval-composition seam), ADR-0022 (engine neutrality / surface parity), ADR-0020 (entity-kind vocabulary), `docs/domain-data-model.md`
+- **Related:** RFC-0012 (code-structural graph layer), RFC-0013 (context-graph packets), RFC-0014 (canonical KG identity), ADR-0008 (OntologyRepository), ADR-0009 (retrieval-composition seam), ADR-0022 (engine neutrality / surface parity), ADR-0020 (entity-kind vocabulary), `docs/architecture/domain-data-model.md`
 
 ## Reviewer brief
 

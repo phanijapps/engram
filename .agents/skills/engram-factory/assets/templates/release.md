@@ -27,6 +27,8 @@ updated_at: "{{timestamp}}"
 
 ## What ships
 
+- <One line per surface; reference REQ/STEP IDs, not prose>.
+
 > One paragraph plus identity. Enforcement: approver binds this to the snapshot id.
 
 {{what_ships}}
@@ -56,6 +58,12 @@ updated_at: "{{timestamp}}"
 > What an operator watches after this lands: signals, growth paths, runbook links.
 
 {{ops_notes}}
+
+## Evidence chain (L3)
+
+- job.released event: `.engram-factory/jobs/<job-id>/events.jsonl` carries the
+  merge commit and artifact hashes (rail 06 canonical evidence).
+- Deviations opened/closed this job: <none or DW/DEV IDs>.
 
 ## Handoff manifest
 

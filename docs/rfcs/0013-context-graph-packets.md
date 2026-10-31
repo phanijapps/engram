@@ -8,7 +8,7 @@ are product; the domain taxonomy/ontology content is consumer-loaded. -->
 - **Date opened:** 2026-07-13
 - **Date closed:** 2026-07-13
 - **Decision weight:** standard
-- **Related:** ADR-0009 (retrieval-composition seam), ADR-0022 (engine neutrality), RFC-0008 (cross-repo linkage), RFC-0012 (codegraph on-top layer), `docs/research/engram-framing-synthesis.md`, `docs/research/more/it-sdlc-ontology-build-reduction-options.md`, `docs/domain-data-model.md`
+- **Related:** ADR-0009 (retrieval-composition seam), ADR-0022 (engine neutrality), RFC-0008 (cross-repo linkage), RFC-0012 (codegraph on-top layer), `docs/research/engram-framing-synthesis.md`, `docs/research/more/it-sdlc-ontology-build-reduction-options.md`, `docs/architecture/domain-data-model.md`
 
 ## Reviewer brief
 
@@ -18,7 +18,7 @@ are product; the domain taxonomy/ontology content is consumer-loaded. -->
   - New framework primitives: `ContextSubgraph` packet shape, `ApplicabilityRule`, `DecisionTrace`, and an entity→ontology-class link.
   - One frozen-v1 enum touch (`RetrievalTargetType` additions, under the tolerance clause) + additive draft-extension types.
   - A new agentic-population **adapter** behind existing ports (the deterministic ingestor stays pure), and a thin packet-recipe layer.
-- **Affected surface:** `core/domain` (new types), `core/retrieval` (composition output), `core/knowledge` (existing ingest ports implemented by the new adapter — no new port), a new `adapters/` crate, `contracts/v1/` (one schema regen), `docs/domain-data-model.md`.
+- **Affected surface:** `core/domain` (new types), `core/retrieval` (composition output), `core/knowledge` (existing ingest ports implemented by the new adapter — no new port), a new `adapters/` crate, `contracts/v1/` (one schema regen), `docs/architecture/domain-data-model.md`.
 - **Stakes:** costly-to-reverse (contract surface grows; one frozen-enum edit), but additive and v1-compatible — no data migration, no rewrite.
 - **Review focus:** (1) the **framework/content boundary** — Engram ships types + machinery, never domain ontology content; (2) the frozen-`RetrievalTargetType` touch in D2; (3) the "decision traces are candidate, never authoritative" rule in D4.
 - **Not in scope:** banking (or any domain) ontology **content** — consumer-loaded; authority-precedence conflict resolution (a sibling primitive of the reconciliation layer); a federated query engine over external warehouses (Engram owns its governed store); replacing the deterministic ingestor; auto-promoting trace-derived facts.
@@ -184,4 +184,4 @@ Plus the **framework/content boundary** (Q1, confirmed): Engram ships framework 
   ```
 
   One at a time through `new-spec` → `work-loop`.
-- **Convention change:** none expected to `docs/CONVENTIONS.md` (the framework/content split is recorded as an ADR, not a convention edit).
+- **Convention change:** none expected to `docs/guides/CONVENTIONS.md` (the framework/content split is recorded as an ADR, not a convention edit).

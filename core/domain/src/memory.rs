@@ -94,7 +94,7 @@ pub enum MemoryStatus {
 /// Optional assertion verdict word carried by `MemoryRecord.verdict`.
 ///
 /// Closed vocabulary of exactly three snake_case words
-/// (docs/domain-data-model.md § Memory Model → Verdict). `derived` is
+/// (docs/architecture/domain-data-model.md § Memory Model → Verdict). `derived` is
 /// reserved for the future derivation layer: nothing in v1 emits it, and
 /// write surfaces reject it as input with a reserved-for-derivation error.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]

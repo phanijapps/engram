@@ -360,7 +360,7 @@ The one-shot `reindex` alias is deprecated and exits with a diagnostic that dire
 Native and TypeScript hosts deny code operations unless the host injects `codeAuthority.launchScopes` into `NativeProvider` configuration.
 For example, use `{"codeAuthority":{"launchScopes":[{"tenant":"acme","workspace":"payments"}]}}` with the provider configuration.
 The legacy native `codeBindJson` path returns `LegacyCodeBindUnsupported`; use `NativeProvider` or the TypeScript provider/client path with host authority injection.
-See [`docs/operator-bound-code-runbook.md`](../../docs/operator-bound-code-runbook.md) for reset, matrix, and fixture custody.
+See [`docs/guides/operator-bound-code-runbook.md`](../../docs/guides/operator-bound-code-runbook.md) for reset, matrix, and fixture custody.
 
 ### Version identity
 

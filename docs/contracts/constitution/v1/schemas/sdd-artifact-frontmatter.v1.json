@@ -1,0 +1,40 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://engram.local/schemas/sdd-artifact-frontmatter.v1.json",
+  "title": "engram.sdd_artifact_frontmatter.v1",
+  "description": "Frontmatter contract for engram-factory SDD artifacts (brief, spec/analysis, plan, tasks). Enforced by tools/ci/check_job_artifacts.py. Markdown-first: the artifact body stays markdown; this schema governs the YAML frontmatter block only.",
+  "type": "object",
+  "required": ["schema_version", "artifact", "job_id", "status", "size_tier"],
+  "properties": {
+    "schema_version": { "const": 2 },
+    "artifact": { "enum": ["brief", "spec", "plan", "tasks"] },
+    "job_id": { "type": "string", "pattern": "^[0-9]{3}-[a-z0-9-]+$" },
+    "cycle": { "type": "integer", "minimum": 1 },
+    "status": {
+      "oneOf": [
+        { "enum": ["draft", "ratified"] },
+        { "enum": ["draft", "ready", "superseded"] },
+        { "enum": ["draft", "active", "complete"] }
+      ]
+    },
+    "size_tier": { "enum": ["S", "M", "L"] },
+    "owner": { "type": ["string", "null"] },
+    "ratified_at": { "type": ["string", "null"], "format": "date" },
+    "constitution_rules_touched": {
+      "type": "array",
+      "items": { "type": "string", "pattern": "^[A-Z]{2}-[0-9]{3}$" }
+    },
+    "brief_ref": {
+      "type": ["object", "null"],
+      "properties": {
+        "path": { "type": "string" },
+        "sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" }
+      }
+    },
+    "required_reviewers": { "type": "array", "items": { "type": "string" } },
+    "input_hashes": {
+      "type": "object",
+      "additionalProperties": { "type": "string", "pattern": "^[a-f0-9]{64}$" }
+    }
+  }
+}

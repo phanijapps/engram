@@ -10,7 +10,7 @@
 //! non-pgvector configs) as the named recipe entry point. The full internal
 //! extraction (moving the 15 files out of `core/integration/src/sqlite/` into
 //! this crate + making `open` engine-neutral) is a larger follow-up — see
-//! `docs/backlog.md#backends-sqlite-extraction`.
+//! `docs/history/backlog.md#backends-sqlite-extraction`.
 
 use engram_integration::{EngramConfig, EngramProvider};
 use engram_runtime::CoreResult;

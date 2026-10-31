@@ -289,8 +289,8 @@ record's lineage is traceable via `EvidenceRef` and `DerivationRef`.
 
 ### 8. Contract-first design (domain types outrank SQL)
 
-The human-readable domain model (`docs/domain-data-model.md`), the
-machine-readable wire contract (`contracts/v1/`), and the product overview
+The human-readable domain model (`docs/architecture/domain-data-model.md`), the
+machine-readable wire contract (`docs/contracts/v1/`), and the product overview
 (`docs/product/engram.md`) are the **source of truth**. Rust types, generated TypeScript,
 JSON Schema, database schemas, and API payloads all conform *downward* — never
 the reverse. This is what makes engram portable across SQLite today and
@@ -328,7 +328,7 @@ cargo build --features sqlite
 
 Both backends share the **same ports, same DTOs, same facade** — the storage
 engine is an adapter detail. An engine-neutrality lint
-(`.codex/hooks/check-engine-neutrality.sh`) enforces that no engine type
+(`.codex/hooks/check_engine_neutrality.py`) enforces that no engine type
 (`Sql*`, raw SQL) leaks into the neutral facade or port crates.
 Engine-agnostic adapters (lexical BM25, associative-graph PPR, community-summary,
 cross-encoder rerank, decay, ingest) work with any backend — see
@@ -399,7 +399,7 @@ Current validated surface:
 ## Repository layout
 
 ```text
-contracts/           Portable JSON schemas and generated contract outputs.
+docs/contracts/           Portable JSON schemas and generated contract outputs.
 core/                Storage-neutral Rust crates.
   domain/            Domain types, invariants, serde, version markers.
   runtime/           Shared errors, result type, clocks, ids, policy gates.
@@ -432,7 +432,7 @@ codegraph/           On-top codegraph layer (RFC-0012).
 memory/              Memory MCP server (agent-callable tools).
 
 packages/            TypeScript workspace.
-  contracts/         Generated TypeScript types + schemas.
+  docs/contracts/         Generated TypeScript types + schemas.
   client/            Ergonomic application SDK.
   node/              Native binding package.
   adapters/          JS-side framework + gateway integrations.
@@ -565,14 +565,14 @@ locations, and the MCP-vs-N-API-vs-Rust-facade choice are in the
 
 ## Contracts
 
-The accepted v1 contract package lives in `contracts/v1/`. Domain types in
+The accepted v1 contract package lives in `docs/contracts/v1/`. Domain types in
 `engram-domain` are the Rust source of truth; TypeScript types are generated
 from them and should not be edited by hand.
 
 ```bash
 pnpm run contracts:generate     # generate TS types from Rust
 pnpm run contracts:check-generated  # verify they match
-python3 tools/scripts/validate_contracts.py
+python3 tools/contracts/validate_contracts.py
 ```
 
 ---
@@ -591,9 +591,9 @@ cargo check --workspace
 cargo clippy --workspace --all-targets -- -D warnings
 cargo test --workspace
 pnpm run check
-.codex/hooks/check-contracts.sh
-.codex/hooks/check-docs.sh
-.codex/hooks/check-engine-neutrality.sh   # ADR-0022 rule-1 gate
+.codex/hooks/check_contracts.py
+.codex/hooks/check_docs.py
+.codex/hooks/check_engine_neutrality.py   # ADR-0022 rule-1 gate
 ```
 
 ---
@@ -616,8 +616,8 @@ pnpm run check
 | Document | What it covers |
 |---|---|
 | [`docs/product/engram.md`](docs/product/engram.md) | Consolidated product overview — every capability + status |
-| [`docs/domain-data-model.md`](docs/domain-data-model.md) | The source-of-truth domain model (2,400+ lines) |
-| [`docs/CHARTER.md`](docs/CHARTER.md) | Mission, scope, six principles |
+| [`docs/architecture/domain-data-model.md`](docs/architecture/domain-data-model.md) | The source-of-truth domain model (2,400+ lines) |
+| [`docs/product/engram.md` (charter retired)](docs/CHARTER.md) | Mission, scope, six principles |
 | [`docs/research/synthesis.md`](docs/research/synthesis.md) | Research → architecture direction |
 | [`docs/research/engram-framing-synthesis.md`](docs/research/engram-framing-synthesis.md) | The "belief layer" positioning |
 | [`docs/research/academic-research-findings.md`](docs/research/academic-research-findings.md) | CoALA, Tulving, MemGPT, ACT-R, GraphRAG citations |

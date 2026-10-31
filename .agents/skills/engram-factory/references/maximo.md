@@ -4,7 +4,7 @@ Pin Maximo product/deployment and Manage/Application Suite version. Distinguish
 configuration migration from application-source migration; available mechanisms
 and limitations vary by version and artifact type.
 
-## Analysis
+## Spec
 
 Inventory affected objects/attributes, domains, relationships, workflows, automation
 scripts/launch points, escalations, integration object structures, security groups,

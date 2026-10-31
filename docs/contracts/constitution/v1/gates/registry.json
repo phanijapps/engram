@@ -1,0 +1,156 @@
+{
+  "schema": "engram.gates_registry.v1",
+  "version": "1.0",
+  "adopted": "2026-10-31",
+  "constitution_ref": "docs/constitution/00-INDEX.md",
+  "notes": "Rule-to-gate mapping. status: existing | planned. blocking: whether the gate blocks merge today. SCCT L2 requires a gate per rule class with blocking=true.",
+  "gates": [
+    {
+      "gate_id": "GATE-EN",
+      "name": "check_engine_neutrality.py",
+      "path": "tools/ci/check_engine_neutrality.py",
+      "rules": [
+        "EN-001"
+      ],
+      "rule_class": "RULE-1",
+      "status": "existing",
+      "blocking": true
+    },
+    {
+      "gate_id": "GATE-SP",
+      "name": "check_surface_parity.py",
+      "path": "tools/ci/check_surface_parity.py",
+      "rules": [
+        "SP-001",
+        "SP-002"
+      ],
+      "rule_class": "RULE-1",
+      "status": "existing",
+      "blocking": true
+    },
+    {
+      "gate_id": "GATE-CONTRACTS",
+      "name": "check_contracts.py",
+      "path": "tools/ci/check_contracts.py",
+      "rules": [
+        "CI-004"
+      ],
+      "rule_class": "RULE-1",
+      "status": "existing",
+      "blocking": true
+    },
+    {
+      "gate_id": "GATE-DOCS",
+      "name": "check_docs.py",
+      "path": "tools/ci/check_docs.py",
+      "rules": [
+        "PC-003",
+        "OR-003"
+      ],
+      "rule_class": "RULE-3",
+      "status": "existing",
+      "blocking": true
+    },
+    {
+      "gate_id": "GATE-CONSTITUTION",
+      "name": "check_constitution.py",
+      "path": "tools/ci/check_constitution.py",
+      "rules": [
+        "ZD-001",
+        "ZD-002",
+        "ZD-003",
+        "ZD-004"
+      ],
+      "rule_class": "RULE-5",
+      "status": "existing",
+      "blocking": true
+    },
+    {
+      "gate_id": "GATE-JOB-ARTIFACTS",
+      "name": "check_job_artifacts.py",
+      "path": "tools/ci/check_job_artifacts.py",
+      "rules": [
+        "PC-002",
+        "OR-004"
+      ],
+      "rule_class": "RULE-3",
+      "status": "existing",
+      "blocking": false,
+      "notes": "advisory until 2026-11-28 (DW-5), then blocking for post-adoption jobs"
+    },
+    {
+      "gate_id": "GATE-IMPL-REGISTRY",
+      "name": "check_implementation_registry.py",
+      "path": "tools/ci/check_implementation_registry.py",
+      "rules": [
+        "CI-001",
+        "CI-002",
+        "CI-003"
+      ],
+      "rule_class": "RULE-1",
+      "status": "existing",
+      "blocking": true
+    },
+    {
+      "gate_id": "GATE-DIST-DRIFT",
+      "name": "check_distribution_drift.py",
+      "path": "tools/ci/check_distribution_drift.py",
+      "rules": [
+        "DD-001",
+        "DD-002",
+        "DD-003"
+      ],
+      "rule_class": "RULE-2",
+      "status": "existing",
+      "blocking": true
+    },
+    {
+      "gate_id": "GATE-PROD-COMPLETE",
+      "name": "check_production_completeness.py",
+      "path": "tools/ci/check_production_completeness.py",
+      "rules": [
+        "PC-001"
+      ],
+      "rule_class": "RULE-3",
+      "status": "existing",
+      "blocking": true
+    },
+    {
+      "gate_id": "GATE-EVIDENCE",
+      "name": "check_canonical_evidence.py",
+      "path": "tools/ci/check_canonical_evidence.py",
+      "rules": [
+        "CE-001",
+        "CE-002"
+      ],
+      "rule_class": "RULE-4",
+      "status": "existing",
+      "blocking": true
+    },
+    {
+      "gate_id": "GATE-ORPHANS",
+      "name": "check_coherent_integration.py",
+      "path": "tools/ci/check_coherent_integration.py",
+      "rules": [
+        "OR-001",
+        "OR-002",
+        "OR-003"
+      ],
+      "rule_class": "RULE-6",
+      "status": "existing",
+      "blocking": true
+    },
+    {
+      "gate_id": "GATE-ARCH-GUARDS",
+      "name": "check_architecture_guards.py",
+      "path": "tools/ci/check_architecture_guards.py",
+      "rules": [
+        "PR-003"
+      ],
+      "rule_class": "RULE-1",
+      "status": "existing",
+      "blocking": true,
+      "notes": "runs via check_docs.py; crate-root line caps + module responsibilities"
+    }
+  ]
+}

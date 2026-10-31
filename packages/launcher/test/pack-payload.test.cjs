@@ -2,7 +2,7 @@
  * Pack payload tests (job 002, RISK-001): drive `npm pack --json` (which
  * runs the prepack generator) and assert the tarball members carry exactly
  * the authored skill set with hygiene — a stale or empty payload fails the
- * release chain here, mirroring scripts/release/verify-launcher-package.py.
+ * release chain here, mirroring tools/release/verify-launcher-package.py.
  */
 'use strict';
 

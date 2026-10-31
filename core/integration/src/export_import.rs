@@ -19,11 +19,11 @@
 //! v1 covers the families whose concrete stores expose scope-wide listing
 //! methods (knowledge + memory). Hierarchy and belief export is deferred where
 //! no concrete list method exists, and contradictions are not in the round-trip
-//! ([`ImportData`] carries no contradictions vec). See `docs/backlog.md`,
+//! ([`ImportData`] carries no contradictions vec). See `docs/history/backlog.md`,
 //! `export-import-hierarchy-belief`.
 //!
 //! ADR-0022: this port is engine-neutral — it names no engine type and holds no
-//! SQL (enforced by `.codex/hooks/check-engine-neutrality.sh`).
+//! SQL (enforced by `.codex/hooks/check_engine_neutrality.py`).
 
 use async_trait::async_trait;
 use engram_domain::Scope;

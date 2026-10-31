@@ -6,7 +6,7 @@
 //! and vector retrieval produce. The crate is engine-neutral: all graph data
 //! enters through the injected [`GraphRelationshipSource`] trait, so no SQL or
 //! storage-engine type lives here. See
-//! `docs/specs/associative-graph-retrieval/`.
+//! (retired spec `specs/associative-graph-retrieval/` — preserved in git history).
 //!
 //! This crate ships the adapter unit only; composing it into the live retrieval
 //! pipeline (a `GraphRelationshipSource` backed by a concrete knowledge store +

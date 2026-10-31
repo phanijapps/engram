@@ -2,7 +2,7 @@
 
 Future home for TypeScript evaluation fixture helpers and CLI wrappers.
 
-Evaluation behavior should stay aligned with `docs/specs/` and
+Evaluation behavior should stay aligned with `docs/product/ # retired specs tree` and
 `contracts/v1/examples/`.
 
 The Rust `engram-eval` crate owns fixture execution, report summaries, and

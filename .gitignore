@@ -63,3 +63,6 @@ packages/launcher/skills/
 .archify/
 site/_site/
 site/.sass-cache/
+
+# DW-2: never track build artifacts
+*.tgz

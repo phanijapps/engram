@@ -1,65 +1,35 @@
----
-schema_version: "1.0"
-artifact_type: "verification"
-job_id: "{{job_id}}"
-cycle: {{cycle}}
-status: "draft"
-author_role: "engram-tasks"
-profiles: {{profiles_json}}
-source_snapshot: null
-input_artifacts: []
-updated_at: "{{timestamp}}"
----
-
-<!--
-  v2 template. House rules: references/templates.md §Writing rules.
-  Executed results live ONLY here — no other artifact restates gate outcomes.
-  Negative evidence is mandatory: what was deliberately not verified, and why.
--->
-
 # Verification: {{feature_title}}
 
-| Field | Value |
-|---|---|
-| Reader / question | QA, reviewers, approver asking "what was actually executed, and what was deliberately not?" |
-| Status | cycle {{cycle}} · planned checks start NOT_RUN · executed results recorded once, here |
-| Budget | One line per check. |
+<!--
+  Verification v2 (2026-10-31): the gate-evidence ledger. Every GATE-ID from
+  the tasks gate inventory MUST have a row with raw evidence. Acceptance rows
+  bind to AC-IDs from spec.md — no orphan gates, no unproven ACs.
+-->
 
 ## Acceptance verification
 
-> Links analysis AC ids — never restates them. Results are recorded only after execution.
-> Enforcement: an unexecuted check recorded as PASS is a blocker.
-
-| AC | Command | Expected observable | Result |
+| AC ID | GATE IDs | Result | Evidence reference |
 |---|---|---|---|
-| AC-001 | {{ac_verification}} | one sentence | NOT_RUN |
-| AC-00n | `<command>` | one sentence | NOT_RUN |
+| AC-001 | GATE-001 | PASS | `#gates` row below |
 
 ## Gates
 
-> The repo validation block, verbatim commands. Results land only here.
+| Gate ID | Command | Status | Raw evidence |
+|---|---|---|---|
+| GATE-001 | `<exact command>` | PASS | exit 0, output summary (first/last lines) |
 
-| Gate | Command | Result |
-|---|---|---|
-| {{gates}} | `<command>` | NOT_RUN |
+Every gate from the tasks gate inventory appears above with real output —
+NOT_RUN is a finding, not a state to hand to review.
 
 ## Negative evidence
 
-> REQUIRED. Every deliberate omission: `omitted: <check> — reason — owner — revisit trigger`.
-> Enforcement: QA and the approver check every N/A carries a reason and an owner.
-
-{{negative_evidence}}
+- <What was tried that correctly failed (denial, error path, rollback)>.
 
 ## Execution environment
 
-> Where the commands ran: machine shape, toolchain, store paths, revision. One line each.
-
-{{environment}}
+- <OS/toolchain/versions — only if it changes interpretation>.
 
 ## Recording rules
 
-> Imperatives. Enforcement: reviewers compare recorded results against raw output.
-
-{{recording_rules}}
-
-*(Write: record command, result, and reference for every executed check · never pre-record a result · a failed check stays FAIL until re-executed · partial runs say which part ran.)*
+- Raw evidence stays here; summaries reference it. A PASS without pasted
+  output is a finding.

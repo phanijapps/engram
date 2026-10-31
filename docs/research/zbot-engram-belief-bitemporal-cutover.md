@@ -88,7 +88,7 @@ Engram has the right domain vocabulary for the cutover:
 - [`core/domain/src/identity.rs`](../../core/domain/src/identity.rs) defines
   `Scope` as `tenant`, optional `subject`, `workspace`, `session`, and
   `environment`.
-- [`docs/domain-data-model.md`](../domain-data-model.md) describes beliefs as
+- [`docs/architecture/domain-data-model.md`](../domain-data-model.md) describes beliefs as
   derived stances over evidence, not source truth, and includes valid intervals,
   stale/supersession semantics, provenance, and source evidence.
 

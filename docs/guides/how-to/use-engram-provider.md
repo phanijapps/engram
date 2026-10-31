@@ -164,7 +164,7 @@ semantic records, embeddings, graph edges, or backend query logic.
 SQLite is the only implemented backend today. The engine-neutral contract
 (ADR-0022) means swapping to a future backend (Postgres, Surreal) is a
 config-file change, not a code change. The neutrality gate
-(`check-engine-neutrality.sh`) enforces that the port layer names zero engine
+(`check_engine_neutrality.py`) enforces that the port layer names zero engine
 types. A stub backend (S7) proves the traits are satisfiable without SQLite.
 
 ## Further reading

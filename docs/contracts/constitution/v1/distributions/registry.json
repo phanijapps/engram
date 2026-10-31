@@ -1,0 +1,44 @@
+{
+  "schema": "engram.distributions_registry.v1",
+  "version": "1.0",
+  "adopted": "2026-10-31",
+  "constitution_ref": "docs/constitution/04-distribution-drift.md",
+  "notes": "Published and installed surfaces (RULE-2, library/SDK reinterpretation). reconcile: how the surface is checked against repo state.",
+  "surfaces": [
+    {
+      "surface_id": "npm.engramlabs-mcp",
+      "kind": "npm",
+      "package": "@engramlabs/mcp",
+      "manifest": "packages/launcher/package.json",
+      "payload": ["bin.js", "install.js", "agent-install.js", "hooks/", "skills/", "agents/", "scripts/"],
+      "reconcile": "package.json files[] vs on-disk payload; skills/ vs .agents/skills (DD-002)"
+    },
+    {
+      "surface_id": "npm.engramlabs-client",
+      "kind": "npm",
+      "package": "@engramlabs/client",
+      "manifest": "packages/client/package.json",
+      "reconcile": "package.json files[] vs on-disk payload"
+    },
+    {
+      "surface_id": "npm.engramlabs-contracts",
+      "kind": "npm",
+      "package": "@engramlabs/contracts",
+      "manifest": "packages/contracts/package.json",
+      "reconcile": "generated output must equal pnpm run contracts:generate (CI already diffs)"
+    },
+    {
+      "surface_id": "crates.engram-workspace",
+      "kind": "crates",
+      "manifest": "Cargo.toml",
+      "reconcile": "published crate versions vs workspace members (scheduled, network-dependent; declared now, gate deferred)"
+    },
+    {
+      "surface_id": "agent-bundle.installed",
+      "kind": "installed-bundle",
+      "source_of_truth": ".agents/skills",
+      "installed_copy": "packages/launcher/skills",
+      "reconcile": "directory inventory + SKILL.md name-tag sync (DD-002); agents: mcp/engram-mcp/agents vs packages/launcher/agents"
+    }
+  ]
+}

@@ -79,7 +79,7 @@ Code reads, retrieval, graph operations, and targeted reset use the same binding
 Reset follows preview → owner gate → apply/resume with an exact durable journal, preservation digests, and ambiguous-ownership denial.
 MCP stdio and one-shot, Rust, N-API, and TypeScript hosts expose the scoped registration, bind, status, and refresh operations.
 Hosts inject `codeAuthority.launchScopes`; recipe defaults deny code operations and the legacy native bind path directs callers to the provider path.
-The matrix runner records disposable SQLite/pgvector and native/MCP receipts; see [`docs/operator-bound-code-runbook.md`](../operator-bound-code-runbook.md).
+The matrix runner records disposable SQLite/pgvector and native/MCP receipts; see [`docs/guides/operator-bound-code-runbook.md`](../operator-bound-code-runbook.md).
 
 ### Taxonomy & ontology ✅
 A governed, evolving concept vocabulary (SKOS-aligned) and a typed ontology
@@ -250,8 +250,8 @@ This is a **living product view** of the shipped implementation. It rolls
 features up by **capability** and tracks product-level status. When a capability
 ships or its status changes, update the relevant line here in the same PR — drift
 between this doc and reality is a bug. New feature work is specced in
-[`docs/specs/`](../specs/); open items live in [`docs/backlog.md`](../backlog.md).
-(See [`docs/CONVENTIONS.md`](../CONVENTIONS.md) document-lifecycle.)
+[`docs/specs/`](../specs/); open items live in [`docs/history/backlog.md`](../backlog.md).
+(See [`docs/guides/CONVENTIONS.md`](../CONVENTIONS.md) document-lifecycle.)
 
 ## See also
 
@@ -261,4 +261,4 @@ between this doc and reality is a bug. New feature work is specced in
 - [Backlog](../backlog.md) — open / deferred items.
 - [ADRs](../adr/README.md) · [RFCs](../rfcs/README.md) — durable decisions + proposals.
 - [Research synthesis](../research/README.md) — prior-art + concept grounding.
-- [`CHARTER.md`](../CHARTER.md) — mission + scope.
+- Charter retired 2026-10-31 (content drifted); mission + scope live in this document.

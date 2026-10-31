@@ -12,7 +12,7 @@ cargo run -p engram-store-sql --example sql_memory
 ```
 
 Both examples reuse the accepted v1 write and retrieval fixtures under
-`contracts/v1/examples/`.
+`docs/contracts/v1/examples/`.
 
 ## TypeScript Client
 

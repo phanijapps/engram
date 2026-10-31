@@ -151,7 +151,7 @@ surface and leaving the other unwired is not allowed.
 ├── packages/             # TypeScript workspace (contracts / client / node / adapters / eval)
 ├── prototype/            # enterprise knowledge-platform demo (RFC-0004): Hono backend + React frontend + MCP
 ├── engram-cc/           # web-based code-graph visualization workspace (engram-cc spec)
-├── docs/                 # CHARTER · CONVENTIONS · adr · rfcs · specs · architecture · product · guides · perf · research
+├── docs/                 # README (front door) · adr · architecture · constitution · contracts · guides · history · product · research · rfcs
 └── .codex/  .claude/     # validation hooks + skills/agents for AI contributors
 ```
 
@@ -197,7 +197,7 @@ surface and leaving the other unwired is not allowed.
 
 ## Where to start
 
-1. Read [`docs/CHARTER.md`](../CHARTER.md) — mission, scope, principles.
+1. Read [`docs/product/engram.md`](../product/engram.md) — mission, scope, principles.
 2. Read [`reference.md`](reference.md) (normative golden path) then this overview
    (descriptive map).
 3. Read [ADR-0022](../adr/0022-engine-grid-vs-backend-recipe.md) (engine grid +

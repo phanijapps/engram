@@ -24,7 +24,7 @@
 - **Why we made past choices** → [`../adr/`](../adr/) (immutable history).
 - **What we're proposing to change** → [`../rfc/`](../rfc/) (governance).
 - **What an individual feature does** → [`engram.md`](engram.md).
-- **The mission and scope of the project** → [`../CHARTER.md`](../CHARTER.md).
+- **The mission and scope of the project** → this file (absorbed the retired charter, 2026-10-31).
 - **How users actually use the product** → [`../guides/`](../guides/) (Diátaxis-organized user docs).
 
 ## The product/ layer is *living*

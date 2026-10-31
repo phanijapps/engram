@@ -26,7 +26,19 @@ jobs:
       - name: Install Python dev dependencies
         run: python -m pip install -r requirements-dev.txt
       - name: Validate contracts
-        run: scripts/ci/check-contracts.sh
+        run: tools/ci/check_contracts.py
+      - name: Constitution gate (L1 + zero-deviation + registries)
+        run: tools/ci/check_constitution.py
+      - name: Rule-class gates (L2: RULE-1/2/3/6)
+        run: |
+          python3 tools/ci/check_implementation_registry.py
+          python3 tools/ci/check_coherent_integration.py
+          python3 tools/ci/check_production_completeness.py
+          python3 tools/ci/check_distribution_drift.py
+          python3 tools/ci/check_canonical_evidence.py
+      - name: SDD artifact gate (advisory until 2026-11-28, DW-5)
+        run: tools/ci/check_job_artifacts.py
+        continue-on-error: true
 
   changes:
     name: Path changes
@@ -73,13 +85,13 @@ jobs:
         with:
           python-version: "3.12"
       - name: Prepare owned acquisition transport fixtures
-        run: python scripts/ci/prepare-acquisition-fixtures.py
+        run: python tools/ci/prepare_acquisition_fixtures.py
       - name: Test
         run: cargo test --workspace
       - name: Engine-neutrality lint (ADR-0022 rule 1)
-        run: scripts/ci/check-engine-neutrality.sh
+        run: tools/ci/check_engine_neutrality.py
       - name: Surface-parity lint (Rust facade <-> N-API binding)
-        run: scripts/ci/check-surface-parity.sh
+        run: tools/ci/check_surface_parity.py
       # The fastembed-gated vector-lane checks are intentionally NOT run in
       # CI: they compile fastembed + ONNX for rarely-changing feature-gated
       # code. Keep them local (`cargo clippy -p engram-store-sqlite
@@ -134,7 +146,7 @@ jobs:
       - name: Install Python dev dependencies
         run: python -m pip install -r requirements-dev.txt
       - name: Check docs
-        run: scripts/ci/check-docs.sh
+        run: tools/ci/check_docs.py
 
   typescript:
     name: TypeScript

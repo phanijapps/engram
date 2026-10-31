@@ -4,7 +4,7 @@ Pin release, scope, installed applications/plugins, deployment mechanism and act
 instance capabilities. Verify current official documentation and local standards;
 do not assume global and scoped customizations have identical lifecycle behavior.
 
-## Analysis
+## Spec
 
 Inventory tables/fields, business rules, Script Includes, flows/subflows, catalog
 items, ACLs/roles and user surfaces affected. Record application scope, cross-scope

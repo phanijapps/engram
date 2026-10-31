@@ -1,6 +1,6 @@
 ---
-schema_version: "1.0"
-artifact_type: "plan"
+schema_version: 2
+artifact: "plan"
 job_id: "{{job_id}}"
 cycle: {{cycle}}
 status: "draft"
@@ -8,82 +8,57 @@ author_role: "engram-planner"
 profiles: {{profiles_json}}
 source_snapshot: null
 input_artifacts: []
-updated_at: "{{timestamp}}"
+updated_at: "FILL: ISO-8601 with timezone"
+size_tier: "S"
+spec_ref: null
+constitution_rules_touched: []
 ---
-
 <!--
-  v2 template. House rules: references/templates.md §Writing rules.
-  Steps use imperative STE-style sentences. Requirements stay in EARS — the plan
-  never restates them; it links REQ/AC ids from analysis.md.
+  Plan template v2 (constitution adoption 2026-10-31).
+  v2 changes: every step carries REQ IDs + constitution rule IDs + concrete
+  paths + verification + rollback — no orphan steps, no orphan REQs; blast
+  radius must be paths/counts, not adjectives. Approach links DEC-* without
+  restating REQ prose. Verified by tools/ci/check_job_artifacts.py.
 -->
 
-# Plan: {{feature_title}}
 
-| Field | Value |
-|---|---|
-| Reader / question | Builder asking "what do I do, in what order, and how do I prove each step?" · reviewers checking design soundness |
-| Status | cycle {{cycle}} · consumes analysis (DEC blocks) · supersedes: none |
-| Budget | ≤ 500 narrative words (tables excluded) |
-| Out of scope | Requirements and ACs (analysis.md owns them) · task decomposition (tasks.md owns it) |
+# Plan: <short outcome>
 
 ## Approach
 
-> The design story in plain words. Start by naming which analysis DEC blocks this plan follows.
-> Enforcement: every DEC-n from analysis appears here or in New decisions; an unconsumed DEC fails validation.
-
-{{approach}}
-
-*(≤ 200 words. If a reader cannot retell the design from this paragraph alone, it is not done.)*
+One concise design narrative. Link consumed `DEC-*`; do not restate `REQ-*` —
+reference by ID.
 
 ## New decisions
 
-> Only choices NEW since analysis — ADR blocks, authority-tagged, same shape as analysis DEC blocks.
-
-{{new_decisions}}
+| ID | Authority / rule | Decision | Why now | Consequence |
+|---|---|---|---|---|
+| DEC-002 | DELEGATED / <rule ID> | <choice> | <new fact> | <effect> |
 
 ## Steps
 
-> One sentence per step, imperative, each naming its own proof. Small steps beat large ones.
-> Enforcement: builder verification and reviewer traceability follow this table; a step without a verify command fails review.
-
-| Step | Do (one sentence) | Verify with | Touches |
-|---|---|---|---|
-| 1 | {{first_step}} | `<command>` | files / crates |
-| 2 | {{steps}} | `<command>` | files / crates |
+| ID | Implement | REQ IDs | Rule IDs | Concrete paths | Verify (GATE-ID / command) | Rollback |
+|---|---|---|---|---|---|---|
+| STEP-001 | <imperative action> | REQ-001 | <rule ID> | `src/a.rs`; `new-path: tests/a.rs` | GATE-001 | <exact revert/recovery> |
 
 ## Contracts and compatibility
 
-> What changes in contracts, schemas, or public surface — classified compatible or breaking, per repo docs standard (docs first).
-> Enforcement: platform reviewer checks the classification against the actual diff.
-
-{{contract_changes}}
+| Surface | Classification | REQ IDs | Consumer / migration / documentation action |
+|---|---|---|---|
+| public/internal/none | compatible/breaking/none | REQ-001 | <concrete action> |
 
 ## Blast radius
 
-> Quantified from the graph, not adjectives. Enforcement: code reviewer checks the numbers against change_impact output.
-
-{{blast_radius}}
-
-*(Shape: `<symbol/area> — <change_impact number> dependents — <risk shape>`; name every crate boundary crossed.)*
+| Area or symbol | Concrete dependent paths/count | Risk | Owning STEP IDs |
+|---|---|---|---|
+| <area> | <paths or measured count> | <failure shape> | STEP-001 |
 
 ## Verification map
 
-> Which step proves which AC. Link — do not restate — analysis §Acceptance.
-> Enforcement: every AC id from analysis appears exactly once here or is named in a reasoned omission.
+| AC ID | Step IDs | Gate IDs | Omission / deviation |
+|---|---|---|---|
+| AC-001 | STEP-001 | GATE-001 | none |
 
-{{verification_map}}
+## Rollback and recovery
 
-*(Shape: `AC-001 ← step 3 gate output` · `AC-005 ← steps 6-8 matrix`.)*
-
-## Recovery and rollback
-
-> How to undo this change and how a partial failure recovers. Imperative steps, exact commands.
-> Enforcement: release.md consumes this section verbatim.
-
-{{rollback}}
-
-## Glossary deltas
-
-> New terms this plan introduces beyond the analysis glossary. If none, write: none.
-
-{{glossary_deltas}}
+- STEP-001: <exact rollback command/action and partial-failure state>.

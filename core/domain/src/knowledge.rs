@@ -285,7 +285,7 @@ pub struct KnowledgeRelationship {
 
 /// Closed predicate vocabulary for code-extraction edges. The relationship
 /// `predicate` stays an open string; this enum is the set the code extractor
-/// (`engram-code`) is contracted to emit (`docs/domain-data-model.md`
+/// (`engram-code`) is contracted to emit (`docs/architecture/domain-data-model.md`
 /// §Code indexing).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -362,7 +362,7 @@ impl UnresolvedReferenceStatus {
 }
 
 /// A recorded, best-effort-failed cross-file code reference — the honesty
-/// ledger for code resolution (`docs/domain-data-model.md` §Code indexing).
+/// ledger for code resolution (`docs/architecture/domain-data-model.md` §Code indexing).
 /// Rows persist in the knowledge store with the same lifecycle as
 /// relationships: retracted with their referring document on re-ingest,
 /// re-attempted by the orphan sweep whenever new symbols land.

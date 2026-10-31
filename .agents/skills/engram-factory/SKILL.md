@@ -98,7 +98,7 @@ All paths are relative to the primary repository checkout.
     |   `-- <job-id>/
     |       |-- feature.md
     |       |-- brief.md
-    |       |-- analysis.md
+    |       |-- spec.md
     |       |-- plan.md
     |       |-- tasks.md
     |       |-- verification.md
@@ -111,7 +111,10 @@ All paths are relative to the primary repository checkout.
     |       |   `-- round-<n>/
     |       |       `-- review-<discipline>.md
     |       |-- evidence/
-    |       `-- history/
+    |       |-- history/
+    |       |-- runs/                        # ALL orchestration receipts (OR-004)
+    |       |   `-- <batch-or-dispatch-id>/  # dispatch results, batch outputs, rerun/
+    |       |                                # recovery churn — NEVER at top level
     `-- worktrees/
         `-- <job-id>/
 
@@ -120,6 +123,42 @@ Build on `factory/<job-id>` in the assigned worktree.
 
 Use templates from `assets/templates/`.
 Use `references/templates.md` for metadata, writing and traceability rules.
+
+## Constitution compliance (adopted 2026-10-31)
+
+The SDD pipeline is governed by `constitution/` (see `constitution/00-INDEX.md`).
+Artifacts are checked by `tools/ci/check_job_artifacts.py` (advisory until
+2026-11-28, then blocking for post-adoption jobs):
+
+- **Frontmatter (v2 templates)**: `schema_version: 2`, `artifact`, `job_id`,
+  `status`, `size_tier` on brief/analysis/plan/tasks. `spec.md` carries
+  `artifact: spec`.
+- **ID discipline**: requirements are `REQ-*` in the spec (canonical behavior
+  source); plan steps are `STEP-*` referencing ≥1 REQ; tasks are `TASK-*`
+  referencing STEP + REQ IDs. Restate nothing — reference by ID. The REQ×task
+  coverage matrix MUST be total.
+- **No stubs in ratified artifacts**: no TBD/TODO/FIXME once `status` leaves
+  `draft` (PC-002).
+- **Ratification-before-build**: `build.md` is only valid once the brief's
+  `status: ratified` (RULE-4 ordering).
+- **Job layout**: job-dir top level holds ONLY the canonical artifact set
+  above; dispatch results, batch receipts, recovery and rerun files go under
+  `runs/<id>/` (OR-004). Historical job 010 is grandfathered (DW-3).
+
+### Size tiers (scales ceremony — the noise fix)
+
+Set `size_tier` in the brief frontmatter; it flows to every downstream
+artifact. R = required, O = optional-as-needed, X = omit-unless-touched:
+
+| Artifact | S — localized, reversible, one surface | M — several paths or one boundary | L — cross-store/cross-surface |
+|---|---|---|---|
+| Brief | R: ask, problem/symptom, outcome, MoSCoW, ledger, scope, tier. X: constraints table unless real. | same | same |
+| Spec | R: intent trace, evidence, REQ/AC/gate tables, out-list, risks/reviewers. O: terms/environment. X: story prose. | same + O: terms | same |
+| Plan | R: approach, steps table, verification map, rollback. O: contracts/blast-radius when public surfaces change. | R: contracts + blast radius | R: all |
+| Tasks | R: task list, ordering, coverage matrix, gate inventory. X: delivery applicability when no row would be "yes". | O: delivery | R: delivery |
+
+Evidence budget: S jobs target ≤ 60 lines per artifact; exceeding it needs a
+one-line justification in the artifact.
 
 ## Board
 

@@ -1,6 +1,6 @@
 ---
 name: engram-analyzer
-description: Factory ANALYZE stage — authors analysis.md from the feature, a registered brief (its decision ledger is binding), and repository evidence. Dispatched by the engram-factory orchestrator; also usable directly to analyze a feature against repo evidence before planning.
+description: Factory ANALYZE stage — authors spec.md from the feature, a registered brief (its decision ledger is binding), and repository evidence. Dispatched by the engram-factory orchestrator; also usable directly to analyze a feature against repo evidence before planning.
 ---
 
 # engram-analyzer — factory analyze
@@ -8,7 +8,7 @@ description: Factory ANALYZE stage — authors analysis.md from the feature, a r
 You are the factory's analyzer. Read your FULL role contract first and follow
 it exactly: `.agents/skills/engram-factory/references/agents.md` § engram-analyzer.
 Writing and artifact rules: `references/templates.md` (§ Writing rules binding).
-Template: `assets/templates/analysis.md` (v2 — reader/budget header, Intent with
+Template: `assets/templates/spec.md` (v2 — reader/budget header, Intent with
 authority tags, EARS requirements, THE acceptance map, negative evidence, glossary).
 
 ## Dispatch envelope (expect from the orchestrator)
@@ -28,5 +28,5 @@ path, reviewer applicability duty, profiles.
 
 ## Completion
 Validate: `python3 .agents/skills/engram-factory/scripts/factory.py --repo <repo>
-validate-artifact --job <job> --artifact analysis.md` — iterate until pass;
+validate-artifact --job <job> --artifact spec.md` — iterate until pass;
 every LED id must appear in your body. Report ≤10 lines per the contract.

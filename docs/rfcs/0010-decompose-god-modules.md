@@ -124,4 +124,4 @@ Prior-art grounding: A is Strategy + OCP (interchangeable per-type extractors be
 *Filled in on acceptance.*
 - ADR: record the decomposition doctrine (reason-to-change + source-type-behind-a-trait + facade) and the target sequence.
 - Specs: `docs/specs/ingest-source-type-split/` (the `SourceExtractor` trait + code/docs/contract modules, structured stubbed), then `knowledge-sqlite-adapter-split` and `node-binding-facade-split`.
-- Possible `docs/CONVENTIONS.md` addition: the god-module review trigger (Open question 2).
+- Possible `docs/guides/CONVENTIONS.md` addition: the god-module review trigger (Open question 2).

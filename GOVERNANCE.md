@@ -24,9 +24,9 @@ Use the narrowest durable record that fits the decision:
   accepted.
 - Specs under `docs/specs/` record implementation acceptance criteria for a
   concrete slice.
-- `docs/domain-data-model.md` remains the domain source of truth until an ADR
+- `docs/architecture/domain-data-model.md` remains the domain source of truth until an ADR
   moves that authority to generated Rust/domain contracts.
-- `contracts/v1/` contains accepted machine-readable v1 contract artifacts.
+- `docs/contracts/v1/` contains accepted machine-readable v1 contract artifacts.
 
 Roadmap entries are intent, not acceptance. A roadmap item becomes accepted
 behavior only after its spec is implemented, validated, and marked shipped.
@@ -59,7 +59,7 @@ production, security, or performance claims.
 ## Releases
 
 Engram is not production-ready. Release candidates must satisfy
-`docs/release-checklist.md` before publishing any crate, npm package, or tag.
+`docs/guides/release-checklist.md` before publishing any crate, npm package, or tag.
 
 Release notes should include:
 

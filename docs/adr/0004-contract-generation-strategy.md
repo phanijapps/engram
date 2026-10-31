@@ -17,7 +17,7 @@ initial open-source phase.
 
 The source of truth is:
 
-- `docs/domain-data-model.md` for semantics.
+- `docs/architecture/domain-data-model.md` for semantics.
 - `contracts/v1/schemas/engram-v1.schema.json` for wire shape.
 - `contracts/v1/examples/` for valid and invalid examples.
 - `docs/specs/` for acceptance behavior.

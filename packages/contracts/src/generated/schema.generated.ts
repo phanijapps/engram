@@ -1,4 +1,4 @@
-/* Generated from contracts/v1/schemas/engram-v1.schema.json. Do not edit. */
+/* Generated from docs/contracts/v1/schemas/engram-v1.schema.json. Do not edit. */
 export const engramV1Schema = {
   "$defs": {
     "Actor": {

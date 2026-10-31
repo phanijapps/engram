@@ -13,7 +13,7 @@
 //! listing is wired.
 //!
 //! ADR-0022: this port is engine-neutral — it names no engine type and holds no
-//! SQL (enforced by `.codex/hooks/check-engine-neutrality.sh`). ADR-0023: the
+//! SQL (enforced by `.codex/hooks/check_engine_neutrality.py`). ADR-0023: the
 //! attach write is a natural, additive extension of this same port — the trait
 //! keeps its name and stays engine-neutral.
 

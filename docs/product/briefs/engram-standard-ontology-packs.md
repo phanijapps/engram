@@ -85,7 +85,7 @@ change what existing knowledge means (pain #2).
   Claude Code / Codex hosts (imposed by owner pick LED-3; necessary because
   the adoption gap lives in those hosts).
 - owner-fixed: additive-only, no retrieval regression (LED-5).
-- House (AGENTS.md): contract-first — `docs/domain-data-model.md` before
+- House (AGENTS.md): contract-first — `docs/architecture/domain-data-model.md` before
   contract changes; surface parity (facade + N-API + CapabilityReport + MCP,
   parity lint); engine neutrality; per-project scope; server never calls an
   LLM — domain pick and classification stay agent-side; CI gates

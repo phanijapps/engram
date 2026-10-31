@@ -45,6 +45,6 @@ The batch uses **deferred reindex** (option 1). The batch records metadata; vect
 
 ## References
 
-- `docs/backlog.md` → `atomic-batch-evidence-embeddings` (the deferred item this ADR resolves).
+- `docs/history/backlog.md` → `atomic-batch-evidence-embeddings` (the deferred item this ADR resolves).
 - ADR-0009 (retrieval composition seam — the VectorIndex port the reindex job writes to).
 - `docs/specs/atomic-batch-ingest/spec.md` (S3 — the embeddings step).

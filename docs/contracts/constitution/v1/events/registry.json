@@ -1,0 +1,18 @@
+{
+  "schema": "engram.events_registry.v1",
+  "version": "1.0",
+  "adopted": "2026-10-31",
+  "constitution_ref": "docs/constitution/06-canonical-evidence.md",
+  "notes": "Canonical-first (CE-002): families declared here BEFORE any code references them. Emission wiring is month 2-3 (L3). Records carry actor, timestamp, job/PR ref, rule IDs, artifact hashes.",
+  "families": [
+    { "family": "job.created", "actor": "agent", "fields": ["job_id", "brief_sha256", "size_tier"] },
+    { "family": "job.approved", "actor": "owner", "fields": ["job_id", "cycle", "approver", "artifact_hashes"] },
+    { "family": "job.reworked", "actor": "owner", "fields": ["job_id", "cycle", "note", "review_refs"] },
+    { "family": "job.released", "actor": "owner", "fields": ["job_id", "merge_commit", "release_notes_ref"] },
+    { "family": "deviation.opened", "actor": "owner", "fields": ["rule_id", "scope", "expiry"] },
+    { "family": "deviation.closed", "actor": "owner", "fields": ["rule_id", "resolution"] },
+    { "family": "constitution.amended", "actor": "owner", "fields": ["rail", "rule_ids", "supersession"] },
+    { "family": "publication.released", "actor": "maintainer", "fields": ["surface", "source_revision"] },
+    { "family": "ci.run", "actor": "ci", "fields": ["run_id", "gates", "results"] }
+  ]
+}

@@ -18,10 +18,10 @@ ports until their contracts are proven.
 Apply this loop to every feature slice.
 
 1. Update or add the capability detail under `docs/product/engram.md`
-   (open items in `docs/backlog.md`).
+   (open items in `docs/history/backlog.md`).
 2. Confirm whether the public contract changes.
-3. If the public contract changes, update `docs/domain-data-model.md`,
-   `contracts/v1/`, `docs/product/engram.md`, examples, invalid examples, and generated
+3. If the public contract changes, update `docs/architecture/domain-data-model.md`,
+   `docs/contracts/v1/`, `docs/product/engram.md`, examples, invalid examples, and generated
    TypeScript.
 4. Add conformance tests that prove Rust serialization still matches the
    accepted schema.

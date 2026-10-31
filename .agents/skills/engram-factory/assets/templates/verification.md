@@ -1,3 +1,16 @@
+---
+schema_version: "1.0"
+artifact_type: "verification"
+job_id: "{{job_id}}"
+cycle: {{cycle}}
+status: "draft"
+author_role: "engram-tasks"
+profiles: {{profiles_json}}
+source_snapshot: null
+input_artifacts: []
+updated_at: "{{timestamp}}"
+---
+
 # Verification: {{feature_title}}
 
 <!--

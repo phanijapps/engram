@@ -314,3 +314,18 @@ ledger (AC×GATE rows, NOT_RUN is a finding); release.md gained the L3
 evidence-chain section; engram-frame Contract §0 makes briefs v2 at the
 source (tier question last). 48/48 evals green (v1 fixtures still pass —
 union accepts both). Next: first real v2 job (DW-3 archival candidate).
+
+## 16. First v2 job COMPLETE (2026-10-31): 011-en004-fail-closed
+
+End-to-end through the reconciled pipeline: v2 brief (owner-ratified) → create
+(light mode, L3 job.created) → spec 63 ln / plan 39 / tasks 41 (S-tier budgets)
+→ build in worktree (8d9bac15) with snapshot + hash-pinned inputs → 3 PASS
+reviews (red-forman) → decision APPROVE → owner approval gate → merge.
+**Noise measurement: spec+plan+tasks = 143 lines vs 416-420 historical
+S-jobs = 66% cut** (projection was ~44%). L3 chain complete in events.jsonl:
+job.created (agent) → job.approved (owner) → job.released (owner). DW-7
+closed 22 days early. Hardening earned en route: brief heading contract,
+verification template frontmatter, snapshot-bound approval semantics
+(caught a mid-approval target advance — guard worked as designed). Pipeline
+friction found and fixed live: reviewer-set validation in light mode,
+input-hash re-pinning after author-role edits, round numbering at review.

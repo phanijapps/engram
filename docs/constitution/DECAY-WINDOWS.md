@@ -21,5 +21,7 @@ behavior during window, closure date.
 
 | Window | Closed | Note |
 |---|---|---|
+| DW-7 EN-004 fail-closed | 2026-10-31 | Closed 22 days early by job 011 (v2 pipeline first run: 66% artifact-noise cut, 143 vs ~418 ln). |
+| DW-3 job-layout archival | 2026-10-31 | (also closed above) |
 | DW-1 AGENTS.md tree-shape truth | 2026-10-31 | adapters/ block corrected to disk truth; core/packs + core/proposals declared. Component registry already matched disk (seeded from workspace members). |
 | DW-2 committed build artifacts | 2026-10-31 | 2 launcher tarballs `git rm`'d; `*.tgz` ignored. |

@@ -1,6 +1,6 @@
 use engram_domain::*;
 use engram_ingest::{
-    CommittedGenerationFiles, ScanOptions, content_hash,
+    CodeSymbolChunker, CommittedGenerationFiles, ScanOptions, content_hash,
     git_source::{CommittedFile, ResolvedCommit},
     prepare_generation, write_prepared_generation,
 };
@@ -238,6 +238,70 @@ mod task_009 {
             .expect("caller relationship");
         assert_eq!(call.object.name.as_deref(), Some("target"));
         assert_eq!(call.object.id.as_ref(), Some(&target.id));
+    }
+    #[test]
+    fn impl_methods_are_entity_only_with_canonical_lineage() {
+        let b = binding();
+        let prepared = prepare(
+            &b,
+            "generation",
+            &[file(
+                "src/query.rs",
+                "struct TraversalSpec;\nimpl TraversalSpec {\n    fn blast_radius(&self) {}\n}\n",
+            )],
+        );
+        let document = &prepared.documents[0];
+        let method = document
+            .graph
+            .entities
+            .iter()
+            .find(|entity| entity.name == "TraversalSpec::blast_radius")
+            .expect("implementation method entity");
+        let lineage = &prepared.lineage[&method.id.to_string()];
+        assert_eq!(lineage.source_path, "src/query.rs");
+        assert_eq!(
+            lineage.span,
+            Some(CanonicalSpan {
+                start_line: 3,
+                end_line: 3
+            })
+        );
+        assert_eq!(
+            lineage.contributors,
+            vec![document.records.document.id.to_string()]
+        );
+        assert!(document.records.chunks.iter().all(|chunk| {
+            !chunk
+                .entities
+                .iter()
+                .any(|entity_ref| entity_ref.id.as_ref() == Some(&method.id))
+        }));
+        let source =
+            "struct TraversalSpec;\nimpl TraversalSpec {\n    fn blast_radius(&self) {}\n}\n";
+        let candidates = CodeSymbolChunker.chunk_for_ext(source, "rs").unwrap();
+        assert_eq!(document.records.chunks.len(), candidates.len());
+        for (chunk, candidate) in document.records.chunks.iter().zip(candidates) {
+            assert_eq!(
+                chunk
+                    .location
+                    .as_ref()
+                    .and_then(|location| location.start_line),
+                candidate
+                    .location
+                    .as_ref()
+                    .and_then(|location| location.start_line)
+            );
+            assert_eq!(
+                chunk
+                    .location
+                    .as_ref()
+                    .and_then(|location| location.end_line),
+                candidate
+                    .location
+                    .as_ref()
+                    .and_then(|location| location.end_line)
+            );
+        }
     }
     #[test]
     fn shared_contributor_lineage() {

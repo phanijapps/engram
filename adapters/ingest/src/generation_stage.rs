@@ -227,7 +227,7 @@ pub fn prepare_generation(
         engram_lang::register_all(&mut chunker);
         chunker
     });
-    let entity_names: HashSet<String> = documents
+    let mut entity_names: HashSet<String> = documents
         .iter()
         .flat_map(|document| {
             document
@@ -239,20 +239,87 @@ pub fn prepare_generation(
         .collect();
     let repo_context = engram_code::parser::repo_context::RepoContext::empty();
     let mut skipped_ast_call_extraction: usize = 0;
+    let mut method_entity_collisions: usize = 0;
     if let Some(ts_chunker) = ts_chunker.as_ref() {
+        // Parse each supported file once. The AST contributes implementation
+        // methods as entity-only records while CodeSymbolChunker remains the
+        // sole owner of chunk identity and spans.
+        let mut parsed_trees = Vec::with_capacity(documents.len());
         for (document, (path, text)) in documents.iter_mut().zip(&ast_inputs) {
             let extension = path.rsplit_once('.').map(|(_, ext)| ext).unwrap_or("");
             if !ts_chunker.supports(extension) {
+                parsed_trees.push(None);
                 continue;
             }
-            let calls =
-                match ts_chunker.extract_calls(text, extension, &entity_names, &repo_context) {
-                    Ok(calls) => calls,
-                    Err(_) => {
-                        skipped_ast_call_extraction += 1;
-                        continue;
-                    }
-                };
+            let tree = match ts_chunker.parse(text, extension) {
+                Ok(tree) => tree,
+                Err(_) => {
+                    skipped_ast_call_extraction += 1;
+                    parsed_trees.push(None);
+                    continue;
+                }
+            };
+            let methods = match ts_chunker.extract_impl_methods_tree(&tree, text, extension) {
+                Ok(methods) => methods,
+                Err(_) => {
+                    skipped_ast_call_extraction += 1;
+                    parsed_trees.push(None);
+                    continue;
+                }
+            };
+            let contributor = document.records.document.id.to_string();
+            for method in methods {
+                // Existing chunk-derived entities win. New methods also dedupe
+                // globally by name so the SymbolIndex sees one stable target.
+                if !entity_names.insert(method.name.clone()) {
+                    method_entity_collisions += 1;
+                    continue;
+                }
+                let entity = GraphExtractor::new().ast_declaration_entity(
+                    &document.records.source,
+                    &document.records.document,
+                    &method.name,
+                    EntityKind::Function,
+                );
+                lineage.insert(
+                    entity.id.to_string(),
+                    CodeLineage {
+                        repo_id: binding.repo_id.clone(),
+                        generation_id: generation.id.clone(),
+                        source_path: document.source.path.clone(),
+                        contributors: vec![contributor.clone()],
+                        span: Some(engram_domain::CanonicalSpan {
+                            start_line: method.start_line,
+                            end_line: method.end_line,
+                        }),
+                    },
+                );
+                document.graph.entities.push(entity);
+            }
+            parsed_trees.push(Some(tree));
+        }
+        for ((document, (path, text)), tree) in documents
+            .iter_mut()
+            .zip(&ast_inputs)
+            .zip(parsed_trees.iter())
+        {
+            let Some(tree) = tree.as_ref() else {
+                continue;
+            };
+            let extension = path.rsplit_once('.').map(|(_, ext)| ext).unwrap_or("");
+            let calls = match ts_chunker.extract_calls_tree(
+                tree,
+                text,
+                extension,
+                &entity_names,
+                &repo_context,
+            ) {
+                Ok(calls) => calls,
+                Err(_) => {
+                    skipped_ast_call_extraction += 1;
+                    continue;
+                }
+            };
             let ast_graph = GraphExtractor::new().extract_with_calls(
                 &document.records.source,
                 &document.records.document,
@@ -324,6 +391,11 @@ pub fn prepare_generation(
     if skipped_ast_call_extraction > 0 {
         eprintln!(
             "engram-ingest: skipped AST call extraction for {skipped_ast_call_extraction} code file(s); retained co-occurrence relationships"
+        );
+    }
+    if method_entity_collisions > 0 {
+        eprintln!(
+            "engram-ingest: retained existing entities for {method_entity_collisions} colliding AST implementation method declaration(s)"
         );
     }
     Ok(PreparedGeneration {

@@ -49,6 +49,63 @@ impl GraphExtractor {
         Self
     }
 
+    /// Builds a code entity from an AST-only declaration without creating a
+    /// chunk, preserving the normal extractor's entity identity and metadata.
+    ///
+    /// Bound staging uses this for implementation methods that its identity
+    /// chunker deliberately does not emit. The caller owns collision handling
+    /// and durable lineage because this method has no chunk to attach them to.
+    pub fn ast_declaration_entity(
+        &self,
+        source: &KnowledgeSource,
+        document: &SourceDocument,
+        name: &str,
+        kind: EntityKind,
+    ) -> KnowledgeEntity {
+        let now = Utc::now();
+        let graph_id = graph_id_for(document);
+        let metadata = source.metadata.as_ref().and_then(|m| {
+            let mut git = Metadata::default();
+            for key in [REPOSITORY_KEY, BRANCH_KEY, REVISION_KEY] {
+                if let Some(value) = m.get(key) {
+                    git.insert(key.to_owned(), value.clone());
+                }
+            }
+            if git.is_empty() { None } else { Some(git) }
+        });
+        KnowledgeEntity {
+            id: entity_id(&graph_id, name),
+            graph_id: Some(graph_id),
+            kind,
+            name: name.to_owned(),
+            aliases: Vec::new(),
+            scope: source.scope.clone(),
+            source_refs: vec![EvidenceRef {
+                target_type: EvidenceTargetType::Source,
+                target_id: Some(source.id.to_string()),
+                uri: None,
+                quote: None,
+                location: Some(SourceLocation {
+                    path: document.path.clone(),
+                    start_line: None,
+                    end_line: None,
+                    start_offset: None,
+                    end_offset: None,
+                    anchor: None,
+                }),
+            }],
+            concept_refs: Vec::new(),
+            ontology_class_refs: Vec::new(),
+            provenance: source.provenance.clone(),
+            created_at: now,
+            updated_at: None,
+            valid_from: Some(now),
+            valid_until: None,
+            metadata,
+            archived_at: None,
+        }
+    }
+
     /// Extracts a graph from ingested chunks. Pure: it builds records but does
     /// not persist them. Call `extract_into` to persist through a repository.
     pub fn extract(

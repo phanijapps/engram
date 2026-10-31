@@ -26,6 +26,17 @@ pub struct TreeSitterChunker {
     entries: HashMap<&'static str, LangEntry>,
 }
 
+/// A method declaration discovered inside an implementation block.
+///
+/// `name` is receiver-qualified when the implementation names a concrete type
+/// and bare when the grammar cannot provide that receiver.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ImplMethodDeclaration {
+    pub name: String,
+    pub start_line: u32,
+    pub end_line: u32,
+}
+
 impl TreeSitterChunker {
     pub fn new() -> CoreResult<Self> {
         let mut entries = HashMap::new();
@@ -218,6 +229,27 @@ impl TreeSitterChunker {
     ///
     /// One-shot convenience (parses internally). Scan paths should use
     /// [`Self::parse`] + [`Self::extract_calls_tree`].
+    /// Extracts methods declared directly inside named implementation blocks.
+    ///
+    /// Rust `impl Type` and `impl Trait for Type` declarations use
+    /// `Type::method`; an implementation without a usable concrete type falls
+    /// back to the bare method name. Other grammars currently return no
+    /// implementation methods because their implementation node shapes are not
+    /// stable across the registered language packs.
+    pub fn extract_impl_methods_tree(
+        &self,
+        tree: &tree_sitter::Tree,
+        text: &str,
+        ext: &str,
+    ) -> CoreResult<Vec<ImplMethodDeclaration>> {
+        if !self.supports(ext) || ext != "rs" {
+            return Ok(Vec::new());
+        }
+        let mut methods = Vec::new();
+        collect_rust_impl_methods(&tree.root_node(), text.as_bytes(), &mut methods);
+        Ok(methods)
+    }
+
     pub fn extract_calls(
         &self,
         text: &str,
@@ -831,6 +863,58 @@ fn import_aliases(source: &str, ext: &str) -> std::collections::HashMap<String, 
 /// Collects function-like declaration spans (row ranges + qualified names)
 /// for call attribution, plus JSX element usage sites (declarative component
 /// references — see the JSX note below).
+/// Collect Rust methods immediately contained by `impl_item` nodes.
+///
+/// This mirrors the receiver rule used by `walk_declarations_with_receivers`:
+/// the `type` field supplies the concrete receiver for both inherent and trait
+/// implementations, while malformed or unnamed implementations retain a bare
+/// method identity rather than inventing a receiver.
+fn collect_rust_impl_methods(
+    node: &tree_sitter::Node,
+    source: &[u8],
+    methods: &mut Vec<ImplMethodDeclaration>,
+) {
+    if node.kind() == "impl_item" {
+        let receiver = node
+            .child_by_field_name("type")
+            .map(|type_node| extract_name(&type_node, source))
+            .filter(|name| !name.is_empty());
+        let mut cursor = node.walk();
+        for child in node.named_children(&mut cursor) {
+            if child.kind() != "declaration_list" {
+                continue;
+            }
+            let mut body_cursor = child.walk();
+            for declaration in child.named_children(&mut body_cursor) {
+                if declaration.kind() != "function_item" {
+                    continue;
+                }
+                let Some(name_node) = declaration.child_by_field_name("name") else {
+                    continue;
+                };
+                let method = extract_name(&name_node, source);
+                if method.is_empty() {
+                    continue;
+                }
+                let name = receiver
+                    .as_ref()
+                    .map(|receiver| format!("{receiver}::{method}"))
+                    .unwrap_or(method);
+                methods.push(ImplMethodDeclaration {
+                    name,
+                    start_line: (declaration.start_position().row + 1) as u32,
+                    end_line: (declaration.end_position().row + 1) as u32,
+                });
+            }
+        }
+        return;
+    }
+    let mut cursor = node.walk();
+    for child in node.named_children(&mut cursor) {
+        collect_rust_impl_methods(&child, source, methods);
+    }
+}
+
 fn collect_fn_spans(
     node: &tree_sitter::Node,
     source: &[u8],

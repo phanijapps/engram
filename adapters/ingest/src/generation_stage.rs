@@ -83,6 +83,7 @@ pub fn prepare_generation(
     let mut documents = Vec::new();
     let mut lineage: BTreeMap<String, CodeLineage> = BTreeMap::new();
     let mut paths = std::collections::HashSet::new();
+    let mut skipped_oversized: usize = 0;
     for file in committed.files {
         let path = file
             .path
@@ -103,10 +104,15 @@ pub fn prepare_generation(
         {
             continue;
         }
+        // Per-file overflow at STAGING skips the file — parity with the legacy
+        // checkout scanner (which skipped oversized files) and with the
+        // acquisition stage's skip-with-notice. Real repos carry vendored/
+        // generated blobs in the 1–2 MiB band (e.g. tree-sitter parser.c);
+        // failing the whole generation on them regressed indexability. The
+        // skip is surfaced so the caller can report it.
         if file.bytes.len() as u64 > options.max_bytes() {
-            return Err(invalid(
-                "selected code exceeds the configured file size bound",
-            ));
+            skipped_oversized += 1;
+            continue;
         }
         let text =
             std::str::from_utf8(&file.bytes).map_err(|_| invalid("selected code is not UTF-8"))?;
@@ -218,6 +224,11 @@ pub fn prepare_generation(
         value
             .validate()
             .map_err(|_| invalid("invalid staged contributor lineage"))?;
+    }
+    if skipped_oversized > 0 {
+        eprintln!(
+            "engram-ingest: skipped {skipped_oversized} code file(s) exceeding the staging per-file bound; they are not in the bound index"
+        );
     }
     Ok(PreparedGeneration {
         binding: binding.clone(),

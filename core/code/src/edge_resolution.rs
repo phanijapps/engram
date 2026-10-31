@@ -136,6 +136,24 @@ pub fn attempt(
                 branch: Some(ResolutionBranch::NameTable),
             };
         }
+        // A Rust SELF-QUALIFIED path (`crate::…`, `self::…`, `super::…`) can
+        // retain its module prefix at the call site while method entities are
+        // indexed under their concrete owner. Try the owner-and-method
+        // suffix for self-qualified references only — foreign-qualified
+        // paths keep the terminal no-owner-substitution rule below.
+        let segs: Vec<&str> = reference.split("::").collect();
+        if segs.len() >= 3 && matches!(segs[0], "crate" | "self" | "super") {
+            let imported = format!("{}::{}", segs[segs.len() - 2], segs[segs.len() - 1]);
+            if imported != reference {
+                if let Resolution::Resolved(c) = resolve_one(index, &imported, from_path, from_repo)
+                {
+                    return AttemptOutcome {
+                        resolution: Resolution::Resolved(c),
+                        branch: Some(ResolutionBranch::NameTable),
+                    };
+                }
+            }
+        }
         // Full-path miss/ambiguous is TERMINAL for type-associated owners:
         // the owner segment (immediately before the final `::name`) is a
         // known type OR PascalCase. A qualified type owner's prefix is
@@ -439,6 +457,29 @@ mod tests {
             "Config::clone must not bind Error::clone: {:?}",
             out.resolution
         );
+    }
+
+    /// An import-qualified static call settles against the indexed
+    /// owner-and-method suffix before receiver inference.
+    #[test]
+    fn crate_prefixed_type_path_binds_import_stripped_suffix() {
+        let mut index = SymbolIndex::new();
+        register(
+            &mut index,
+            "TraversalSpec::blast_radius",
+            "e1",
+            "r",
+            "src/spec.rs",
+        );
+        let out = attempt(
+            &index,
+            "crate::estate::TraversalSpec::blast_radius",
+            Some("src/conformance.rs"),
+            Some("r"),
+            None,
+        );
+        assert!(resolved(&out), "import-qualified method must bind");
+        assert_eq!(out.branch, Some(ResolutionBranch::NameTable));
     }
 
     /// `crate::module::Config::clone` — the OWNER segment (`Config`)

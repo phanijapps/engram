@@ -21,13 +21,20 @@ NAME = "docs"
 
 # 1. placeholder markers in tracked docs/contracts/skills (*.upstream.md exempt)
 MARKER = re.compile(r"TO""DO|\[TO""DO")
+CODE = re.compile(r"`[^`]*`|<!--.*?-->")  # inline code + HTML comments are citations, not placeholders
 tracked = []
 for pattern in ("README.md", "AGENTS.md", "docs/**", "docs/contracts/**", ".codex/skills/**"):
     tracked += git_tracked(pattern)
-marker_paths = [p for p in dict.fromkeys(tracked) if not p.endswith(".upstream.md") and Path(p).is_file()]
+# *.upstream.md are frozen upstream snapshots; docs/research/ legitimately
+# QUOTES markers (decay-window baselines, gate documentation) — quoting is not
+# an unresolved placeholder.
+marker_paths = [
+    p for p in dict.fromkeys(tracked)
+    if not p.endswith(".upstream.md") and not p.startswith("docs/research/") and Path(p).is_file()
+]
 hits = []
 for p in marker_paths:
-    if MARKER.search(Path(p).read_text(errors="replace")):
+    if MARKER.search(CODE.sub("", Path(p).read_text(errors="replace"))):
         hits.append(p)
 if hits:
     print(f"{NAME}: unresolved documentation/skill placeholder markers:", file=sys.stderr)

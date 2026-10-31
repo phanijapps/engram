@@ -125,11 +125,13 @@ test('expected set derives from the authored source, knowledge skills all ship',
     assert.ok(AUTHORED_SKILLS.includes(skill), `knowledge skill ${skill} missing from the authored set`);
   }
   // The workflow class is exactly the authored set minus knowledge — today
-  // engram-domain, engram-factory, engram-frame, outcome-reporting
-  // (DEC-005; engram-domain joined with the standard-ontology-packs job).
+  // engram-bound, engram-domain, engram-factory, engram-frame,
+  // outcome-reporting (DEC-005; engram-domain joined with the
+  // standard-ontology-packs job; engram-bound joined with job-010's
+  // branch-bound indexing merge).
   assert.deepEqual(
     WORKFLOW_SKILLS,
-    ['engram-domain', 'engram-factory', 'engram-frame', 'outcome-reporting'].sort(),
+    ['engram-bound', 'engram-domain', 'engram-factory', 'engram-frame', 'outcome-reporting'].sort(),
   );
 });
 

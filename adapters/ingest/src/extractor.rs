@@ -935,9 +935,27 @@ fn local_qualify(
             return Some(exact.clone());
         }
     }
-    let candidates = bare_to_qualified.get(reference)?;
-    match candidates.as_slice() {
-        [only] => Some(only.clone()),
+    if let Some(candidates) = bare_to_qualified.get(reference) {
+        return match candidates.as_slice() {
+            [only] => Some(only.clone()),
+            _ => None,
+        };
+    }
+    // Rust's declaration chunker retains generic parameters in the symbol
+    // anchor (`caller<T`), while call attribution uses the callable's bare
+    // identifier (`caller`). Match that parser-only suffix when exactly one
+    // local declaration has it, without weakening ambiguous name handling.
+    let generic_candidates: Vec<_> = bare_to_qualified
+        .iter()
+        .filter_map(|(bare, candidates)| {
+            bare.strip_prefix(reference)
+                .filter(|suffix| suffix.starts_with('<'))
+                .map(|_| candidates)
+        })
+        .flatten()
+        .collect();
+    match generic_candidates.as_slice() {
+        [only] => Some((*only).clone()),
         _ => None,
     }
 }

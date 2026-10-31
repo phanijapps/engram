@@ -238,6 +238,39 @@ fn code_entities_carry_logical_names() {
 }
 
 #[test]
+fn ast_calls_from_generic_rust_functions_keep_their_caller() {
+    let store = SqlKnowledgeStore::open_in_memory().expect("open store");
+    let ingested = ingest_code(
+        &store,
+        "generic-caller",
+        "generic.rs",
+        "fn generic_caller<T>() {}\n",
+    );
+    let extracted = GraphExtractor::new()
+        .extract_with_calls(
+            &ingested.source,
+            &ingested.document,
+            &ingested.chunks,
+            Some(&[(
+                "generic_caller".to_owned(),
+                "TraversalSpec::blast_radius".to_owned(),
+            )]),
+            None,
+            None,
+        )
+        .expect("extract AST calls");
+    assert!(
+        extracted.relationships.iter().any(|relationship| {
+            relationship.predicate == "calls"
+                && relationship.subject.name.as_deref() == Some("generic_caller<T>")
+                && relationship.object.name.as_deref() == Some("TraversalSpec::blast_radius")
+        }),
+        "generic caller AST edge must survive local qualification: {:?}",
+        extracted.relationships
+    );
+}
+
+#[test]
 fn cross_file_calls_resolve_after_qualification() {
     let store = SqlKnowledgeStore::open_in_memory().expect("open store");
     let mut index = engram_code::SymbolIndex::new();

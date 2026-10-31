@@ -1771,12 +1771,29 @@ mod receiver_gap_tests {
     fn rust_qualified_path_preserves_tail() {
         let source = "fn caller() {\n    super::fastembed_embedding::FastEmbedEmbeddingProvider::new(config);\n}\n";
         let edges = calls(source, "rs", &["FastEmbedEmbeddingProvider::new", "new"]);
-        // The callee must carry enough path to not hit the noise filter.
         assert!(
-            edges
-                .iter()
-                .any(|(_c, callee)| callee.contains("FastEmbedEmbeddingProvider")),
-            "qualified path preserved: {edges:?}"
+            edges.iter().any(|(_c, callee)| {
+                callee == "super::fastembed_embedding::FastEmbedEmbeddingProvider::new"
+            }),
+            "qualified path must remain full as written: {edges:?}"
+        );
+    }
+
+    /// Call extraction must descend through Rust let initializers and preserve
+    /// the scoped callee exactly as written for downstream resolution.
+    #[test]
+    fn rust_let_initializer_emits_scoped_callee() {
+        let source = "fn caller() {\n    let mut spec = TraversalSpec::blast_radius(8);\n    spec.max_depth = 8;\n}\n";
+        let edges = calls(
+            source,
+            "rs",
+            &["caller", "TraversalSpec::blast_radius", "blast_radius"],
+        );
+        assert!(
+            edges.iter().any(|(caller, callee)| {
+                caller == "caller" && callee == "TraversalSpec::blast_radius"
+            }),
+            "let-initializer scoped callee must be emitted as written: {edges:?}"
         );
     }
 

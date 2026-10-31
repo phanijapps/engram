@@ -31,6 +31,13 @@ For example, deliver fail-closed path validation before its fixture, and stop if
 | Done | ID | Imperative outcome | STEP IDs | REQ IDs | Gate to run | Evidence reference |
 |---|---|---|---|---|---|---|
 | [ ] | TASK-001 | Make missing declared paths fail the gate and name each path. | STEP-001 | REQ-001 | GATE-001 | `verification.md#gates` |
+| [ ] | TASK-002 | Author the fixture proving AC-001: two concrete test instances (missing-path fails named; present-path clean) in `tools/ci/tests/test_engine_neutrality.py`. | STEP-002 | REQ-002, AC-001 | GATE-001 | `verification.md#gates` |
+
+**Test scenarios are code, not documents.** The spec carries the Gherkin AC;
+here the work of proving it is an ordinary TASK row bound to the AC and gate
+it serves (IDs + fixture path). No separate test-scenario artifact exists in
+the pipeline; the format is whatever the owning suite uses (unittest, cargo
+test, fixtures), and `NOT_RUN` below is the only honest pre-execution state.
 
 ## What is the execution order and the stop condition?
 

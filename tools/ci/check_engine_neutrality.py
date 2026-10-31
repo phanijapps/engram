@@ -66,7 +66,10 @@ def scan(paths: list[Path]) -> list[str]:
     violations: list[str] = []
     for p in paths:
         if not p.exists():
-            continue  # EN-004 fail-closed enhancement is DW-7; behavior preserved
+            # EN-004 fail-closed (DW-7 closed 2026-10-31): a declared gated path
+            # that is missing narrows enforcement silently — that is a violation.
+            violations.append(f"declared gated path missing on disk: {p}")
+            continue
         files = [p] if p.is_file() else [f for f in p.rglob("*") if f.is_file()]
         for f in files:
             try:

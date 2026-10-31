@@ -144,14 +144,13 @@ pub fn attempt(
         let segs: Vec<&str> = reference.split("::").collect();
         if segs.len() >= 3 && matches!(segs[0], "crate" | "self" | "super") {
             let imported = format!("{}::{}", segs[segs.len() - 2], segs[segs.len() - 1]);
-            if imported != reference {
-                if let Resolution::Resolved(c) = resolve_one(index, &imported, from_path, from_repo)
-                {
-                    return AttemptOutcome {
-                        resolution: Resolution::Resolved(c),
-                        branch: Some(ResolutionBranch::NameTable),
-                    };
-                }
+            if imported != reference
+                && let Resolution::Resolved(c) = resolve_one(index, &imported, from_path, from_repo)
+            {
+                return AttemptOutcome {
+                    resolution: Resolution::Resolved(c),
+                    branch: Some(ResolutionBranch::NameTable),
+                };
             }
         }
         // Full-path miss/ambiguous is TERMINAL for type-associated owners:

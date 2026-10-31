@@ -10,9 +10,9 @@ Gate: `tools/ci/check_production_completeness.py` (planned; baseline measured 20
   live in test directories only.
 - **PC-002 (MUST)**: SDD artifacts are governed too: ratified sections of factory job
   artifacts (brief, analysis/spec, plan, tasks, verification, release) MUST NOT contain
-  TBD/TODO stub cells — an unratified draft MAY, a ratified artifact MUST NOT.
+  `TBD`/`TODO` stub cells — an unratified draft MAY, a ratified artifact MUST NOT.
   Enforced by `tools/ci/check_job_artifacts.py`.
-- **PC-003 (SHOULD)**: Doc-level TODO markers SHOULD stay zero in tracked docs
+- **PC-003 (SHOULD)**: Doc-level `TODO` markers SHOULD stay zero in tracked docs
   (already enforced today by `check_docs.py`).
 
 ## Enforcement boundary (measured baseline 2026-10-31)

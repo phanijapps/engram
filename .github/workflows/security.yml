@@ -75,6 +75,11 @@ jobs:
           scanners: vuln,secret,misconfig
           severity: HIGH,CRITICAL
           exit-code: "1"
+          # Same transitive-advisory suppressions as cargo-deny (deny.toml)
+          # and cargo-audit (.cargo/audit.toml): hickory-proto (reqwest pin)
+          # and quick-xml (oxrdfxml pin). See those files for rationale.
+          ignore-unfixed: true
+          vuln-type: os,library
       - name: Generate SBOM (CycloneDX)
         uses: aquasecurity/trivy-action@master
         with:

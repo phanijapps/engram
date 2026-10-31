@@ -56,8 +56,8 @@ not a scenario — split or merge it.
 **Why this priority**: <value if only this ships>.
 **Independent test**: <how to verify this journey alone>.
 Journey-level acceptance lives here as one-line Given/When/Then bullets;
-the formal executable ACs are the Gherkin blocks in Acceptance criteria —
-write them there, reference U-1, do not duplicate.
+the formal ACs are the Gherkin blocks in Acceptance criteria — write them
+there, reference U-1, do not duplicate.
 1. **Given** <initial state>, **When** <action>, **Then** <observable outcome>.
 
 ## Requirements (mandatory)
@@ -107,13 +107,17 @@ on stripped checkouts (RISK-001, maintainer-owned).
 - **<Entity>**: what it represents, key attributes, relationships — deltas
   against `docs/architecture/domain-data-model.md`, no implementation.
 
-## Acceptance criteria (mandatory — Gherkin/BDD)
+## Acceptance criteria (mandatory — Gherkin)
 
-Each AC is a named Gherkin scenario block (Cucumber style): `Rule:` groups a
-behavior, `Scenario:` carries the AC ID, steps are Given/When/Then — the
-happy path AND the negative case as sibling scenarios under the same rule.
-Steps are written to map 1:1 onto the gate/fixture that proves them; the
-verification ledger reports per scenario.
+The AC layer is the acceptance contract, written in Gherkin: `Rule:` groups a
+behavior, `Scenario:` carries the AC ID, Given/When/Then steps state what
+done looks like — including failure-path acceptance where the behavior is a
+guard (fail-closed, denial, validation). The spec ends here on purpose:
+**test scenarios — concrete test instances, fixtures, boundary permutations —
+are NOT written here and are NOT Gherkin**. They are the builder's domain:
+the gate/fixture suite implements them and verification.md reports raw
+evidence per gate. An AC names the gate that proves it; it does not contain
+its own test plan.
 
 ```gherkin
 Rule: missing declared gated paths fail loudly
@@ -122,19 +126,14 @@ Rule: missing declared gated paths fail loudly
     Given a gated path list containing "/nonexistent/gated/path"
     When the engine-neutrality gate runs
     Then it exits non-zero naming "/nonexistent/gated/path"
-
-  Scenario: AC-001 negative — every declared path present
-    Given the current repository gated paths
-    When the engine-neutrality gate runs
-    Then it exits zero with "gated surface clean"
 ```
 
-| AC | REQ / scenarios | Gate (automation for the steps) | Evidence |
+| AC | REQ | Gate (proof) | Evidence |
 |---|---|---|---|
-| AC-001 | REQ-001, both scenarios | GATE-001: `python3 tools/ci/tests/test_engine_neutrality.py` | raw output → verification.md |
+| AC-001 | REQ-001 | GATE-001: `python3 tools/ci/tests/test_engine_neutrality.py` | raw output → verification.md |
 
-A scenario without an automating gate is a finding, not a hope; a gate
-covering only the happy scenario is half an AC.
+An AC without a named gate is unaccepted by definition — it is a finding at
+review, not a TODO.
 
 ## Evidence, decisions, assumptions (mandatory)
 
@@ -154,4 +153,5 @@ trigger. `none` is a valid answer.>
 - Every REQ: necessary, singular, implementation-free, feasible, verifiable,
   conforming (ISO 29148 rubric) — reviewed, not self-declared.
 - No `[NEEDS CLARIFICATION]` remains; every REQ has ≥1 negative case or a
-  stated reason; deltas tagged; every AC names a runnable gate.
+  stated reason; deltas tagged; every AC is Gherkin and names a runnable gate
+  (test scenarios themselves belong to the gate suite, not this document).

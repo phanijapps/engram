@@ -312,3 +312,13 @@ feature-specific traps.
   ### Memory Layer
    - Distill memory skill is used to find processes, facts etc to save in  memory. 
    - If you have any doubt, use engram mcp to query.
+
+## Index Mining (all harnesses)
+
+Before authoring analysis or plan artifacts, run:
+```bash
+python3 tools/hooks/index-mining.py
+```
+This prints the engram index mining instruction with concrete CLI examples.
+Cite ≥2 index results (or state "index empty for <query>") in the artifact.
+Validator: `python3 tools/hooks/index-evidence-validator.py <artifact> --strict`

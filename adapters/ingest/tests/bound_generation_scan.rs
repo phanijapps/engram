@@ -210,6 +210,36 @@ mod task_009 {
         );
     }
     #[test]
+    fn resolves_cross_file_calls_after_registering_every_staged_document() {
+        let b = binding();
+        let prepared = prepare(
+            &b,
+            "generation",
+            &[
+                file("src/caller.rs", "pub fn caller() { target(); }\n"),
+                file("src/target.rs", "pub fn target() {}\n"),
+            ],
+        );
+        let target = prepared
+            .documents
+            .iter()
+            .flat_map(|document| &document.graph.entities)
+            .find(|entity| entity.name == "target")
+            .expect("target entity");
+        let call = prepared
+            .documents
+            .iter()
+            .find(|document| document.source.path == "src/caller.rs")
+            .expect("caller document")
+            .graph
+            .relationships
+            .iter()
+            .find(|relationship| relationship.predicate == "calls")
+            .expect("caller relationship");
+        assert_eq!(call.object.name.as_deref(), Some("target"));
+        assert_eq!(call.object.id.as_ref(), Some(&target.id));
+    }
+    #[test]
     fn shared_contributor_lineage() {
         let b = binding();
         let prepared = prepare(

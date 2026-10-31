@@ -2,11 +2,11 @@
 use crate::{
     CodeSymbolChunker, DocumentIngestRequest, DocumentMetadata, ExtractedGraph, FileKind,
     GraphExtractor, IngestedKnowledge, KnowledgeIngestor, ScanOptions, classify_file, content_hash,
-    is_secret_file,
+    is_secret_file, register_entities, resolve_call_refs,
 };
 use engram_domain::*;
 use engram_knowledge::{CoreError, CoreResult, KnowledgeGraphRepository, KnowledgeRepository};
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashSet};
 
 pub struct CommittedGenerationFiles<'a> {
     pub commit: &'a crate::git_source::ResolvedCommit,
@@ -82,7 +82,8 @@ pub fn prepare_generation(
     let ingestor = KnowledgeIngestor::new(chunker);
     let mut documents = Vec::new();
     let mut lineage: BTreeMap<String, CodeLineage> = BTreeMap::new();
-    let mut paths = std::collections::HashSet::new();
+    let mut paths = HashSet::new();
+    let mut ast_inputs = Vec::new();
     let mut skipped_oversized: usize = 0;
     for file in committed.files {
         let path = file
@@ -213,11 +214,96 @@ pub fn prepare_generation(
         source
             .validate()
             .map_err(|_| invalid("invalid indexed source descriptor"))?;
+        ast_inputs.push((path.to_owned(), text.to_owned()));
         documents.push(StagedDocument {
             records,
             graph,
             source,
         });
+    }
+    // Keep CodeSymbolChunker as the identity/span source. A separate parser
+    // only contributes call edges, matching the legacy scanner's AST path.
+    let ts_chunker = crate::TreeSitterChunker::new().ok().map(|mut chunker| {
+        engram_lang::register_all(&mut chunker);
+        chunker
+    });
+    let entity_names: HashSet<String> = documents
+        .iter()
+        .flat_map(|document| {
+            document
+                .graph
+                .entities
+                .iter()
+                .map(|entity| entity.name.clone())
+        })
+        .collect();
+    let repo_context = engram_code::parser::repo_context::RepoContext::empty();
+    let mut skipped_ast_call_extraction: usize = 0;
+    if let Some(ts_chunker) = ts_chunker.as_ref() {
+        for (document, (path, text)) in documents.iter_mut().zip(&ast_inputs) {
+            let extension = path.rsplit_once('.').map(|(_, ext)| ext).unwrap_or("");
+            if !ts_chunker.supports(extension) {
+                continue;
+            }
+            let calls =
+                match ts_chunker.extract_calls(text, extension, &entity_names, &repo_context) {
+                    Ok(calls) => calls,
+                    Err(_) => {
+                        skipped_ast_call_extraction += 1;
+                        continue;
+                    }
+                };
+            let ast_graph = GraphExtractor::new().extract_with_calls(
+                &document.records.source,
+                &document.records.document,
+                &document.records.chunks,
+                Some(&calls),
+                None,
+                None,
+            )?;
+            for relationship in &document.graph.relationships {
+                lineage.remove(&relationship.id.to_string());
+            }
+            let contributor = document.records.document.id.to_string();
+            for relationship in &ast_graph.relationships {
+                lineage.insert(
+                    relationship.id.to_string(),
+                    CodeLineage {
+                        repo_id: binding.repo_id.clone(),
+                        generation_id: generation.id.clone(),
+                        source_path: document.source.path.clone(),
+                        contributors: vec![contributor.clone()],
+                        span: None,
+                    },
+                );
+            }
+            document.graph.relationships = ast_graph.relationships;
+        }
+    } else {
+        skipped_ast_call_extraction = documents.len();
+    }
+    // Resolve only after every extracted entity is registered so the result is
+    // independent of committed-file order and can bind cross-file references.
+    let mut symbol_index = engram_code::SymbolIndex::new();
+    for document in &documents {
+        register_entities(
+            &mut symbol_index,
+            &document.graph.entities,
+            Some(binding.repo_id.0.as_str()),
+            Some(document.source.path.as_str()),
+        );
+    }
+    let mut skipped_unresolved: usize = 0;
+    for document in &mut documents {
+        // Bound staging has no unresolved-reference ledger surface yet, so
+        // retain unresolved relationships as name-only and report their count.
+        skipped_unresolved += resolve_call_refs(
+            &symbol_index,
+            &mut document.graph.relationships,
+            Some(binding.repo_id.0.as_str()),
+            Some(document.source.path.as_str()),
+        )
+        .len();
     }
     for value in lineage.values_mut() {
         value.contributors.sort();
@@ -228,6 +314,16 @@ pub fn prepare_generation(
     if skipped_oversized > 0 {
         eprintln!(
             "engram-ingest: skipped {skipped_oversized} code file(s) exceeding the staging per-file bound; they are not in the bound index"
+        );
+    }
+    if skipped_unresolved > 0 {
+        eprintln!(
+            "engram-ingest: skipped persistence of {skipped_unresolved} unresolved code reference(s); the bound staging ledger is deferred"
+        );
+    }
+    if skipped_ast_call_extraction > 0 {
+        eprintln!(
+            "engram-ingest: skipped AST call extraction for {skipped_ast_call_extraction} code file(s); retained co-occurrence relationships"
         );
     }
     Ok(PreparedGeneration {

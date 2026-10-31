@@ -15,7 +15,20 @@ unmaintained = "workspace"
 unsound = "workspace"
 # Warning-baseline advisories — remove entries when the dependency chain
 # updates past them:
-ignore = []
+ignore = [
+    # hickory-proto 0.25.2 (via reqwest -> hickory-resolver ^0.25) — fixed in
+    # 0.26.1; blocked by reqwest's pin. None reachable from exposed DNS surfaces.
+    "RUSTSEC-2026-0118",
+    "RUSTSEC-2026-0119",
+    # quick-xml 0.37.5 (via core/packs -> oxrdfio -> oxrdfxml ^0.37) — fixed
+    # in 0.38; blocked by oxrdfxml's pin. Not reachable from exposed parsing.
+    "RUSTSEC-2026-0194",
+    "RUSTSEC-2026-0195",
+    # lru 0.12.5 (via tantivy ^0.12) — Stacked-Borrows + panic-safety in
+    # IterMut/pop; unused code paths for our read-only caches.
+    "RUSTSEC-2026-0002",
+    "RUSTSEC-2026-0253",
+]
 
 
 [licenses]

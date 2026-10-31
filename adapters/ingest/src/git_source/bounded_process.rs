@@ -473,7 +473,7 @@ fn run_limited_faulted(
             .map_err(|e| operation_failed(StageFailure::from_error("child.wait", e)))?
     };
     #[cfg(windows)]
-    let status = super::windows_job::finish_injected(child, owned_job, finish_fault);
+    let status = super::windows_job::finish_injected(child, owned_job, _finish_fault);
     #[cfg(unix)]
     {
         let (stdout, stderr) = outcome?;

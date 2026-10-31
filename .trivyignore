@@ -1,0 +1,13 @@
+# Trivy vulnerability suppressions — mirrors cargo-deny (deny.toml) and
+# cargo-audit (.cargo/audit.toml) for the same transitive advisories.
+# Remove entries when the dependency chain updates past them.
+
+# hickory-resolver 0.25.2 (via reqwest -> hickory-resolver ^0.25)
+# Fix exists in 0.26.2; blocked by reqwest's ^0.25 pin.
+# Not reachable from exposed DNS surfaces (embedding HTTP client only).
+GHSA-5j98-2g5x-46v6
+
+# hickory-proto 0.25.2 (same chain) — suppress if it re-surfaces
+# with a fixed version Trivy detects:
+# RUSTSEC-2026-0118
+# RUSTSEC-2026-0119

@@ -3,7 +3,9 @@ PROPOSED v4 (not landed) — the spec template, focused and final.
 Synthesis of: github/spec-kit (prioritized independently-testable user
 scenarios, [NEEDS CLARIFICATION], edge cases, key entities, assumptions),
 Fission-AI/OpenSpec (named requirements + WHEN/THEN scenario bullets, delta
-framing against living contracts), IEEE 830-1998/ISO 29148 (requirement
+framing against living contracts), Gherkin/BDD Cucumber convention (ACs as
+named Rule/Scenario blocks, happy + negative steps mapped to gates),
+IEEE 830-1998/ISO 29148 (requirement
 rubric: necessary/singular/implementation-free/feasible/verifiable/conforming;
 interfaces section), RFC 7322 (mandatory-when-empty discipline, tier-marked
 sections), ISO 25010 (quality-attribute vocabulary), engram's own contracts
@@ -53,9 +55,10 @@ not a scenario — split or merge it.
 
 **Why this priority**: <value if only this ships>.
 **Independent test**: <how to verify this journey alone>.
-**Acceptance**:
+Journey-level acceptance lives here as one-line Given/When/Then bullets;
+the formal executable ACs are the Gherkin blocks in Acceptance criteria —
+write them there, reference U-1, do not duplicate.
 1. **Given** <initial state>, **When** <action>, **Then** <observable outcome>.
-2. **Given** <boundary state>, **When** <action>, **Then** <failure behavior>.
 
 ## Requirements (mandatory)
 
@@ -104,11 +107,34 @@ on stripped checkouts (RISK-001, maintainer-owned).
 - **<Entity>**: what it represents, key attributes, relationships — deltas
   against `docs/architecture/domain-data-model.md`, no implementation.
 
-## Acceptance and gates (mandatory)
+## Acceptance criteria (mandatory — Gherkin/BDD)
 
-| AC | Scenarios / REQ | Gate | Expected evidence |
+Each AC is a named Gherkin scenario block (Cucumber style): `Rule:` groups a
+behavior, `Scenario:` carries the AC ID, steps are Given/When/Then — the
+happy path AND the negative case as sibling scenarios under the same rule.
+Steps are written to map 1:1 onto the gate/fixture that proves them; the
+verification ledger reports per scenario.
+
+```gherkin
+Rule: missing declared gated paths fail loudly
+
+  Scenario: AC-001 declared path missing on disk
+    Given a gated path list containing "/nonexistent/gated/path"
+    When the engine-neutrality gate runs
+    Then it exits non-zero naming "/nonexistent/gated/path"
+
+  Scenario: AC-001 negative — every declared path present
+    Given the current repository gated paths
+    When the engine-neutrality gate runs
+    Then it exits zero with "gated surface clean"
+```
+
+| AC | REQ / scenarios | Gate (automation for the steps) | Evidence |
 |---|---|---|---|
-| AC-001 | U-1, REQ-001 | GATE-001: `<exact command>` | exit/result; raw output lands in verification.md |
+| AC-001 | REQ-001, both scenarios | GATE-001: `python3 tools/ci/tests/test_engine_neutrality.py` | raw output → verification.md |
+
+A scenario without an automating gate is a finding, not a hope; a gate
+covering only the happy scenario is half an AC.
 
 ## Evidence, decisions, assumptions (mandatory)
 

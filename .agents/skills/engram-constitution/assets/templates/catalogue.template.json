@@ -1,0 +1,9 @@
+{
+  "schema": "engram.constitution_catalogue.v1",
+  "version": "1.0",
+  "adopted": "{{DATE}}",
+  "constitution_ref": "docs/constitution/00-INDEX.md",
+  "note": "Rule-ID -> pack -> path. Drafted by engram-constitution ({{MODE}}); ratified by owner.",
+  "root_rails": {},
+  "packs": []
+}

@@ -1,82 +1,67 @@
 ---
 name: engram-constitution
-description: Build or grow a Software Constitution for ANY repository — grounded, evidence-cited domain packs (product/architecture/build/testing/ci/security/release) under a root INDEX. Follows the evidence→counterexample→gate-verification→ratification loop; every rule must be false for a different codebase. Trigger on "build a constitution", "add domain rules", "ground the packs", "constitution for this repo", or when adopting engram to govern a new codebase (including engram itself).
+description: Build or grow a Software Constitution for ANY repository — greenfield (interview) or brownfield (code + docs + interview) — into docs/constitution/ with knowledge/rules split, one rule per file, ASD-STE100 style, machine catalogue. Trigger on "build a constitution", "constitution for this repo", "ground the packs", or when engram adopts a new codebase to govern.
 ---
 
 # engram-constitution
 
-Turn a repository's ACTUAL law — the invariants its code, tests, and docs
-already live by — into a federated, gate-linked constitution. You are the
-analyst-drafter; the OWNER is the legislator. Nothing you draft is law until
-ratified.
+Turn a repository's actual law — or a greenfield owner's intent — into a
+federated constitution: knowledge and rules in ONE tree, one rule per file,
+STE-compliant, catalogue-machined. You are the analyst-drafter; the OWNER
+legislates.
 
-## Non-negotiables (BCP 14)
-
-1. Every rule MUST be **false for a different codebase** — if it reads like
-   fortune-cookie advice, delete it and find the real invariant.
-2. Every rule MUST carry **repository evidence** (`file:line` or command).
-3. Every rule MUST name a **counterexample** — the concrete change that
-   would violate it. No counterexample, no rule.
-4. An enforcement claim MUST be **verified against the gate's code** (read
-   it, run its fixtures) — a catalogue that says "enforced-by" is a claim,
-   not a proof. Doc-says/gate-does drift is the #1 failure mode.
-5. One rule, one home: domain packs refine root rules (`governs`/`refines`/
-   `enforced-by` refs); CI is an enforcement VIEW, never a rule home.
-6. Nothing lands without owner ratification; the factory journal is the
-   receipt.
-
-## The loop (per repository, per pack)
-
-### 1. Bind revision and authority
-Record the exact revision you analyzed (commit SHA) and where authority
-lives (owner channel). Un-rebased worktrees need direct source inspection.
-
-### 2. Collect evidence — code and docs SEPARATELY
-Code: workspace manifests, entry points, the real seams (who calls whom —
-engram's code graph / `symbol_context` where available; grep otherwise).
-Docs: product/mission docs, ADRs, existing rails, CI workflows, registries.
-Docs are LEADS, not inventory — reconcile before drafting (count the
-crates, read the globs; expect the docs to be stale somewhere).
-
-### 3. Draft rules with counterexamples (the anti-generic test)
-For each candidate: smallest BCP 14 obligation + evidence + the violating
-change + which root rule it refines + gate that could enforce it. Start
-from OBSERVED patterns ("SQL only in named engine zones"), not aspirations.
-
-### 4. Verify enforcement claims
-Read each gate's code; run its positive AND negative fixture; record what
-it actually checks vs what the rule says. Partial enforcement is stated as
-partial — never smoothed.
-
-### 5. Propose for ratification
-Deliver: rule table (ID | statement | refs/enforcement | evidence), the
-discrepancies found (stale docs, gate holes, overclaims — these are
-findings regardless of adoption), and the catalogue entries. Owner
-ratifies; only then do packs/catalogue change; commit with the journal.
-
-### 6. Distill the accepted revision
-If the repo has engram: distill the ratified packs with source discipline
-(stable source_id, exact-sha keys) so future sessions can query the law.
-
-## House format (per pack)
+## Layout (this skill)
 
 ```
-<repo>/docs/constitution/<pack>/00-INDEX.md
-  SUBORDINATE line (one constitution, one root)
-  ## Charter  (what this pack owns — one paragraph, domain-specific)
-  ## Rules    (table: ID | statement | refs/enforcement | evidence)
-  ## Notes    (enforcement honesty, partial claims)
+assets/templates/    root-INDEX · pack-INDEX · knowledge · rule · catalogue
+references/          pack-charters (the 7-pack cut, merge rules) · ste-style
+                     (the mechanical subset) · evidence-mining (brownfield)
+                     · interview-guide (greenfield)
+scripts/             scaffold.py (greenfield|brownfield skeleton) ·
+                     validate.py (structure + catalogue) · lint.py (STE)
+evals/               test_scaffold.py (6 tests)
 ```
-Prefixes: PRD/ARC/BLD/TST/CIE/SEC/REL (or domain-appropriate, globally
-unique). Root INDEX stays authoritative; packs are additive.
 
-## Anti-patterns
+## Mode 1 — GREENFIELD (interview)
 
-- Generic garbage ("code MUST be testable") — fails the false-elsewhere test
-- Rules without counterexamples — unfalsifiable wishes
-- Trusting the catalogue over the gate code (the EN-004 lesson: rail said
-  fail-closed, gate silently skipped — the drift detector must READ code)
-- Moving root rails into packs during grounding — additive only
-- Drafting aspirations the code doesn't live by yet — those are proposals
-  for CHANGE, labeled as such, never smuggled as law
-- Landing rules without the owner's ratification
+No code exists; the constitution encodes INTENT.
+
+1. `python3 scripts/scaffold.py --repo <path> --mode greenfield [--packs ...]`
+   (merges allowed — see references/pack-charters.md)
+2. Interview per `references/interview-guide.md`: option-based, <= 4
+   substantive questions per round, one pack at a time. The NOT-question is
+   mandatory (what this software is NOT).
+3. Fill knowledge.md from answers (descriptive register, marked
+   intent-until-code). Convert outcome/never answers into rules via
+   `assets/templates/rule.template.md` — EARS + BCP 14 + STE + counterexample
+   from the owner's own scenario.
+4. Read the whole draft back; owner ratifies; then `scripts/validate.py` +
+   `scripts/lint.py` clean.
+
+## Mode 2 — BROWNFIELD (code + docs + interview)
+
+1. `python3 scripts/scaffold.py --repo <path> --mode brownfield --docs <files/dirs>`
+2. Mine per `references/evidence-mining.md`: manifests → seams → tests →
+   docs (leads, not inventory). Absorb real knowledge into knowledge.md.
+   Expect at least one doc-vs-code discrepancy — finding it is a deliverable.
+3. Draft rules with the anti-generic test (FALSE for a different codebase),
+   evidence (file:line), counterexample (the violating change), enforcement
+   honesty (read the gate code; partial is stated as partial).
+4. Interview only for what code+docs cannot answer (scar-born rules, debt
+   vs law). Then ratify + validate + lint.
+
+## Non-negotiables (both modes)
+
+1. Every rule MUST be false for a different codebase.
+2. Every rule carries evidence (brownfield) or owner-intent marker (greenfield).
+3. Every rule names a counterexample — no counterexample, no rule.
+4. Enforcement claims are verified against gate code, never assumed.
+5. One rule, one home: `rules/<ID>.md`; ci/ is an enforcement view only.
+6. Nothing is law until the owner ratifies; aspirations are labeled proposals.
+7. ASD-STE100 registers: procedural (rules, <= 20 words) and descriptive
+   (knowledge, <= 25 words); lint clean before handoff.
+
+## Self-host
+
+This skill built engram's own constitution (docs/constitution/) — the
+dogfood path is the reference implementation.

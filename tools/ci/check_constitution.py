@@ -129,9 +129,13 @@ if cat_path.is_file():
         idxp = pack_dir / "00-INDEX.md"
         if pack_dir.is_dir() and idxp.is_file():
             body = idxp.read_text(errors="replace")
-            for section in ("## Knowledge", "## Rules", "## Deviations"):
+            for section in ("## Rule index", "## Deviations"):
                 if section not in body:
-                    F(f"pack {pack_dir.name}: missing section {section} (one-place contract)")
+                    F(f"pack {pack_dir.name}: missing section {section}")
+            if not (pack_dir / "knowledge.md").is_file():
+                F(f"pack {pack_dir.name}: missing knowledge.md (knowledge/rules split)")
+            if not (pack_dir / "rules").is_dir() or not any((pack_dir / "rules").glob("*.md")):
+                F(f"pack {pack_dir.name}: missing rules/ with rule files")
     root_rail_files = set(cat.get("root_rails", {}).values())
     for rf in root_rail_files:
         if not (ROOT / rf).is_file():

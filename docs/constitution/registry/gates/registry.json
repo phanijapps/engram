@@ -151,6 +151,18 @@
       "status": "existing",
       "blocking": true,
       "notes": "runs via check_docs.py; crate-root line caps + module responsibilities"
+    },
+    {
+      "gate_id": "GATE-STE-LINT",
+      "name": "ste_lint.py",
+      "path": "tools/ci/ste_lint.py",
+      "rules": [
+        "STE-WRITING"
+      ],
+      "rule_class": "RULE-3",
+      "status": "existing",
+      "blocking": false,
+      "notes": "ASD-STE100 mechanical subset (sentence caps, passive voice); advisory until corpus converges"
     }
   ]
 }

@@ -292,6 +292,12 @@
       "kind": "dir",
       "role": "product",
       "name": "agent-harness hooks (index-mining trio)"
+    },
+    {
+      "path": "prototype",
+      "kind": "dir",
+      "role": "prototype",
+      "name": "scratch prototypes (pnpm-workspace member; not shipped)"
     }
   ]
 }

@@ -30,8 +30,8 @@ recorded below and are not discharged by a passing regex.
 
 ## Gate gaps (tracked, not waived)
 
-- EN-004: the current script silently continues for missing paths — needs a fail-closed
-  enhancement.
+- CLOSED 2026-10-31 (job 011): missing declared paths now fail as named violations,
+  with a negative fixture in tools/ci/tests/test_engine_neutrality.py.
 - EN-002: needs scope-regression comparison against an accepted baseline.
 - EN-003: needs registry/dependency-direction validation and backend conformance tests
   rather than regex alone.

@@ -1,21 +1,28 @@
 # Ci sub-constitution
 
 SUBORDINATE to `docs/constitution/00-INDEX.md` — one constitution, one root;
-this pack narrows it locally. Rule IDs prefixed `CIE-` are globally
-unique. Reference grammar: `governs` (authority, acyclic), `refines` (local
-narrowing of a root rule), `enforced-by` (gate), `see` (information).
+this pack narrows it locally with ENGRAM-GROUNDED law: every rule below is
+false for a different codebase and carries repository evidence. Reference
+grammar: `governs` / `refines` / `enforced-by` / `see`. Source analysis:
+`docs/research/software-constitution/14-engram-grounded-packs.md` §2.5.
 
 ## Charter
 
-Enforcement view: which gate enforces which rule on every push — owns no other domain's rules.
+Enforcement view only: which registered gate enforces which rule on every push. Not an eighth source of domain law.
 
 ## Rules
 
-| ID | Statement | References |
-|---|---|---|
-| CIE-001 | Every blocking gate in the gates registry MUST run on every push | governs: all packs; enforced-by: .github/workflows/ci.yml |
+| ID | Candidate statement | Typed references / present enforcement | Repository evidence |
+|---|---|---|---|
+| CIE-101 | PR/main CI MUST retain contract+constitution checks, the five standalone rule-class gate invocations, Rust formatting/Clippy/tests/neutrality/parity, documentation checks and TS generation-diff/build/typecheck/tests; its report MUST separately identify advisory SDD and path-selected live-pgvector coverage. | refines: CI-004, PC-002, SP-001, EN-001, OR-001; enforced-by: `.github/workflows/ci.yml` orchestration; branch-protection configuration not proved. | `.github/workflows/ci.yml:28-41,78-94,100-134,148-173`; `docs/contracts/constitution/v1/gates/registry.json:69-79`. |
+| CIE-102 | Neutrality evidence MUST cover the committed `GATED_PATHS`, fail on an absent declared path, and disclose excluded bindings/runtime/eval/config rather than claim all neutral layers proved. Any scope reduction MUST retain EN-002 review, not obtain legitimacy from a green narrower regex. | refines: EN-001, EN-002, EN-004; enforced-by: check_engine_neutrality.py (presence/patterns); scope-regression review gap. | `tools/ci/check_engine_neutrality.py:7-10,27-61,65-80`; `tools/ci/tests/test_engine_neutrality.py:11-24`. |
+| CIE-103 | Surface-parity receipts MUST distinguish provider `require_*`/N-API proxy-name coverage from actual operation/backend/transport behavior; a passing name check MUST NOT be recorded as bound-code matrix or MCP-profile proof. | refines: SP-001, SP-004; enforced-by: check_surface_parity.py (names); check_bound_code_matrix.py remains job-scoped. | `tools/ci/check_surface_parity.py:19-56`; `tools/ci/check_bound_code_matrix.py:31-32,140-185`; `docs/constitution/02-surface-parity.md:20-30`. |
+| CIE-104 | The orphan check MUST reject undeclared Cargo workspace members and `packages/*` manifests, dangling component paths/manifests and missing registered existing gate files; evidence MUST NOT describe this as a complete transport/gate/registry/prototype bijection until those sets are independently enumerated. | refines: OR-001, OR-002, OR-003; enforced-by: check_coherent_integration.py (current enumerated subset); wider-inventory gap. | `tools/ci/check_coherent_integration.py:24-63`; `docs/contracts/constitution/v1/components/registry.json:261-294`; `pnpm-workspace.yaml:1-3`. |
+| CIE-105 | Post-job-010 factory evidence checks MUST validate `engram.evidence.v1`, declared event families and required fields, require approval evidence at the merge boundary and release evidence after merge, and keep the historical exemption explicit; passing JSON checks MUST NOT be presented as authenticated owner identity or complete publication/amendment/CI-run emission. | refines: CE-001, CE-002, CE-003, CE-004; enforced-by: check_canonical_evidence.py (shape/stage subset only). | `tools/ci/check_canonical_evidence.py:19-21,31-88`; `docs/contracts/constitution/v1/events/registry.json:8-16`; `.agents/skills/engram-factory/scripts/factory.py:470-502`. |
 
-## Enforcement
+## Notes
 
-Gates named above are registered in `docs/contracts/constitution/v1/gates/registry.json`;
-the ci/ pack holds the reciprocal enforcement view.
+- Enforcement claims verified against gate code + fixtures in the source
+  analysis; partial enforcement is stated, not smoothed over.
+- The ci/ pack holds the reciprocal enforcement view; the machine catalogue
+  is `docs/contracts/constitution/v1/constitution-catalogue.json`.

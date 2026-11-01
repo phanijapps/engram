@@ -98,7 +98,8 @@ Your agent gains these MCP tools:
 | Windows | x86-64 | ✅ |
 
 > **Privacy:** engram is local-first. All data lives in SQLite files on your
-> machine. No telemetry, no cloud calls, no network on the default path —
+> machine. No telemetry, no cloud calls, no network at query time in
+> disabled-vector mode — first-install ontology/model fetches may use the
 > the code has no network usage outside optional HTTP embeddings you
 > configure yourself.
 

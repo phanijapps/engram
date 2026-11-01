@@ -163,6 +163,32 @@
       "status": "existing",
       "blocking": false,
       "notes": "ASD-STE100 mechanical subset (sentence caps, passive voice); advisory until corpus converges"
+    },
+    {
+      "gate_id": "GATE-CONSTITUTION-HEALTH",
+      "name": "constitution_health",
+      "path": "tools/ci/constitution_health.py",
+      "rules": [
+        "SIZE-LAW",
+        "MANIFEST",
+        "CATALOGUE"
+      ],
+      "rule_class": "RULE-6",
+      "status": "existing",
+      "blocking": false,
+      "notes": "lane 2 detect+advise: size law, orphans, uncatalogued rules, undeclared modules; advisory"
+    },
+    {
+      "gate_id": "GATE-CATALOGUE-DERIVE",
+      "name": "derive_catalogue",
+      "path": "tools/ci/derive_catalogue.py",
+      "rules": [
+        "RULE-1"
+      ],
+      "rule_class": "RULE-1",
+      "status": "existing",
+      "blocking": true,
+      "notes": "lane 1: catalogue must match derivation from rules/*.md; drift = failure"
     }
   ]
 }

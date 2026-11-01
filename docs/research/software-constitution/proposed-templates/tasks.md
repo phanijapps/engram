@@ -1,6 +1,8 @@
 <!--
-Integration: frontmatter is the union contract: JSON-per-line render values and literal IDs remain discoverable to job gates.
-v5 provenance: OpenSpec numbered deltas; spec-kit numbered checklist + test-column spirit; Kiro [P] + per-task verification.
+PROPOSED v6 (not landed). Phase-grouped TDD checklist (spec-kit phase
+structure + Kiro imperative detail + TDD red-green spine). IDs inline;
+verification.md is the sole result record. Frontmatter union contract intact.
+v5 was too lean to execute; this restores executability without tables.
 -->
 
 ---
@@ -13,7 +15,7 @@ author_role: "engram-tasks"
 profiles: {{profiles_json}}
 source_snapshot: null
 input_artifacts: []
-updated_at: "FILL: ISO-8601 with timezone"
+updated_at: "{{timestamp}}"
 size_tier: "S"
 plan_ref: null
 constitution_rules_touched: []
@@ -21,27 +23,65 @@ constitution_rules_touched: []
 
 # Tasks: <short observable outcome>
 
-## Checklist
+## Phase 1 — Tests first (TDD red)
 
-1. [ ] <Imperative implementation action> (TASK-001, REQ-001, AC-001, STEP-001, GATE-001, `path/to/file`)
-   - Verify: `GATE-001` proves the action; record the run at `verification.md#gate-001`.
-1. [ ] [P] <Independent imperative action> (TASK-002, REQ-002, AC-002, STEP-002, GATE-002, `path/to/file`)
-   - Verify: `GATE-002` proves the action; record the run at `verification.md#gate-002`.
+Write the failing fixtures BEFORE implementation. Each item names the fixture
+file, the AC it proves, and the expected RED state.
 
-## Rules
+1. [ ] <Write failing fixture for AC> — create `<path/to/test_file>`, cases:
+   <case A>, <case B>; expected RED pre-fix (TASK-001, REQ-001, AC-001,
+   GATE-001, STEP-001)
+   - Verify: `GATE-001` fails for the right reason; record at `verification.md#gate-001`.
 
-- `[x]` means PASS, or a linked authorized exception; an exception is not PASS.
-- Stop on an unexpected required-gate failure, unresolved authority, or required deviation.
-- `verification.md` is the sole result record; link its exact gate anchor here.
-- Coverage: every `REQ-*` and `AC-*` appears in an item tag until a gate derives it.
-- Example: `(TASK-001, REQ-001, AC-001, STEP-001, GATE-001, `path/to/file`)`.
-- `[P]` means independent files and no unmet dependency; omit it otherwise.
+## Phase 2 — Implementation (green)
 
-## Worked example — job 011 fail-closed gate
+Make the red fixtures pass. One commit-sized action per item; name files and
+the seam being changed; no scope beyond the spec.
 
-1. [ ] Fail closed and name every missing declared `GATED_PATH` (TASK-001, REQ-001, REQ-002, AC-001, AC-002, STEP-001, GATE-001, GATE-002, `tools/ci/check_engine_neutrality.py`)
-   - Verify: `GATE-001` proves the named missing path and `GATE-002` proves the clean surface; evidence is `verification.md#gate-001` and `verification.md#gate-002`.
-   1.1 [ ] Add the isolated missing-path fixture (AC-001, GATE-001, `tools/ci/tests/test_engine_neutrality.py`)
-   - Verify: `GATE-001` runs the fixture; evidence is `verification.md#gate-001`.
-2. [ ] Add the missing-path-fails and present-path-passes regression cases (TASK-002, REQ-002, AC-001, AC-002, STEP-002, GATE-001, `tools/ci/tests/test_engine_neutrality.py`)
-   - Verify: `GATE-001` passes both cases; evidence is `verification.md#gate-001`.
+2. [ ] <Imperative implementation action> in `<path/to/source>` — <what
+   changes, one line> (TASK-002, REQ-001, AC-001, GATE-001, STEP-001)
+   - Verify: `GATE-001` now GREEN; all pre-existing gates still GREEN (regression).
+
+## Phase 3 — Full verification
+
+Run the whole gate inventory from the plan's acceptance map; record raw
+output per gate in verification.md.
+
+3. [ ] Run every GATE-* from the plan map; every AC has PASS evidence or a
+   linked authorized exception (TASK-003, all REQ/AC/GATE IDs)
+   - Verify: verification.md complete; exceptions are not PASS.
+
+## Phase 4 — Delivery concerns (only when real)
+
+4. [ ] <migration / authorization / release-handoff action + TASK owner, or
+   `none applies: <reason>`> (TASK-004)
+
+## Rules (the whole governance, seven lines)
+
+- TDD discipline: Phase 1 RED before Phase 2 GREEN; an expected red is
+  recorded, never "fixed" by weakening the test.
+- `[x]` only for PASS or a linked authorized exception — an exception is not PASS.
+- Unchecked at tasks stage; the build-stage re-completer (`engram-builder`)
+  checks only work evidenced in verification.md.
+- Stop on unexpected gate failure, unresolved authority, or required
+  deviation: record TASK, blocker, owner, resumption condition.
+- Coverage: every REQ and AC from the spec appears in some item's ID list
+  (reviewer-enforced until the gate derives it).
+- verification.md is the sole mutable result record; failed runs are kept.
+- Findings/dispositions live in review and decision artifacts, not here.
+
+## Worked example — job 011 fail-closed gate (S-tier)
+
+1. [ ] Write failing fixture `tools/ci/tests/test_engine_neutrality.py`:
+   missing-declared-path must exit 1 naming the path; present-path scans
+   clean. Expected RED: current gate silently skips missing paths
+   (TASK-001, REQ-001, AC-001, GATE-001, STEP-001)
+   - Verify: `python3 tools/ci/tests/test_engine_neutrality.py` fails on the
+     missing-path case, passes the present-path case.
+2. [ ] Fail closed in `tools/ci/check_engine_neutrality.py` scan(): missing
+   declared path appends a named violation instead of `continue`
+   (TASK-002, REQ-001, AC-001, GATE-001, STEP-001)
+   - Verify: fixture GREEN; `check_engine_neutrality.py` GREEN on real tree.
+3. [ ] Full battery + record per-gate output in verification.md (TASK-003,
+   REQ-001, AC-001, GATE-001, GATE-002)
+4. [ ] None applies: gate-only change, no migration/authz/release surface (TASK-004).

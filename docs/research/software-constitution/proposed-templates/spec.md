@@ -79,13 +79,16 @@ Unresolved points are inline, honest, and block `status: "ready"`:
   no breaking payload change — additive field only.
 - `none — gate-only change` is a complete answer.
 
-## Quality attributes (mandatory; ISO 25010 vocabulary)
+## Quality attributes / NFRs (mandatory; ISO 25010 vocabulary)
 
-<Which characteristics this change moves beyond baseline — functional
-suitability, performance efficiency, compatibility, usability, reliability,
-security, maintainability, portability — each with its gate.>
-Example: reliability — missing declared scan inputs cannot silently bypass
-enforcement; acceptance AC-001. Use `none` only with a change-specific reason.
+Which characteristics this change moves beyond baseline. Each NFR is
+measurable and gate-bound — an NFR without a gate is a wish:
+
+- NFR-001 (reliability): missing declared scan inputs cannot silently bypass
+  enforcement — measurable as GATE-001's missing-path case; acceptance AC-001.
+- NFR-<n> (<characteristic>): <measurable statement + proving gate>.
+
+`none beyond baseline` requires a change-specific reason, not a shrug.
 
 ## Blast radius (mandatory — never silently absent)
 

@@ -92,8 +92,8 @@ referenced spec must occur in a STEP row. A new consequential choice is
 
 | ID | Imperative | REQ IDs | Rule IDs | Concrete paths | Verify (GATE) | Rollback |
 |---|---|---|---|---|---|---|
-| STEP-001 | Collect missing declared paths as named violations without changing existing pattern checks. | REQ-001, REQ-001 | EN-004 | `tools/ci/check_engine_neutrality.py` | GATE-001 | Revert the behavior commit. |
-| STEP-002 | Add present-path and missing-path fixture coverage through the gate boundary. | REQ-001, REQ-001 | EN-004 | `tools/ci/tests/test_engine_neutrality.py` | GATE-001 | Revert the fixture commit. |
+| STEP-001 | Collect missing declared paths as named violations without changing existing pattern checks. | REQ-001 | EN-004 | `tools/ci/check_engine_neutrality.py` | GATE-002 | Revert the behavior commit. |
+| STEP-002 | Add present-path and missing-path fixture coverage through the gate boundary. | REQ-001 | EN-004 | `tools/ci/tests/test_engine_neutrality.py` | GATE-001 | Revert the fixture commit. |
 
 Stop and escalate if the pre-fix missing-path fixture does not fail or the
 post-fix fixture does not pass: that invalidates the seam argument rather than
@@ -107,8 +107,19 @@ approved omission/deviation explicitly; an empty cell is not evidence.
 
 | AC ID | Step IDs | Gate IDs | Omission or authorized deviation |
 |---|---|---|---|
-| AC-001 | STEP-001, STEP-002 | GATE-001: `python3 tools/ci/tests/test_engine_neutrality.py` | none |
-| AC-001 | STEP-001, STEP-002 | GATE-001; GATE-002: `python3 tools/ci/check_engine_neutrality.py` | none |
+| AC-001 | STEP-001, STEP-002 | GATE-001: `python3 tools/ci/tests/test_engine_neutrality.py`; GATE-002: `python3 tools/ci/check_engine_neutrality.py` | none |
+
+## Quality attributes met by design (mandatory)
+
+How the design delivers each spec NFR — mechanism, not restatement:
+- NFR-001 (reliability) → fail-closed collection in scan() before any skip
+  path exists; proven by GATE-001's missing-path case.
+Or `no NFRs declared; spec quality line is none beyond baseline` with reason.
+
+## Outside this change (mandatory — one line)
+
+Mirror the spec's out-list by reference: <"see spec Outside this change" plus
+any plan-level exclusions (tools, experiments, refactors)>.
 
 ## Deployment safety (mandatory — one short block)
 

@@ -12,12 +12,16 @@ import json, re, sys
 from pathlib import Path
 
 repo = Path(sys.argv[1] if len(sys.argv) > 1 else ".").resolve()
-query = " ".join(sys.argv[2:]) if len(sys.argv) > 2 else ""
 pack_filter = None
 type_filter = "all"
+query_parts = []
 for i, arg in enumerate(sys.argv):
-    if arg == "--pack" and i + 1 < len(sys.argv): pack_filter = sys.argv[i + 1]
-    if arg == "--type": type_filter = sys.argv[i + 1] if i + 1 < len(sys.argv) else "all"
+    if arg == "--pack" and i + 1 < len(sys.argv): pack_filter = sys.argv[i + 1]; continue
+    if arg == "--type" and i + 1 < len(sys.argv): type_filter = sys.argv[i + 1]; continue
+    if arg.startswith("--"): continue
+    if i > 0 and sys.argv[i-1] in ("--pack", "--type"): continue
+    if i > 1 and not arg.startswith('-'): query_parts.append(arg)
+query = " ".join(query_parts)
 
 C = repo / "docs/constitution"
 if not C.is_dir():
@@ -31,7 +35,10 @@ results = []
 
 def score(text: str) -> int:
     t = text.lower()
-    return sum(1 for term in terms if term in t)
+    hits = sum(1 for term in terms if term in t)
+    if hits < 2 and len(terms) > 2: return 0  # need >=2 matches for multi-term queries
+    if query.lower() in t: hits += 3  # exact phrase boost
+    return hits
 
 def add(kind: str, path: str, summary: str, prereq: str, pack: str, sc: int):
     if sc > 0:
@@ -47,7 +54,7 @@ if type_filter in ("all", "rules"):
             sc = score(e.get("statement", "")) + score(e.get("rule_id", ""))
             add("rule", e["path"], f"{e['rule_id']}: {e.get('statement', '')[:100]}", "", e.get("pack", ""), sc)
 
-# Search knowledge fragments
+# Search knowledge fragments (manifest titles + fragment bodies)
 if type_filter in ("all", "knowledge"):
     for idx in C.rglob("knowledge/INDEX.md"):
         pack = idx.relative_to(C).parts[0]
@@ -58,13 +65,33 @@ if type_filter in ("all", "knowledge"):
                 cells = [c.strip() for c in line.strip("|").split("|")]
                 if len(cells) >= 4:
                     title, size, prereq, routes = cells[0], cells[1], cells[2], cells[3]
-                    # extract the file path from the markdown link
                     m = re.search(r"\]\((.*?)\)", title)
-                    fpath = m.group(1) if m else ""
-                    sc = score(title) + score(routes)
+                    frag_rel = m.group(1) if m else ""
+                    # Fix 3: correct path (resolve relative to the manifest's parent)
+                    frag_path = idx.parent / frag_rel.replace("knowledge/", "", 1) if frag_rel else None
+                    title_clean = title.replace("[", "").replace("]", "").split("]")[0]
+                    sc = score(title_clean) + score(routes)
+                    # also search the fragment body if the path resolves
+                    if frag_path and frag_path.is_file():
+                        body = frag_path.read_text(errors="replace")
+                        sc += score(body[:2000])  # search first 2000 chars
                     if sc:
-                        full = str(idx.parent.parent / fpath.replace("knowledge/", "", 1)) if fpath else ""
-                        add("knowledge", full, title.replace("[", "").replace("]", "").split("]")[0], prereq, pack, sc)
+                        add("knowledge", str(frag_path.relative_to(repo)) if frag_path else frag_rel,
+                            title_clean, prereq, pack, sc)
+
+# Search root INDEX (universal rules + principles)
+if type_filter in ("all", "rules"):
+    root_idx = C / "00-INDEX.md"
+    if root_idx.is_file():
+        body = root_idx.read_text(errors="replace")
+        # search full body text (multi-line rules work)
+        sc = score(body)
+        if sc:
+            # find the best matching section
+            for line in body.splitlines():
+                ls = score(line)
+                if ls >= 2:
+                    add("rule", str(root_idx.relative_to(repo)), line.strip()[:120], "", "root", ls)
 
 # Search runbooks
 if type_filter in ("all", "runbooks"):

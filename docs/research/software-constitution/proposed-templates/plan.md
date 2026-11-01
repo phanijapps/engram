@@ -1,8 +1,3 @@
-<!--
-PROPOSED (not landed) — architecture-first plan-template redesign.
-Integration: preserve this JSON-per-line frontmatter union and literal REQ/AC/STEP/GATE IDs; the factory parser consumes it unchanged.
--->
-
 ---
 schema_version: 2
 artifact: "plan"
@@ -13,11 +8,16 @@ author_role: "engram-planner"
 profiles: {{profiles_json}}
 source_snapshot: null
 input_artifacts: []
-updated_at: "FILL: ISO-8601 with timezone"
+updated_at: "{{timestamp}}"
 size_tier: "S"
 spec_ref: null
 constitution_rules_touched: []
 ---
+<!--
+PROPOSED (not landed) — architecture-first plan-template redesign.
+Integration: preserve this JSON-per-line frontmatter union and literal REQ/AC/STEP/GATE IDs; the factory parser consumes it unchanged.
+-->
+
 
 # Plan: <short observable outcome>
 ## Approach argument (mandatory)
@@ -31,7 +31,7 @@ only when they clarify a real boundary or runtime concern—never blank sections
 **Worked example — job 011.** Change the scan seam in
 `tools/ci/check_engine_neutrality.py` to collect a nonexistent declared path as
 a named violation. That fail-closed behavior satisfies `REQ-001`; retaining the
-existing pattern scan satisfies `REQ-002`. Silently skipping the path is
+existing pattern scan satisfies `REQ-001`. Silently skipping the path is
 rejected because it permits an unscanned engine-bearing surface to ship. No
 `DEC-*` is consumed: the spec determines this gate-only shape.
 
@@ -52,7 +52,7 @@ flowchart LR
 
 For job 011, the gate and its fixture are inside the boundary; repository paths
 are scanned input, and CI consumes only the exit/result contract. `REQ-001`
-changes the missing-path result, while `REQ-002` preserves present-path behavior.
+changes the missing-path result, while `REQ-001` preserves present-path behavior.
 
 ## Technical architecture (M/L — components and runtime flow)
 Name concrete components and the implementation seam, then add a separate
@@ -92,8 +92,8 @@ referenced spec must occur in a STEP row. A new consequential choice is
 
 | ID | Imperative | REQ IDs | Rule IDs | Concrete paths | Verify (GATE) | Rollback |
 |---|---|---|---|---|---|---|
-| STEP-001 | Collect missing declared paths as named violations without changing existing pattern checks. | REQ-001, REQ-002 | EN-004 | `tools/ci/check_engine_neutrality.py` | GATE-001 | Revert the behavior commit. |
-| STEP-002 | Add present-path and missing-path fixture coverage through the gate boundary. | REQ-001, REQ-002 | EN-004 | `tools/ci/tests/test_engine_neutrality.py` | GATE-001 | Revert the fixture commit. |
+| STEP-001 | Collect missing declared paths as named violations without changing existing pattern checks. | REQ-001, REQ-001 | EN-004 | `tools/ci/check_engine_neutrality.py` | GATE-001 | Revert the behavior commit. |
+| STEP-002 | Add present-path and missing-path fixture coverage through the gate boundary. | REQ-001, REQ-001 | EN-004 | `tools/ci/tests/test_engine_neutrality.py` | GATE-001 | Revert the fixture commit. |
 
 Stop and escalate if the pre-fix missing-path fixture does not fail or the
 post-fix fixture does not pass: that invalidates the seam argument rather than
@@ -108,7 +108,12 @@ approved omission/deviation explicitly; an empty cell is not evidence.
 | AC ID | Step IDs | Gate IDs | Omission or authorized deviation |
 |---|---|---|---|
 | AC-001 | STEP-001, STEP-002 | GATE-001: `python3 tools/ci/tests/test_engine_neutrality.py` | none |
-| AC-002 | STEP-001, STEP-002 | GATE-001; GATE-002: `python3 tools/ci/check_engine_neutrality.py` | none |
+| AC-001 | STEP-001, STEP-002 | GATE-001; GATE-002: `python3 tools/ci/check_engine_neutrality.py` | none |
+
+## Deployment safety (mandatory — one short block)
+
+State rollout order, mixed-version and persisted-state compatibility, rollback
+trigger/owner, and irreversible effects; give a reason when none apply.
 
 ## Contracts and blast radius (mandatory)
 State compatibility, consumers, and migration action concretely; say `none`

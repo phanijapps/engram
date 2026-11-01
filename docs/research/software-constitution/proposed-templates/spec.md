@@ -1,3 +1,19 @@
+---
+schema_version: 2
+artifact: "spec"
+job_id: "{{job_id}}"
+cycle: {{cycle}}
+status: "draft"
+author_role: "engram-analyzer"
+profiles: {{profiles_json}}
+source_snapshot: null
+input_artifacts: []
+updated_at: "{{timestamp}}"
+size_tier: "S"
+brief_ref: null
+constitution_rules_touched: []
+required_reviewers: ["code", "security", "platform"]
+---
 <!--
 PROPOSED v4 (not landed) — the spec template, focused and final.
 Synthesis of: github/spec-kit (prioritized independently-testable user
@@ -16,22 +32,6 @@ Integration unchanged: frontmatter union contract; IDs literal for
 check_job_artifacts.py; S-tier = one scenario + one requirement.
 -->
 
----
-schema_version: 2
-artifact: "spec"
-job_id: "{{job_id}}"
-cycle: {{cycle}}
-status: "draft"
-author_role: "engram-analyzer"
-profiles: {{profiles_json}}
-source_snapshot: null
-input_artifacts: []
-updated_at: "FILL: ISO-8601 with timezone"
-size_tier: "S"
-brief_ref: null
-constitution_rules_touched: []
-required_reviewers: ["code", "security", "platform"]
----
 
 # Spec: <short observable outcome>
 
@@ -55,26 +55,22 @@ not a scenario — split or merge it.
 
 **Why this priority**: <value if only this ships>.
 **Independent test**: <how to verify this journey alone>.
-Journey-level acceptance lives here as one-line Given/When/Then bullets;
-the formal ACs are the Gherkin blocks in Acceptance criteria — write them
-there, reference U-1, do not duplicate.
-1. **Given** <initial state>, **When** <action>, **Then** <observable outcome>.
+Acceptance: <AC IDs proving this journey>.
 
 ## Requirements (mandatory)
 
 Named sections: EARS statement with BCP 14 force, scenarios as WHEN/THEN
-bullets. Tag deltas against living contracts — `(added)` / `(modifies
-REQ-014)` / `(removes REQ-003)`; a spec that changes existing behavior MUST
+bullets. Tag deltas against living contracts — `(added)` / `(modifies <existing-req>)` /
+`(removes <existing-req>)`, citing the source revision or hash; a spec that changes existing behavior MUST
 declare it, never silently redefine it.
 
 ### REQ-001: <short name> (added)
 
 **MUST** — When <trigger>, the system shall <observable response>.
-- **WHEN** <concrete trigger> **THEN** <concrete response> (proves AC-001)
-- **WHEN** <denial or boundary trigger> **THEN** <failure behavior>
+- Acceptance: <happy-path AC ID>, <negative/boundary AC ID or justified exception>.
 
 Unresolved points are inline, honest, and block `status: "ready"`:
-### REQ-002: <name> — [NEEDS CLARIFICATION: <exactly what is unknown, who answers>]
+### REQ-<n>: <name> — [NEEDS CLARIFICATION: <exactly what is unknown, who answers>]
 
 ## Interfaces (mandatory when any public surface moves; else one line)
 
@@ -88,7 +84,8 @@ Unresolved points are inline, honest, and block `status: "ready"`:
 <Which characteristics this change moves beyond baseline — functional
 suitability, performance efficiency, compatibility, usability, reliability,
 security, maintainability, portability — each with its gate.>
-`none beyond baseline — gate-only change` is a complete answer.
+Example: reliability — missing declared scan inputs cannot silently bypass
+enforcement; acceptance AC-001. Use `none` only with a change-specific reason.
 
 ## Blast radius (mandatory — never silently absent)
 
@@ -123,14 +120,17 @@ its own test plan.
 Rule: missing declared gated paths fail loudly
 
   Scenario: AC-001 declared path missing on disk
-    Given a gated path list containing "/nonexistent/gated/path"
+    Given a declared gated path absent on disk
     When the engine-neutrality gate runs
-    Then it exits non-zero naming "/nonexistent/gated/path"
+    Then it exits non-zero naming that missing declared path
 ```
 
 | AC | REQ | Gate (proof) | Evidence |
 |---|---|---|---|
-| AC-001 | REQ-001 | GATE-001: `python3 tools/ci/tests/test_engine_neutrality.py` | raw output → verification.md |
+| AC-001 | REQ-001 | GATE-001 | raw output → verification.md |
+
+Gate IDs resolve to runnable commands in the PLAN's acceptance map — the spec
+links behavior to a gate identity, the plan owns the executable command.
 
 An AC without a named gate is unaccepted by definition — it is a finding at
 review, not a TODO.

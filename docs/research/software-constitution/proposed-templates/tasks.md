@@ -1,8 +1,13 @@
 <!--
-PROPOSED (not landed) — owner verification copy from 06-redesigned-templates.md.
-Integration: same frontmatter union contract; TASK rows reference STEP+REQ IDs;
-coverage section must satisfy the coverage-totality check (critic criterion 4
-allows compact prose mapping - gate matches IDs, not table shape).
+PROPOSED v4 (not landed) — owner verification copy.
+Merged from builder-workflow (gpt-6.1-sol) + lane-coherence (gpt-5.6-terra)
+reviews (10-tasks-review-*.md, 2026-11-01). Fixes vs v3: AC IDs get their own
+column; checkbox semantics defined; TASK rows are canonical coverage (compact
+map until the gate derives it); verification.md is the SOLE result record (no
+duplicate table here); build-stage re-completion lifecycle documented;
+findings live in review/decision artifacts.
+Integration: frontmatter union contract (JSON-per-line + {{render}}
+placeholders); literal REQ/AC/STEP/GATE/TASK IDs for check_job_artifacts.py.
 -->
 
 ---
@@ -25,44 +30,61 @@ constitution_rules_touched: []
 
 ## What will the builder do, and what proves each action is done?
 
-<Open with the delivery argument: name the ordered implementation seam, the user-visible result, and the condition that stops work rather than allowing a silent deviation.>
-For example, deliver fail-closed path validation before its fixture, and stop if the new fixture does not fail against the pre-fix behavior or pass against the fix.
+For S-tier, start with the task list; add an execution-constraint sentence
+only when it changes how work proceeds.
 
-| Done | ID | Imperative outcome | STEP IDs | REQ IDs | Gate to run | Evidence reference |
-|---|---|---|---|---|---|---|
-| [ ] | TASK-001 | Make missing declared paths fail the gate and name each path. | STEP-001 | REQ-001 | GATE-001 | `verification.md#gates` |
-| [ ] | TASK-002 | Author the fixture proving AC-001: two concrete test instances (missing-path fails named; present-path clean) in `tools/ci/tests/test_engine_neutrality.py`. | STEP-002 | REQ-002, AC-001 | GATE-001 | `verification.md#gates` |
+| Done | ID | Imperative outcome / fixture path | STEP IDs | REQ IDs | AC IDs | Gates to run | Evidence reference |
+|---|---|---|---|---|---|---|---|
+| [ ] | TASK-001 | Make missing declared paths fail the gate and name each path (`tools/ci/check_engine_neutrality.py`). | STEP-001 | REQ-001 | AC-001 | GATE-001 | `verification.md#gate-001` |
+| [ ] | TASK-002 | Author the fixture proving AC-001: two concrete test instances (missing-path fails named; present-path clean) in `tools/ci/tests/test_engine_neutrality.py`. | STEP-002 | REQ-002 | AC-001 | GATE-001 | `verification.md#gate-001` |
 
-**Test scenarios are code, not documents.** The spec carries the Gherkin AC;
-here the work of proving it is an ordinary TASK row bound to the AC and gate
-it serves (IDs + fixture path). No separate test-scenario artifact exists in
-the pipeline; the format is whatever the owning suite uses (unittest, cargo
-test, fixtures), and `NOT_RUN` below is the only honest pre-execution state.
+**Test scenarios are code, not documents** — the spec carries the Gherkin AC;
+proving it is TASK work bound to the AC and gate it serves. Keep `[ ]` until
+the bounded outcome is implemented and every required gate has recorded
+evidence; `[x]` only for PASS or an explicitly authorized exception linked
+here — an exception is not PASS. Every gate ID MUST resolve to a runnable
+command/fixture in the spec or verification record.
 
-## What is the execution order and the stop condition?
+## Execution order and stop condition
 
-`TASK-002` depends on `TASK-001`; <state every other dependency or `none`>.
-Stop and escalate on <named failed gate, risk, or required deviation>; do not silently broaden scope.
-A commit or release is required only when the plan says so; this template does not impose one commit per task.
+State each dependency or `none`. For regression fixtures, name the isolated
+pre-fix baseline or run the fixture first; record an expected baseline
+failure separately from an unexpected gate failure. Stop on an unexpected
+required-gate failure, unresolved authority, or required deviation — record
+TASK, blocker, owner, and the condition that permits resumption; do not
+broaden scope silently.
 
-## Does every requirement have total task coverage?
+## Build-stage re-completion
 
-| REQ ID | TASK IDs | AC IDs | Coverage status |
-|---|---|---|---|
-| REQ-001 | TASK-001 | AC-001 | total |
+Tasks-stage author (`engram-tasks`): `source_snapshot: null`, current
+spec/plan input hashes. Build-stage author (`engram-builder`): supplies the
+current snapshot and required hashes, preserves IDs/mappings/coverage unless
+escalating a changed fact, refreshes completion state and verification
+links. At tasks stage all Done boxes are unchecked; the builder checks only
+work completed and evidenced in verification.md.
 
-The matrix MUST contain every `REQ-*` defined by the spec, with literal IDs rather than ranges.
+## Coverage
 
-## What did verification actually report?
+TASK rows are the canonical links. Until semantic coverage validation is
+implemented in the gate, keep one compact mapping — every `REQ-*` from the
+spec with its covering TASKs, STEPs, and spec ACs; every listed AC MUST also
+appear in a TASK row (reviewer-enforced until the gate derives it):
 
-Keep gate-to-result evidence tabular. `NOT_RUN` is honest before execution; a completed build records `PASS`, `FAIL`, or an authorized exception with its evidence location.
+- REQ-001 → TASK-001 (STEP-001) → AC-001 → GATE-001
+- REQ-002 → TASK-002 (STEP-002) → AC-001 → GATE-001
 
-| Gate ID | Owning TASK | Result | Raw evidence location |
-|---|---|---|---|
-| GATE-001 | TASK-001 | NOT_RUN | `verification.md#gates` |
+## Verification handoff
 
-## What delivery concerns apply, and what did review find?
+The builder records commands, expected and actual outcomes, status, and raw
+run evidence in **verification.md — the sole mutable result record**; TASK
+rows link exact anchors (`verification.md#gate-001`). Do not duplicate
+NOT_RUN/PASS/FAIL state here. Preserve failed and superseded runs. Task
+completion does not imply independent verification — that is the review's
+judgment.
 
-For each applicable concern, write a short sentence linking its `TASK-*` or `DEV-*` owner: migration, authorization or denial, and release/operator handoff.
-For example, migration does not apply because no persisted format changes; authorization does not apply because the gate has no identity boundary; release handoff does not apply because CI runs the existing command.
-After review, record each `FIND-*` in prose with its disposition, linked task or deviation, and evidence; before review, state `no findings yet` rather than manufacturing rows.
+## Applicable delivery work (one line each, only when real)
+
+- migration / authorization / release-handoff obligations linked to their
+  TASK owner — or `none applies: <one-line reason>`.
+- Reviewer findings and dispositions live in the review and decision
+  artifacts; a rework cycle updates this plan only via the approved re-plan.

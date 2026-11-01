@@ -63,8 +63,16 @@
       "plane": "core",
       "ssot_module": "core/integration",
       "transport_wrappers": [
-        { "module": "bindings/node", "transport": "napi", "must_import": "engram-integration" },
-        { "module": "mcp/engram-mcp", "transport": "mcp", "must_import": "engram-integration" }
+        {
+          "module": "bindings/node",
+          "transport": "napi",
+          "must_import": "engram-integration"
+        },
+        {
+          "module": "mcp/engram-mcp",
+          "transport": "mcp",
+          "must_import": "engram-integration"
+        }
       ]
     },
     {
@@ -83,7 +91,7 @@
       "concept_id": "contracts.generated",
       "name": "Generated portable contracts (JSON schemas + TS types)",
       "plane": "contracts",
-      "ssot_module": "docs/contracts/v1"
+      "ssot_module": "docs/constitution/registry/contracts/v1"
     },
     {
       "concept_id": "graph.analytics",

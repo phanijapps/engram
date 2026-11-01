@@ -15,7 +15,7 @@ def repo_root() -> Path:
 
 
 ROOT = repo_root()
-SOURCE = ROOT / "docs/contracts/v1/schemas/engram-v1.schema.json"
+SOURCE = ROOT / "docs/constitution/registry/contracts/v1/schemas/engram-v1.schema.json"
 TARGET = ROOT / "packages/contracts/src/generated/schema.generated.ts"
 TYPE_SCHEMA_TARGET = ROOT / "packages/contracts/src/generated/types.schema.generated.json"
 
@@ -27,7 +27,7 @@ def main() -> int:
     TARGET.write_text(
         "\n".join(
             [
-                "/* Generated from docs/contracts/v1/schemas/engram-v1.schema.json. Do not edit. */",
+                "/* Generated from docs/constitution/registry/contracts/v1/schemas/engram-v1.schema.json. Do not edit. */",
                 f"export const engramV1Schema = {rendered} as const;",
                 "export const engramV1Definitions = engramV1Schema.$defs;",
                 "export type EngramV1DefinitionName = keyof typeof engramV1Definitions;",

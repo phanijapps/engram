@@ -33,8 +33,8 @@ def repo_root() -> Path:
 
 
 ROOT = repo_root()
-BASE_SCHEMA = ROOT / "docs/contracts/v1/schemas/engram-v1.schema.json"
-EXAMPLES = ROOT / "docs/contracts/v1/examples"
+BASE_SCHEMA = ROOT / "docs/constitution/registry/contracts/v1/schemas/engram-v1.schema.json"
+EXAMPLES = ROOT / "docs/constitution/registry/contracts/v1/examples"
 INVALID_EXAMPLES = EXAMPLES / "invalid"
 
 VALID_EXAMPLE_DEFS = {
@@ -164,7 +164,7 @@ def main() -> int:
             errors.append(f"{path}: invalid example unexpectedly passed")
 
     for path in [
-        ROOT / "docs/contracts/v1/schemas/engram-v1.schema.json",
+        ROOT / "docs/constitution/registry/contracts/v1/schemas/engram-v1.schema.json",
         ROOT / "docs/constitution/architecture/domain-data-model.md",
     ]:
         errors.extend(ensure_no_training_export(path))

@@ -258,7 +258,7 @@
       "name": "@engramlabs/runtime"
     },
     {
-      "path": "docs/contracts/v1",
+      "path": "docs/constitution/registry/contracts/v1",
       "kind": "contracts",
       "role": "contracts",
       "name": "portable-contracts"

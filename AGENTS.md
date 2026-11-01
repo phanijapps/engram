@@ -1,346 +1,56 @@
 # Repository Instructions
 
-Engram is a contract-first Agentic Memory layer with a Rust core and
-TypeScript bindings/SDK. The repository should stay modular: domain contracts
-come first, Rust owns deterministic behavior, TypeScript owns integration
-ergonomics, and infrastructure lives behind adapters.
+Engram is a contract-first agentic memory engine (Rust core, TS SDK, MCP
+surface). **All project knowledge, law, deviations, and registries live in
+ONE place: `docs/constitution/`** — start at `docs/constitution/00-INDEX.md`.
 
-## Current Rule
+## The one rule before working here
 
-The implementation stack is accepted (`docs/adr/0003-implementation-stack.md`,
-Status: Accepted). Before implementation work, run:
+Read the pack that owns your change before writing:
 
-```bash
-tools/ci/check_contracts.py && tools/ci/check_engine_neutrality.py
-```
+| Touching... | Read first |
+|---|---|
+| behavior, scope, product surfaces | `docs/constitution/product/` |
+| structure, seams, dependencies | `docs/constitution/architecture/` |
+| toolchain, builds, packaging | `docs/constitution/dev/` |
+| tests, fixtures, proof | `docs/constitution/testing/` |
+| CI gates | `docs/constitution/ci/` |
+| authz, supply chain, audit | `docs/constitution/security/` |
+| shipping, versions, publication | `docs/constitution/release/` |
 
-## Constitution (adopted 2026-10-31)
+Every pack: `00-INDEX.md` (charter + rule table) · `knowledge.md` ·
+`rules/<ID>.md` (one rule per file, evidence-cited, counterexample-named).
 
-CI-enforced rules live in `docs/constitution/` (rails 01-08, master index
-`docs/constitution/00-INDEX.md`); machine truth (implementation/gates/events/
-distributions/components registries + schemas) lives in
-`docs/contracts/docs/constitution/v1/`. Deviations are owner-approved and time-boxed
-(`docs/constitution/DEVIATIONS.md`, empty by default); temporal clauses live in
-`docs/constitution/DECAY-WINDOWS.md`. The SDD pipeline (factory brief/spec/plan/
-tasks) is governed by the same constitution — see the Constitution compliance
-section of the engram-factory skill.
-
-## Target Repository Shape
-
-```text
-docs/contracts/                 Portable JSON schemas and generated contract outputs.
-docs/                      Architecture, ADRs, RFCs, research, and domain model.
-examples/                  Scenario fixtures and usage sketches.
-
-core/                      Storage-neutral Rust crates.
-  domain/                  Domain types, invariants, serde, version markers.
-  runtime/                 Shared errors, result type, clocks, ids, policy gates.
-  memory/                  Memory service and repository ports.
-  knowledge/               Knowledge, graph, ontology, source, ingestion ports.
-  belief/                  Belief synthesis, contradiction, and bi-temporal ports.
-  hierarchy/               Hierarchy build, navigation, and aggregate ports.
-  consolidation/           Consolidation planning, gated mutation, decay, audit.
-  reflection/              Reflection synthesizer + consolidation executor (derived beliefs).
-  retrieval/               Retrieval composition and fusion ports.
-  procedures/              Procedural memory: runbook storage + success/failure counters.
-  procedures/              Procedural memory: runbook storage + success/failure counters.
-  integration/             SDK facade: EngramProvider, EngramConfig, CapabilityReport.
-  eval/                    Deterministic fixtures and regression harness.
-  graph-analytics/         Pure graph algorithms (PageRank, betweenness, communities, reachability).
-  lang/                    Language packs (engram-lang): modular tree-sitter
-                           grammars + declaration kind maps registered into the
-                           engram-code chunker at composition time. Additive
-                           packs behind cargo features — never a rewrite of
-                           engram-code. First cut: lua, julia, zig, dart,
-                           erlang, ocaml, haskell; legacy modernization:
-                           COBOL, Fortran, SQL (COBOL+SQL grammars vendored
-                           under lang/grammars/ — no linkable crates.io lib).
-  packs/                   Ontology/taxonomy packs (standard-domain vocabulary).
-  proposals/               Change proposal records and validation.
-
-  code/                    Deterministic code-indexing behavior crate (engram-code, ADR-0028):
-                           tree-sitter parsing, symbol identity, typed code edges,
-                           cross-file resolution + unresolved-refs ledger, framework
-                           patterns. Pure (no I/O/git/storage/LLM); adapters/ingest
-                           consumes it to build the code graph.
-
-adapters/                  Replaceable infrastructure crates.
-  ingest/                  Filesystem/Git ingestion adapter until split.
-  embedding/http/          HTTP embedding provider cell (configurable models).
-  integration/             Backend recipe / conformance composition (SQLite wiring
-                           until backends/ split).
-  sqlite/                  SQLite adapter cells (memory, knowledge, belief, vector).
-  pgvector/                pgvector adapter cells.
-  retrieval/tantivy-lexical/       BM25 lexical retrieval index adapter (keyword mode).
-  retrieval/cross-encoder-rerank/  Cross-encoder reranker adapter.
-  retrieval/mmr-rerank/           MMR (maximal marginal relevance) reranker adapter.
-  retrieval/associative-graph/     Associative (Personalized PageRank) retrieval index adapter.
-  retrieval/community-summary/     Community-summary (GraphRAG) retrieval index adapter.
-  consolidation/decay/      Decay consolidation executor (policy-expiry, Ebbinghaus curve).
-  integration/             Backend recipe / conformance composition (SQLite wiring until backends/ split).
-
-backends/                  Backend recipe crates (ADR-0022). A *backend* is one
-  sqlite/                  recipe that composes adapter cells + owns connection
-  pgvector/                lifecycle, config validation, and per-engine
-                           conformance. Both SQLite and pgvector recipes
-                           are implemented; hosts open a recipe directly.
-
-bindings/                  Native language bridges.
-  node/                    N-API bridge for TypeScript.
-
-tools/                     All repository operations + agent hooks: Python-only,
-  lib/                     shared helpers (ROOT, git, fail/ok reporting).
-  ci/                      constitution gates-root (15 check_*.py gates).
-  contracts/               contract codegen + schema validation.
-  hooks/                   agent-session hooks (index-mining trio).
-  dev/, release/           developer workflows, release packaging.
-codegraph/                 On-top codegraph layer (RFC-0012): code-specific
-  queries/                 crates built on engram (dead-code / blast-radius /
-                           dependency-path over call edges).
-  temporal/                Temporal scoring (recent / impact / compound) over versioned symbols.
-                           The standalone codegraph MCP server is RETIRED — its
-                           queries are surfaced through the unified engram-mcp.
-
-mcp/                      Unified agent MCP server (RFC-0015): one EngramProvider,
-  engram-mcp/              fused-per-project scope, multi-layer ontology/taxonomy
-                           as launch config, generic memory + KG + doc-ingestion
-                           tools, and the `engram-distill` agent skill. The sole
-                           server — the interim `codegraph/mcp-server` and
-                           `memory/mcp-server` are both RETIRED (deleted).
-
-packages/                  TypeScript workspace.
-  docs/contracts/               Generated TypeScript types and schemas.
-  client/                  Ergonomic application SDK.
-  node/                    Native binding package.
-  adapters/                JS-side framework and gateway integrations.
-  eval/                    Fixture authoring helpers and CLI wrappers.
-```
-
-The `packages/` workspace already matches this shape (adapters, client,
-contracts, eval, node) now that the stack ADR (ADR-0003) is accepted.
-
-## Boundary Rules
-
-- `docs/constitution/architecture/domain-data-model.md` is the source of truth until Rust domain types are
-  accepted as the generated-contract source.
-- `engram-domain` must not depend on SQL, vector stores, embedding providers,
-  async runtimes, Node, N-API, or TypeScript tooling.
-- `engram-runtime` owns shared runtime primitives only: portable errors, result
-  type, clocks, id generation, scope matching, and policy authorizer traits.
-- `engram-memory` owns memory service and repository ports. It must not own
-  knowledge graph, ontology, source ingestion, vector, or document parsing
-  contracts.
-- `engram-knowledge` owns source-grounded knowledge, graph, ontology, source
-  reader, chunker, and ingestion ports. It must not own memory write, lifecycle
-  event, or forget service contracts.
-- The `engram-core` orchestration facade has been **retired** — consumers now
-  import from the underlying behavior crates (`engram-memory`, `engram-belief`,
-  `engram-knowledge`, etc.) directly. No re-export facade exists; do not
-  re-introduce one.
-- `engram-store-sql` is the active local memory adapter. It owns memory records,
-  lifecycle events, idempotency, write/retrieve/forget behavior, and local
-  in-memory/file-backed SQLite construction only.
-- `engram-store-knowledge-sqlite` is the active local knowledge, graph,
-  taxonomy, and ontology adapter. It must not own memory writes, memory
-  lifecycle events, memory forget semantics, vector indexes, or sibling store
-  internals.
-- `engram-store-lexical` is the BM25 lexical retrieval adapter (Tantivy). It
-  implements the contracted `RetrievalMode::keyword`; Tantivy must stay in this
-  adapter and must not enter `engram-domain` or `engram-retrieval` core.
-- `engram-rerank-cross-encoder` is the cross-encoder reranker adapter. It
-  implements the contracted `RerankStrategy::cross_encoder`; model integrations
-  stay behind the injected `RerankScorer` or a feature gate, never in core.
-- **Engine neutrality (ADR-0022).** `engram-domain`, the other `core/*` port
-  crates, `engram-integration` (the SDK facade: `EngramProvider`,
-  `EngramConfig`, `CapabilityReport`), and the N-API `bindings/node` crate must
-  never name an engine type (`Sql*`, `pgvector`, …) or hold SQL. The only place
-  an engine name may appear in those layers is as a config string. This is what
-  makes backend swap-by-config true; a neutrality lint enforces it.
-- **Engines live on a capability × engine grid (ADR-0022).** Each storage engine
-  is one adapter cell at `adapters/<capability>/<engine>` behind a core port
-  (memory, knowledge, belief, hierarchy, retrieval/vector, retrieval/lexical).
-  Engines are interchangeable within a capability slot; a new engine is an
-  additive cell, never a rewrite of neutral layers.
-- **A backend is a recipe crate (ADR-0022).** `backends/<name>` owns connection
-  lifecycle, config validation, adapter composition, and per-engine conformance
-  only — never ports, domain types, or capability logic. It composes adapter
-  cells into an `EngramProvider` and is the only place a "backend" identity
-  exists. SQLite wiring currently lives in `adapters/integration`; it moves to
-  `backends/sqlite` when a second engine is adopted.
-- **Surface parity — integration + N-API (and every transport).** Every runtime
-  capability, operation, and `RetrievalIndex` / `RetrievalMode` must be reachable
-  through BOTH `engram-integration` (the Rust SDK `EngramProvider` facade,
-  including its unified-recall lanes) AND the N-API binding (`bindings/node`, the
-  TS transport) — and through any other supported transport — and be reflected in
-  `CapabilityReport`. A capability is not "shipped" until a Rust embedder and a
-  TS/N-API agent can both invoke it. Wiring one surface and leaving the other
-  unwired creates transport asymmetry (e.g., a retriever reachable from the
-  binding but not the facade) and is not allowed. The `lexical-keyword-retrieval`
-  + `lexical-wiring` split is the precedent for *sequencing* an adapter unit
-  ahead of its wiring — never for permanently stranding a capability on one
-  surface. If a surface genuinely cannot carry a capability, record why in an
-  ADR. A parity lint (mirroring the engine-neutrality lint) is the intended
-  enforcement.
-- `engram-graph-analytics` owns pure, dependency-free graph algorithms only
-  (PageRank, betweenness, communities, reachability). It must not depend on
-  `engram-domain`, storage, or any infrastructure; callers map domain edges to a
-  generic edge list at the call site.
-- The `codegraph/` area is the on-top codegraph layer (RFC-0012), not engram.
-  Its crates depend only on `engram-domain`, `engram-graph-analytics`, or other
-  engram ports; they must not own storage/infra, duplicate domain truth, or live
-  under `core/`/`adapters/`/`bindings/`.
-- Store, vector, embedding, model, and gateway integrations belong in adapter
-  crates or TypeScript packages.
-- TypeScript must not redefine domain truth. It may wrap, validate, compose, and
-  expose Rust-backed APIs.
-- Generated contracts must be reproducible from source and should not be edited
-  manually.
-- Memory, knowledge, belief, hierarchy, policy, provenance, and evaluation
-  concepts must remain distinct unless an ADR changes the model.
-- Do not create god classes, god modules, or god packages. A file that owns
-  construction, validation, state, orchestration, scoring, persistence, and
-  error translation at the same time must be split before handoff.
-- Crate roots and package entry points should be facades: module declarations,
-  narrow public re-exports, and top-level documentation only. Put behavior in
-  focused modules named for the responsibility they own.
-- When a module grows to mix multiple reasons to change, split it by boundary:
-  domain model, validation, state, repository adapter, operation orchestration,
-  scoring/ranking, policy, serialization, or external integration.
-
-## Rust Standards
-
-- Prefer small crates with explicit responsibilities over a large shared crate.
-- Prefer focused modules with explicit responsibilities over large `lib.rs`,
-  `main.rs`, `mod.rs`, or catch-all service files.
-- Keep public service structs thin. They may compose dependencies and implement
-  traits, but operation-specific behavior should live in focused modules or
-  collaborators.
-- Do not hide unrelated behavior behind a generic `Manager`, `Service`,
-  `Engine`, `Processor`, or `Handler` unless the surrounding modules make the
-  real responsibilities explicit.
-- Use typed errors; avoid stringly public error contracts.
-- Keep policy checks visible on write, retrieve, ingest, consolidate, and forget
-  paths.
-- Keep provider-backed behavior behind traits so tests can use deterministic
-  stubs.
-- Add focused unit tests for invariants and integration tests for vertical
-  memory flows.
-- Do not optimize before correctness fixtures and basic benchmarks exist.
-
-## TypeScript Standards
-
-- Keep public APIs typed from generated contracts.
-- Keep package entry points narrow and stable.
-- Keep package `index.ts` files as public facades. Move validation, transport,
-  native binding calls, adapters, fixtures, and formatting into focused modules.
-- Avoid monolithic SDK clients that own transport, retries, validation,
-  serialization, policy decisions, and fixture execution in one class.
-- Treat the native binding package as a transport over Rust behavior, not a
-  second implementation.
-- Put framework-specific code in `packages/adapters/`, not in the client core.
-- Add type tests or compile checks for exported SDK shapes once the TS workspace
-  exists.
-
-## Documentation Standards
-
-- Put research notes, excerpts, and links under `docs/research/`.
-- Record durable technical decisions under `docs/adr/`.
-- Record design proposals under `docs/rfcs/`.
-- Update `docs/constitution/architecture/domain-data-model.md` before changing contracts, schemas, or
-  generated public types.
-- Classify public contract changes as compatible or breaking.
-- Put accepted machine-readable contract artifacts under `docs/contracts/v1/`.
-- Spec-driven acceptance criteria ride with the factory job artifacts
-  (`.engram-factory/jobs/`, v2 spec templates); the legacy `docs/specs/` tree was
-  retired 2026-10-31 (preserved in git history).
-- Do not treat `docs/contracts/schemas/` as the source of truth; those files are
-  legacy pointers.
-
-## Validation
-
-Use these checks before handoff:
+## Validation (run before handoff)
 
 ```bash
-cargo fmt --all
-cargo check --workspace
-pnpm run contracts:generate
-pnpm run typecheck
-pnpm run test
-tools/ci/check_contracts.py
-tools/ci/check_docs.py
-tools/ci/check_engine_neutrality.py     # ADR-0022 rule-1 gate (engine neutrality)
-tools/ci/check_surface_parity.py        # ADR-0022 surface-parity gate (Rust facade ↔ N-API binding)
-tools/ci/check_constitution.py          # docs/constitution/ L1 + zero-deviation + registries (RULE-5)
-tools/ci/check_job_artifacts.py         # SDD artifact gate (advisory until 2026-11-28, DW-5)
+scripts="tools/ci"
+python3 $scripts/check_constitution.py && python3 $scripts/check_contracts.py
+python3 $scripts/check_engine_neutrality.py && python3 $scripts/check_surface_parity.py
+python3 $scripts/check_docs.py && python3 $scripts/check_job_artifacts.py
+cargo fmt --all && cargo check --workspace
+pnpm run contracts:generate && pnpm run typecheck && pnpm run test
+python3 $scripts/ste_lint.py   # ASD-STE100 style, advisory
 ```
 
-Run `pnpm run build` after TypeScript package surface changes.
+Pre-implementation gate: `check_contracts.py && check_engine_neutrality.py`
+must pass before any implementation work.
 
-## Local Codex Assets
+## Factory
 
-- The project-specific `.codex/skills/engram-*` and `.codex/agents/*` briefs
-  were superseded by the agent-bundle refresh (2026-08-26). The generic
-  workflow skills now present under `.codex/skills/` (`new-spec`, `new-adr`,
-  `new-rcf`, `work-loop`, `new-guide`) cover the same loop; the CI gates under
-  `tools/ci/` carry the enforcement the old hooks owned.
-- Install local Git hooks with `git config core.hooksPath .githooks` when this
-  workspace should enforce checks on commit.
+SDD work runs through engram-factory (`.agents/skills/engram-factory/`):
+brief (engram-frame) → spec → plan → tasks (TDD) → build → review → owner
+approval → merge with L3 evidence. Job receipts live under `runs/`.
 
-## Feature-specific invariants (from shipped specs)
+## Index mining
 
-These one-off structural / honesty traps are not covered by the general boundary
-rules above; they were lifted from the feature specs when those were consolidated
-into [`docs/constitution/product/00-INDEX.md`](docs/constitution/product/00-INDEX.md). The *general principles*
-(neutrality, no-god-modules, facades stay thin, surface parity, store adapters
-don't own composition) already govern all crates; the items below are the
-feature-specific traps.
+Before authoring analysis/plan artifacts, run
+`python3 tools/hooks/index-mining.py` and cite actual index results
+(or state "index empty for <query>").
 
-- **`atomic-batch-ingest`** — the guarantee is `BestEffort`, surfaced. Do not
-  claim or imply cross-store ACID; do not roll back already-succeeded steps on a
-  later step's failure (no cross-store rollback exists); do not reuse one batch
-  key as the per-write memory key (drops records 2..N); do not restructure
-  storage (merge / ATTACH) to fake atomicity.
-- **`unified-recall-api`** — do not fail the whole recall when one lane is
-  unavailable (degrade via `source_failures`); do not bypass the existing
-  `RetrievalIndex` lanes or `MemoryService::retrieve`; do not reimplement RRF /
-  fusion or the composer (reuse `ReciprocalRankFusion` + `compose_context`).
-- **`sqlite-consolidation`** — never fold the engine-agnostic adapters into
-  `engram-store-sqlite` (they serve every backend); never break the
-  `engram-conformance::Sql*` / `bindings/node` import surface mid-transition;
-  this is relocation only — `Sql*` runtime behavior must not change (the existing
-  tests are the regression net).
-- **`retrieval-composition-boundary`** — do not merge memory records and
-  knowledge chunks into one persistence model for retrieval convenience.
-- **`memory-knowledge-boundaries`** — a memory adapter must not persist
-  knowledge-graph / ontology state by default; a knowledge-graph adapter must not
-  depend on SQL memory internals; do not hide graph / ontology semantics in
-  untyped metadata when a typed contract is required.
-- **`export-import-api`** — do not reimplement import (stays on
-  `MigrationService`); do not invent a new export format (reuse `ImportData`);
-  do not reimplement SQL queries for export (use the existing concrete store
-  methods).
-- **`sqlite-knowledge-graph`** — do not couple knowledge persistence to memory or
-  vector persistence (cross-adapter SQL / shared connections across crate
-  boundaries); do not change v1 contract fields or generated TypeScript types;
-  `OntologyRepository` is durable (ADR-0008); its `validate_graph` is advisory
-  only.
+## Constitution changes
 
-  ## engram-mcp 
-  >   Also periodically reindex after Code merges to main to keep the knowledge current.
-  ### Knowledge
-  - Use the code indexed in your knowledge when in doubt.
-  - Docs also get associated in the knowledge.
-  - This is a powerful layer, it is your responsibility to keep it upto date when you see a drift with main branch.
-  ### Memory Layer
-   - Distill memory skill is used to find processes, facts etc to save in  memory. 
-   - If you have any doubt, use engram mcp to query.
-
-## Index Mining (all harnesses)
-
-Before authoring analysis or plan artifacts, run:
-```bash
-python3 tools/hooks/index-mining.py
-```
-This prints the engram index mining instruction with concrete CLI examples.
-Cite ≥2 index results (or state "index empty for <query>") in the artifact.
-Validator: `python3 tools/hooks/index-evidence-validator.py <artifact> --strict`
+Rules change only via owner ratification; amendments preserve rule IDs and
+update gates in the same change. Use the `engram-constitution` skill to
+draft. Deviations are owner-approved and time-boxed (`DEVIATIONS.md`,
+`DECAY-WINDOWS.md`).

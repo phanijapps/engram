@@ -22,41 +22,38 @@ NAME = "contracts"
 REQUIRED_FILES = [
     "docs/constitution/architecture/domain-data-model.md",
     "docs/constitution/architecture/00-INDEX.md",
-    "docs/research/synthesis.md",
-    "docs/rfcs/0001-memory-layer-scope.md",
-    "docs/rfcs/0002-knowledge-source-extension.md",
-    "docs/contracts/schemas/memory-record.schema.json",
-    "docs/contracts/schemas/memory-query.schema.json",
-    "docs/contracts/v1/README.md",
-    "docs/contracts/v1/acceptance.md",
-    "docs/contracts/v1/compatibility.md",
-    "docs/contracts/v1/changelog.md",
-    "docs/contracts/v1/review-checklist.md",
-    "docs/contracts/v1/schemas/engram-v1.schema.json",
-    "docs/contracts/v1/schemas/memory-record.schema.json",
-    "docs/contracts/v1/schemas/retrieval-request.schema.json",
-    "docs/contracts/v1/schemas/context-payload.schema.json",
-    "docs/contracts/v1/schemas/write-memory-request.schema.json",
-    "docs/contracts/v1/schemas/write-memory-response.schema.json",
-    "docs/contracts/v1/schemas/forget-request.schema.json",
-    "docs/contracts/v1/schemas/forget-result.schema.json",
-    "docs/contracts/v1/schemas/evaluation-fixture.schema.json",
-    "docs/contracts/v1/examples/write-memory-request.json",
-    "docs/contracts/v1/examples/write-memory-response.json",
-    "docs/contracts/v1/examples/retrieval-request.json",
-    "docs/contracts/v1/examples/context-payload.json",
-    "docs/contracts/v1/examples/forget-request.json",
-    "docs/contracts/v1/examples/forget-result.json",
-    "docs/contracts/v1/examples/evaluation-fixture.json",
-    "docs/contracts/v1/examples/invalid/write-memory-request.missing-scope-tenant.json",
-    "docs/contracts/v1/examples/invalid/write-memory-request.training-export.json",
-    "docs/contracts/v1/examples/invalid/memory-record.missing-status.json",
-    "docs/contracts/v1/examples/invalid/memory-record.missing-provenance-actor.json",
-    "docs/contracts/v1/examples/invalid/retrieval-request.missing-requester.json",
-    "docs/contracts/v1/examples/invalid/context-payload.redacted-content.json",
-    "docs/contracts/v1/acceptance/memory-fixtures.md",
-    "docs/contracts/v1/acceptance/retrieval-fixtures.md",
-    "docs/contracts/v1/acceptance/forget-modes.md",
+    "docs/constitution/registry/contracts/schemas/memory-record.schema.json",
+    "docs/constitution/registry/contracts/schemas/memory-query.schema.json",
+    "docs/constitution/registry/contracts/v1/README.md",
+    "docs/constitution/registry/contracts/v1/acceptance.md",
+    "docs/constitution/registry/contracts/v1/compatibility.md",
+    "docs/constitution/registry/contracts/v1/changelog.md",
+    "docs/constitution/registry/contracts/v1/review-checklist.md",
+    "docs/constitution/registry/contracts/v1/schemas/engram-v1.schema.json",
+    "docs/constitution/registry/contracts/v1/schemas/memory-record.schema.json",
+    "docs/constitution/registry/contracts/v1/schemas/retrieval-request.schema.json",
+    "docs/constitution/registry/contracts/v1/schemas/context-payload.schema.json",
+    "docs/constitution/registry/contracts/v1/schemas/write-memory-request.schema.json",
+    "docs/constitution/registry/contracts/v1/schemas/write-memory-response.schema.json",
+    "docs/constitution/registry/contracts/v1/schemas/forget-request.schema.json",
+    "docs/constitution/registry/contracts/v1/schemas/forget-result.schema.json",
+    "docs/constitution/registry/contracts/v1/schemas/evaluation-fixture.schema.json",
+    "docs/constitution/registry/contracts/v1/examples/write-memory-request.json",
+    "docs/constitution/registry/contracts/v1/examples/write-memory-response.json",
+    "docs/constitution/registry/contracts/v1/examples/retrieval-request.json",
+    "docs/constitution/registry/contracts/v1/examples/context-payload.json",
+    "docs/constitution/registry/contracts/v1/examples/forget-request.json",
+    "docs/constitution/registry/contracts/v1/examples/forget-result.json",
+    "docs/constitution/registry/contracts/v1/examples/evaluation-fixture.json",
+    "docs/constitution/registry/contracts/v1/examples/invalid/write-memory-request.missing-scope-tenant.json",
+    "docs/constitution/registry/contracts/v1/examples/invalid/write-memory-request.training-export.json",
+    "docs/constitution/registry/contracts/v1/examples/invalid/memory-record.missing-status.json",
+    "docs/constitution/registry/contracts/v1/examples/invalid/memory-record.missing-provenance-actor.json",
+    "docs/constitution/registry/contracts/v1/examples/invalid/retrieval-request.missing-requester.json",
+    "docs/constitution/registry/contracts/v1/examples/invalid/context-payload.redacted-content.json",
+    "docs/constitution/registry/contracts/v1/acceptance/memory-fixtures.md",
+    "docs/constitution/registry/contracts/v1/acceptance/retrieval-fixtures.md",
+    "docs/constitution/registry/contracts/v1/acceptance/forget-modes.md",
 ]
 
 REQUIRED_SECTIONS = [
@@ -87,7 +84,7 @@ def main() -> int:
             print(f"{NAME}: missing required domain model section: {section}", file=sys.stderr)
             return 1
 
-    for jf in sorted(Path("docs/contracts/v1").rglob("*.json")):
+    for jf in sorted(Path("docs/constitution/registry/contracts/v1").rglob("*.json")):
         try:
             json.loads(jf.read_text())
         except json.JSONDecodeError as e:
@@ -95,7 +92,7 @@ def main() -> int:
             return 1
 
     # deny drift: forbidden payload field must not reappear in schemas/model
-    targets = [Path("docs/contracts/v1/schemas"), Path("docs/constitution/architecture/domain-data-model.md")]
+    targets = [Path("docs/constitution/registry/contracts/v1/schemas"), Path("docs/constitution/architecture/domain-data-model.md")]
     for target in targets:
         if target.is_dir():
             found = any(FORBIDDEN_EXAMPLE in f.read_text(errors="replace") for f in target.rglob("*.json"))

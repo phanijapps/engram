@@ -20,6 +20,7 @@ references/          pack-charters (the 7-pack cut, merge rules) · ste-style
 scripts/             scaffold.py (greenfield|brownfield|module skeleton) ·
                      derive_catalogue.py (lane 1: regenerate the registry) ·
                      health.py (lane 2: detect size law, drift, orphans) ·
+                     query.py (search rules, knowledge, runbooks by terms) ·
                      validate.py (structure + catalogue) · lint.py (STE)
 evals/               test_scaffold.py (6 tests)
 ```
@@ -83,6 +84,27 @@ The gate classifies changes from the diff, not the commit message.
    honesty (read the gate code; partial is stated as partial).
 4. Interview only for what code+docs cannot answer (scar-born rules, debt
    vs law). Then ratify + validate + lint.
+
+## Runbooks (procedural knowledge — a fourth content type)
+
+Each pack may carry `runbooks/` — procedural documents (numbered steps, one
+instruction per step) for diagnosing and mitigating known failure modes.
+Runbooks are versioned: each carries `version`, `validated against` (the
+revision it was last tested on), and a change log. After every incident the
+runbook MUST be updated with what actually worked (increment `version`);
+the post-incident checklist in the template enforces this. Runbooks are
+scar-born: they start from the first incident and grow from real experience,
+never from speculation. The engram-constitution skill drafts them in the
+procedural STE register (imperative, ≤20 words per step).
+
+## Searching the constitution
+
+`python3 scripts/query.py <repo> "<terms>" [--pack <name>] [--type rules|knowledge|runbooks|all]`
+
+Searches the derived catalogue (rules), knowledge manifests (fragments with
+prerequisites), and runbook triggers. Returns matches sized for progressive
+loading — the agent loads only what the task needs. This IS the search
+capability; no separate skill is needed.
 
 ## Non-negotiables (both modes)
 

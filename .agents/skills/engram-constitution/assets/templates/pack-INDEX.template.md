@@ -14,6 +14,7 @@ for a different codebase (anti-generic test) and live one-per-file.
 |---|---|
 | Knowledge | `knowledge.md` (STE descriptive register) |
 | Rules | `rules/<ID>.md` — one rule per file (STE procedural register) |
+| Runbooks | `runbooks/` — versioned incident procedures (when they exist) |
 | Deviations | below; global: root DEVIATIONS / DECAY-WINDOWS |
 
 ## Rule index

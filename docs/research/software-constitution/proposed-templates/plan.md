@@ -30,8 +30,8 @@ only when they clarify a real boundary or runtime concern—never blank sections
 
 **Worked example — job 011.** Change the scan seam in
 `tools/ci/check_engine_neutrality.py` to collect a nonexistent declared path as
-a named violation. That fail-closed behavior satisfies `REQ-001`; retaining the
-existing pattern scan satisfies `REQ-001`. Silently skipping the path is
+a named violation. That fail-closed behavior satisfies `REQ-001`; NFR-001 (reliability)
+keeps present-path scanning intact. Silently skipping the path is
 rejected because it permits an unscanned engine-bearing surface to ship. No
 `DEC-*` is consumed: the spec determines this gate-only shape.
 
@@ -52,7 +52,7 @@ flowchart LR
 
 For job 011, the gate and its fixture are inside the boundary; repository paths
 are scanned input, and CI consumes only the exit/result contract. `REQ-001`
-changes the missing-path result, while `REQ-001` preserves present-path behavior.
+changes the missing-path result; `NFR-001` preserves present-path behavior.
 
 ## Technical architecture (M/L — components and runtime flow)
 Name concrete components and the implementation seam, then add a separate

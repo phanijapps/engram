@@ -75,7 +75,7 @@ output per gate in verification.md.
 1. [ ] Write failing fixture `tools/ci/tests/test_engine_neutrality.py`:
    missing-declared-path must exit 1 naming the path; present-path scans
    clean. Expected RED: current gate silently skips missing paths
-   (TASK-001, REQ-001, AC-001, GATE-001, STEP-001)
+   (TASK-001, REQ-001, AC-001, GATE-001, STEP-002)
    - Verify: `python3 tools/ci/tests/test_engine_neutrality.py` fails on the
      missing-path case, passes the present-path case.
 2. [ ] Fail closed in `tools/ci/check_engine_neutrality.py` scan(): missing

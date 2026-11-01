@@ -34,7 +34,7 @@ brief_ref: null
 
 For example: a declared engine-neutrality path can disappear and silently stop being scanned; fail-closed validation makes that loss visible in CI before a prohibited engine reference can ship.
 
-## What did the owner ask for?
+## The ask — in the owner's words
 
 > <Quote the owner’s words verbatim. Do not paraphrase or merge an earlier request with a replacement request.>
 
@@ -52,7 +52,7 @@ For example, `MOS-001` requires a missing declared path to fail the gate, `MOS-0
 **Out of scope:** <MOS IDs and explicit exclusions>.
 **Open:** `none`, or the blocking `LED-*` IDs.
 
-## Which decisions are already bound?
+## Decision ledger — already-bound choices
 
 `LED-001` [HUMAN-DECIDED]: <choice>; the owner said “<verbatim bound>”. Revisit only when <concrete trigger>.
 For example, `LED-001` [HUMAN-DECIDED] permits light review because this is an S-tier, one-file gate change; revisit on any reviewer escalation.
@@ -64,7 +64,7 @@ State each delegated boundary as `LED-*` [DELEGATED: <reason>], including what t
 For example, `EN-004` applies because engine-neutrality must remain fail-closed; `DW-7` makes the path-validation gap due in its stated window.
 If no constitution rule is touched, write `constitution_rules_touched: []` and explain why the boundary is unaffected.
 
-## Has the owner ratified this?
+## Owner ratification — the human gate
 
 <Before ratification, state the missing owner action and keep `status` as `draft`.>
 After ratification: owner reference `<channel/message>` on `<YYYY-MM-DD>` confirmed “<verbatim confirmation>”.

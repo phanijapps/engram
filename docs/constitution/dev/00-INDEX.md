@@ -1,4 +1,4 @@
-# Toolchain sub-constitution (was build)
+# Dev sub-constitution (development + build toolchain)
 
 SUBORDINATE to `docs/constitution/00-INDEX.md` — one constitution, one root;
 this pack narrows it locally with ENGRAM-GROUNDED law: every rule below is
@@ -10,7 +10,7 @@ grammar: `governs` / `refines` / `enforced-by` / `see`. Source analysis:
 
 How engram's artifacts are made: workspace + contracts generation reproducibility, N-API build ordering, launcher payload sync. A small real pack, not a second release policy.
 
-## Knowledge — how artifacts are made (build/toolchain pack)
+## Knowledge — how artifacts are made (dev pack)
 
 Cargo workspace + pnpm workspace (packages/, prototype/). `pnpm
 contracts:generate` regenerates TS types from `docs/contracts/v1` — CI diffs

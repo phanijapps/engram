@@ -10,6 +10,33 @@ grammar: `governs` / `refines` / `enforced-by` / `see`. Source analysis:
 
 What engram promises: identity, the four substrates (memory / source-grounded knowledge / derived belief / code intelligence), observable write-recall-forget guarantees, freshness semantics, honest capability status.
 
+## Knowledge — what engram IS
+
+Engram is a contract-first, local-first **agentic memory and knowledge engine**.
+Its customer is an agent/host that must remember across sessions, retrieve
+grounded context, revise evidence-backed beliefs, and understand code without
+confusing observations with truth.
+
+**The four substrates (distinct — never merged):**
+1. **Memory** — governed experiential records: write/recall/forget with scope,
+   policy, lifecycle events, tombstones (not SQL deletes)
+2. **Knowledge** — source/document/chunk-grounded graph: entities, relations,
+   taxonomy + ontology packs (FIBO, schema.org, +33); source-bound supersession
+   retires stale assertions
+3. **Belief** — derived, revisable stances with valid-time ≠ record-time;
+   contradictions are reviewable signals, never silent overwrites
+4. **Code intelligence** — generation-bound indexes (engram-code tree-sitter):
+   symbols, typed edges, blast radius; branch-bound per project
+
+Rust owns all deterministic behavior behind ports; TypeScript (N-API + SDK)
+owns ergonomics; one unified MCP server (`mcp/engram-mcp`) is the agent
+surface; `packages/launcher` ships the installable agent bundle. Retrieval
+fuses all substrates into a bounded, explainable ContextPayload.
+
+**Engram is NOT:** an LLM host, a vector database, an app server, or a hosted
+control plane. Vector search is a retrieval mechanism, not the identity.
+Extended reference: `docs/product/engram.md` (historical).
+
 ## Rules
 
 | ID | Candidate statement | Typed references / present enforcement | Repository evidence |
@@ -22,6 +49,12 @@ What engram promises: identity, the four substrates (memory / source-grounded kn
 | PRD-106 | Bound-code answers MUST identify the authorized scope/`RepoId`, exact `refs/heads/...` binding and published generation; freshness MUST distinguish indexed OID from explicitly observed ref OID, reporting unknown when unobserved rather than inferring authority from checkout `HEAD`. | refines: PR-001, PR-005, SP-001; bound-source/status and transport fixtures. | `docs/architecture/domain-data-model.md:59-85`; `core/integration/src/code_binding/status.rs:8-57,108-132`; `docs/product/engram.md:73-82`. |
 | PRD-107 | A capability MUST NOT be called shipped merely because an adapter exists: it MUST be callable through the provider, N-API/TS and supported MCP surface or carry the root-required explicit exception, and `CapabilityReport` MUST describe the selected recipe's actual support. The launcher bundle's host limitations MUST be disclosed, not sold as uniform host behavior. | refines: SP-001, SP-002, SP-003, CI-002; enforced-by: check_surface_parity.py (accessor names only); transport/install fixtures and review. | `docs/constitution/02-surface-parity.md:8-25`; `core/integration/src/capability.rs:10-15,24-131`; `README.md:64-69`; `mcp/engram-mcp/src/app.rs:1-7`. |
 | PRD-108 | Ontology/taxonomy MUST remain first-class governed vocabulary, not opaque metadata or a claim of automatic truth enforcement. Pack installation MUST distinguish full structural vocabulary from the bounded launch slice, expose sliced/available counts, and preserve advisory graph validation unless a separately declared policy makes it blocking. | refines: PR-001, PR-005, PC-001; pack fixtures and manual claims review. | `core/knowledge/src/ontology.rs:7-12,16-38`; `mcp/engram-mcp/src/pack.rs:1-14,58-70`; `core/packs/src/slice.rs:1-23,83-106`. |
+
+## Deviations & decay (domain)
+
+- none open
+- Global exceptions: root `DEVIATIONS.md` (zero-deviation law) and
+  `DECAY-WINDOWS.md` (master ledger).
 
 ## Notes
 

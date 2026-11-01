@@ -10,6 +10,16 @@ grammar: `governs` / `refines` / `enforced-by` / `see`. Source analysis:
 
 What demonstrates engram's promises: deterministic fixtures, per-backend conformance, the fail-closed operation×backend×transport matrix — prove the semantic traps (degraded lanes, supersession keys, belief valid-time).
 
+## Knowledge — how proof works here
+
+Deterministic fixtures (no network, no LLM): acceptance fixtures per contract
+(`docs/contracts/v1/acceptance/`), conformance per backend, adapter tests,
+factory evals (48) + frame evals (23). The bound-code matrix
+(operation×backend×transport) is fail-closed. Behavior batteries: cargo test
+--workspace, pnpm test, eval fixtures. CI gates in `tools/ci/` carry unit
+tests (`tools/ci/tests/`). TDD spine: fixtures land RED before GREEN
+(tasks Phase 1).
+
 ## Rules
 
 | ID | Candidate statement | Typed references / present enforcement | Repository evidence |
@@ -22,6 +32,14 @@ What demonstrates engram's promises: deterministic fixtures, per-backend conform
 | TST-106 | Vocabulary-pack changes MUST prove identical cached/offline reinstall, hard rejection of off-pin bytes, full structural writes versus launch-slice reporting, project isolation and deterministic offline widening; an advisory validation finding MUST NOT be mistaken for an install rejection. | refines: PR-001, PR-004, PR-006; MCP pack/converter regression fixtures. | `mcp/engram-mcp/src/pack_tests.rs:98-191,247-329,395-444`; `core/packs/tests/convert.rs:31-141`. |
 | TST-107 | Belief temporal acceptance MUST distinguish valid-time lookup before/after a boundary from unsupported record-time-history lookup; a bi-temporal field set or a generic `Supported` label MUST NOT substitute for that behavioral proof. | refines: PR-001, PC-001, PR-006; belief conformance fixture; selected-backend execution still required. | `adapters/integration/src/fixtures/belief.rs:22-81`; `adapters/integration/src/harness.rs:47-64`; `core/domain/src/belief.rs:68-95`. |
 | TST-108 | Consolidation tests MUST exercise the production provider wiring with `dry_run` true, absent and explicitly false, proving preview requests do not mutate; the gated-service fixture MUST prove a denied `ConsolidationApplyGate` never invokes its mutation executor. A preview label or isolated planner unit test MUST NOT substitute for these flow checks. | refines: PR-005, PR-006, PC-001; production dry-run and gated-apply fixtures. | `adapters/integration/tests/consolidation_dry_run.rs:1-9,87-95`; `core/consolidation/tests/gated_apply.rs:23-64`; `core/consolidation/src/consolidation/mutating.rs:188-213`. |
+
+## Deviations & decay (domain)
+
+- DW-4 historical hash mismatches advisory (2026-11-28)
+- DW-5 SDD frontmatter baseline → gate flips blocking (2026-11-28)
+- DW-6 rust doc comments 77 + rustdoc 30 errors, strict at close (2026-11-28)
+- Global exceptions: root `DEVIATIONS.md` (zero-deviation law) and
+  `DECAY-WINDOWS.md` (master ledger).
 
 ## Notes
 

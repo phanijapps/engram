@@ -122,8 +122,17 @@ cat_path = ROOT / "docs/contracts/constitution/v1/constitution-catalogue.json"
 if cat_path.is_file():
     cat = json.loads(cat_path.read_text())
     for entry in cat.get("packs", []):
-        if not (ROOT / entry["path"]).is_file():
+        pf = ROOT / entry["path"]
+        if not pf.is_file():
             F(f"catalogue rule {entry['rule_id']}: pack file missing: {entry['path']}")
+    # pack structural contract: knowledge + rules + deviations in ONE place
+    for pack_dir in (ROOT / "docs/constitution").iterdir():
+        idxp = pack_dir / "00-INDEX.md"
+        if pack_dir.is_dir() and idxp.is_file():
+            body = idxp.read_text(errors="replace")
+            for section in ("## Knowledge", "## Rules", "## Deviations"):
+                if section not in body:
+                    F(f"pack {pack_dir.name}: missing section {section} (one-place contract)")
     root_rail_files = set(cat.get("root_rails", {}).values())
     for rf in root_rail_files:
         if not (ROOT / rf).is_file():

@@ -10,6 +10,27 @@ grammar: `governs` / `refines` / `enforced-by` / `see`. Source analysis:
 
 Where engram's semantics live: protect the real seams — composer fusion, adapter cells, registries — not a generic layered diagram.
 
+## Knowledge — how engram is built
+
+**The map:** ~35 Rust crates + 6 TS packages. `core/*` = storage-neutral
+behavior (domain, runtime, memory, knowledge, belief, hierarchy,
+consolidation, reflection, retrieval, procedures, code, integration...).
+`adapters/*` = engine cells (sqlite, pgvector, retrieval/*, embedding/http).
+`backends/*` = recipes composing cells into an EngramProvider (ADR-0022:
+swap the backend by config, not rewrite). `codegraph/*` = on-top queries.
+`bindings/node` = N-API. `packages/*` = TS workspace.
+
+**The seams that matter:**
+- Recall composes through the retrieval composer (RRF + lanes); no lane
+  bypasses the service layer; failed lanes degrade via `source_failures`
+- The capability×engine grid: engines are interchangeable cells behind ports;
+  engram-domain and friends never name an engine type (gate-enforced)
+- Surface parity: every capability reachable via Rust facade AND N-API AND
+  MCP, reflected in CapabilityReport (ADR-0022)
+- Domain SSOT: `docs/architecture/domain-data-model.md` until Rust types
+  become the generated-contract source
+Extended reference: `docs/architecture/overview.md`, `reference.md`.
+
 ## Rules
 
 | ID | Candidate statement | Typed references / present enforcement | Repository evidence |
@@ -22,6 +43,12 @@ Where engram's semantics live: protect the real seams — composer fusion, adapt
 | ARC-106 | N-API, TS packages and unified MCP handlers MUST delegate to canonical Rust ports/provider behavior; JSON translation, host configuration and optional agent-side extraction MUST NOT become a second memory/retrieval implementation or a Rust-hosted LLM client. | refines: CI-002, PR-002, SP-001; enforced-by: check_implementation_registry.py, check_production_completeness.py (imports/dependency patterns only), check_docs.py (TS delegation subcheck). | `docs/contracts/constitution/v1/implementation/registry.json:61-68`; `mcp/engram-mcp/src/app.rs:1-24`; `.agents/skills/engram-distill/SKILL.md:8-18`; `tools/ci/check_docs.py:57-65`. |
 | ARC-107 | Ontology-pack conversion/slicing MUST be deterministic bytes-to-domain-record behavior in `core/packs`; fetch/cache/pin verification and launch-config I/O MUST remain in the MCP host path, while durable writes reuse provider ontology/taxonomy ports. Constitution packs MUST NOT be confused with these runtime vocabulary packs. | refines: CI-001, PR-002, PR-004; pack conversion/install fixtures; manual boundary review. | `core/packs/src/converter.rs:1-9,40-60`; `core/packs/src/slice.rs:1-12`; `mcp/engram-mcp/src/pack.rs:1-14`. |
 | ARC-108 | Consolidation MUST remain an explicit request→plan/run operation through injected mutation executors, not an incidental write side effect; only `dry_run == Some(false)` may apply. Gated mutation MUST keep pre/post evaluation and apply authorization visible and return task-level audit outcomes; the default allow-all apply gate MUST NOT be presented as host policy enforcement or a post-run regression as automatic rollback. | refines: CI-001, PR-005, PC-001; consolidation planning/apply and production-wiring fixtures; recipe policy/evaluation coverage must be inspected separately. | `core/consolidation/src/consolidation/mutating.rs:56-105,109-150,165-267`; `adapters/integration/tests/consolidation_dry_run.rs:1-9,87-95`; `docs/product/engram.md:118-125`. |
+
+## Deviations & decay (domain)
+
+- none open
+- Global exceptions: root `DEVIATIONS.md` (zero-deviation law) and
+  `DECAY-WINDOWS.md` (master ledger).
 
 ## Notes
 

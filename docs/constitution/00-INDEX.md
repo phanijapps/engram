@@ -18,6 +18,16 @@ docs/research/software-docs/constitution/01-constitution-organization.md §5.
 - Scope: Rust library, TypeScript SDK/native binding, unified MCP server, and
   repository-owned distribution/agent-bundle surfaces.
 
+## The project in one page
+
+Engram is a contract-first, local-first agentic memory and knowledge engine:
+governed **memory**, source-grounded **knowledge** (graph + ontology packs),
+derived **beliefs** (valid-time), and generation-bound **code intelligence** —
+Rust deterministic core, TypeScript ergonomics, one MCP surface, installable
+agent bundle. NOT an LLM host, vector DB, or app server. Full domain
+knowledge lives in the packs below; extended history in `docs/product/` and
+`docs/architecture/`.
+
 ## Universal rules
 
 Every rail below is subordinate to these. RFC 2119 keywords apply.

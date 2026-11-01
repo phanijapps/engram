@@ -10,6 +10,15 @@ grammar: `governs` / `refines` / `enforced-by` / `see`. Source analysis:
 
 Engram's authority, lineage and agent-install trust boundaries: LLM/model SDK exclusion from core/adapters, stub-free shipped code, tamper-evident audit chain, launcher install trust.
 
+## Knowledge — posture and trust boundaries
+
+No LLM/model SDK in core or adapter manifests (deterministic core; LLM calls
+stay TS-side — PR-002, gate-enforced). Shipped code carries zero stub//mock markers (baseline 0, measured). No secrets in artifacts;
+launcher install is name-tagged (only removes its own files). The L3 audit
+chain (events.jsonl) is the tamper-evident record of privileged actions.
+Embeddings: FastEmbed local or HTTP provider — never a hard network dep
+(disabled-vector mode is fully offline at query time).
+
 ## Rules
 
 | ID | Candidate statement | Typed references / present enforcement | Repository evidence |
@@ -21,6 +30,12 @@ Engram's authority, lineage and agent-install trust boundaries: LLM/model SDK ex
 | SEC-105 | Bound Git acquisition MUST reject traversal/nonportable retained-path identities rather than rename them, enforce independent object/tree/depth/inflation/snapshot limits, and retain explicit cleanup-pending custody on owned cleanup failure; these adapters MUST NOT infer deletion authority for successful referenced generations. | refines: PR-005, PR-004, PC-001; acquisition safety/resource fixtures and focused review. | `docs/architecture/domain-data-model.md:87-96`; `adapters/ingest/src/git_source/safety.rs:25-52,55-87`; `adapters/ingest/src/filesystem.rs:194-219,222-243`. |
 | SEC-106 | Agent-bundle install/remove MUST touch only Engram-owned name-tagged entries, protect authored source trees and refuse symlinked destination components; a same-named foreign skill/agent MUST NOT be overwritten or removed. Packaged skills MUST NOT smuggle symlinks into a host's executable agent context. | refines: DD-002, PR-005, PC-001; installer/payload tests; distribution header check alone is insufficient. | `packages/launcher/agent-install.js:48-127,150-180,369-456`; `packages/launcher/scripts/generate-skills-payload.cjs:36-59`; `packages/launcher/scripts/check-skills-parity.cjs:92-95,138-149`. |
 | SEC-107 | Recalled constitution text MUST remain background data, not executable approval/instructions. Recall hooks MUST remain bounded, relevance-gated, kill-switchable and fail-open for the host session; that availability policy MUST NOT weaken fail-closed code authorization or allow memory to impersonate the factory owner's approving instruction. | refines: PR-005, CE-003, CI-002; hook/install fixtures and factory approval review. | `packages/launcher/hooks/recall-context.cjs:3-21,239-275`; `core/integration/src/code_binding/mod.rs:130-150`; `.agents/skills/engram-factory/scripts/factory.py:470-484`. |
+
+## Deviations & decay (domain)
+
+- none open
+- Global exceptions: root `DEVIATIONS.md` (zero-deviation law) and
+  `DECAY-WINDOWS.md` (master ledger).
 
 ## Notes
 

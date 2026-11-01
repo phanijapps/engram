@@ -18,6 +18,12 @@ brief_ref: null
 
 # Brief: <the owner’s outcome in one line>
 
+> **Functional nature**: this brief describes what the system must do, for
+> whom, and why — behavior and outcomes, not mechanisms. Owner-fixed
+> technical constraints (owner-fixed = externally imposed) are allowed but
+> MUST be labeled externally imposed; owner suggestions are NOT constraints —
+> they are non-binding.
+
 ## Why act now?
 
 <Open with the affected user or system, the harmful outcome, and the bet this work makes. State the problem rather than prescribing a mechanism.>
@@ -26,9 +32,12 @@ For example: a declared engine-neutrality path can disappear and silently stop b
 
 ## The ask — in the owner's words
 
-> <Quote the owner’s words verbatim. Do not paraphrase or merge an earlier request with a replacement request.>
+> <Quote the owner’s words verbatim. verbatim, any length; never shortened or compressed. Do not paraphrase or merge an earlier request with a replacement request.>
 
-The judgment moment is OUT-001: <state one observable success signal and who can judge it>.
+The judgment moment is OUT-001: <state one observable success signal and who
+can judge it — or `[UNMEASURABLE: the owner's pass/fail signal + when and how
+the owner will judge]>`. Without a signal and judgment moment the outcome is
+undecided `[OPEN]` — and OPEN rows block analysis, full stop.
 For example, OUT-001 is satisfied when deleting a declared gated path makes the gate exit non-zero and name that path.
 
 ## What matters, and what does not?
@@ -40,7 +49,7 @@ For example, `MOS-001` requires a missing declared path to fail the gate, `MOS-0
 
 **In scope:** <MOS/OUT IDs and bounded areas>.
 **Out of scope:** <MOS IDs and explicit exclusions>.
-**Open:** `none`, or the blocking `LED-*` IDs.
+**Open:** `none`, or the blocking `LED-*`/`[OPEN]` rows (undecided — they block analysis, full stop).
 
 ## Decision ledger — already-bound choices
 
@@ -50,9 +59,21 @@ State each delegated boundary as `LED-*` [DELEGATED: <reason>], including what t
 
 ## What constrains the bet?
 
-<Name the authority, deadline, or constitution rule and its practical effect in prose.>
+<Name the authority, deadline, or constitution rule and its practical effect
+in prose. Owner-fixed technical constraints MUST be labeled externally imposed.>
 For example, `EN-004` applies because engine-neutrality must remain fail-closed; `DW-7` makes the path-validation gap due in its stated window.
 If no constitution rule is touched, write `constitution_rules_touched: []` and explain why the boundary is unaffected.
+
+## Owner suggestions — non-binding
+
+<If the owner floated a mechanism, record it as a suggestion — it is NOT a requirement; analysis MAY use or discard it. Or `none`>
+
+## Consumption and supersession
+
+- Consumption contract: the spec receives this brief by content hash; the
+  decision ledger is BINDING; only explicitly `DELEGATED` boundaries may the
+  spec decide.
+- Rework supersession: a rework cycle supersedes earlier cycles with no inherited authority; the brief itself survives rework (intent contract).
 
 ## Owner ratification — the human gate
 

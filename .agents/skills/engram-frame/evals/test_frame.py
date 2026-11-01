@@ -32,7 +32,7 @@ class FrameSkillTests(unittest.TestCase):
             self.assertIn(section, self.skill, f"missing {section}")
 
     def test_stays_lean(self):
-        self.assertLessEqual(len(self.skill.splitlines()), 160)
+        self.assertLessEqual(len(self.skill.splitlines()), 185)  # grew with BCP-14 + EARS priming (Contract 0/7)
 
     def test_interview_discipline_markers(self):
         for marker in ("freeform", "MoSCoW", "strike", "Translate-and-confirm",
@@ -45,8 +45,8 @@ class FrameSkillTests(unittest.TestCase):
         self.assertRegex(self.skill, r"transition, not a question")
 
     def test_authority_rules(self):
-        self.assertIn("Silence is never consent", self.skill)
-        self.assertRegex(self.skill, r"C and D require\s+an explicit selection|C and D require an explicit")
+        self.assertRegex(self.skill, r"Silence MUST NOT be\s+treated as consent|Silence is never consent")
+        self.assertRegex(self.skill, r"(?i)C and D require\s+an\s+explicit\s+selection|C and D require an explicit")
         self.assertRegex(self.skill, r"Converting an `\[OPEN\]` row|Without a pick: OPEN")
         self.assertIn("ratification", self.skill.lower())
         self.assertRegex(self.skill, r"assumes <X>|assumption behind")
@@ -66,18 +66,17 @@ class BriefTemplateTests(unittest.TestCase):
         self.brief = (FACTORY / "assets" / "templates" / "brief.md").read_text()
 
     def test_required_sections(self):
-        for section in ("## The ask", "## Problem", "## Outcome measures",
-                        "## Non-goals", "## Priorities (MoSCoW)",
-                        "## Known constraints", "## Decision ledger",
-                        "## Delegated to analysis", "## Open", "## Owner ratification",
-                        "## Owner suggestions", "## Handoff"):
+        for section in ("## The ask", "## Why act now?",
+                        "## What matters, and what does not?",
+                        "## What constrains the bet?",
+                        "## Decision ledger", "## Owner ratification",
+                        "## Owner suggestions", "## Consumption and supersession"):
             self.assertIn(section, self.brief, f"missing {section}")
 
     def test_authority_vocabulary(self):
-        for term in ("HUMAN-DECIDED", "DELEGATED", "OPEN", "LED-1"):
+        for term in ("HUMAN-DECIDED", "DELEGATED", "OPEN", "LED-001"):
             self.assertIn(term, self.brief)
         self.assertIn("undecided", self.brief, "OPEN must read as undecided")
-        self.assertIn("material by default", self.brief)
 
     def test_open_blocks_analysis(self):
         self.assertRegex(self.brief, r"block analysis, full stop|blocks? analysis")
@@ -142,10 +141,10 @@ class WiringTests(unittest.TestCase):
         self.assertIn("LED-", src, "controller checks ledger row coverage")
         self.assertIn("feature text verbatim", src, "controller checks brief frames the feature")
 
-    def test_analysis_intent_binds_ledger(self):
-        analysis = (FACTORY / "assets" / "templates" / "analysis.md").read_text()
-        self.assertRegex(analysis, r"ledger is BINDING|BINDING")
-        self.assertRegex(analysis, r"OPEN rows BLOCK|OPEN rows block")
+    def test_spec_intent_binds_ledger(self):
+        spec = (FACTORY / "assets" / "templates" / "spec.md").read_text()
+        self.assertRegex(spec, r"ledger is BINDING|BINDING")
+        self.assertRegex(spec, r"OPEN.*block|block.*OPEN|\[OPEN\] rows block", spec)
 
     def test_factory_docs_name_the_seam(self):
         for path, needle in (

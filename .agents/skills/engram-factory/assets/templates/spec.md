@@ -141,8 +141,9 @@ review, not a TODO.
 ## Evidence, decisions, assumptions (mandatory)
 
 - **Evidence**: <claim> — `<path:line or command>`, proven|assumed.
-- **Decisions**: `LED-*` dispositions one line each; new decisions get `DEC-*`
-  with the rejected alternative and consequence.
+- **Decisions**: the brief's decision ledger is BINDING — every `LED-*` row
+  gets a disposition (honored/resolved); `[OPEN]` rows block this spec.
+  New decisions get `DEC-*` with the rejected alternative and consequence.
 - **Assumptions**: <default chosen because the brief was silent — revisit
   trigger>. Example: single-OS CI is assumed; revisit on Windows runners.
 

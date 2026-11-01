@@ -133,6 +133,27 @@
       "refs": ""
     },
     {
+      "rule_id": "PLT-001",
+      "pack": "platform",
+      "path": "docs/constitution/platform/rules/PLT-001.md",
+      "statement": "When vector mode is disabled, the system MUST NOT initialize embedding models, read model credentials, or make HTTP calls. The disabled-vector path MUST operate fully offline.",
+      "refs": ""
+    },
+    {
+      "rule_id": "PLT-002",
+      "pack": "platform",
+      "path": "docs/constitution/platform/rules/PLT-002.md",
+      "statement": "When the MCP server starts, storage MUST resolve to a per-project subdirectory under the declared root. Two projects MUST NOT share a database file.",
+      "refs": ""
+    },
+    {
+      "rule_id": "PLT-003",
+      "pack": "platform",
+      "path": "docs/constitution/platform/rules/PLT-003.md",
+      "statement": "When an ontology pack installs, the system MUST distinguish the full structural vocabulary from the bounded launch slice. The launch config MUST expose sliced and available counts.",
+      "refs": ""
+    },
+    {
       "rule_id": "PRD-101",
       "pack": "product",
       "path": "docs/constitution/product/rules/PRD-101.md",

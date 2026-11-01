@@ -44,3 +44,8 @@ developer_instructions: |
 
 features:
   shell_tool: true
+
+## Context (mandatory before building)
+
+Read `references/context.md` §engram-builder: gate commands and test
+conventions; verification.md is the sole result record.

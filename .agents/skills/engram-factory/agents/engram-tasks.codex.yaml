@@ -38,3 +38,8 @@ developer_instructions: |
 
 features:
   shell_tool: true
+
+## Context (mandatory before writing)
+
+Read `references/context.md` §engram-tasks: gate registry commands and
+`tools/ci/tests/` conventions — Phase 1 RED fixtures follow house style.

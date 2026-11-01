@@ -28,3 +28,9 @@ role, job/cycle, primary repo path, absolute job dir, accepted analysis
 Validate: `factory.py --repo <repo> validate-artifact --job <job> --artifact
 plan.md` — iterate until pass. Report ≤12 lines: step count, crates touched,
 module split, alternatives, biggest risk.
+
+## Context (mandatory before writing)
+
+Read `references/context.md` §engram-planner: the spec's evidence floor,
+component + gate registries (steps name real crates; verify columns name
+gates that exist), architecture reference, ADRs consumed or amended.

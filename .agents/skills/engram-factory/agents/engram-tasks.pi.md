@@ -26,3 +26,8 @@ plan (paths + hashes), allowed output paths (three artifacts), profiles.
 Validate each artifact with `factory.py validate-artifact` — iterate until all
 three pass. Report ≤10 lines: task count, AC coverage, ordering guarantees,
 ambiguities resolved for the builder.
+
+## Context (mandatory before writing)
+
+Read `references/context.md` §engram-tasks: gate registry commands and
+`tools/ci/tests/` conventions — Phase 1 RED fixtures follow house style.

@@ -12,6 +12,7 @@ from lib.repo import ROOT  # noqa: E402
 
 os.chdir(ROOT)
 
+import json
 import re
 
 strict = "--strict" in sys.argv[1:]
@@ -46,6 +47,27 @@ for job_dir in sorted(Path(".engram-factory/jobs").glob("[0-9]*-*")):
             for key in ("schema_version", "artifact", "job_id", "status", "size_tier"):
                 if not re.search(rf"^{key}:", fm, re.M):
                     findings.append(f"{jid}/{name}: frontmatter missing key `{key}`")
+            # constitution rules validation (rails must exist; tripwire for
+            # gated-path touches with empty rules claim)
+            m = re.search(r"^constitution_rules_touched:\s*(\[.*?\])\s*$", fm, re.M)
+            if m:
+                try:
+                    rules = json.loads(m.group(1))
+                except json.JSONDecodeError:
+                    rules = None; findings.append(f"{jid}/{name}: constitution_rules_touched not valid JSON")
+                if isinstance(rules, list):
+                    rail_ids = set()
+                    for rail in Path("docs/constitution").glob("0*.md"):
+                        for line in rail.read_text(errors="replace").splitlines():
+                            for rid in re.findall(r"\b([A-Z]{2}-\d{3})\b", line):
+                                rail_ids.add(rid)
+                    for rid in rules:
+                        if rid not in rail_ids:
+                            findings.append(f"{jid}/{name}: constitution rule `{rid}` does not exist in any rail")
+                    if not rules and name in ("spec.md", "analysis.md"):
+                        spec_text = texts.get(name, "")
+                        if re.search(r"adapters/|bindings/|contracts/|backends/|docs/contracts", spec_text):
+                            findings.append(f"{jid}/{name}: touches governed paths but claims no constitution rules (tripwire)")
     # ID referential integrity (only when v2 IDs present)
     spec = texts.get("spec.md") or texts.get("analysis.md") or ""
     plan, tasks = texts.get("plan.md", ""), texts.get("tasks.md", "")
@@ -80,8 +102,8 @@ for job_dir in sorted(Path(".engram-factory/jobs").glob("[0-9]*-*")):
             findings.append(f"{jid}: build.md exists while brief status=draft (ratification-before-build, RULE-4 ordering)")
 
 print(f"job-artifacts: scanned {jobs} job(s), {len(findings)} finding(s)")
-for f in findings[:40]:
+for f in findings:
     print(f"  - {f}", file=sys.stderr)
 if len(findings) > 40:
-    print(f"  ... and {len(findings)-40} more", file=sys.stderr)
+    pass
 sys.exit(1 if (strict and findings) else 0)

@@ -39,3 +39,9 @@ developer_instructions: |
 
 features:
   shell_tool: true
+
+## Context (mandatory before writing)
+
+Read `references/context.md` §engram-planner: the spec's evidence floor,
+component + gate registries (steps name real crates; verify columns name
+gates that exist), architecture reference, ADRs consumed or amended.

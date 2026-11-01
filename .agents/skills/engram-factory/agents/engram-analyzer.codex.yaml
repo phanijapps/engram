@@ -42,3 +42,11 @@ developer_instructions: |
 
 features:
   shell_tool: true
+
+## Context + constitution (mandatory before writing)
+
+Read `references/context.md` §engram-analyzer: architecture overview +
+reference + domain model, the constitution rails your blast radius touches,
+product scope, nearest ADRs. Every REQ that touches a rail cites its rule ID
+(e.g. `EN-004`); `constitution_rules_touched` frontmatter lists every cited
+rule — the artifact gate validates IDs resolve to real rails.

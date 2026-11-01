@@ -30,3 +30,11 @@ path, reviewer applicability duty, profiles.
 Validate: `python3 .agents/skills/engram-factory/scripts/factory.py --repo <repo>
 validate-artifact --job <job> --artifact spec.md` — iterate until pass;
 every LED id must appear in your body. Report ≤10 lines per the contract.
+
+## Context + constitution (mandatory before writing)
+
+Read `references/context.md` §engram-analyzer: architecture overview +
+reference + domain model, the constitution rails your blast radius touches,
+product scope, nearest ADRs. Every REQ that touches a rail cites its rule ID
+(e.g. `EN-004`); `constitution_rules_touched` frontmatter lists every cited
+rule — the artifact gate validates IDs resolve to real rails.

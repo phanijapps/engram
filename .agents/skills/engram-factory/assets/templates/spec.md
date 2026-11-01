@@ -67,6 +67,7 @@ declare it, never silently redefine it.
 ### REQ-001: <short name> (added)
 
 **MUST** — When <trigger>, the system shall <observable response>.
+- Rules: <rail rule ID(s) this REQ touches, e.g. EN-004 — or `none`>.
 - Acceptance: <happy-path AC ID>, <negative/boundary AC ID or justified exception>.
 
 Unresolved points are inline, honest, and block `status: "ready"`:

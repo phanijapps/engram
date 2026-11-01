@@ -83,6 +83,15 @@ supersession in the rail's history block.
   `tools/ci/check_job_artifacts.py` (advisory until one clean job cycle completes,
   then blocking).
 
+## Domain sub-constitutions (ratified 2026-11-01)
+
+Seven subordinate packs — product, architecture, build, testing, ci, security,
+release — each with its own `00-INDEX.md`, locally-prefixed rule IDs, and
+typed references into root rules (governs/refines/enforced-by). Root rails
+01-09 remain intact and authoritative. Machine catalogue:
+`docs/contracts/constitution/v1/constitution-catalogue.json`. ci/ is an
+enforcement view only. Plan: docs/research/software-constitution/13-federated-constitution-plan.md.
+
 ## Amendment record
 
 - 2026-10-31 (later): rail 09 (Principles) added — the six tie-breaker values

@@ -117,6 +117,20 @@ events = load("docs/contracts/constitution/v1/events/registry.json")
 for fam in events.get("families", []):
     if not fam.get("family") or not fam.get("fields"): F(f"event family malformed: {fam}")
 
+# --- Domain packs (ratified 2026-11-01): subordinate 00-INDEXes + catalogue ---
+cat_path = ROOT / "docs/contracts/constitution/v1/constitution-catalogue.json"
+if cat_path.is_file():
+    cat = json.loads(cat_path.read_text())
+    for entry in cat.get("packs", []):
+        if not (ROOT / entry["path"]).is_file():
+            F(f"catalogue rule {entry['rule_id']}: pack file missing: {entry['path']}")
+    root_rail_files = set(cat.get("root_rails", {}).values())
+    for rf in root_rail_files:
+        if not (ROOT / rf).is_file():
+            F(f"catalogue root rail missing: {rf}")
+else:
+    W("constitution catalogue not found (packs optional at this stage)")
+
 for w in warn: print(f"constitution: WARN {w}", file=sys.stderr)
 if fail:
     for f_ in fail: print(f"constitution: FAIL {f_}", file=sys.stderr)

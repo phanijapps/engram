@@ -1,0 +1,83 @@
+{
+  "schema": "engram.constitution_catalogue.v1",
+  "version": "1.0",
+  "adopted": "2026-11-01",
+  "constitution_ref": "docs/constitution/00-INDEX.md",
+  "note": "Rule-ID -> pack -> path -> enforcement. The single source tools read. Root rails 01-09 remain authoritative at root.",
+  "root_rails": {
+    "01-engine-neutrality.md": "docs/constitution/01-engine-neutrality.md",
+    "02-surface-parity.md": "docs/constitution/02-surface-parity.md",
+    "03-canonical-implementations.md": "docs/constitution/03-canonical-implementations.md",
+    "04-distribution-drift.md": "docs/constitution/04-distribution-drift.md",
+    "05-production-completeness.md": "docs/constitution/05-production-completeness.md",
+    "06-canonical-evidence.md": "docs/constitution/06-canonical-evidence.md",
+    "07-zero-deviations.md": "docs/constitution/07-zero-deviations.md",
+    "08-coherent-integration.md": "docs/constitution/08-coherent-integration.md",
+    "09-principles.md": "docs/constitution/09-principles.md"
+  },
+  "packs": [
+    {
+      "rule_id": "PRD-001",
+      "pack": "product",
+      "path": "docs/constitution/product/00-INDEX.md",
+      "statement": "Every feature brief MUST name its judgment moment (OUT-*) and non-goals",
+      "refs": "governs: root RULE-1; enforced-by: check_job_artifacts.py"
+    },
+    {
+      "rule_id": "ARC-001",
+      "pack": "architecture",
+      "path": "docs/constitution/architecture/00-INDEX.md",
+      "statement": "A new component MUST be declared in the components registry in the change that introduces it",
+      "refs": "refines: OR-001; enforced-by: check_coherent_integration.py"
+    },
+    {
+      "rule_id": "ARC-002",
+      "pack": "architecture",
+      "path": "docs/constitution/architecture/00-INDEX.md",
+      "statement": "Engine-bearing logic MUST stay in adapter/backend cells",
+      "refs": "refines: EN-001, EN-003; enforced-by: check_engine_neutrality.py"
+    },
+    {
+      "rule_id": "BLD-001",
+      "pack": "build",
+      "path": "docs/constitution/build/00-INDEX.md",
+      "statement": "Build artifacts MUST NOT be committed; published surfaces reconcile to source revisions",
+      "refs": "refines: DD-001, DD-003; enforced-by: check_distribution_drift.py"
+    },
+    {
+      "rule_id": "TST-001",
+      "pack": "testing",
+      "path": "docs/constitution/testing/00-INDEX.md",
+      "statement": "Every AC names a gate; fixtures land RED before GREEN (TDD spine)",
+      "refs": "refines: PC-002; enforced-by: check_job_artifacts.py"
+    },
+    {
+      "rule_id": "TST-002",
+      "pack": "testing",
+      "path": "docs/constitution/testing/00-INDEX.md",
+      "statement": "Production-reachable code carries zero stub markers",
+      "refs": "refines: PC-001; enforced-by: check_production_completeness.py"
+    },
+    {
+      "rule_id": "CIE-001",
+      "pack": "ci",
+      "path": "docs/constitution/ci/00-INDEX.md",
+      "statement": "Every blocking gate in the gates registry MUST run on every push",
+      "refs": "governs: all packs; enforced-by: .github/workflows/ci.yml"
+    },
+    {
+      "rule_id": "SEC-001",
+      "pack": "security",
+      "path": "docs/constitution/security/00-INDEX.md",
+      "statement": "No LLM/model SDK may enter core or adapter manifests; stub-free shipped code",
+      "refs": "refines: PR-002, PC-001; enforced-by: check_production_completeness.py"
+    },
+    {
+      "rule_id": "REL-001",
+      "pack": "release",
+      "path": "docs/constitution/release/00-INDEX.md",
+      "statement": "No merge without owner approval and the L3 released event; rollback path stated",
+      "refs": "refines: CE-001, ZD-002; enforced-by: check_canonical_evidence.py"
+    }
+  ]
+}

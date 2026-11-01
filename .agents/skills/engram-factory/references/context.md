@@ -16,7 +16,7 @@ replace, these files.
 1. `docs/architecture/overview.md` — the map: layout, crates, layers
 2. `docs/architecture/reference.md` — the golden path (how new code is shaped)
 3. `docs/architecture/domain-data-model.md` — domain SSOT (Key entities cite it)
-4. `docs/constitution/` — the rails the blast radius touches:
+4. `docs/constitution/` — root rails AND the domain packs (product/ architecture/ build/ testing/ ci/ security/ release/ — each pack INDEX narrows root rules for its domain):
    - `00-INDEX.md` universal rules + rail table, then the specific rails
    - every REQ touching a rail cites its rule ID (e.g. `EN-004`);
    - `constitution_rules_touched` frontmatter lists every cited rule

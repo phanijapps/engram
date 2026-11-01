@@ -57,7 +57,7 @@ for job_dir in sorted(Path(".engram-factory/jobs").glob("[0-9]*-*")):
                     rules = None; findings.append(f"{jid}/{name}: constitution_rules_touched not valid JSON")
                 if isinstance(rules, list):
                     rail_ids = set()
-                    for rail in Path("docs/constitution").glob("0*.md"):
+                    for rail in Path("docs/constitution").rglob("*.md"):
                         for line in rail.read_text(errors="replace").splitlines():
                             for rid in re.findall(r"\b([A-Z]{2}-\d{3})\b", line):
                                 rail_ids.add(rid)

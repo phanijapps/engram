@@ -16,3 +16,18 @@ always: does this domain have its own decision authority?
 
 Rule: one rule, one home. ci/ only REGISTERS enforcement. Security rules live
 where they constrain, cited with `security:` refs if a dedicated pack exists.
+
+
+## Monorepo: the per-module×concern test
+
+A module earns a sub-constitution pack only for concerns where it holds its
+own decision authority. Run the test per module × per concern:
+
+| Module type | Owns | Shares root |
+|---|---|---|
+| Microservice (own deploy, own data) | product, architecture, platform, release | dev, testing, ci, security |
+| Monolith module (shared deploy) | product rules if a distinct capability | almost everything |
+| Shared library | nothing | everything |
+
+Root architecture owns module boundaries and dependency direction — never
+module internals. Module architecture owns its seams. The two never invert.

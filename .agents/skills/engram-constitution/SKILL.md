@@ -1,6 +1,6 @@
 ---
 name: engram-constitution
-description: Build or grow a Software Constitution for ANY repository — greenfield (interview) or brownfield (code + docs + interview) — into docs/constitution/ with knowledge/rules split, one rule per file, ASD-STE100 style, machine catalogue. Trigger on "build a constitution", "constitution for this repo", "ground the packs", or when engram adopts a new codebase to govern.
+description: Build, grow, and MAINTAIN a Software Constitution for ANY repository — greenfield (interview) or brownfield (code + docs + interview) — with 8 domain packs (product/architecture/dev/testing/ci/security/release/platform), knowledge/rules split, one rule per file, ASD-STE100 style, DERIVED catalogue (never hand-edited), health detection, module sub-constitutions for monorepos. Self-maintaining: lane 1 derives, lane 2 detects and advises, lane 3 drafts only when the owner asks. Trigger on "build a constitution", "constitution health", "split a pack", "add a module", "ground the packs", or when adopting any codebase to govern.
 ---
 
 # engram-constitution
@@ -17,7 +17,9 @@ assets/templates/    root-INDEX · pack-INDEX · knowledge · rule · catalogue
 references/          pack-charters (the 7-pack cut, merge rules) · ste-style
                      (the mechanical subset) · evidence-mining (brownfield)
                      · interview-guide (greenfield)
-scripts/             scaffold.py (greenfield|brownfield skeleton) ·
+scripts/             scaffold.py (greenfield|brownfield|module skeleton) ·
+                     derive_catalogue.py (lane 1: regenerate the registry) ·
+                     health.py (lane 2: detect size law, drift, orphans) ·
                      validate.py (structure + catalogue) · lint.py (STE)
 evals/               test_scaffold.py (6 tests)
 ```
@@ -36,7 +38,39 @@ No code exists; the constitution encodes INTENT.
    `assets/templates/rule.template.md` — EARS + BCP 14 + STE + counterexample
    from the owner's own scenario.
 4. Read the whole draft back; owner ratifies; then `scripts/validate.py` +
-   `scripts/lint.py` clean.
+   `scripts/lint.py` clean + `scripts/derive_catalogue.py <repo> --write`.
+
+## Mode 3 — MODULE (monorepo sub-constitutions)
+
+`python3 scripts/scaffold.py --repo <path> --mode brownfield --module <name>`
+creates `docs/constitution/modules/<name>/` — a sub-constitution for a
+module with its own decision authority (microservice, independently
+published package, distinct platform). The per-module×concern test decides
+which packs a module owns: a deployable service gets product/architecture/
+platform/release; a monolith module gets product rules only; a shared
+library gets none (root law covers it). Module rules `refine:` root rules;
+root architecture owns module boundaries, never internals.
+
+## Self-management (the three lanes)
+
+**Lane 1 — DERIVED (automation executes, no approval):**
+`derive_catalogue.py <repo> --write` regenerates the catalogue from
+rules/*.md scans. The gate proves the committed catalogue matches the
+derivation. Humans never hand-edit the registry.
+
+**Lane 2 — DETECT + ADVISE (automation surfaces, the owner decides):**
+`health.py <repo>` emits findings: size law crossings (>=2,400 advisory,
+>3,000 blocking), orphan fragments, uncatalogued rules, incomplete packs,
+undeclared modules. The session agent reads findings and ADVISES the owner
+with evidence — never a drafted diff. If the owner says no, the finding
+stays open and visible.
+
+**Lane 3 — HUMAN-ORIGINATED (the skill drafts only when asked):**
+When the owner says "split testing" or "add platform rules", the skill
+runs its mining/interview analysis and drafts with REJECTED ALTERNATIVES
+listed. Structural changes require verified authorization: an L3
+ratification bound to the exact revision, or a signed owner instruction.
+The gate classifies changes from the diff, not the commit message.
 
 ## Mode 2 — BROWNFIELD (code + docs + interview)
 

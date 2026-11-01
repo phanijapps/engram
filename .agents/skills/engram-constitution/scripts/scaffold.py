@@ -15,9 +15,9 @@ from pathlib import Path
 
 SKILL = Path(__file__).resolve().parents[1]
 TPL = SKILL / "assets/templates"
-DEFAULT_PACKS = ["product", "architecture", "dev", "testing", "ci", "security", "release"]
+DEFAULT_PACKS = ["product", "architecture", "dev", "testing", "ci", "security", "release", "platform"]
 PREFIX = {"product": "PRD", "architecture": "ARC", "dev": "DEV", "testing": "TST",
-          "ci": "CIE", "security": "SEC", "release": "REL"}
+          "ci": "CIE", "security": "SEC", "release": "REL", "platform": "PLT"}
 CHARTER = {
  "product": "What this software promises: scope, observable outcomes, what it is NOT.",
  "architecture": "How it is structured: parts, seams, dependencies, boundaries.",
@@ -26,6 +26,7 @@ CHARTER = {
  "ci": "Enforcement view: which gate enforces which rule on every push. Owns no other pack's rules.",
  "security": "Trust boundaries: what is protected, from whom, and how it is audited.",
  "release": "Shipping: versioning, compatibility, publication, rollback.",
+ "platform": "Where it runs: environments, databases, dependent services, runtime wiring.",
 }
 
 def fill(tpl: str, subs: dict) -> str:
@@ -38,11 +39,19 @@ def main() -> int:
     ap.add_argument("--mode", choices=["greenfield", "brownfield"], required=True)
     ap.add_argument("--packs", default=",".join(DEFAULT_PACKS))
     ap.add_argument("--docs", nargs="*", default=[], help="brownfield: doc files/dirs to mine")
+    ap.add_argument("--module", default=None, help="create a module sub-constitution under modules/<name>/")
     a = ap.parse_args()
 
     repo = Path(a.repo).resolve()
     C = repo / "docs" / "constitution"
-    if C.exists() and (C / "00-INDEX.md").is_file():
+    if a.module:
+        C = C / "modules" / a.module
+        if C.exists() and (C / "00-INDEX.md").is_file():
+            print(f"module {a.module} already exists", file=sys.stderr); return 2
+        # module mode: parent root must exist
+        if not (repo / "docs/constitution/00-INDEX.md").is_file():
+            print("root constitution not found — scaffold root first", file=sys.stderr); return 2
+    elif C.exists() and (C / "00-INDEX.md").is_file():
         print(f"engram-constitution: {C} already exists — refusing to overwrite", file=sys.stderr)
         return 2
     packs = [p.strip() for p in a.packs.split(",") if p.strip()]
@@ -51,10 +60,11 @@ def main() -> int:
             print(f"unknown pack {p} (known: {', '.join(DEFAULT_PACKS)})", file=sys.stderr); return 2
 
     date = datetime.date.today().isoformat()
+    sub = f" (module: {a.module})" if a.module else ""
     rows = "\n".join(f"| {p} | {CHARTER[p]} | `{p}/rules/` |" for p in packs)
     (C / "registry").mkdir(parents=True, exist_ok=True)
     (C / "00-INDEX.md").write_text(fill((TPL/"root-INDEX.template.md").read_text(),
-        {"REPO": repo.name or "project", "DATE": date, "MODE": a.mode,
+        {"REPO": (a.module or repo.name or "project"), "DATE": date, "MODE": a.mode,
          "ONE_PAGE": "<greenfield: from the interview. brownfield: mine the docs and code.>",
          "UNIVERSAL_RULES": "<3-6 rules every pack refines — BCP 14.>",
          "PACK_ROWS": rows}))

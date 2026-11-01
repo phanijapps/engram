@@ -11,29 +11,30 @@ input_artifacts: []
 updated_at: "{{timestamp}}"
 ---
 
-<!--
-  v2 template. The human instruction artifact — verbatim note, minimal framing.
-  House rules: references/templates.md §Writing rules.
--->
-
 # Rework cycle {{cycle}}: {{feature_title}}
+
+<!--
+  Rework v3: the owner's correction, verbatim-first. What resets, what
+  survives (the brief ALWAYS survives — it is the intent contract), what
+  happens next.
+-->
 
 ## Human instruction (verbatim)
 
-> {{human_note}}
+{{human_note}}
 
 ## What this resets
 
-- Cycle counter advances; round returns to zero.
-- Prior approval and snapshot are void.
-- Analysis, plan, and tasks are re-validated from scratch — changed acceptance is not a builder fix.
+<Stages/artifacts re-opened this cycle — typically spec onward; evidence
+archives preserved, never edited>
 
 ## What this preserves
 
-- Source changes in the worktree — the analyzer assesses them.
-- All prior evidence and review history — archived, never edited.
+- brief.md (intent contract, immutable); owner ratification; LED decisions
+  unless the instruction explicitly reopens one.
+- Prior cycles' evidence under history/ (read-only).
 
 ## Next
 
-- Analyzer re-enters with the instruction above as input.
-- Prior-cycle artifacts are archived under history/ before new ones are scaffolded.
+<The analyzer re-runs from the instruction; new cycle number; prior
+REQ/AC/GATE IDs may be superseded — delta-tag per the spec template.>

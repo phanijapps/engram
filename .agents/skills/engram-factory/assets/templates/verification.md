@@ -14,35 +14,47 @@ updated_at: "{{timestamp}}"
 # Verification: {{feature_title}}
 
 <!--
-  Verification v2 (2026-10-31): the gate-evidence ledger. Every GATE-ID from
-  the tasks gate inventory MUST have a row with raw evidence. Acceptance rows
-  bind to AC-IDs from spec.md — no orphan gates, no unproven ACs.
+  Verification v3 (2026-11-01): the evidence ledger. The SOLE mutable result
+  record — tasks.md links here, never duplicates. Report per-AC, per-GATE,
+  with raw output. NOT_RUN is a pre-execution state; PASS requires pasted
+  evidence; an authorized exception is not PASS.
 -->
 
-## Acceptance verification
+## Acceptance verification (mandatory)
 
-| AC ID | GATE IDs | Result | Evidence reference |
+One row per AC from the spec's Gherkin blocks — verdict follows the
+scenarios, negative case included or justified:
+
+| AC | Scenario result (happy / negative) | GATE | Evidence below |
 |---|---|---|---|
-| AC-001 | GATE-001 | PASS | `#gates` row below |
+| AC-001 | missing-path-fails PASS / present-path-clean PASS | GATE-001 | `#gates` row |
 
-## Gates
+## Gates (mandatory — raw evidence, per run)
 
-| Gate ID | Command | Status | Raw evidence |
+| Gate ID | Command | Result | Raw output (kept, incl. failures) |
 |---|---|---|---|
-| GATE-001 | `<exact command>` | PASS | exit 0, output summary (first/last lines) |
+| GATE-001 | `python3 tools/ci/tests/test_engine_neutrality.py` | PASS | OK — 2 cases |
+| GATE-002 | `python3 tools/ci/check_engine_neutrality.py` | PASS | gated surface clean |
 
-Every gate from the tasks gate inventory appears above with real output —
-NOT_RUN is a finding, not a state to hand to review.
+Failed and superseded runs stay recorded — a wall of green with no failures
+anywhere is a smell, not a virtue.
 
-## Negative evidence
+## NFR evidence (mandatory-when-NFRs-declared)
 
-- <What was tried that correctly failed (denial, error path, rollback)>.
+- NFR-001 (reliability): proven by GATE-001 missing-path case — see row above.
+- Or `no NFRs declared in spec`.
 
-## Execution environment
+## Negative evidence (mandatory — never silently absent)
 
-- <OS/toolchain/versions — only if it changes interpretation>.
+<What was tried that correctly failed: denial paths, rollback, boundary
+inputs>. Or `none applies: <reason>`.
 
-## Recording rules
+## Execution environment (one line, only if it changes interpretation)
 
-- Raw evidence stays here; summaries reference it. A PASS without pasted
-  output is a finding.
+<OS/toolchain/versions>. Or `standard CI runner`.
+
+## Recording rules (mandatory)
+
+Raw evidence stays HERE; other artifacts link to it. A PASS without pasted
+output is a finding. Profile evidence: {{profiles_json}}-driven sections
+appended below by the controller.

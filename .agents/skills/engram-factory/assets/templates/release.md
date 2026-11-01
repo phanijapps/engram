@@ -11,60 +11,40 @@ input_artifacts: []
 updated_at: "{{timestamp}}"
 ---
 
-<!--
-  v2 template. House rules: references/templates.md §Writing rules.
-  This artifact is the handoff to a future Release/Operations factory: it must
-  stand alone for a reader who has never seen the job.
--->
-
 # Release: {{feature_title}}
 
-| Field | Value |
-|---|---|
-| Reader / question | A release operator asking "what ships, how do I undo it, and what am I accepting?" |
-| Status | cycle {{cycle}} · rehearsal required before ready |
-| Boundary | Source merge authorizes NO deployment or promotion |
+<!--
+  Release v3: the ship record. What changed (by ID), how it was rehearsed,
+  how it unwinds. L3 events close the audit chain at merge.
+-->
 
 ## What ships
 
-- <One line per surface; reference REQ/STEP IDs, not prose>.
-
-> One paragraph plus identity. Enforcement: approver binds this to the snapshot id.
-
 {{what_ships}}
 
-*(Shape: behavior delivered in plain words · exact commit/snapshot identity · surfaces touched.)*
-
 ## Rehearsal
-
-> The fresh-run evidence: full gates on a clean store, matrix green. Link verification.md — do not restate results.
 
 {{rehearsal}}
 
 ## Rollback
 
-> Imperative steps, exact commands. Consumes plan §Recovery and rollback verbatim or explains the delta.
-
 {{rollback_steps}}
 
-## Accepted limitations and follow-ups
+## Evidence chain (L3)
 
-> Every known gap that ships anyway: `limitation — owner — revisit trigger`. No hidden asterisks.
+- job.released event: `.engram-factory/jobs/<job-id>/events.jsonl` carries
+  the merge commit + artifact hashes (rail 06).
+- Deviations opened/closed this job: <none or DW/DEV IDs>.
+
+## Accepted limitations and follow-ups
 
 {{limitations}}
 
 ## Operations notes
 
-> What an operator watches after this lands: signals, growth paths, runbook links.
-
 {{ops_notes}}
-
-## Evidence chain (L3)
-
-- job.released event: `.engram-factory/jobs/<job-id>/events.jsonl` carries the
-  merge commit and artifact hashes (rail 06 canonical evidence).
-- Deviations opened/closed this job: <none or DW/DEV IDs>.
 
 ## Handoff manifest
 
-> What a Release factory consumes from here: approved snapshot id · verification evidence · limitations list · promotion status (none until separately authorized).
+<One line per consumer surface: who must do what after merge — or
+`none: no runtime/packaging surface touched`>

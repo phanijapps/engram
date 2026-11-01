@@ -8,57 +8,127 @@ author_role: "engram-planner"
 profiles: {{profiles_json}}
 source_snapshot: null
 input_artifacts: []
-updated_at: "FILL: ISO-8601 with timezone"
+updated_at: "{{timestamp}}"
 size_tier: "S"
 spec_ref: null
 constitution_rules_touched: []
 ---
 <!--
-  Plan template v2 (constitution adoption 2026-10-31).
-  v2 changes: every step carries REQ IDs + constitution rule IDs + concrete
-  paths + verification + rollback — no orphan steps, no orphan REQs; blast
-  radius must be paths/counts, not adjectives. Approach links DEC-* without
-  restating REQ prose. Verified by tools/ci/check_job_artifacts.py.
+PROPOSED (not landed) — architecture-first plan-template redesign.
+Integration: preserve this JSON-per-line frontmatter union and literal REQ/AC/STEP/GATE IDs; the factory parser consumes it unchanged.
 -->
 
 
-# Plan: <short outcome>
+# Plan: <short observable outcome>
+## Approach argument (mandatory)
 
-## Approach
+Make the engineering case before listing work: name the chosen seam, explain why
+it satisfies each cited `REQ-*`, consume applicable `DEC-*`, and state the
+rejected alternative and its consequence inline. S tier is this argument,
+steps, and at most one relevant diagram; M/L adds the architecture views below
+only when they clarify a real boundary or runtime concern—never blank sections.
 
-One concise design narrative. Link consumed `DEC-*`; do not restate `REQ-*` —
-reference by ID.
+**Worked example — job 011.** Change the scan seam in
+`tools/ci/check_engine_neutrality.py` to collect a nonexistent declared path as
+a named violation. That fail-closed behavior satisfies `REQ-001`; NFR-001 (reliability)
+keeps present-path scanning intact. Silently skipping the path is
+rejected because it permits an unscanned engine-bearing surface to ship. No
+`DEC-*` is consumed: the spec determines this gate-only shape.
 
-## New decisions
+## High-level architecture (M/L — system context)
+Use a C4-ish context graph to show what is inside the change boundary, external
+actors, and the contract crossing each boundary. This diagram answers the
+ISO-42010 **context/boundary** concern; it is not a runtime sequence. For S,
+omit it unless this is the one diagram needed to make the seam legible.
 
-| ID | Authority / rule | Decision | Why now | Consequence |
-|---|---|---|---|---|
-| DEC-002 | DELEGATED / <rule ID> | <choice> | <new fact> | <effect> |
+```mermaid
+flowchart LR
+  Maintainer[Maintainer / CI] -->|runs| Gate[EN-004 gate\ntools/ci/check_engine_neutrality.py]
+  Gate -->|declared paths| Surface[Repository gated surface]
+  Gate -->|exit 1 + named violation| CI[CI result]
+  Fixture[tools/ci/tests/test_engine_neutrality.py] -->|proves fail-closed contract| Gate
+  style Gate fill:#d9eaf7,stroke:#245
+```
 
-## Steps
+For job 011, the gate and its fixture are inside the boundary; repository paths
+are scanned input, and CI consumes only the exit/result contract. `REQ-001`
+changes the missing-path result; `NFR-001` preserves present-path behavior.
 
-| ID | Implement | REQ IDs | Rule IDs | Concrete paths | Verify (GATE-ID / command) | Rollback |
+## Technical architecture (M/L — components and runtime flow)
+Name concrete components and the implementation seam, then add a separate
+control-flow or sequence view for the runtime concern. Do not use a context
+diagram to imply execution order. The component view below owns the
+**structure/responsibility** concern; the sequence owns **failure control flow**.
+
+```mermaid
+flowchart TB
+  Scan[scan()\ncheck_engine_neutrality.py] --> Exists{declared path exists?}
+  Exists -->|yes| Patterns[existing prohibited-pattern scan]
+  Exists -->|no| Violations[append named missing-path violation]
+  Patterns --> Result[aggregate violations and exit]
+  Violations --> Result
+```
+
+```mermaid
+sequenceDiagram
+  participant CI as CI runner
+  participant Gate as check_engine_neutrality.py
+  participant FS as declared gated path
+  CI->>Gate: run EN-004
+  Gate->>FS: exists()?
+  FS-->>Gate: missing
+  Gate-->>CI: exit 1; name missing path
+```
+
+In the worked example, collection joins the existing violation aggregation rather
+than adding a second exit path; the fixture invokes the public gate behavior,
+not an implementation-only helper.
+
+## Governed implementation, verification, and rollback (mandatory)
+Order independently reviewable work so later evidence depends on earlier
+behavior. Every step must cite one or more `REQ-*`; every requirement in the
+referenced spec must occur in a STEP row. A new consequential choice is
+`DEC-* [DELEGATED: authority]`: decision; rejected alternative; consequence.
+
+| ID | Imperative | REQ IDs | Rule IDs | Concrete paths | Verify (GATE) | Rollback |
 |---|---|---|---|---|---|---|
-| STEP-001 | <imperative action> | REQ-001 | <rule ID> | `src/a.rs`; `new-path: tests/a.rs` | GATE-001 | <exact revert/recovery> |
+| STEP-001 | Collect missing declared paths as named violations without changing existing pattern checks. | REQ-001 | EN-004 | `tools/ci/check_engine_neutrality.py` | GATE-002 | Revert the behavior commit. |
+| STEP-002 | Add present-path and missing-path fixture coverage through the gate boundary. | REQ-001 | EN-004 | `tools/ci/tests/test_engine_neutrality.py` | GATE-001 | Revert the fixture commit. |
 
-## Contracts and compatibility
+Stop and escalate if the pre-fix missing-path fixture does not fail or the
+post-fix fixture does not pass: that invalidates the seam argument rather than
+just a test expectation. Roll back in reverse dependency order; job 011 has no
+persisted state, schema migration, or partial deployment, so reverting the two
+commits restores the prior gate behavior.
 
-| Surface | Classification | REQ IDs | Consumer / migration / documentation action |
+## Acceptance-to-evidence map (mandatory)
+Every `AC-*` needs at least one STEP and a named runnable GATE. State an
+approved omission/deviation explicitly; an empty cell is not evidence.
+
+| AC ID | Step IDs | Gate IDs | Omission or authorized deviation |
 |---|---|---|---|
-| public/internal/none | compatible/breaking/none | REQ-001 | <concrete action> |
+| AC-001 | STEP-001, STEP-002 | GATE-001: `python3 tools/ci/tests/test_engine_neutrality.py`; GATE-002: `python3 tools/ci/check_engine_neutrality.py` | none |
 
-## Blast radius
+## Quality attributes met by design (mandatory)
 
-| Area or symbol | Concrete dependent paths/count | Risk | Owning STEP IDs |
-|---|---|---|---|
-| <area> | <paths or measured count> | <failure shape> | STEP-001 |
+How the design delivers each spec NFR — mechanism, not restatement:
+- NFR-001 (reliability) → fail-closed collection in scan() before any skip
+  path exists; proven by GATE-001's missing-path case.
+Or `no NFRs declared; spec quality line is none beyond baseline` with reason.
 
-## Verification map
+## Outside this change (mandatory — one line)
 
-| AC ID | Step IDs | Gate IDs | Omission / deviation |
-|---|---|---|---|
-| AC-001 | STEP-001 | GATE-001 | none |
+Mirror the spec's out-list by reference: <"see spec Outside this change" plus
+any plan-level exclusions (tools, experiments, refactors)>.
 
-## Rollback and recovery
+## Deployment safety (mandatory — one short block)
 
-- STEP-001: <exact rollback command/action and partial-failure state>.
+State rollout order, mixed-version and persisted-state compatibility, rollback
+trigger/owner, and irreversible effects; give a reason when none apply.
+
+## Contracts and blast radius (mandatory)
+State compatibility, consumers, and migration action concretely; say `none`
+only with a reason. Worked example: this is a compatible internal CI-gate
+behavior change. Consumers are `tools/ci/check_engine_neutrality.py` and its
+fixture; no stored format, public API, or migration changes. The owned failure
+shape is a false failure in a stripped checkout, surfaced as the named path.

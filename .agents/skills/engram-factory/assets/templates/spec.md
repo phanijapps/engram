@@ -106,7 +106,7 @@ on stripped checkouts (RISK-001, maintainer-owned).
 ## Key entities (only when the domain model moves)
 
 - **<Entity>**: what it represents, key attributes, relationships — deltas
-  against `docs/architecture/domain-data-model.md`, no implementation.
+  against `docs/constitution/architecture/domain-data-model.md`, no implementation.
 
 ## Acceptance criteria (mandatory — Gherkin)
 

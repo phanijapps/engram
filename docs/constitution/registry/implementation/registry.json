@@ -6,7 +6,7 @@
   "notes": [
     "Seeded at adoption (L1 structural). The drift gate (check_implementation_registry.py, month 1) makes this blocking.",
     "ssot_module paths are repo-relative crate roots or package entry points.",
-    "Domain truth remains docs/architecture/domain-data-model.md until Rust domain types become the generated-contract source (CI-004)."
+    "Domain truth remains docs/constitution/architecture/domain-data-model.md until Rust domain types become the generated-contract source (CI-004)."
   ],
   "concepts": [
     {

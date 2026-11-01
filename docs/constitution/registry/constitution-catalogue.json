@@ -3,18 +3,8 @@
   "version": "1.0",
   "adopted": "2026-11-01",
   "constitution_ref": "docs/constitution/00-INDEX.md",
-  "note": "Rule-ID -> pack -> path -> enforcement. Grounded by evidence analysis (14-engram-grounded-packs.md, gpt-6.1-sol xhigh, 2026-11-01); every rule carries repository citations. Root rails 01-09 remain authoritative.",
-  "root_rails": {
-    "01-engine-neutrality.md": "docs/constitution/01-engine-neutrality.md",
-    "02-surface-parity.md": "docs/constitution/02-surface-parity.md",
-    "03-canonical-implementations.md": "docs/constitution/03-canonical-implementations.md",
-    "04-distribution-drift.md": "docs/constitution/04-distribution-drift.md",
-    "05-production-completeness.md": "docs/constitution/05-production-completeness.md",
-    "06-canonical-evidence.md": "docs/constitution/06-canonical-evidence.md",
-    "07-zero-deviations.md": "docs/constitution/07-zero-deviations.md",
-    "08-coherent-integration.md": "docs/constitution/08-coherent-integration.md",
-    "09-principles.md": "docs/constitution/09-principles.md"
-  },
+  "note": "Rule-ID -> pack -> path -> enforcement. Root rails 01-09 dissolved into packs (2026-11-01 replatforming): EN/SP/CI/OR->architecture, PC->build, DD->release, CE->ci; ZD+PR principles into root 00-INDEX. Rule IDs unchanged.",
+  "root_rails": {},
   "packs": [
     {
       "rule_id": "PRD-101",

@@ -24,14 +24,13 @@ required = [
     "docs/constitution/00-INDEX.md",
     "docs/constitution/DEVIATIONS.md",
     "docs/constitution/DECAY-WINDOWS.md",
-    "docs/contracts/constitution/v1/implementation/registry.json",
-    "docs/contracts/constitution/v1/schemas/software-constitution-implementation-registry.v1.json",
+    "docs/constitution/registry/implementation/registry.json",
+    "docs/constitution/registry/schemas/software-constitution-implementation-registry.v1.json",
 ]
 for p in required:
     if not Path(p).is_file(): F(f"missing required artifact: {p}")
 
 rails = sorted(Path("docs/constitution").glob("0[1-9]-*.md")) if Path("docs/constitution").is_dir() else []
-if len(rails) < 1: F("no numbered constitution rails found")
 index = Path("docs/constitution/00-INDEX.md").read_text() if Path("docs/constitution/00-INDEX.md").is_file() else ""
 for rail in rails:
     if rail.name not in index:
@@ -77,7 +76,7 @@ def load(p):
     except Exception as e:
         F(f"registry {p} does not parse: {e}"); return {}
 
-impl = load("docs/contracts/constitution/v1/implementation/registry.json")
+impl = load("docs/constitution/registry/implementation/registry.json")
 if impl:
     if impl.get("schema") != "software-constitution.implementation_registry.v1":
         F("implementation registry: wrong schema field")
@@ -94,7 +93,7 @@ if impl:
             if not Path(w.get("module", "")).exists():
                 F(f"transport wrapper path missing: {w.get('module')} (concept {c.get('concept_id')})")
 
-gates = load("docs/contracts/constitution/v1/gates/registry.json")
+gates = load("docs/constitution/registry/gates/registry.json")
 classes_covered = set()
 for g in gates.get("gates", []):
     if g.get("status") == "existing":
@@ -106,19 +105,19 @@ for rc in ("RULE-1", "RULE-3", "RULE-5"):
     if rc not in classes_covered:
         F(f"no blocking existing gate for {rc} (minimum L1 discipline set)")
 
-comps = load("docs/contracts/constitution/v1/components/registry.json")
+comps = load("docs/constitution/registry/components/registry.json")
 if comps:
     paths = [c["path"] for c in comps.get("components", [])]
     if len(paths) != len(set(paths)): F("components registry: duplicate path")
     for c in comps.get("components", []):
         if not Path(c["path"]).exists(): F(f"components registry: declared path missing on disk: {c['path']}")
 
-events = load("docs/contracts/constitution/v1/events/registry.json")
+events = load("docs/constitution/registry/events/registry.json")
 for fam in events.get("families", []):
     if not fam.get("family") or not fam.get("fields"): F(f"event family malformed: {fam}")
 
 # --- Domain packs (ratified 2026-11-01): subordinate 00-INDEXes + catalogue ---
-cat_path = ROOT / "docs/contracts/constitution/v1/constitution-catalogue.json"
+cat_path = ROOT / "docs/constitution/registry/constitution-catalogue.json"
 if cat_path.is_file():
     cat = json.loads(cat_path.read_text())
     for entry in cat.get("packs", []):

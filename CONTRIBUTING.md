@@ -39,7 +39,7 @@ git config core.hooksPath .githooks
 ## Contribution Flow
 
 1. Open an issue or discussion for non-trivial contract changes.
-2. Update `docs/architecture/domain-data-model.md` when changing accepted semantics.
+2. Update `docs/constitution/architecture/domain-data-model.md` when changing accepted semantics.
 3. Update `docs/contracts/v1/` for accepted wire contracts.
 4. Update `docs/specs/` before implementation behavior.
 5. Add valid and invalid examples for contract changes.

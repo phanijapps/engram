@@ -143,7 +143,7 @@ For product, data, and strategy teams — the problems engram solves, in plain t
 
 Engram bakes in eight concepts beyond "store text, search by similarity." The
 full version is in [The conceptual model](#the-conceptual-model); the pipeline
-that connects them is in the [architecture overview](docs/architecture/overview.md).
+that connects them is in the [architecture overview](docs/constitution/architecture/00-INDEX.md).
 
 1. **Memory as a first-class domain** — typed records with a lifecycle, not bare rows.
 2. **Source-grounded knowledge graph** — facts traceable to a source, never free-floating.
@@ -290,9 +290,9 @@ record's lineage is traceable via `EvidenceRef` and `DerivationRef`.
 
 ### 8. Contract-first design (domain types outrank SQL)
 
-The human-readable domain model (`docs/architecture/domain-data-model.md`), the
+The human-readable domain model (`docs/constitution/architecture/domain-data-model.md`), the
 machine-readable wire contract (`docs/contracts/v1/`), and the product overview
-(`docs/product/engram.md`) are the **source of truth**. Rust types, generated TypeScript,
+(`docs/constitution/product/00-INDEX.md`) are the **source of truth**. Rust types, generated TypeScript,
 JSON Schema, database schemas, and API payloads all conform *downward* — never
 the reverse. This is what makes engram portable across SQLite today and
 Postgres / Neo4j tomorrow without breaking agents that depend on it.
@@ -355,7 +355,7 @@ contracts instead of redefining them.
 
 The full pipeline diagram (write/ingest → process → storage cells → retrieval
 composition → context packet), the layer responsibilities, and the research
-grounding are in the **[architecture overview](docs/architecture/overview.md)**.
+grounding are in the **[architecture overview](docs/constitution/architecture/00-INDEX.md)**.
 
 ---
 
@@ -605,7 +605,7 @@ pnpm run check
 
 | Document | What it covers |
 |---|---|
-| [`docs/architecture/overview.md`](docs/architecture/overview.md) | The memory pipeline diagram + layer responsibilities |
+| [`docs/constitution/architecture/00-INDEX.md`](docs/constitution/architecture/00-INDEX.md) | The memory pipeline diagram + layer responsibilities |
 | [`docs/guides/how-to/build-and-run.md`](docs/guides/how-to/build-and-run.md) | Prerequisites, build/test, demo, MCP startup |
 | [`docs/guides/how-to/connect-via-mcp.md`](docs/guides/how-to/connect-via-mcp.md) | Both MCP servers, tool lists, client configs |
 | [`docs/guides/how-to/extend-storage.md`](docs/guides/how-to/extend-storage.md) | How to add a new storage backend |
@@ -616,9 +616,9 @@ pnpm run check
 
 | Document | What it covers |
 |---|---|
-| [`docs/product/engram.md`](docs/product/engram.md) | Consolidated product overview — every capability + status |
-| [`docs/architecture/domain-data-model.md`](docs/architecture/domain-data-model.md) | The source-of-truth domain model (2,400+ lines) |
-| [`docs/product/engram.md` (charter retired)](docs/CHARTER.md) | Mission, scope, six principles |
+| [`docs/constitution/product/00-INDEX.md`](docs/constitution/product/00-INDEX.md) | Consolidated product overview — every capability + status |
+| [`docs/constitution/architecture/domain-data-model.md`](docs/constitution/architecture/domain-data-model.md) | The source-of-truth domain model (2,400+ lines) |
+| [`docs/constitution/product/00-INDEX.md` (charter retired)](docs/CHARTER.md) | Mission, scope, six principles |
 | [`docs/research/synthesis.md`](docs/research/synthesis.md) | Research → architecture direction |
 | [`docs/research/engram-framing-synthesis.md`](docs/research/engram-framing-synthesis.md) | The "belief layer" positioning |
 | [`docs/research/academic-research-findings.md`](docs/research/academic-research-findings.md) | CoALA, Tulving, MemGPT, ACT-R, GraphRAG citations |

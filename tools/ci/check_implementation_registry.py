@@ -15,7 +15,7 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
-REGISTRY = ROOT / "docs/contracts/constitution/v1/implementation/registry.json"
+REGISTRY = ROOT / "docs/constitution/registry/implementation/registry.json"
 
 fail = []
 

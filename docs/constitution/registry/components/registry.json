@@ -264,7 +264,7 @@
       "name": "portable-contracts"
     },
     {
-      "path": "docs/contracts/constitution/v1",
+      "path": "docs/constitution/registry",
       "kind": "contracts",
       "role": "contracts",
       "name": "constitution-spec-root"

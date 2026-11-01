@@ -20,8 +20,8 @@ os.chdir(ROOT)
 NAME = "contracts"
 
 REQUIRED_FILES = [
-    "docs/architecture/domain-data-model.md",
-    "docs/architecture/README.md",
+    "docs/constitution/architecture/domain-data-model.md",
+    "docs/constitution/architecture/00-INDEX.md",
     "docs/research/synthesis.md",
     "docs/rfcs/0001-memory-layer-scope.md",
     "docs/rfcs/0002-knowledge-source-extension.md",
@@ -81,7 +81,7 @@ def main() -> int:
             print(f"{NAME}: missing required contract file: {f}", file=sys.stderr)
             return 1
 
-    domain = Path("docs/architecture/domain-data-model.md").read_text()
+    domain = Path("docs/constitution/architecture/domain-data-model.md").read_text()
     for section in REQUIRED_SECTIONS:
         if section not in domain:
             print(f"{NAME}: missing required domain model section: {section}", file=sys.stderr)
@@ -95,7 +95,7 @@ def main() -> int:
             return 1
 
     # deny drift: forbidden payload field must not reappear in schemas/model
-    targets = [Path("docs/contracts/v1/schemas"), Path("docs/architecture/domain-data-model.md")]
+    targets = [Path("docs/contracts/v1/schemas"), Path("docs/constitution/architecture/domain-data-model.md")]
     for target in targets:
         if target.is_dir():
             found = any(FORBIDDEN_EXAMPLE in f.read_text(errors="replace") for f in target.rglob("*.json"))

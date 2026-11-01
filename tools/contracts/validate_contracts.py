@@ -165,7 +165,7 @@ def main() -> int:
 
     for path in [
         ROOT / "docs/contracts/v1/schemas/engram-v1.schema.json",
-        ROOT / "docs/architecture/domain-data-model.md",
+        ROOT / "docs/constitution/architecture/domain-data-model.md",
     ]:
         errors.extend(ensure_no_training_export(path))
 

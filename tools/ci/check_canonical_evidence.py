@@ -3,7 +3,7 @@
 
 Fails when:
   - an events.jsonl record references an event family NOT declared in
-    docs/contracts/constitution/v1/events/registry.json (canonical-first),
+    docs/constitution/registry/events/registry.json (canonical-first),
   - a record is malformed (not JSON, missing schema/family/actor/at/job_id),
   - a required per-family field (per the registry) is absent,
   - a job created after L3 adoption (job number > 010) reached approve/merge
@@ -16,7 +16,7 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
-REGISTRY = ROOT / "docs/contracts/constitution/v1/events/registry.json"
+REGISTRY = ROOT / "docs/constitution/registry/events/registry.json"
 JOBS = ROOT / ".engram-factory/jobs"
 ADOPTION_JOB = 10  # jobs 001-010 are pre-L3 (DW-8)
 

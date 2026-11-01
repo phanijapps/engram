@@ -3,7 +3,7 @@
 
 Bidirectional bijection between the component registry and disk:
   - every Rust workspace member and TS package MUST be declared in
-    docs/contracts/constitution/v1/components/registry.json (orphans fail),
+    docs/constitution/registry/components/registry.json (orphans fail),
   - every registry entry MUST resolve to a directory on disk with a
     Cargo.toml or package.json (dangling declarations fail),
   - every gate in the gates registry MUST exist on disk when status=existing.
@@ -15,8 +15,8 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
-COMPONENTS = ROOT / "docs/contracts/constitution/v1/components/registry.json"
-GATES = ROOT / "docs/contracts/constitution/v1/gates/registry.json"
+COMPONENTS = ROOT / "docs/constitution/registry/components/registry.json"
+GATES = ROOT / "docs/constitution/registry/gates/registry.json"
 
 fail = []
 

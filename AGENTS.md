@@ -121,7 +121,7 @@ contracts, eval, node) now that the stack ADR (ADR-0003) is accepted.
 
 ## Boundary Rules
 
-- `docs/architecture/domain-data-model.md` is the source of truth until Rust domain types are
+- `docs/constitution/architecture/domain-data-model.md` is the source of truth until Rust domain types are
   accepted as the generated-contract source.
 - `engram-domain` must not depend on SQL, vector stores, embedding providers,
   async runtimes, Node, N-API, or TypeScript tooling.
@@ -246,7 +246,7 @@ contracts, eval, node) now that the stack ADR (ADR-0003) is accepted.
 - Put research notes, excerpts, and links under `docs/research/`.
 - Record durable technical decisions under `docs/adr/`.
 - Record design proposals under `docs/rfcs/`.
-- Update `docs/architecture/domain-data-model.md` before changing contracts, schemas, or
+- Update `docs/constitution/architecture/domain-data-model.md` before changing contracts, schemas, or
   generated public types.
 - Classify public contract changes as compatible or breaking.
 - Put accepted machine-readable contract artifacts under `docs/contracts/v1/`.
@@ -290,7 +290,7 @@ Run `pnpm run build` after TypeScript package surface changes.
 
 These one-off structural / honesty traps are not covered by the general boundary
 rules above; they were lifted from the feature specs when those were consolidated
-into [`docs/product/engram.md`](docs/product/engram.md). The *general principles*
+into [`docs/constitution/product/00-INDEX.md`](docs/constitution/product/00-INDEX.md). The *general principles*
 (neutrality, no-god-modules, facades stay thin, surface parity, store adapters
 don't own composition) already govern all crates; the items below are the
 feature-specific traps.

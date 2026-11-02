@@ -2,6 +2,8 @@ import { useEffect, useState } from "react";
 import { fetchInventory, type InventoryResponse } from "./api";
 import { AliasHeader, InventoryView } from "./views/Inventory";
 import { PartitionView, type PartitionTuple } from "./views/Partition";
+import { AnomaliesView } from "./views/Anomalies";
+import { fetchAnomalies } from "./api";
 
 /**
  * Console shell (job 012 STEP-007 scaffold): the org/project alias header
@@ -11,7 +13,7 @@ import { PartitionView, type PartitionTuple } from "./views/Partition";
  */
 export function App() {
   const [inventory, setInventory] = useState<InventoryResponse | null>(null);
-  const [view, setView] = useState<"inventory" | "partition">("inventory");
+  const [view, setView] = useState<"inventory" | "partition" | "anomalies">("inventory");
   const [selected, setSelected] = useState<PartitionTuple | null>(null);
 
   useEffect(() => {
@@ -43,6 +45,12 @@ export function App() {
         >
           Inventory
         </button>
+        <button
+          className={`rounded-t px-3 py-1.5 ${view === "anomalies" ? "bg-slate-800" : "hover:bg-slate-900"}`}
+          onClick={() => setView("anomalies")}
+        >
+          Anomalies
+        </button>
       </nav>
       <main className="px-6 py-4">
         {view === "inventory" ? (
@@ -50,6 +58,14 @@ export function App() {
             inventory={inventory}
             onSelect={(partition) => {
               setSelected(partition.scope);
+              setView("partition");
+            }}
+          />
+        ) : view === "anomalies" ? (
+          <AnomaliesView
+            onLoad={fetchAnomalies}
+            onOpenPartition={(scope) => {
+              setSelected(scope);
               setView("partition");
             }}
           />

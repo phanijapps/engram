@@ -108,6 +108,24 @@ export function fetchPartitionRecent(
   return getJson(`/api/partitions/${partitionKey(scope)}/recent?limit=${limit}`);
 }
 
+export interface Anomaly {
+  kind: "subject-partitions" | "entity-identity";
+  title: string;
+  partitions: PartitionSummary["scope"][];
+  partitionCount: number;
+}
+
+export interface AnomaliesResponse {
+  state: InventoryState;
+  anomalies: Anomaly[];
+  anomalyCount?: number;
+  message?: string;
+}
+
+export function fetchAnomalies(): Promise<AnomaliesResponse> {
+  return getJson<AnomaliesResponse>("/api/anomalies");
+}
+
 export function fetchPartitionGraph(
   scope: PartitionSummary["scope"],
   limit: number

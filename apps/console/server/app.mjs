@@ -66,6 +66,83 @@ export function classifyDegradedState(errorText) {
   return { state: "engine-error", message: text };
 }
 
+/**
+ * The minimal documented anomaly set (REQ-010, LED-003 Show tier), computed
+ * ONLY from engine reads: (1) the same subject value present in more than one
+ * partition; (2) the same entity identity (name) present in more than one
+ * partition. STRICTLY read-only: this function performs no writes and offers
+ * no actions; repair, prune, and enforcement are out of scope for v1 (W-001).
+ *
+ * Bounds: subject anomalies derive from the inventory summary directly;
+ * entity anomalies scan up to `maxPartitions` partitions with one bounded
+ * entity page each — the same bounded-summary doctrine as the inventory.
+ */
+export async function detectAnomalies(api, partitions, { maxPartitions = 200 } = {}) {
+  const anomalies = [];
+
+  // (1) same subject under multiple partitions (tenant-scoped: a subject is
+  // an identity inside its tenant).
+  const bySubject = new Map();
+  for (const partition of partitions) {
+    const subject = partition.scope?.subject ?? null;
+    if (!subject) continue;
+    const tenant = partition.scope.tenant;
+    const groupKey = `${tenant}||${subject}`;
+    if (!bySubject.has(groupKey)) bySubject.set(groupKey, []);
+    bySubject.get(groupKey).push(partition.scope);
+  }
+  for (const [groupKey, scopes] of bySubject) {
+    if (scopes.length > 1) {
+      const [tenant, subject] = groupKey.split("||");
+      anomalies.push({
+        kind: "subject-partitions",
+        title: `Subject '${subject}' appears in ${scopes.length} partitions`,
+        tenant,
+        subject,
+        partitions: scopes,
+        partitionCount: scopes.length
+      });
+    }
+  }
+
+  // (2) same entity identity (name) under multiple partitions.
+  const entityPartitions = new Map();
+  const scanned = partitions.slice(0, maxPartitions);
+  for (const partition of scanned) {
+    let page = null;
+    try {
+      page = JSON.parse(
+        api.partitionEntitiesJson(
+          JSON.stringify({ partition: partition.scope, page: { limit: 500, offset: 0 } })
+        )
+      );
+    } catch {
+      continue; // a partition that cannot be listed is not an anomaly signal
+    }
+    for (const entity of page.items ?? []) {
+      const name = entity.name;
+      if (!name) continue;
+      if (!entityPartitions.has(name)) entityPartitions.set(name, []);
+      const seen = entityPartitions.get(name);
+      if (!seen.some((scope) => JSON.stringify(scope) === JSON.stringify(partition.scope))) {
+        seen.push(partition.scope);
+      }
+    }
+  }
+  for (const [name, scopes] of entityPartitions) {
+    if (scopes.length > 1) {
+      anomalies.push({
+        kind: "entity-identity",
+        title: `Entity '${name}' appears in ${scopes.length} partitions`,
+        name,
+        partitions: scopes,
+        partitionCount: scopes.length
+      });
+    }
+  }
+  return anomalies;
+}
+
 const MIME = {
   ".html": "text/html; charset=utf-8",
   ".js": "text/javascript; charset=utf-8",
@@ -140,6 +217,18 @@ export function createConsoleServer({ provider, backend, storage, uiDir }) {
       } catch (error) {
         const degraded = classifyDegradedState(error?.message ?? error);
         return sendJson(res, 200, { state: degraded.state, message: degraded.message, partitions: [] });
+      }
+    }
+
+    if (req.method === "GET" && url.pathname === "/api/anomalies") {
+      try {
+        const api = inventoryApi();
+        const partitions = JSON.parse(api.inventoryJson());
+        const anomalies = await detectAnomalies(api, partitions);
+        return sendJson(res, 200, { state: "ready", anomalies, anomalyCount: anomalies.length });
+      } catch (error) {
+        const degraded = classifyDegradedState(error?.message ?? error);
+        return sendJson(res, 200, { state: degraded.state, message: degraded.message, anomalies: [] });
       }
     }
 

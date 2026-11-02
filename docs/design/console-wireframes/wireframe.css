@@ -299,7 +299,7 @@
 
   @media (min-width: 64rem) {
     .wf-shell {
-      grid-template-columns: var(--wf-sidebar-width) minmax(0, 1fr);
+      grid-template-columns: var(--ds-sidebar-width) minmax(0, 1fr);
     }
 
     .wf-sidebar {
@@ -404,7 +404,7 @@
 
   .wf-kpi-label {
     font-size: var(--wf-kpi-label-size);
-    font-weight: var(--wf-micro-label-weight);
+    font-weight: var(--ds-font-semibold);
     text-transform: uppercase;
     letter-spacing: var(--ds-tracking-micro);
     color: var(--wf-kpi-label-color);
@@ -845,8 +845,8 @@
   .wf-spec-table code {
     padding: 1px 2px;
     border-radius: var(--ds-radius-sm);
-    background-color: var(--wf-code-bg);
-    color: var(--wf-code-fg);
+    background-color: var(--ds-color-well-bg);
+    color: var(--ds-color-well-fg);
     font-size: var(--ds-text-sm);
   }
 

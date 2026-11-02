@@ -165,6 +165,25 @@
           </article>
         </div>
       </section>
+      <section class="wf-section" aria-labelledby="kbd-title">
+        <details class="wf-panel" data-contract="keyboard-order">
+          <summary id="kbd-title">Keyboard contract <span class="wf-faint">tab order · keys · focus destination — open to explore</span></summary>
+          <div class="wf-panel-body">
+            <div>
+              <h3 class="wf-col-title">Tab order (documented)</h3>
+              <ol class="wf-records wf-flow"><li>Skip to frame content</li><li>Frame navigation — Overview, six v1 frames, three future frames (aria-current marks this page)</li><li>Theme toggle</li><li>Hero judging steps (text — not controls)</li><li>Gallery cards — six v1, three future, each one link</li><li>Boot gallery cards (text and terminals — not controls)</li><li>Footer frame-sequence pager</li></ol>
+            </div>
+            <div>
+              <h3 class="wf-col-title">Keys</h3>
+              <table class="wf-spec-table">
+                <thead><tr><th scope="col">Key</th><th scope="col">Action</th><th scope="col">Focus destination</th><th scope="col">Screen reader announcement</th></tr></thead>
+                <tbody><tr><td><kbd class="wf-kbd">Tab</kbd></td><td>First Tab lands on the skip link, then the rail</td><td>Skip link</td><td>“Skip to frame content, link”</td></tr><tr><td><kbd class="wf-kbd">Enter</kbd> / <kbd class="wf-kbd">Space</kbd></td><td>Theme toggle: switch dark ⇄ light</td><td>Stays on the toggle</td><td>“Switch to light theme, button” — name reflects the action</td></tr><tr><td><kbd class="wf-kbd">Enter</kbd></td><td>Open a frame from the rail or a gallery card</td><td>New frame page; focus starts fresh at its skip link</td><td>Frame title announced on load</td></tr><tr><td><kbd class="wf-kbd">Tab</kbd> / <kbd class="wf-kbd">Shift+Tab</kbd></td><td>Move between controls in document order</td><td>Next / previous control</td><td>Control name and role</td></tr></tbody>
+              </table>
+            </div>
+            <p class="wf-faint">Visible focus on every control: a 2px ring in the focus token with a 2px offset, driven from wireframe.css — every :hover rule pairs with :focus-visible. Pointer targets are at least 24×24 CSS px (WCAG 2.5.8 Target Size, verified manually). </p>
+          </div>
+        </details>
+      </section>
     </main>
 
     <footer class="wf-foot">

@@ -66,6 +66,34 @@
           <span class="wf-faint">observed 7a7ee95d — the branch is 1 commit past the indexed tip</span>
         </div>
       </section>
+      <section class="wf-section" aria-labelledby="contract-title-binding">
+        <details class="wf-panel" data-contract="component-contract">
+          <summary id="contract-title-binding">Component contract — BindingHealthView <span class="wf-faint">inputs · outputs · slots · states · a11y — open to explore</span></summary>
+          <div class="wf-panel-body">
+            <p>One line of code-status facts for a partition: repo, branch, indexed commit, freshness — the operator supplies the exact repo id; there is no default.</p>
+            <div>
+              <h3 class="wf-col-title">Inputs</h3>
+              <table class="wf-spec-table"><thead><tr><th scope="col">Input</th><th scope="col">Contract</th></tr></thead><tbody><tr><td><code>scope</code></td><td>PartitionTuple — bindings are per scope + repo</td></tr><tr><td><code>onLoad</code></td><td>(scope, repo) =&gt; Promise&lt;BindingHealthLine&gt; — injected fetch</td></tr><tr><td><code>initialRepo</code></td><td>optional; otherwise the remembered last-used repo id (single operator, single machine)</td></tr></tbody></table>
+            </div>
+            <div>
+              <h3 class="wf-col-title">Outputs</h3>
+              <table class="wf-spec-table"><thead><tr><th scope="col">Output</th><th scope="col">Behavior</th></tr></thead><tbody><tr><td><code>none</code></td><td>the line renders in place; the repo id is remembered locally — no navigation, no writes</td></tr></tbody></table>
+            </div>
+            <div>
+              <h3 class="wf-col-title">Slots</h3>
+              <table class="wf-spec-table"><thead><tr><th scope="col">Slot</th><th scope="col">Renders when</th></tr></thead><tbody><tr><td><code>line body</code></td><td>BindingHealthRow — bound variant and non-bound variant</td></tr></tbody></table>
+            </div>
+            <div>
+              <h3 class="wf-col-title">States owned</h3>
+              <table class="wf-spec-table"><thead><tr><th scope="col">State</th><th scope="col">Treatment</th></tr></thead><tbody><tr><td><code>prompt</code></td><td>no repo submitted — “enter the bound repo id to show its binding health line”</td></tr><tr><td><code>loading</code></td><td>“loading binding health…” in the line’s position</td></tr><tr><td><code>bound · fresh</code></td><td>repo: BOUND branch · INDEXED oid · FRESHNESS-STATE: fresh</td></tr><tr><td><code>bound · stale</code></td><td>ref-moved-past-indexed-commit — a state, not an error; shows observed oid and distance</td></tr><tr><td><code>unbound</code></td><td>the engine’s real denial surfaces verbatim (BindingRequired) — classified by the corrected matcher, never shown as a generic error</td></tr><tr><td><code>engine-error</code></td><td>named state with the error text</td></tr></tbody></table>
+            </div>
+            <div>
+              <h3 class="wf-col-title">Accessibility contract</h3>
+              <table class="wf-spec-table"><thead><tr><th scope="col">Guarantee</th><th scope="col">Detail</th></tr></thead><tbody><tr><td><code>input labeling</code></td><td>visible label associated with the input (label for); placeholder is an example, not a label</td></tr><tr><td><code>submission</code></td><td>Enter submits; blur with a value also resolves; focus stays on the input after resolution</td></tr><tr><td><code>announcement</code></td><td>the resolved line is announced through a polite live region when it replaces the loading text</td></tr></tbody></table>
+            </div>
+          </div>
+        </details>
+      </section>
     </main>
 
     <footer class="wf-foot">

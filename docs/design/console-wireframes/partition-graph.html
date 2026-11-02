@@ -134,6 +134,34 @@
 
         <p class="wf-note">Honesty contract, learned the hard way: the canvas caption always tells the truth about what is rendered — never a static list under an interactive caption. This wireframe is a static excerpt of the 14 most-connected entities; the shipped canvas loads react-force-graph-2d dynamically and renders all 31 with pan, zoom, and hover labels — and when the canvas cannot load, the bounded summary list renders under a caption that says exactly that.</p>
       </section>
+      <section class="wf-section" aria-labelledby="contract-title-graph">
+        <details class="wf-panel" data-contract="component-contract">
+          <summary id="contract-title-graph">Component contract — PartitionGraphView <span class="wf-faint">inputs · outputs · slots · states · a11y — open to explore</span></summary>
+          <div class="wf-panel-body">
+            <p>Render the entities and relationships of exactly one partition, resolved against that partition alone — the graph can never contain a foreign record.</p>
+            <div>
+              <h3 class="wf-col-title">Inputs</h3>
+              <table class="wf-spec-table"><thead><tr><th scope="col">Input</th><th scope="col">Contract</th></tr></thead><tbody><tr><td><code>scope</code></td><td>PartitionTuple — confines every node and link</td></tr><tr><td><code>limit</code></td><td>500 entities/relationships cap</td></tr></tbody></table>
+            </div>
+            <div>
+              <h3 class="wf-col-title">Outputs</h3>
+              <table class="wf-spec-table"><thead><tr><th scope="col">Output</th><th scope="col">Behavior</th></tr></thead><tbody><tr><td><code>none</code></td><td>canvas interactions (pan, zoom, hover) stay inside the canvas; no callbacks escape</td></tr></tbody></table>
+            </div>
+            <div>
+              <h3 class="wf-col-title">Slots</h3>
+              <table class="wf-spec-table"><thead><tr><th scope="col">Slot</th><th scope="col">Renders when</th></tr></thead><tbody><tr><td><code>summary fallback</code></td><td>when the canvas cannot load, the bounded summary list renders under an honest caption — same data, list form</td></tr></tbody></table>
+            </div>
+            <div>
+              <h3 class="wf-col-title">States owned</h3>
+              <table class="wf-spec-table"><thead><tr><th scope="col">State</th><th scope="col">Treatment</th></tr></thead><tbody><tr><td><code>data: loading</code></td><td>skeleton placeholder while entities/relationships fetch</td></tr><tr><td><code>data: ready</code></td><td>graph data derived by the pure toGraphData() — links that do not resolve inside the partition are dropped</td></tr><tr><td><code>data: empty</code></td><td>“no knowledge entities in this partition — the graph renders once entities exist here”</td></tr><tr><td><code>data: engine-error</code></td><td>named state card</td></tr><tr><td><code>canvas: loading → ready → unavailable</code></td><td>orthogonal axis: the force-graph module loads dynamically; unavailable degrades to the summary fallback — the caption always says which is rendered</td></tr></tbody></table>
+            </div>
+            <div>
+              <h3 class="wf-col-title">Accessibility contract</h3>
+              <table class="wf-spec-table"><thead><tr><th scope="col">Guarantee</th><th scope="col">Detail</th></tr></thead><tbody><tr><td><code>canvas a11y</code></td><td>the summary list is the accessible representation of the graph — the canvas itself is decorative to assistive tech and marked accordingly</td></tr><tr><td><code>legend</code></td><td>kind legend is real text with swatches — color is never the only signal for a node kind</td></tr><tr><td><code>caption honesty</code></td><td>entity/relationship counts and the interaction hint describe what is actually rendered, always</td></tr></tbody></table>
+            </div>
+          </div>
+        </details>
+      </section>
     </main>
 
     <footer class="wf-foot">

@@ -128,6 +128,34 @@
 
         <p class="wf-note">The knowledge graph for this partition has its own frame — in the shipped layout it renders directly below these columns, confined to the same tuple.</p>
       </section>
+      <section class="wf-section" aria-labelledby="contract-title-partition">
+        <details class="wf-panel" data-contract="component-contract">
+          <summary id="contract-title-partition">Component contract — PartitionView <span class="wf-faint">inputs · outputs · slots · states · a11y — open to explore</span></summary>
+          <div class="wf-panel-body">
+            <p>Browse exactly one partition: engine-scoped, paged listings of memories and entities with the recent-additions column and the binding line in their real placement.</p>
+            <div>
+              <h3 class="wf-col-title">Inputs</h3>
+              <table class="wf-spec-table"><thead><tr><th scope="col">Input</th><th scope="col">Contract</th></tr></thead><tbody><tr><td><code>scope</code></td><td>PartitionTuple — the exact tuple; never widened or filtered client-side</td></tr><tr><td><code>onBack</code></td><td>() =&gt; void — return to inventory</td></tr><tr><td><code>page size</code></td><td>25 per listing, fixed — offsets are internal state</td></tr></tbody></table>
+            </div>
+            <div>
+              <h3 class="wf-col-title">Outputs</h3>
+              <table class="wf-spec-table"><thead><tr><th scope="col">Output</th><th scope="col">Behavior after emitting</th></tr></thead><tbody><tr><td><code>onBack()</code></td><td>emitted from the back affordance and from the engine-error card</td></tr><tr><td><code>no data events</code></td><td>paging mutates internal offsets only; scope never changes from inside</td></tr></tbody></table>
+            </div>
+            <div>
+              <h3 class="wf-col-title">Slots</h3>
+              <table class="wf-spec-table"><thead><tr><th scope="col">Slot</th><th scope="col">Renders when</th></tr></thead><tbody><tr><td><code>error body</code></td><td>engine-error card replaces all three columns, carries the back affordance</td></tr><tr><td><code>composed children</code></td><td>RecentAdditionsView, PartitionGraphView, BindingHealthView render in their fixed positions</td></tr></tbody></table>
+            </div>
+            <div>
+              <h3 class="wf-col-title">States owned</h3>
+              <table class="wf-spec-table"><thead><tr><th scope="col">State</th><th scope="col">Treatment</th></tr></thead><tbody><tr><td><code>loading</code></td><td>per column, skeleton matching the record-card shape</td></tr><tr><td><code>ready</code></td><td>three columns with independent pagination</td></tr><tr><td><code>engine-error</code></td><td>single card, error text + back link</td></tr><tr><td><code>empty (per listing)</code></td><td>“no memories in this partition (engine-scoped read returned none)” — per column, independently</td></tr><tr><td><code>partial</code></td><td>offset caption states position: “showing 1–4 of 31 · more pages”</td></tr></tbody></table>
+            </div>
+            <div>
+              <h3 class="wf-col-title">Accessibility contract</h3>
+              <table class="wf-spec-table"><thead><tr><th scope="col">Guarantee</th><th scope="col">Detail</th></tr></thead><tbody><tr><td><code>pagination</code></td><td>previous/next are real buttons; disabled at bounds via the disabled attribute (announced as unavailable); position text sits adjacent, not inside buttons</td></tr><tr><td><code>headings</code></td><td>each column carries its own heading — memories, recent additions, knowledge entities</td></tr><tr><td><code>tuple line</code></td><td>the exact tuple with (unset) labels is text, announced in reading order</td></tr></tbody></table>
+            </div>
+          </div>
+        </details>
+      </section>
     </main>
 
     <footer class="wf-foot">

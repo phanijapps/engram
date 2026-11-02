@@ -78,6 +78,34 @@
 
         <p class="wf-note">The minimal documented set: (1) the same subject value under multiple partitions of one tenant; (2) the same entity identity under multiple partitions. Anything outside this set is not a v1 anomaly — widening the set is a decision, not a drive-by. When duplication becomes actionable, the pruning-review frame (future) is where review work would live; nothing here links to a write.</p>
       </section>
+      <section class="wf-section" aria-labelledby="contract-title-anomalies">
+        <details class="wf-panel" data-contract="component-contract">
+          <summary id="contract-title-anomalies">Component contract — AnomaliesView <span class="wf-faint">inputs · outputs · slots · states · a11y — open to explore</span></summary>
+          <div class="wf-panel-body">
+            <p>Surface cross-partition duplication signals from the minimal documented set — read-only; the panel offers no repair anywhere.</p>
+            <div>
+              <h3 class="wf-col-title">Inputs</h3>
+              <table class="wf-spec-table"><thead><tr><th scope="col">Input</th><th scope="col">Contract</th></tr></thead><tbody><tr><td><code>onLoad</code></td><td>() =&gt; Promise&lt;AnomaliesResponse&gt; — injected fetch (testable)</td></tr><tr><td><code>onOpenPartition</code></td><td>(scope: PartitionTuple) =&gt; void — drill-down intent</td></tr></tbody></table>
+            </div>
+            <div>
+              <h3 class="wf-col-title">Outputs</h3>
+              <table class="wf-spec-table"><thead><tr><th scope="col">Output</th><th scope="col">Behavior after emitting</th></tr></thead><tbody><tr><td><code>onOpenPartition(scope)</code></td><td>emitted by a partition chip; the caller owns navigation</td></tr></tbody></table>
+            </div>
+            <div>
+              <h3 class="wf-col-title">Slots</h3>
+              <table class="wf-spec-table"><thead><tr><th scope="col">Slot</th><th scope="col">Renders when</th></tr></thead><tbody><tr><td><code>degraded body</code></td><td>named-state line replaces the list when state &ne; ready</td></tr><tr><td><code>empty body</code></td><td>none-detected copy names the checked set</td></tr></tbody></table>
+            </div>
+            <div>
+              <h3 class="wf-col-title">States owned</h3>
+              <table class="wf-spec-table"><thead><tr><th scope="col">State</th><th scope="col">Treatment</th></tr></thead><tbody><tr><td><code>loading</code></td><td>“loading anomalies…” placeholder in list position</td></tr><tr><td><code>ready</code></td><td>one card per signal with kind chip, title, evidence sentence, partition chips</td></tr><tr><td><code>empty</code></td><td>“No cross-partition anomalies detected in the minimal documented set…” — names the set so silence is meaningful</td></tr><tr><td><code>degraded family</code></td><td>any InventoryState renders as the named state line with message</td></tr></tbody></table>
+            </div>
+            <div>
+              <h3 class="wf-col-title">Accessibility contract</h3>
+              <table class="wf-spec-table"><thead><tr><th scope="col">Guarantee</th><th scope="col">Detail</th></tr></thead><tbody><tr><td><code>card semantics</code></td><td>list of cards; each partition chip is a real link with the full tuple as its accessible name</td></tr><tr><td><code>kind labeling</code></td><td>kind renders as text (subject-partitions / entity-identity), never color alone</td></tr></tbody></table>
+            </div>
+          </div>
+        </details>
+      </section>
     </main>
 
     <footer class="wf-foot">

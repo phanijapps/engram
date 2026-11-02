@@ -93,6 +93,34 @@
 
         <p class="wf-note">No pagination below the newest page by design: this view answers “what just landed,” and older history belongs to the paged memories column of the partition browse.</p>
       </section>
+      <section class="wf-section" aria-labelledby="contract-title-recent">
+        <details class="wf-panel" data-contract="component-contract">
+          <summary id="contract-title-recent">Component contract — RecentAdditionsView <span class="wf-faint">inputs · outputs · slots · states · a11y — open to explore</span></summary>
+          <div class="wf-panel-body">
+            <p>Show the newest memories of one partition in the engine&rsquo;s newest-first order — the pulse, not the archive.</p>
+            <div>
+              <h3 class="wf-col-title">Inputs</h3>
+              <table class="wf-spec-table"><thead><tr><th scope="col">Input</th><th scope="col">Contract</th></tr></thead><tbody><tr><td><code>scope</code></td><td>PartitionTuple — engine-scoped read</td></tr><tr><td><code>limit</code></td><td>20 by default — newest page only</td></tr></tbody></table>
+            </div>
+            <div>
+              <h3 class="wf-col-title">Outputs</h3>
+              <table class="wf-spec-table"><thead><tr><th scope="col">Output</th><th scope="col">Behavior</th></tr></thead><tbody><tr><td><code>none</code></td><td>render-only: no callbacks, no navigation — older history belongs to the partition page</td></tr></tbody></table>
+            </div>
+            <div>
+              <h3 class="wf-col-title">Slots</h3>
+              <table class="wf-spec-table"><thead><tr><th scope="col">Slot</th><th scope="col">Renders when</th></tr></thead><tbody><tr><td><code>none</code></td><td>self-contained ordered list; composition is fixed</td></tr></tbody></table>
+            </div>
+            <div>
+              <h3 class="wf-col-title">States owned</h3>
+              <table class="wf-spec-table"><thead><tr><th scope="col">State</th><th scope="col">Treatment</th></tr></thead><tbody><tr><td><code>loading</code></td><td>skeleton of the record list</td></tr><tr><td><code>ready</code></td><td>ordered list, newest first — order is the engine’s recency, never a client re-sort</td></tr><tr><td><code>empty</code></td><td>“no recent additions in this partition — new memories appear here as they are written”</td></tr><tr><td><code>engine-error</code></td><td>named state with the error text; retry is page-level</td></tr></tbody></table>
+            </div>
+            <div>
+              <h3 class="wf-col-title">Accessibility contract</h3>
+              <table class="wf-spec-table"><thead><tr><th scope="col">Guarantee</th><th scope="col">Detail</th></tr></thead><tbody><tr><td><code>list semantics</code></td><td>an ordered list — position announces recency rank (#1 newest)</td></tr><tr><td><code>record anatomy</code></td><td>id and timestamp as mono meta text, content as body text — one tab stop per record only if interactive; records here are not links</td></tr></tbody></table>
+            </div>
+          </div>
+        </details>
+      </section>
     </main>
 
     <footer class="wf-foot">

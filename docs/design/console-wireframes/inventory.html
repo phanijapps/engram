@@ -158,6 +158,34 @@
         </div>
         <p class="wf-note">Design contract: the entire row is the select target (shown here as the tenant anchor). Scope values keep their exact engine spelling — including non-ASCII tenants and subjects, which encode to UTF-8 base64url partition keys and must open identically to ASCII scopes. Unset dimensions render as <span class="wf-unset">(unset)</span>, never blank.</p>
       </section>
+      <section class="wf-section" aria-labelledby="contract-title-inventory">
+        <details class="wf-panel" data-contract="component-contract">
+          <summary id="contract-title-inventory">Component contract — InventoryView <span class="wf-faint">inputs · outputs · slots · states · a11y — open to explore</span></summary>
+          <div class="wf-panel-body">
+            <p>Present every partition in the store as one selectable row with the engine&rsquo;s own counts — the bounded summary over the whole store, never a record dump.</p>
+            <div>
+              <h3 class="wf-col-title">Inputs</h3>
+              <table class="wf-spec-table"><thead><tr><th scope="col">Input</th><th scope="col">Contract</th></tr></thead><tbody><tr><td><code>inventory</code></td><td>InventoryResponse | null — the fetched state plus partitions; null while loading</td></tr><tr><td><code>onSelect</code></td><td>(partition: PartitionSummary) =&gt; void — emitted when a row is activated</td></tr></tbody></table>
+            </div>
+            <div>
+              <h3 class="wf-col-title">Outputs</h3>
+              <table class="wf-spec-table"><thead><tr><th scope="col">Output</th><th scope="col">Behavior after emitting</th></tr></thead><tbody><tr><td><code>onSelect(partition)</code></td><td>Emits the chosen partition and stops — the caller owns navigation; the view never routes</td></tr></tbody></table>
+            </div>
+            <div>
+              <h3 class="wf-col-title">Slots</h3>
+              <table class="wf-spec-table"><thead><tr><th scope="col">Slot</th><th scope="col">Renders when</th></tr></thead><tbody><tr><td><code>degraded body</code></td><td>Replaces the table when state &ne; ready — the named-state card</td></tr><tr><td><code>empty body</code></td><td>Replaces the table when partitions.length === 0 — the empty-store card</td></tr></tbody></table>
+            </div>
+            <div>
+              <h3 class="wf-col-title">States owned</h3>
+              <table class="wf-spec-table"><thead><tr><th scope="col">State</th><th scope="col">Treatment</th></tr></thead><tbody><tr><td><code>loading</code></td><td>inventory === null — skeleton matching the final table shape (aria-busy)</td></tr><tr><td><code>ready</code></td><td>table renders with summary strip; rows are the select target</td></tr><tr><td><code>empty</code></td><td>zero partitions — orient + what appears here automatically</td></tr><tr><td><code>store-locked · backend-unreachable · store-invalid · configuration-invalid · engine-error</code></td><td>degraded family — one designed card per code-named state (api.ts:21-27)</td></tr></tbody></table>
+            </div>
+            <div>
+              <h3 class="wf-col-title">Accessibility contract</h3>
+              <table class="wf-spec-table"><thead><tr><th scope="col">Guarantee</th><th scope="col">Detail</th></tr></thead><tbody><tr><td><code>row semantics</code></td><td>each row acts as one link: role=link, tabIndex=0, Enter or Space activates, aria-label “open partition tenant / workspace”</td></tr><tr><td><code>focus</code></td><td>visible focus ring on the focused row; :focus-visible styling from the token layer</td></tr><tr><td><code>summary</code></td><td>totals announced as caption text above the table; counts right-aligned, tabular numerals</td></tr></tbody></table>
+            </div>
+          </div>
+        </details>
+      </section>
     </main>
 
     <footer class="wf-foot">

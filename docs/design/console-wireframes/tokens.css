@@ -59,7 +59,7 @@
   --primitive-text-dark-faint: #7e879c;
   --primitive-text-light-high: #171a21;
   --primitive-text-light-mid: #4b5262;
-  --primitive-text-light-faint: #66707f;
+  --primitive-text-light-faint: #5d6879;
 
   /* ONE accent family — blue, hue 214°, saturation <= 61%, four grades.
      Reserved for state and action. Dark grades (300/400) are the dark-theme
@@ -81,7 +81,7 @@
   --primitive-green-400: #4ade80;
   --primitive-green-wash-dark: rgba(74, 222, 128, 0.12);
   --primitive-green-wash-light: #e7f6ed;
-  --primitive-amber-700: #b45309;
+  --primitive-amber-700: #a64d08;
   --primitive-amber-400: #fbbf24;
   --primitive-amber-wash-dark: rgba(251, 191, 36, 0.12);
   --primitive-amber-wash-light: #fdf3e3;

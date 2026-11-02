@@ -1,6 +1,7 @@
 ---
-name: constitution
-description: Build, grow, and MAINTAIN a Software Constitution for ANY repository — greenfield (interview) or brownfield (code + docs + interview) — with 8 domain packs (product/architecture/dev/testing/ci/security/release/platform), knowledge/rules split, one rule per file, DERIVED catalogue (never hand-edited), health detection, module sub-constitutions for monorepos. Self-maintaining: lane 1 derives, lane 2 detects and advises, lane 3 drafts only when the owner asks. Trigger on "build a constitution", "constitution health", "split a pack", "add a module", "ground the packs", or when adopting any codebase to govern.
+name: engram-constitution
+description: >-
+  Build, grow, and MAINTAIN a Software Constitution for ANY repository — greenfield (interview) or brownfield (code + docs + interview) — with 8 domain packs (product/architecture/dev/testing/ci/security/release/platform), knowledge/rules split, one rule per file, DERIVED catalogue (never hand-edited), health detection, module sub-constitutions for monorepos. Self-maintaining: lane 1 derives, lane 2 detects and advises, lane 3 drafts only when the owner asks. Trigger on "build a constitution", "constitution health", "split a pack", "add a module", "ground the packs", or when adopting any codebase to govern.
 ---
 
 # constitution

@@ -55,6 +55,7 @@ export function PartitionView({
   const [memories, setMemories] = useState<PartitionRecords<MemoryRecordView> | null>(null);
   const [entities, setEntities] = useState<PartitionRecords<EntityView> | null>(null);
   const [memoryOffset, setMemoryOffset] = useState(0);
+  const [entityOffset, setEntityOffset] = useState(0);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -62,7 +63,7 @@ export function PartitionView({
     setError(null);
     Promise.all([
       fetchPartitionMemories(scope, PAGE_SIZE, memoryOffset),
-      fetchPartitionEntities(scope, PAGE_SIZE, 0)
+      fetchPartitionEntities(scope, PAGE_SIZE, entityOffset)
     ])
       .then(([memoryPage, entityPage]) => {
         if (cancelled) return;
@@ -75,7 +76,7 @@ export function PartitionView({
     return () => {
       cancelled = true;
     };
-  }, [scope, memoryOffset]);
+  }, [scope, memoryOffset, entityOffset]);
 
   const hasNext = memories?.nextOffset != null;
   const hasPrev = memoryOffset > 0;
@@ -158,19 +159,43 @@ export function PartitionView({
             knowledge entities
           </h3>
           {entities === null ? (
-            <p className="text-slate-500">loading…</p>
+            <p className="text-slate-400">loading…</p>
           ) : entities.items.length === 0 ? (
-            <p className="text-slate-500">no entities in this partition</p>
+            <p className="text-slate-400">no entities in this partition</p>
           ) : (
-            <ul className="space-y-1">
-              {entities.items.map((entity) => (
-                <li key={entity.id} className="rounded bg-slate-900/70 px-3 py-1.5 text-sm">
-                  <span className="font-mono text-xs text-slate-500">{entity.id}</span>{" "}
-                  <span className="text-slate-200">{entity.name}</span>{" "}
-                  <span className="text-xs text-slate-500">({entity.kind})</span>
-                </li>
-              ))}
-            </ul>
+            <>
+              <ul className="space-y-1">
+                {entities.items.map((entity) => (
+                  <li key={entity.id} className="rounded bg-slate-900/70 px-3 py-1.5 text-sm">
+                    <span className="font-mono text-xs text-slate-400">{entity.id}</span>{" "}
+                    <span className="text-slate-200">{entity.name}</span>{" "}
+                    <span className="text-xs text-slate-400">({entity.kind})</span>
+                  </li>
+                ))}
+              </ul>
+              <div className="mt-2 flex items-center gap-2 text-sm">
+                <button
+                  className="rounded bg-slate-800 px-2 py-1 disabled:opacity-40"
+                  disabled={entityOffset === 0}
+                  onClick={() => setEntityOffset(Math.max(0, entityOffset - PAGE_SIZE))}
+                >
+                  ← prev
+                </button>
+                <button
+                  className="rounded bg-slate-800 px-2 py-1 disabled:opacity-40"
+                  disabled={entities.nextOffset == null}
+                  onClick={() => {
+                    if (entities.nextOffset != null) setEntityOffset(entities.nextOffset);
+                  }}
+                >
+                  next →
+                </button>
+                <span className="text-xs text-slate-400">
+                  showing {entityOffset + 1}–{entityOffset + entities.items.length}
+                  {entities.nextOffset != null ? ", more pages" : ", end of listing"}
+                </span>
+              </div>
+            </>
           )}
         </div>
       </div>

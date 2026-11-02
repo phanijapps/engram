@@ -154,6 +154,36 @@ describe("job012 partition isolation (STEP-009)", () => {
     expect(serverKey(unicodePartition)).toBe(key);
   });
 
+  it("isolation: entity listings paginate through continuation offsets (FIND-ui-005)", async () => {
+    const provider = recordingProvider();
+    provider.requireScopeInventoryApi = () => {
+      const all = Array.from({ length: 30 }, (_, i) => ({ id: `ent-${i + 1}`, kind: "concept", name: `E${i + 1}` }));
+      return {
+        inventoryJson: () => "[]",
+        partitionMemoriesJson: () => JSON.stringify({ items: [], nextOffset: null }),
+        partitionEntitiesJson: (requestJson: string) => {
+          const { partition, page } = JSON.parse(requestJson);
+          provider.requests.push({ view: "entities", partition, limit: page.limit, offset: page.offset });
+          const items = all.slice(page.offset, page.offset + page.limit);
+          return JSON.stringify({
+            items,
+            nextOffset: page.offset + items.length < all.length ? page.offset + items.length : null
+          });
+        },
+        partitionRelationshipsJson: () => JSON.stringify({ items: [], nextOffset: null }),
+        partitionRecentMemoriesJson: () => "[]"
+      };
+    };
+    const base = await start(provider);
+    const key = partitionKey(PARTITION_A);
+    const page1 = await (await fetch(`${base}/api/partitions/${key}/entities?limit=25&offset=0`)).json();
+    expect(page1.items).toHaveLength(25);
+    expect(page1.nextOffset).toBe(25);
+    const page2 = await (await fetch(`${base}/api/partitions/${key}/entities?limit=25&offset=25`)).json();
+    expect(page2.items).toHaveLength(5);
+    expect(page2.nextOffset).toBeNull();
+  });
+
   it("isolation: malformed partition keys are rejected as bad requests", async () => {
     const base = await start(recordingProvider());
     const response = await fetch(`${base}/api/partitions/not-a-key/memories`);

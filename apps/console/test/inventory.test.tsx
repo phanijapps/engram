@@ -103,6 +103,15 @@ describe("job012 inventory view (STEP-008)", () => {
     expect(source).toMatch(/key === " "/);
   });
 
+  it("inventory: partition view ships an entity pager, never silent truncation (FIND-ui-005)", async () => {
+    const source = await import("node:fs").then((fs) =>
+      fs.readFileSync("src/views/Partition.tsx", "utf8")
+    );
+    expect(source).toContain("entityOffset");
+    expect(source).toContain("end of listing");
+    expect(source).toContain(", more pages");
+  });
+
   it("inventory: the org/project alias header states the DEC-002 mapping", () => {
     const markup = renderToStaticMarkup(<AliasHeader />);
     expect(markup).toContain("--org");

@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="en" data-theme="dark">
+<html lang="en">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -44,7 +44,20 @@
         <h1 class="wf-frame-title">Recent additions</h1>
         <p class="wf-lede">The pulse of one partition: the newest memories in the engine’s own newest-first order. The order is the engine’s recency, never a client-side re-sort.</p>
         <p class="wf-lineage">lineage <code>job-012:REQ-008</code> <code>job-012:REQ-003</code> · this contract: <code>job-013:REQ-001</code> <code>job-013:REQ-004</code> <code>job-013:REQ-005</code> · shaped by ux-writing · frontend-engineering · component-contract</p>
+      <div class="wf-frame-tools">
+        <div class="wf-search" role="search">
+          <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"></circle><path d="m20 20-3.5-3.5"></path></svg>
+          <input type="search" aria-label="Search this view" placeholder="Search recent additions…">
+        </div>
+      </div>
       </header>
+      <nav class="wf-tab" aria-label="Sections">
+        <a href="#recent-view-title" aria-current="page">View</a>
+        <a href="#states-recent">States</a>
+        <a href="#contract-title-recent">Contract</a>
+        <a href="#kbd-title">Keyboard</a>
+      </nav>
+
       <section class="wf-kpi-row" aria-label="Frame metrics">
         <div class="wf-kpi"><span class="wf-kpi-label">shown</span><span class="wf-kpi-value">5</span></div>
         <div class="wf-kpi"><span class="wf-kpi-label">in partition</span><span class="wf-kpi-value">156</span></div>
@@ -77,28 +90,28 @@
         <p class="wf-quiet">Four states, one list — each designed so silence always means something specific.</p>
         <div class="wf-states-grid">
             <article class="wf-state-card wf-state-card--info">
-              <span class="wf-state-name">loading</span>
+              <span class="wf-badge wf-badge--info"><span class="wf-dot" aria-hidden="true"></span>loading</span>
               <p class="wf-state-headline">loading recent additions…</p>
               <p class="wf-state-body">The list position is held by record-shaped skeletons so the page doesn’t shift when the newest page lands.</p>
               <div class="wf-records" aria-hidden="true"><span class="wf-skel wf-skel--title"></span><span class="wf-skel wf-skel--row"></span><span class="wf-skel wf-skel--row"></span><span class="wf-skel wf-skel--chip"></span></div>
               <p class="wf-state-src">apps/console/src/views/RecentAdditions.tsx:32-34</p>
             </article>
             <article class="wf-state-card wf-state-card--ok">
-              <span class="wf-state-name">ready</span>
+              <span class="wf-badge wf-badge--ready"><span class="wf-dot" aria-hidden="true"></span>ready</span>
               <p class="wf-state-headline">Newest first — the engine’s order.</p>
               <p class="wf-state-body">The list above is the ready state. Position #1 is the newest memory; the console never re-sorts what the engine ordered.</p>
               
               <p class="wf-state-src">apps/console/src/views/RecentAdditions.tsx:43-54</p>
             </article>
             <article class="wf-state-card ">
-              <span class="wf-state-name">empty</span>
+              <span class="wf-badge wf-badge--warning"><span class="wf-dot" aria-hidden="true"></span>empty</span>
               <p class="wf-state-headline">no recent additions in this partition — new memories appear here as they are written.</p>
               <p class="wf-state-body">Nothing has landed in this scope yet. The next engine write appears at position #1 on reload — no refresh loop, no polling.</p>
               
               <p class="wf-state-src">apps/console/src/views/RecentAdditions.tsx:35-41</p>
             </article>
             <article class="wf-state-card wf-state-card--danger">
-              <span class="wf-state-name">engine-error</span>
+              <span class="wf-badge wf-badge--danger"><span class="wf-dot" aria-hidden="true"></span>engine-error</span>
               <p class="wf-state-headline">State: engine-error — the recent read failed.</p>
               <p class="wf-state-body">The error text renders inline with the state name; retry is page-level. An empty list and a failed read are never confused.</p>
               

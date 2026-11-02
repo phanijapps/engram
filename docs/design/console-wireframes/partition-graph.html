@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="en" data-theme="dark">
+<html lang="en">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -44,7 +44,20 @@
         <h1 class="wf-frame-title">Partition knowledge graph</h1>
         <p class="wf-lede">The entities and relationships of exactly one partition, resolved against that partition alone — a link whose endpoints do not resolve inside the tuple is dropped, so no foreign record can ever appear on this canvas.</p>
         <p class="wf-lineage">lineage <code>job-012:REQ-009</code> <code>job-012:REQ-003</code> · this contract: <code>job-013:REQ-001</code> <code>job-013:REQ-004</code> <code>job-013:REQ-005</code> · shaped by frontend-engineering · archify · fe-performance · a11y-engineering</p>
+      <div class="wf-frame-tools">
+        <div class="wf-search" role="search">
+          <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"></circle><path d="m20 20-3.5-3.5"></path></svg>
+          <input type="search" aria-label="Search this view" placeholder="Search entities, predicates…">
+        </div>
+      </div>
       </header>
+      <nav class="wf-tab" aria-label="Sections">
+        <a href="#graph-view-title" aria-current="page">View</a>
+        <a href="#states-graph">States</a>
+        <a href="#contract-title-graph">Contract</a>
+        <a href="#kbd-title">Keyboard</a>
+      </nav>
+
       <section class="wf-kpi-row" aria-label="Frame metrics">
         <div class="wf-kpi"><span class="wf-kpi-label">entities</span><span class="wf-kpi-value">31</span></div>
         <div class="wf-kpi"><span class="wf-kpi-label">relationships</span><span class="wf-kpi-value">40</span></div>
@@ -55,7 +68,7 @@
       <section class="wf-view" aria-labelledby="graph-view-title">
         <h2 id="graph-view-title">Knowledge graph — 可视化研究 / mem-alpha</h2>
 
-        <div class="wf-graph">
+        <div class="wf-graph wf-graph-grid">
           <div class="wf-graph-caption">
             <span>static excerpt — 14 of 31 entities · 15 of 40 relationships · confined to this partition</span>
             <span class="wf-badge">static excerpt</span>
@@ -153,35 +166,35 @@
         <p class="wf-quiet">The graph owns two orthogonal state axes — data (loading / empty / error) and canvas (loading / ready / unavailable) — every combination is designed and honestly captioned.</p>
         <div class="wf-states-grid">
             <article class="wf-state-card wf-state-card--info">
-              <span class="wf-state-name">loading</span>
+              <span class="wf-badge wf-badge--info"><span class="wf-dot" aria-hidden="true"></span>loading</span>
               <p class="wf-state-headline">loading partition graph… / loading canvas…</p>
               <p class="wf-state-body">Two loads, both honest: entity data loads first (the summary list can render), then the force-graph module loads in the background.</p>
               <div class="wf-records" aria-hidden="true"><span class="wf-skel wf-skel--title"></span><span class="wf-skel wf-skel--row"></span><span class="wf-skel wf-skel--row"></span><span class="wf-skel wf-skel--chip"></span></div>
               <p class="wf-state-src">apps/console/src/views/PartitionGraph.tsx:83,134-136,155</p>
             </article>
             <article class="wf-state-card wf-state-card--ok">
-              <span class="wf-state-name">ready</span>
+              <span class="wf-badge wf-badge--ready"><span class="wf-dot" aria-hidden="true"></span>ready</span>
               <p class="wf-state-headline">ready — interactive force-graph over 31 entities · 40 relationships.</p>
               <p class="wf-state-body">In the shipped console this state replaces the static excerpt with the live canvas: pan, zoom, hover for labels. The caption always states exactly what is rendered.</p>
               
               <p class="wf-state-src">apps/console/src/views/PartitionGraph.tsx:83,145-159</p>
             </article>
             <article class="wf-state-card ">
-              <span class="wf-state-name">unavailable</span>
+              <span class="wf-badge wf-badge--warning"><span class="wf-dot" aria-hidden="true"></span>unavailable</span>
               <p class="wf-state-headline">canvas unavailable — summary view.</p>
               <p class="wf-state-body">The interactive canvas couldn’t load (missing module, offline install). The bounded summary list IS the graph — same entities and relationships, list form — under a caption that says so.</p>
               
               <p class="wf-state-src">apps/console/src/views/PartitionGraph.tsx:83,111-113,156</p>
             </article>
             <article class="wf-state-card ">
-              <span class="wf-state-name">empty</span>
+              <span class="wf-badge wf-badge--warning"><span class="wf-dot" aria-hidden="true"></span>empty</span>
               <p class="wf-state-headline">no knowledge entities in this partition — the graph renders once entities exist here.</p>
               <p class="wf-state-body">An empty graph is a scoped fact: this tuple holds no entities yet. Write entities through the engine and the graph appears on reload.</p>
               
               <p class="wf-state-src">apps/console/src/views/PartitionGraph.tsx:137-143</p>
             </article>
             <article class="wf-state-card wf-state-card--danger">
-              <span class="wf-state-name">engine-error</span>
+              <span class="wf-badge wf-badge--danger"><span class="wf-dot" aria-hidden="true"></span>engine-error</span>
               <p class="wf-state-headline">State: engine-error — the graph read failed.</p>
               <p class="wf-state-body">Named state with the error text; the view never substitutes a fabricated or cached graph for a failed read.</p>
               

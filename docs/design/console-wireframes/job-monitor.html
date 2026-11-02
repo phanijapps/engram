@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="en" data-theme="dark">
+<html lang="en">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -51,7 +51,18 @@
             <p class="wf-record-text">Nothing in this frame ships in v1. v1 is read-only by construction; the pause, resume, retry, and cancel affordances below are the first write-shaped capabilities on the trajectory, and every one of them is labeled future on purpose.</p>
           </div>
         </details>
+      <div class="wf-frame-tools">
+        <div class="wf-search" role="search">
+          <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"></circle><path d="m20 20-3.5-3.5"></path></svg>
+          <input type="search" aria-label="Search this view" placeholder="Filter jobs…">
+        </div>
+      </div>
       </header>
+      <nav class="wf-tab" aria-label="Sections">
+        <a href="#job-view-title" aria-current="page">View</a>
+        <a href="#kbd-title">Keyboard</a>
+      </nav>
+
       <section class="wf-kpi-row" aria-label="Frame metrics">
         <div class="wf-kpi"><span class="wf-kpi-label">running</span><span class="wf-kpi-value">1</span></div>
         <div class="wf-kpi"><span class="wf-kpi-label">queued</span><span class="wf-kpi-value">1</span></div>

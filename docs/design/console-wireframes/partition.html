@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="en" data-theme="dark">
+<html lang="en">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -44,7 +44,20 @@
         <h1 class="wf-frame-title">Partition browse</h1>
         <p class="wf-lede">One partition, opened from the inventory: engine-scoped reads of exactly this tuple, paged by the engine — the console never widens, filters, or reorders a scope.</p>
         <p class="wf-lineage">lineage <code>job-012:REQ-003</code> <code>job-012:REQ-004</code> · this contract: <code>job-013:REQ-001</code> <code>job-013:REQ-005</code> · shaped by frontend-engineering · ux-writing · responsive-layout · a11y-engineering</p>
+      <div class="wf-frame-tools">
+        <div class="wf-search" role="search">
+          <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"></circle><path d="m20 20-3.5-3.5"></path></svg>
+          <input type="search" aria-label="Search this view" placeholder="Search memories, entities…">
+        </div>
+      </div>
       </header>
+      <nav class="wf-tab" aria-label="Sections">
+        <a href="#partition-view-title" aria-current="page">View</a>
+        <a href="#states-partition">States</a>
+        <a href="#contract-title-partition">Contract</a>
+        <a href="#kbd-title">Keyboard</a>
+      </nav>
+
       <section class="wf-kpi-row" aria-label="Frame metrics">
         <div class="wf-kpi"><span class="wf-kpi-label">memories</span><span class="wf-kpi-value">156</span></div>
         <div class="wf-kpi"><span class="wf-kpi-label">entities</span><span class="wf-kpi-value">31</span></div>
@@ -132,35 +145,35 @@
         <p class="wf-quiet">Partition browsing owns the listing states — load, page, empty per column — plus the engine-error card with its built-in way back.</p>
         <div class="wf-states-grid">
             <article class="wf-state-card wf-state-card--info">
-              <span class="wf-state-name">loading</span>
+              <span class="wf-badge wf-badge--info"><span class="wf-dot" aria-hidden="true"></span>loading</span>
               <p class="wf-state-headline">Each column loads its own page.</p>
               <p class="wf-state-body">Skeletons match the record-card shape per column — memories, recent additions, entities settle independently as each read returns.</p>
               <div class="wf-records" aria-hidden="true"><span class="wf-skel wf-skel--title"></span><span class="wf-skel wf-skel--row"></span><span class="wf-skel wf-skel--row"></span><span class="wf-skel wf-skel--chip"></span></div>
               <p class="wf-state-src">apps/console/src/views/Partition.tsx:114-115,161</p>
             </article>
             <article class="wf-state-card wf-state-card--ok">
-              <span class="wf-state-name">ready</span>
+              <span class="wf-badge wf-badge--ready"><span class="wf-dot" aria-hidden="true"></span>ready</span>
               <p class="wf-state-headline">Three columns, one tuple.</p>
               <p class="wf-state-body">The page above is the ready state: paged memories and entities, the recency column, the binding line — all scoped to exactly the selected tuple.</p>
               
               <p class="wf-state-src">apps/console/src/views/Partition.tsx:102-208</p>
             </article>
             <article class="wf-state-card ">
-              <span class="wf-state-name">empty</span>
+              <span class="wf-badge wf-badge--warning"><span class="wf-dot" aria-hidden="true"></span>empty</span>
               <p class="wf-state-headline">No memories in this partition (engine-scoped read returned none).</p>
               <p class="wf-state-body">An empty column is a fact about the scope, not an error — the engine read exactly this tuple and found none. Entities and recency still load independently.</p>
               
               <p class="wf-state-src">apps/console/src/views/Partition.tsx:116-119,163-164</p>
             </article>
             <article class="wf-state-card wf-state-card--info">
-              <span class="wf-state-name">partial</span>
+              <span class="wf-badge wf-badge--info"><span class="wf-dot" aria-hidden="true"></span>partial</span>
               <p class="wf-state-headline">Offset 0, 25 per page — more pages.</p>
               <p class="wf-state-body">Pagination state is always visible and always truthful: position, page size, and whether more pages exist. Previous and next disable at the bounds.</p>
               
               <p class="wf-state-src">apps/console/src/views/Partition.tsx:130-149</p>
             </article>
             <article class="wf-state-card wf-state-card--danger">
-              <span class="wf-state-name">engine-error</span>
+              <span class="wf-badge wf-badge--danger"><span class="wf-dot" aria-hidden="true"></span>engine-error</span>
               <p class="wf-state-headline">State: engine-error — reads failed for this tuple.</p>
               <p class="wf-state-body">The error text is shown with a way back: the card carries the return-to-inventory affordance so a failed read never strands you.</p>
               

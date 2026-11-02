@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="en" data-theme="dark">
+<html lang="en">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -57,7 +57,7 @@
         <ol class="wf-flow">
           <li>Open this folder in a stock browser — <code>index.html</code> over <code>file://</code> is the whole runtime.</li>
           <li>Click through every frame from the sidebar; each opens standalone with relative links only.</li>
-          <li>Toggle dark and light themes on every frame — both themes are designed, not derived.</li>
+          <li>Light is the default; toggle dark on every frame — both themes are designed, not derived.</li>
           <li>Walk each frame’s state gallery: every named state the code can emit appears with designed microcopy pinned to its source line.</li>
           <li>Tab through each frame: every control reachable, focus visible, order documented in the frame’s keyboard panel.</li>
         </ol>
@@ -133,7 +133,7 @@
         <p class="wf-quiet">The console names its own failure to start. Two boot states are required vocabulary (<span class="wf-mono">ui-not-built</span>, <span class="wf-mono">port-in-use</span>); three more are named in the code and designed here for completeness. Terminal states render as terminals — that is where you meet them.</p>
         <div class="wf-states-grid">
           <article class="wf-state-card wf-state-card--danger">
-            <span class="wf-state-name">port-in-use</span>
+            <span class="wf-badge wf-badge--danger"><span class="wf-dot" aria-hidden="true"></span>port-in-use</span>
             <div class="wf-term" role="img" aria-label="Terminal showing: engram-console state port-in-use, 127.0.0.1:7777 is already bound. Stop the other listener or pass --port N. Exit code 4.">
               <div class="wf-term-bar"><span aria-hidden="true">●</span> terminal — console start</div>
               <p class="wf-term-body"><span class="wf-term-accent">engram-console: state: port-in-use</span> — 127.0.0.1:7777 is already bound.<br>Stop the other listener or pass --port &lt;N&gt;.<br>exit code 4</p>
@@ -142,7 +142,7 @@
             <p class="wf-state-src">apps/console/server/main.mjs:130,175 · exit 4</p>
           </article>
           <article class="wf-state-card">
-            <span class="wf-state-name">ui-not-built</span>
+            <span class="wf-badge wf-badge--warning"><span class="wf-dot" aria-hidden="true"></span>ui-not-built</span>
             <div class="wf-view">
               <h3 class="wf-gallery-title">engram console</h3>
               <p class="wf-state-body"><strong>State: ui-not-built.</strong> Run <code>pnpm --filter @engram/console build</code> then restart. The JSON API is live at <code>/api/health</code>.</p>
@@ -151,7 +151,7 @@
             <p class="wf-state-src">apps/console/server/app.mjs:374,405</p>
           </article>
           <article class="wf-state-card wf-state-card--danger">
-            <span class="wf-state-name">store-absent</span>
+            <span class="wf-badge wf-badge--danger"><span class="wf-dot" aria-hidden="true"></span>store-absent</span>
             <div class="wf-term" role="img" aria-label="Terminal showing: engram-console state store-absent, storage directory does not exist. The console is read-only and never creates a store. Exit code 3.">
               <div class="wf-term-bar"><span aria-hidden="true">●</span> terminal — console start</div>
               <p class="wf-term-body"><span class="wf-term-accent">engram-console: state: store-absent</span> — storage directory ‘~/.engram’ does not exist.<br>The console is read-only and never creates a store.<br>exit code 3</p>
@@ -160,13 +160,13 @@
             <p class="wf-state-src">apps/console/server/main.mjs:150 · exit 3</p>
           </article>
           <article class="wf-state-card">
-            <span class="wf-state-name">origin-refused</span>
+            <span class="wf-badge wf-badge--warning"><span class="wf-dot" aria-hidden="true"></span>origin-refused</span>
             <p class="wf-state-headline">Console requests must originate from a loopback host (127.0.0.1 / localhost / ::1).</p>
             <p class="wf-state-body">This is the single-operator security model doing its job, not a malfunction. Reach the console from the same machine; remote origins are refused by design — with a named JSON state, never a silent hang.</p>
             <p class="wf-state-src">apps/console/server/app.mjs:425-428</p>
           </article>
           <article class="wf-state-card">
-            <span class="wf-state-name">ui-read-error</span>
+            <span class="wf-badge wf-badge--warning"><span class="wf-dot" aria-hidden="true"></span>ui-read-error</span>
             <p class="wf-state-headline">A served UI file couldn’t be read mid-stream.</p>
             <p class="wf-state-body">The server stays up and answers with this named JSON state instead of crashing — the stream’s own error handler catches what the pipe would have swallowed. Reload; if it persists, rebuild the UI bundle.</p>
             <p class="wf-state-src">apps/console/server/app.mjs:411-418</p>
@@ -199,7 +199,7 @@
           <div class="wf-tier"><span class="wf-tier-name">frontend-engineering</span><span class="wf-tier-desc">Create-mode pre-flight and craft rules: named aesthetic reference (Linear at Raycast-tier density), the state-matrix discipline behind every frame’s state section, semantic-HTML rules (one main, one h1, labels on inputs, buttons for actions), and the no-AI-aesthetic rules — one accent, flat elevation, radius scale by element type, realistic content, no lorem ipsum.</span></div>
           <div class="wf-tier"><span class="wf-tier-name">archify</span><span class="wf-tier-desc">The explorable standalone-HTML format these frames follow: self-contained, dark/light themed, conclusion-first, with no-JS explorable panels (native details/summary disclosures). The archify tool itself is diagram-scoped — the set takes the format, not the CLI.</span></div>
           <div class="wf-tier"><span class="wf-tier-name">component-contract</span><span class="wf-tier-desc">Every v1 frame’s contract panel: purpose, inputs, outputs with the emit-and-stop rule, slots, states owned, and an accessibility contract — designed before any future implementation, per the skill’s API-first principle.</span></div>
-          <div class="wf-tier"><span class="wf-tier-name">token-architecture</span><span class="wf-tier-desc">The three-tier one-way chain in tokens.css, [data-theme] plus prefers-color-scheme kept in sync, the 4px-grid spacing scale, role-based token naming, and the audit grep that this job’s drift sweep (CHK-1) runs verbatim.</span></div>
+          <div class="wf-tier"><span class="wf-tier-name">token-architecture</span><span class="wf-tier-desc">The three-tier one-way chain in tokens.css — light default at :root, dark behind the explicit [data-theme] toggle, no OS-preference fallback — the 4px-grid spacing scale, role-based token naming, and the audit grep that this job’s drift sweep (CHK-1) runs verbatim.</span></div>
           <div class="wf-tier"><span class="wf-tier-name">responsive-layout</span><span class="wf-tier-desc">Grid page structure with Flexbox inside cells, mobile-first min-width breakpoints in rem, auto-fill gallery and state grids, the table-to-labeled-blocks collapse under 48rem, clamp() fluid frame titles, and the no-JS rule — every layout behavior works without scripting.</span></div>
           <div class="wf-tier"><span class="wf-tier-name">ux-writing</span><span class="wf-tier-desc">Every state card’s copy: blame-free formula (what happened plainly + what to do next), empty states that orient and invite, no dead ends, engine-exact terminology — state names verbatim from code, human sentences around them.</span></div>
           <div class="wf-tier"><span class="wf-tier-name">a11y-engineering</span><span class="wf-tier-desc">The keyboard contract table in every frame (key, action, focus destination, announcement), focus-visible paired with every hover rule, 24×24 minimum pointer targets, the polite live region on the binding line, the decorative-canvas decision for the graph, and the stated WCAG 2.2 AA gap below.</span></div>

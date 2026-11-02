@@ -20,7 +20,7 @@ write = "--write" in sys.argv
 
 FM_ID = re.compile(r"^id:\s*([A-Z]{3,4}-\d{3})", re.M)
 FM_FIELD = re.compile(r"^(title|description|status|pack):\s*(.*)$", re.M)
-FM_LINK = re.compile(r"-\s*\{\s*target:\s*([^,}]+),\s*relation:\s*([^}]+)")
+FM_EDGE = re.compile(r"^(\w+):\s*(\[.*?\]|.*)$", re.M)
 
 
 def parse_rule(path: Path) -> dict | None:
@@ -30,8 +30,32 @@ def parse_rule(path: Path) -> dict | None:
     rid = m.group(1)
     pack = path.relative_to(C).parts[0] if len(path.relative_to(C).parts) > 1 else "root"
     fields = dict(FM_FIELD.findall(body))
-    links = FM_LINK.findall(body)
-    refs = "; ".join(f"{t.strip()}:{r.strip()}" for t, r in links)
+    # Parse typed edges
+    edges = {}
+    in_edges = False
+    current_key = None
+    for line in body.splitlines():
+        s = line.strip()
+        if s == "edges:":
+            in_edges = True; continue
+        if in_edges:
+            em = re.match(r"^(\w+):\s*(.*)$", line)
+            if em and not line.startswith((" ", "-")):
+                in_edges = False; continue
+            if em:
+                key, val = em.group(1), em.group(2).strip()
+                if val.startswith("["):
+                    edges[key] = [v.strip().strip("'\"") for v in val[1:-1].split(",") if v.strip()]
+                elif val:
+                    edges[key] = [val.strip().strip("'\"")]
+                else:
+                    edges[key] = []
+                current_key = key
+            elif s.startswith("- ") and current_key:
+                item = s.lstrip("- ").strip().strip("'\"")
+                if item:
+                    edges[current_key].append(item)
+    refs = "; ".join(f"{k}:{','.join(v)}" for k, v in edges.items() if v)
     return {
         "rule_id": rid,
         "pack": fields.get("pack", pack),
@@ -39,7 +63,8 @@ def parse_rule(path: Path) -> dict | None:
         "title": fields.get("title", "")[:120],
         "description": fields.get("description", "")[:200],
         "status": fields.get("status", "unknown"),
-        "refs": refs[:120],
+        "edges": {k: v for k, v in edges.items() if v},
+        "refs": refs[:200],
     }
 
 rules = []

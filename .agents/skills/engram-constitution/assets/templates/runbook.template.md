@@ -1,17 +1,18 @@
 ---
 type: runbook
 id: {{RUNBOOK_ID}}
-title: {{TITLE}}
-description: {{ONE_LINE_SUMMARY}}
+title: "{{TITLE}}"
+description: "{{ONE_LINE_SUMMARY}}"
 pack: {{PACK}}
 status: draft
 tags: []
 version: 1
 created_on: {{DATE}}
 last_incident: null
-forward_links: []
-backward_links: []
-semantic_links: []
+edges:
+  mitigates: []
+  triggered_by: []
+  uses: []
 ---
 
 ## Trigger

@@ -9,6 +9,8 @@ import {
 import { dimensionLabel } from "./Inventory";
 import { RecentAdditionsView } from "./RecentAdditions";
 import { PartitionGraphView } from "./PartitionGraph";
+import { BindingHealthView } from "./BindingHealth";
+import { fetchBindingHealth } from "../api";
 
 /** Header for the selected partition: the exact tuple with "(unset)" labels. */
 export function PartitionHeader({ scope }: { scope: PartitionTuple }) {
@@ -102,6 +104,7 @@ export function PartitionView({
         ← inventory
       </button>
       <PartitionHeader scope={scope} />
+      <BindingHealthView scope={scope} repo="default" onLoad={fetchBindingHealth} />
       <div className="grid gap-6 lg:grid-cols-3">
         <div>
           <h3 className="mb-1 text-sm font-semibold uppercase tracking-wide text-slate-400">

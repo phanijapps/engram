@@ -279,6 +279,57 @@ export function createConsoleServer({ provider, backend, storage, uiDir }) {
       }
     }
 
+    // Index-binding health line for one partition (STEP-011 / REQ-011): the
+    // engine code-status surface, mapped to a single line's facts. The
+    // N-API surface (codeStatusJson) already exists — extended here with
+    // mapping only, no binding surface change.
+    const bindingMatch = url.pathname.match(/^\/api\/partitions\/([A-Za-z0-9_-]+)\/binding-health$/);
+    if (req.method === "GET" && bindingMatch) {
+      const [, key] = bindingMatch;
+      let partition;
+      try {
+        partition = parsePartitionKey(key);
+      } catch {
+        return sendJson(res, 400, { state: "bad-request", message: "malformed partition key" });
+      }
+      const repo = url.searchParams.get("repo");
+      if (!repo) {
+        return sendJson(res, 400, { state: "bad-request", message: "repo query parameter required" });
+      }
+      try {
+        const status = JSON.parse(
+          provider.codeStatusJson(JSON.stringify({ scope: partition, repo }))
+        );
+        const freshnessState =
+          status?.freshness?.state === "unknown"
+            ? "unknown"
+            : status?.freshness?.state?.observed?.matchesIndexed === false
+              ? "ref-moved-past-indexed-commit"
+              : status?.freshness?.state?.observed?.matchesIndexed === true
+                ? "fresh"
+                : "observed";
+        return sendJson(res, 200, {
+          state: "bound",
+          repo,
+          branchRef: status?.binding?.branchRef ?? status?.checkpoint?.branchRef ?? null,
+          indexedCommitOid: status?.indexedCommitOid ?? null,
+          freshnessState,
+          observedOid: status?.freshness?.observedOid ?? null
+        });
+      } catch (error) {
+        const text = String(error?.message ?? error);
+        if (/NotFound|no binding|not bound|AuthorizationRequired/i.test(text)) {
+          return sendJson(res, 200, {
+            state: "unbound",
+            repo,
+            message: "No code index is bound for this partition and repository."
+          });
+        }
+        const degraded = classifyDegradedState(text);
+        return sendJson(res, 200, { state: degraded.state, repo, message: degraded.message });
+      }
+    }
+
     return sendJson(res, 404, { state: "not-found", message: url.pathname });
   }
 

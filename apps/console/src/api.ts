@@ -126,6 +126,23 @@ export function fetchAnomalies(): Promise<AnomaliesResponse> {
   return getJson<AnomaliesResponse>("/api/anomalies");
 }
 
+export interface BindingHealthLine {
+  state: string;
+  repo: string;
+  branchRef?: string | null;
+  indexedCommitOid?: string | null;
+  freshnessState?: string;
+  observedOid?: string | null;
+  message?: string;
+}
+
+export function fetchBindingHealth(
+  scope: PartitionSummary["scope"],
+  repo: string
+): Promise<BindingHealthLine> {
+  return getJson(`/api/partitions/${partitionKey(scope)}/binding-health?repo=${encodeURIComponent(repo)}`);
+}
+
 export function fetchPartitionGraph(
   scope: PartitionSummary["scope"],
   limit: number

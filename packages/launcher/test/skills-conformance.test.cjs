@@ -58,9 +58,24 @@ function frontmatter(text) {
   const m = text.match(/^---\n([\s\S]*?)\n---\n/);
   if (!m) return null;
   const fm = {};
-  for (const line of m[1].split('\n')) {
-    const kv = line.match(/^([a-z_]+):\s*(.*)$/);
-    if (kv) fm[kv[1]] = kv[2];
+  const lines = m[1].split('\n');
+  for (let i = 0; i < lines.length; i += 1) {
+    const kv = lines[i].match(/^([a-z_]+):\s*(.*)$/);
+    if (!kv) continue;
+    // YAML block scalars (folded `>-` / literal `|` with any indicators):
+    // the value is the following more-indented block, folded to one line.
+    // SKILL.md files use them for long descriptions.
+    const block = kv[2].match(/^[>|][+-]?$/);
+    if (block) {
+      const collected = [];
+      for (let j = i + 1; j < lines.length && /^\s+\S/.test(lines[j]); j += 1) {
+        collected.push(lines[j].trim());
+      }
+      fm[kv[1]] = collected.join(' ');
+      i += collected.length;
+      continue;
+    }
+    fm[kv[1]] = kv[2];
   }
   return fm;
 }
@@ -125,13 +140,24 @@ test('expected set derives from the authored source, knowledge skills all ship',
     assert.ok(AUTHORED_SKILLS.includes(skill), `knowledge skill ${skill} missing from the authored set`);
   }
   // The workflow class is exactly the authored set minus knowledge — today
-  // engram-bound, engram-domain, engram-factory, engram-frame,
-  // outcome-reporting (DEC-005; engram-domain joined with the
-  // standard-ontology-packs job; engram-bound joined with job-010's
-  // branch-bound indexing merge).
+  // engram-bound, engram-constitution, engram-domain, engram-factory,
+  // engram-frame, engram-visualize, outcome-reporting (DEC-005; engram-domain
+  // joined with the standard-ontology-packs job; engram-bound joined with
+  // job-010's branch-bound indexing merge; engram-constitution and
+  // engram-visualize joined with the constitution/site jobs and never carried
+  // the knowledge-class structural sections, so they are workflow-class —
+  // drift fixed with job 012's GATE-F repair).
   assert.deepEqual(
     WORKFLOW_SKILLS,
-    ['engram-bound', 'engram-domain', 'engram-factory', 'engram-frame', 'outcome-reporting'].sort(),
+    [
+      'engram-bound',
+      'engram-constitution',
+      'engram-domain',
+      'engram-factory',
+      'engram-frame',
+      'engram-visualize',
+      'outcome-reporting',
+    ].sort(),
   );
 });
 

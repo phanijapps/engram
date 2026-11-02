@@ -7,7 +7,7 @@
   <link rel="stylesheet" href="tokens.css">
   <link rel="stylesheet" href="wireframe.css">
 </head>
-<body data-scope="v1">
+<body data-scope="v1" data-anchor="job-012:REQ-004 job-012:REQ-007">
   <a class="wf-skip" href="#main">Skip to frame content</a>
   <div class="wf-shell">
     <aside class="wf-rail">
@@ -42,6 +42,7 @@
         <p class="wf-eyebrow">design contract · job 013 · cycle 1</p>
         <h1 class="wf-frame-title">engram console — professional wireframe set</h1>
         <p class="wf-lede">The design contract every future console job builds against: six v1 surfaces as interactive frames, every code-named state with designed microcopy, one three-tier token layer, and a clearly-labeled future trajectory. Open any frame over <code>file://</code> — zero build, zero server, zero tooling.</p>
+        <p class="wf-lineage">lineage <code>job-012:REQ-004</code> <code>job-012:REQ-007</code> · this contract: <code>job-013:REQ-005</code> <code>job-013:REQ-008</code> · shaped by frontend-engineering · archify · token-architecture · fe-status</p>
       </header>
 
       <section class="wf-hero" aria-labelledby="hero-title">
@@ -165,6 +166,55 @@
           </article>
         </div>
       </section>
+      <section class="wf-section" aria-labelledby="tokens-title">
+        <h2 id="tokens-title" class="wf-section-title">Token layer — three tiers, one-way dependency</h2>
+        <p class="wf-quiet">Every display value in this set resolves through <code>tokens.css</code> — a raw value outside the primitive tier is a defect the drift sweep can see (a grep for hex or rgb outside tokens.css must return nothing).</p>
+        <div class="wf-tier-map">
+          <div class="wf-tier">
+            <span class="wf-tier-name">tier 1 · primitive</span>
+            <span class="wf-tier-desc">Raw values, defined once, referenced only by semantics: the ink and paper ramps, one indigo accent family, status hues, minor-third spacing, the type scale, radii, shadows, z-index, motion. Names carry values, never meaning.</span>
+          </div>
+          <div class="wf-tier">
+            <span class="wf-tier-name">tier 2 · semantic</span>
+            <span class="wf-tier-desc">Role assignments — surface, on-surface, outline, primary, focus, status roles, graph hues. Where theming lives: light values are the defaults, <code>[data-theme="dark"]</code> overrides them, and a prefers-color-scheme fallback stays in sync for attribute-less loads.</span>
+          </div>
+          <div class="wf-tier">
+            <span class="wf-tier-name">tier 3 · component</span>
+            <span class="wf-tier-desc">Anatomy tokens scoped to a component class — <code>--wf-btn-*</code>, <code>--wf-state-*</code>, graph node fills — referencing semantics only, never primitives. wireframe.css consumes var(--*) exclusively.</span>
+          </div>
+        </div>
+      </section>
+
+      <section class="wf-section" aria-labelledby="citations-title">
+        <h2 id="citations-title" class="wf-section-title">Skills used and cited — what shaped what</h2>
+        <p class="wf-quiet">All eleven UI skills were read and applied during authoring (job-013 REQ-008, MOS-002). Each citation names the concrete thing it shaped — not a hat-tip.</p>
+        <div class="wf-tier-map">
+          <div class="wf-tier"><span class="wf-tier-name">frontend-engineering</span><span class="wf-tier-desc">Create-mode pre-flight and craft rules: named aesthetic reference (Linear at Raycast-tier density), the state-matrix discipline behind every frame’s state section, semantic-HTML rules (one main, one h1, labels on inputs, buttons for actions), and the no-AI-aesthetic rules — one accent, flat elevation, radius scale by element type, realistic content, no lorem ipsum.</span></div>
+          <div class="wf-tier"><span class="wf-tier-name">archify</span><span class="wf-tier-desc">The explorable standalone-HTML format these frames follow: self-contained, dark/light themed, conclusion-first, with no-JS explorable panels (native details/summary disclosures). The archify tool itself is diagram-scoped — the set takes the format, not the CLI.</span></div>
+          <div class="wf-tier"><span class="wf-tier-name">component-contract</span><span class="wf-tier-desc">Every v1 frame’s contract panel: purpose, inputs, outputs with the emit-and-stop rule, slots, states owned, and an accessibility contract — designed before any future implementation, per the skill’s API-first principle.</span></div>
+          <div class="wf-tier"><span class="wf-tier-name">token-architecture</span><span class="wf-tier-desc">The three-tier one-way chain in tokens.css, [data-theme] plus prefers-color-scheme kept in sync, minor-third spacing for data-dense surfaces, role-based token naming, and the audit grep that this job’s drift sweep (CHK-1) runs verbatim.</span></div>
+          <div class="wf-tier"><span class="wf-tier-name">responsive-layout</span><span class="wf-tier-desc">Grid page structure with Flexbox inside cells, mobile-first min-width breakpoints in rem, auto-fill gallery and state grids, the table-to-labeled-blocks collapse under 48rem, clamp() fluid frame titles, and the no-JS rule — every layout behavior works without scripting.</span></div>
+          <div class="wf-tier"><span class="wf-tier-name">ux-writing</span><span class="wf-tier-desc">Every state card’s copy: blame-free formula (what happened plainly + what to do next), empty states that orient and invite, no dead ends, engine-exact terminology — state names verbatim from code, human sentences around them.</span></div>
+          <div class="wf-tier"><span class="wf-tier-name">a11y-engineering</span><span class="wf-tier-desc">The keyboard contract table in every frame (key, action, focus destination, announcement), focus-visible paired with every hover rule, 24×24 minimum pointer targets, the polite live region on the binding line, the decorative-canvas decision for the graph, and the stated WCAG 2.2 AA gap below.</span></div>
+          <div class="wf-tier"><span class="wf-tier-name">css-architecture</span><span class="wf-tier-desc">wireframe.css structure: cascade layers declared once (reset, base, layout, components, utilities), class selectors only, specificity budget at two classes, no ID selectors, role-based class names that survive redesign.</span></div>
+          <div class="wf-tier"><span class="wf-tier-name">fe-status</span><span class="wf-tier-desc">The surface-state block below: future console jobs orient from one block — states covered, a11y status with the stated gap, known exceptions, next action — instead of re-deriving the set’s history.</span></div>
+          <div class="wf-tier"><span class="wf-tier-name">rendering-strategy</span><span class="wf-tier-desc">Static-first decision for the set (SSG-equivalent file:// frames, zero hydration) and the islands rule the production console inherits: only genuinely interactive components ship script — in these frames, the theme toggle is the single JS island.</span></div>
+          <div class="wf-tier"><span class="wf-tier-name">fe-performance</span><span class="wf-tier-desc">The structural performance contract: system font stacks (zero webfont payload, no swap CLS), zero images (SVG and CSS only), skeletons that match final layout (no shift on load), one stylesheet pair per frame — LCP is the document, CLS is zero by construction.</span></div>
+        </div>
+        <p class="wf-note">Named skips, per the skills’ own rules: <code>design handoff: no [design] section configured</code> — no agentbundle-layout.toml exists at repo root or user profile, so the canonical reference set applied. <code>XD genre routing: skipped (experience-design pack absent)</code> — no information-architecture skill installed; genre guidance came from frontend-engineering’s canonical set.</p>
+      </section>
+
+      <section class="wf-section" aria-labelledby="status-title">
+        <h2 id="status-title" class="wf-section-title">Surface state — this set, honestly</h2>
+        <div class="wf-records">
+          <article class="wf-record"><span class="wf-record-id">states covered</span><p class="wf-record-text">ready, loading (skeleton), empty, partial (pagination), the six degraded api states, unbound, bound-fresh, bound-stale, canvas loading/unavailable, plus boot states ui-not-built, port-in-use, store-absent, origin-refused, ui-read-error. first-run is the empty store card; no-results, offline, and permission-denied have no v1 surface to own them (no filters, no network, no auth) — that absence is v1 scope, not omission.</p></article>
+          <article class="wf-record"><span class="wf-record-id">a11y status</span><p class="wf-record-text">Built in: focus-visible on every control, tab order documented per frame, 24×24 targets, live region on the binding line, decorative canvas with text equivalents. Owner-run at acceptance: the felt tab-through (AC-006 protocol). Stated WCAG 2.2 AA gap — not yet checked: 2.4.11 Focus Not Obscured, 2.5.7 Dragging Movements, 3.2.6 Consistent Help, 3.3.7 Redundant Entry, 3.3.8 Accessible Authentication.</p></article>
+          <article class="wf-record"><span class="wf-record-id">performance</span><p class="wf-record-text">Untested by tooling at this tier (static files over file://; judgment is the owner dogfood). Structural contract: zero JS beyond the theme-toggle island, zero webfonts, zero images, skeletons that match final layout — documented so the production build inherits the argument, not just the pixels.</p></article>
+          <article class="wf-record"><span class="wf-record-id">known exceptions</span><p class="wf-record-text">Representative fixtures, not exhaustive data (spec assumption); the professional-bar judgment lands late by design at owner acceptance (RISK-001); motion notes stay MAY-tier — the set animates only the skeleton pulse, guarded by prefers-reduced-motion.</p></article>
+          <article class="wf-record"><span class="wf-record-id">next action</span><p class="wf-record-text">Owner: open index.html over file://, walk every frame, toggle both themes, judge (AC-001); tab through each frame (AC-006). Future console jobs: consume these frames as the design contract and tokens.css as the styling source of truth; cite frames by file plus their job-012 anchors.</p></article>
+        </div>
+      </section>
+
       <section class="wf-section" aria-labelledby="kbd-title">
         <details class="wf-panel" data-contract="keyboard-order">
           <summary id="kbd-title">Keyboard contract <span class="wf-faint">tab order · keys · focus destination — open to explore</span></summary>

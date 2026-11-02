@@ -31,3 +31,8 @@ happens there, never the primary checkout), absolute job dir, accepted inputs
 Run the closing gate named in your dispatch; finish with a clean, committed
 worktree; finalize artifacts per the template with real evidence. Report per
 contract, ending with exactly: SOURCE READY FOR SNAPSHOT — or the stop-report.
+
+## Context (mandatory before building)
+
+Read `references/context.md` §engram-builder: gate commands and test
+conventions; verification.md is the sole result record.

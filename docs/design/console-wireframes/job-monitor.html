@@ -1,0 +1,157 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Ingest &amp; maintain job monitoring (future) — engram console wireframes</title>
+  <link rel="stylesheet" href="tokens.css">
+  <link rel="stylesheet" href="wireframe.css">
+</head>
+<body data-scope="future">
+  <a class="wf-skip" href="#main">Skip to frame content</a>
+  <div class="wf-shell">
+    <aside class="wf-rail">
+      <div class="wf-rail-brand">
+        <span class="wf-mark" aria-hidden="true"></span>
+        <span class="wf-rail-title">engram console</span>
+        <span class="wf-rail-sub">wireframe set v1</span>
+      </div>
+      <nav class="wf-rail-nav" aria-label="Frames">
+        <a class="wf-nav-link" href="index.html">Overview</a>
+        <a class="wf-nav-link" href="inventory.html">Inventory</a>
+        <a class="wf-nav-link" href="partition.html">Partition</a>
+        <a class="wf-nav-link" href="recent-additions.html">Recent additions</a>
+        <a class="wf-nav-link" href="partition-graph.html">Knowledge graph</a>
+        <a class="wf-nav-link" href="anomalies.html">Anomalies</a>
+        <a class="wf-nav-link" href="binding-health.html">Binding health</a>
+        <span class="wf-nav-group-label">future</span>
+        <a class="wf-nav-link" href="job-monitor.html" aria-current="page">Job monitoring</a>
+        <a class="wf-nav-link" href="pruning-review.html">Pruning review</a>
+        <a class="wf-nav-link" href="central-deployment.html">Central deployment</a>
+      </nav>
+      <div class="wf-rail-foot">
+        <span class="wf-badge wf-badge--future"><span class="wf-dot" aria-hidden="true"></span>future · not in v1</span>
+        <button type="button" class="wf-theme-toggle" data-action="toggle-theme">
+          <span aria-hidden="true">◐</span><span class="wf-theme-label">Light theme</span>
+        </button>
+      </div>
+    </aside>
+
+    <main id="main" class="wf-content">
+      <header class="wf-frame-head">
+        <p class="wf-eyebrow">future-trajectory frame · design target, not a v1 promise</p>
+        <h1 class="wf-frame-title">Ingest &amp; maintain job monitoring</h1>
+        <p class="wf-lede">The console watching long-running engine work — ingest and maintenance jobs with progress, queue, and history — instead of only ever showing finished state.</p>
+        <p class="wf-note"><span class="wf-badge wf-badge--future"><span class="wf-dot" aria-hidden="true"></span>future</span> Nothing in this frame ships in v1. v1 is read-only by construction; the pause, resume, retry, and cancel affordances below are the first write-shaped capabilities on the trajectory, and every one of them is labeled future on purpose.</p>
+      </header>
+
+      <section class="wf-view" aria-labelledby="job-view-title">
+        <h2 id="job-view-title">Running jobs</h2>
+
+        <div class="wf-table-wrap">
+          <table class="wf-table wf-table--collapse">
+            <caption>Engine jobs touching the owner’s real local store — one row per job with live progress.</caption>
+            <thead>
+              <tr>
+                <th scope="col">job</th>
+                <th scope="col">kind</th>
+                <th scope="col">partition</th>
+                <th scope="col">started</th>
+                <th scope="col">progress</th>
+                <th scope="col">state</th>
+                <th scope="col">controls <span class="wf-badge wf-badge--future">future</span></th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td class="wf-mono">job_01JD8Z4K7Q</td>
+                <td class="wf-mono">ingest</td>
+                <td class="wf-mono">videogamer / mem-alpha / dev</td>
+                <td class="wf-mono">09:12:44Z</td>
+                <td>
+                  <div class="wf-meter">
+                    <span class="wf-meter-track"><span class="wf-meter-fill wf-meter-fill--70"></span></span>
+                    <span class="wf-num">70%</span>
+                  </div>
+                </td>
+                <td><span class="wf-chip wf-chip--accent">running</span></td>
+                <td>
+                  <span class="wf-pager-inline">
+                    <button type="button" class="wf-btn" disabled>pause <span class="wf-badge wf-badge--future">future</span></button>
+                  </span>
+                </td>
+              </tr>
+              <tr>
+                <td class="wf-mono">job_01JD8WZ2M4</td>
+                <td class="wf-mono">maintain</td>
+                <td class="wf-mono">可视化研究 / mem-alpha</td>
+                <td class="wf-mono">—</td>
+                <td><span class="wf-faint">queued</span></td>
+                <td><span class="wf-chip">queued</span></td>
+                <td>
+                  <span class="wf-pager-inline">
+                    <button type="button" class="wf-btn" disabled>cancel <span class="wf-badge wf-badge--future">future</span></button>
+                  </span>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="wf-cols">
+          <div class="wf-col">
+            <h3 class="wf-col-title">history</h3>
+            <div class="wf-records">
+              <article class="wf-record">
+                <span class="wf-record-meta"><span class="wf-chip wf-chip--mono">ingest</span><span>completed 08:54Z</span></div>
+                <p class="wf-record-text">Indexed 2,413 memories across 4 partitions of videogamer / mem-alpha — no findings.</p>
+              </article>
+              <article class="wf-record">
+                <span class="wf-record-meta"><span class="wf-chip wf-chip--mono">maintain</span><span>failed 09:41Z</span></div>
+                <p class="wf-record-text">The store was locked by a concurrent engine session — the job paused itself and retried; the retry is the queued row above.</p>
+              </article>
+            </div>
+          </div>
+          <div class="wf-col">
+            <h3 class="wf-col-title">what exists in v1</h3>
+            <p class="wf-record-text">None of this. v1 observes the store read-only through finished engine state: the inventory counts, the anomaly set, the binding line. Jobs are engine-side operations you run from the CLI; the console has no window into them.</p>
+          </div>
+          <div class="wf-col">
+            <h3 class="wf-col-title">why it is future</h3>
+            <p class="wf-record-text">Job monitoring needs a status channel from the engine and a job registry — new engine surface, not console paint. The write-shaped controls (pause, resume, retry, cancel) additionally break the v1 read-only posture and land only with an explicit owner decision.</p>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <footer class="wf-foot">
+      <div class="wf-foot-inner">
+        <p>read-only by construction · loopback only · no authentication by design (single trusted operator)</p>
+        <nav class="wf-pager" aria-label="Frame sequence">
+          <a class="wf-pager-link" href="binding-health.html">← Binding health</a>
+          <a class="wf-pager-link" href="pruning-review.html">Pruning review →</a>
+        </nav>
+      </div>
+    </footer>
+  </div>
+
+  <script>
+    (function () {
+      var root = document.documentElement;
+      var toggle = document.querySelector("[data-action=\"toggle-theme\"]");
+      if (!toggle) { return; }
+      var label = toggle.querySelector(".wf-theme-label");
+      function paint() {
+        var dark = root.getAttribute("data-theme") === "dark";
+        toggle.setAttribute("aria-label", dark ? "Switch to light theme" : "Switch to dark theme");
+        if (label) { label.textContent = dark ? "Light theme" : "Dark theme"; }
+      }
+      toggle.addEventListener("click", function () {
+        root.setAttribute("data-theme", root.getAttribute("data-theme") === "dark" ? "light" : "dark");
+        paint();
+      });
+      paint();
+    })();
+  </script>
+</body>
+</html>

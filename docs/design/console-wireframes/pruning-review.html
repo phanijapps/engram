@@ -1,0 +1,133 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Pruning review (future) — engram console wireframes</title>
+  <link rel="stylesheet" href="tokens.css">
+  <link rel="stylesheet" href="wireframe.css">
+</head>
+<body data-scope="future">
+  <a class="wf-skip" href="#main">Skip to frame content</a>
+  <div class="wf-shell">
+    <aside class="wf-rail">
+      <div class="wf-rail-brand">
+        <span class="wf-mark" aria-hidden="true"></span>
+        <span class="wf-rail-title">engram console</span>
+        <span class="wf-rail-sub">wireframe set v1</span>
+      </div>
+      <nav class="wf-rail-nav" aria-label="Frames">
+        <a class="wf-nav-link" href="index.html">Overview</a>
+        <a class="wf-nav-link" href="inventory.html">Inventory</a>
+        <a class="wf-nav-link" href="partition.html">Partition</a>
+        <a class="wf-nav-link" href="recent-additions.html">Recent additions</a>
+        <a class="wf-nav-link" href="partition-graph.html">Knowledge graph</a>
+        <a class="wf-nav-link" href="anomalies.html">Anomalies</a>
+        <a class="wf-nav-link" href="binding-health.html">Binding health</a>
+        <span class="wf-nav-group-label">future</span>
+        <a class="wf-nav-link" href="job-monitor.html">Job monitoring</a>
+        <a class="wf-nav-link" href="pruning-review.html" aria-current="page">Pruning review</a>
+        <a class="wf-nav-link" href="central-deployment.html">Central deployment</a>
+      </nav>
+      <div class="wf-rail-foot">
+        <span class="wf-badge wf-badge--future"><span class="wf-dot" aria-hidden="true"></span>future · not in v1</span>
+        <button type="button" class="wf-theme-toggle" data-action="toggle-theme">
+          <span aria-hidden="true">◐</span><span class="wf-theme-label">Light theme</span>
+        </button>
+      </div>
+    </aside>
+
+    <main id="main" class="wf-content">
+      <header class="wf-frame-head">
+        <p class="wf-eyebrow">future-trajectory frame · design target, not a v1 promise</p>
+        <h1 class="wf-frame-title">Pruning review</h1>
+        <p class="wf-lede">Where duplication becomes a decision: the anomaly panel’s signals turned into a review queue of pruning candidates — evidence first, judgment yours, nothing removed without an explicit approval.</p>
+        <p class="wf-note"><span class="wf-badge wf-badge--future"><span class="wf-dot" aria-hidden="true"></span>future</span> This is the first surface on the trajectory with a write affordance. v1 is read-only, no writes, ever — the review queue reads, the decision writes, and the decision does not exist in v1. Every action below is labeled future and stays that way until an owner decision opens a write path.</p>
+      </header>
+
+      <section class="wf-view" aria-labelledby="pruning-view-title">
+        <h2 id="pruning-view-title">Review queue</h2>
+        <p class="wf-quiet">2 candidates — sourced from the same documented set as the anomaly panel: subject duplication (tenant-scoped) and entity-identity duplication. 0 decisions recorded (decisions are writes — future).</p>
+
+        <ul class="wf-records">
+          <li class="wf-anomaly">
+            <p class="wf-anomaly-title">
+              <span class="wf-chip wf-chip--mono">entity-identity</span>
+              «mem-alpha» (project) exists in 3 partitions — 2 look like copies
+            </p>
+            <div class="wf-records">
+              <article class="wf-record">
+                <span class="wf-record-id">evidence · videogamer / mem-alpha / dev — 412 memories, entity named 41×</span>
+                <p class="wf-record-text">First-seen 2026-10-28; the partition’s entity set is a superset of the candidate duplicate.</p>
+              </article>
+              <article class="wf-record">
+                <span class="wf-record-id">evidence · 可视化研究 / mem-alpha — 156 memories, entity named 17×</span>
+                <p class="wf-record-text">Contents of the newest 20 memories match the dev partition’s oldest 20 — consistent with a copied workspace.</p>
+              </article>
+            </div>
+            <div class="wf-pager-inline">
+              <button type="button" class="wf-btn" disabled>approve prune <span class="wf-badge wf-badge--future">future</span></button>
+              <button type="button" class="wf-btn" disabled>keep both <span class="wf-badge wf-badge--future">future</span></button>
+              <span class="wf-faint">destructive action — requires explicit confirmation with a stated blast radius</span>
+            </div>
+          </li>
+          <li class="wf-anomaly">
+            <p class="wf-anomaly-title">
+              <span class="wf-chip wf-chip--mono">subject-partitions</span>
+              Subject «Πελάτης-42» in 2 partitions of Archivo-histórico — likely distinct, listed for completeness
+            </p>
+            <p class="wf-record-text">The dev and production partitions have disjoint memory contents; the signal fires on the shared subject value alone. A reviewer would keep both.</p>
+            <div class="wf-pager-inline">
+              <button type="button" class="wf-btn" disabled>keep both <span class="wf-badge wf-badge--future">future</span></button>
+            </div>
+          </li>
+        </ul>
+
+        <div class="wf-cols">
+          <div class="wf-col">
+            <h3 class="wf-col-title">what exists in v1</h3>
+            <p class="wf-record-text">The anomaly panel — the same signals, surfaced read-only with drill-down links. No queue, no decisions, no history of decisions.</p>
+          </div>
+          <div class="wf-col">
+            <h3 class="wf-col-title">what the future adds</h3>
+            <p class="wf-record-text">An evidence-first review flow: candidates carry their evidence, approvals state their blast radius, destructive confirmations default to cancel, and every decision is recorded with who decided and when.</p>
+          </div>
+          <div class="wf-col">
+            <h3 class="wf-col-title">why it is future</h3>
+            <p class="wf-record-text">Deletion is the one operation the console must never get wrong in silence. It needs an engine write path with audit, a review-decision store, and an owner decision that the read-only posture should lift at all.</p>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <footer class="wf-foot">
+      <div class="wf-foot-inner">
+        <p>read-only by construction · loopback only · no authentication by design (single trusted operator)</p>
+        <nav class="wf-pager" aria-label="Frame sequence">
+          <a class="wf-pager-link" href="job-monitor.html">← Job monitoring</a>
+          <a class="wf-pager-link" href="central-deployment.html">Central deployment →</a>
+        </nav>
+      </div>
+    </footer>
+  </div>
+
+  <script>
+    (function () {
+      var root = document.documentElement;
+      var toggle = document.querySelector("[data-action=\"toggle-theme\"]");
+      if (!toggle) { return; }
+      var label = toggle.querySelector(".wf-theme-label");
+      function paint() {
+        var dark = root.getAttribute("data-theme") === "dark";
+        toggle.setAttribute("aria-label", dark ? "Switch to light theme" : "Switch to dark theme");
+        if (label) { label.textContent = dark ? "Light theme" : "Dark theme"; }
+      }
+      toggle.addEventListener("click", function () {
+        root.setAttribute("data-theme", root.getAttribute("data-theme") === "dark" ? "light" : "dark");
+        paint();
+      });
+      paint();
+    })();
+  </script>
+</body>
+</html>

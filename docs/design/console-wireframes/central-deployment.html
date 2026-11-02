@@ -1,0 +1,140 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Central deployment (future) — engram console wireframes</title>
+  <link rel="stylesheet" href="tokens.css">
+  <link rel="stylesheet" href="wireframe.css">
+</head>
+<body data-scope="future">
+  <a class="wf-skip" href="#main">Skip to frame content</a>
+  <div class="wf-shell">
+    <aside class="wf-rail">
+      <div class="wf-rail-brand">
+        <span class="wf-mark" aria-hidden="true"></span>
+        <span class="wf-rail-title">engram console</span>
+        <span class="wf-rail-sub">wireframe set v1</span>
+      </div>
+      <nav class="wf-rail-nav" aria-label="Frames">
+        <a class="wf-nav-link" href="index.html">Overview</a>
+        <a class="wf-nav-link" href="inventory.html">Inventory</a>
+        <a class="wf-nav-link" href="partition.html">Partition</a>
+        <a class="wf-nav-link" href="recent-additions.html">Recent additions</a>
+        <a class="wf-nav-link" href="partition-graph.html">Knowledge graph</a>
+        <a class="wf-nav-link" href="anomalies.html">Anomalies</a>
+        <a class="wf-nav-link" href="binding-health.html">Binding health</a>
+        <span class="wf-nav-group-label">future</span>
+        <a class="wf-nav-link" href="job-monitor.html">Job monitoring</a>
+        <a class="wf-nav-link" href="pruning-review.html">Pruning review</a>
+        <a class="wf-nav-link" href="central-deployment.html" aria-current="page">Central deployment</a>
+      </nav>
+      <div class="wf-rail-foot">
+        <span class="wf-badge wf-badge--future"><span class="wf-dot" aria-hidden="true"></span>future · not in v1</span>
+        <button type="button" class="wf-theme-toggle" data-action="toggle-theme">
+          <span aria-hidden="true">◐</span><span class="wf-theme-label">Light theme</span>
+        </button>
+      </div>
+    </aside>
+
+    <main id="main" class="wf-content">
+      <header class="wf-frame-head">
+        <p class="wf-eyebrow">future-trajectory frame · design target, not a v1 promise</p>
+        <h1 class="wf-frame-title">Central deployment</h1>
+        <p class="wf-lede">One console watching several stores: the single-operator loopback model widened into a small fleet of registered engines, with the security model redesigned for it — not merely stretched.</p>
+        <p class="wf-note"><span class="wf-badge wf-badge--future"><span class="wf-dot" aria-hidden="true"></span>future</span> v1 is a local single-operator surface: loopback only, every request must originate from 127.0.0.1 / localhost / ::1, and anything else is refused with a named state. Central deployment changes that boundary — remote stores, network origins, and an authentication story that does not exist today. All of it is future.</p>
+      </header>
+
+      <section class="wf-view" aria-labelledby="central-view-title">
+        <h2 id="central-view-title">Deployment topology</h2>
+
+        <div class="wf-table-wrap">
+          <table class="wf-table wf-table--collapse">
+            <caption>Registered engines and their stores — today exactly one row is real; the rest is the design target.</caption>
+            <thead>
+              <tr>
+                <th scope="col">node</th>
+                <th scope="col">engine</th>
+                <th scope="col">store</th>
+                <th scope="col">partitions</th>
+                <th scope="col">binding</th>
+                <th scope="col">state</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td class="wf-mono">local <span class="wf-chip wf-chip--accent">v1 today</span></td>
+                <td class="wf-mono">loopback · 127.0.0.1</td>
+                <td class="wf-mono">~/.engram (sqlite)</td>
+                <td class="wf-num">7</td>
+                <td class="wf-mono">mem-alpha</td>
+                <td><span class="wf-chip wf-chip--accent">ready</span></td>
+              </tr>
+              <tr>
+                <td class="wf-mono">build-host <span class="wf-badge wf-badge--future">future</span></td>
+                <td class="wf-mono">remote · registered</td>
+                <td class="wf-mono">engram-job hosts (pg)</td>
+                <td class="wf-num">—</td>
+                <td class="wf-mono">—</td>
+                <td><span class="wf-chip">unregistered</span></td>
+              </tr>
+              <tr>
+                <td class="wf-mono">agent-laptop <span class="wf-badge wf-badge--future">future</span></td>
+                <td class="wf-mono">remote · registered</td>
+                <td class="wf-mono">~/.engram (sqlite)</td>
+                <td class="wf-num">—</td>
+                <td class="wf-mono">—</td>
+                <td><span class="wf-chip">unregistered</span></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="wf-cols">
+          <div class="wf-col">
+            <h3 class="wf-col-title">what exists in v1</h3>
+            <p class="wf-record-text">Exactly the first row: one console, one engine, one local store, loopback-enforced. Requests from any other origin are refused with the <span class="wf-mono">origin-refused</span> state — that refusal is the v1 security model working as designed.</p>
+          </div>
+          <div class="wf-col">
+            <h3 class="wf-col-title">what the future adds</h3>
+            <p class="wf-record-text">A registry of engines with per-node health (the same named states as every other frame — a remote node can be store-locked or backend-unreachable exactly like the local one), aggregate inventory across stores, and per-node binding health.</p>
+          </div>
+          <div class="wf-col">
+            <h3 class="wf-col-title">why it is future</h3>
+            <p class="wf-record-text">Widening the origin boundary is a security decision, not a UI feature: authentication, transport, and per-node authorization all need designing first. The read-only posture survives — even a central console starts read-only against every store it watches.</p>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <footer class="wf-foot">
+      <div class="wf-foot-inner">
+        <p>read-only by construction · loopback only · no authentication by design (single trusted operator)</p>
+        <nav class="wf-pager" aria-label="Frame sequence">
+          <a class="wf-pager-link" href="pruning-review.html">← Pruning review</a>
+          <a class="wf-pager-link" href="index.html">Overview →</a>
+        </nav>
+      </div>
+    </footer>
+  </div>
+
+  <script>
+    (function () {
+      var root = document.documentElement;
+      var toggle = document.querySelector("[data-action=\"toggle-theme\"]");
+      if (!toggle) { return; }
+      var label = toggle.querySelector(".wf-theme-label");
+      function paint() {
+        var dark = root.getAttribute("data-theme") === "dark";
+        toggle.setAttribute("aria-label", dark ? "Switch to light theme" : "Switch to dark theme");
+        if (label) { label.textContent = dark ? "Light theme" : "Dark theme"; }
+      }
+      toggle.addEventListener("click", function () {
+        root.setAttribute("data-theme", root.getAttribute("data-theme") === "dark" ? "light" : "dark");
+        paint();
+      });
+      paint();
+    })();
+  </script>
+</body>
+</html>

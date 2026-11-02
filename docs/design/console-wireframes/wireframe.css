@@ -1186,6 +1186,16 @@
     background-color: var(--ds-color-primary);
   }
 
+  /* fill widths are data-driven at runtime; the wireframe fixes them with
+     width utilities (the token layer governs track geometry and color) */
+  .wf-meter-fill--35 {
+    inline-size: 35%;
+  }
+
+  .wf-meter-fill--70 {
+    inline-size: 70%;
+  }
+
   /* ---- focus contract: token-driven, visible on every control ---- */
   a:focus-visible,
   summary:focus-visible,

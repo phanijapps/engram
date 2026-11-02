@@ -24,6 +24,10 @@
         <a class="wf-nav-link" href="partition-graph.html">Knowledge graph</a>
         <a class="wf-nav-link" href="anomalies.html">Anomalies</a>
         <a class="wf-nav-link" href="binding-health.html">Binding health</a>
+        <span class="wf-nav-group-label">future</span>
+        <a class="wf-nav-link" href="job-monitor.html">Job monitoring</a>
+        <a class="wf-nav-link" href="pruning-review.html">Pruning review</a>
+        <a class="wf-nav-link" href="central-deployment.html">Central deployment</a>
       </nav>
       <div class="wf-rail-foot">
         <span class="wf-badge wf-badge--v1"><span class="wf-dot" aria-hidden="true"></span>read-only v1</span>
@@ -93,13 +97,36 @@
           </a>
         </div>
       </section>
+      <section class="wf-section" aria-labelledby="future-gallery-title">
+        <h2 id="future-gallery-title" class="wf-section-title">future frames — trajectory, clearly labeled</h2>
+        <div class="wf-gallery">
+          <a class="wf-gallery-card" href="job-monitor.html">
+            <span class="wf-badge wf-badge--future"><span class="wf-dot" aria-hidden="true"></span>future · not in v1</span>
+            <span class="wf-gallery-title">Ingest &amp; maintain job monitoring</span>
+            <span class="wf-gallery-desc">Long-running engine work made visible: progress, queue, history. Pause and cancel are future write affordances, labeled as such.</span>
+            <span class="wf-gallery-meta"><span class="wf-chip wf-chip--mono">jobs</span><span class="wf-chip wf-chip--mono">progress</span></span>
+          </a>
+          <a class="wf-gallery-card" href="pruning-review.html">
+            <span class="wf-badge wf-badge--future"><span class="wf-dot" aria-hidden="true"></span>future · not in v1</span>
+            <span class="wf-gallery-title">Pruning review</span>
+            <span class="wf-gallery-desc">The anomaly signals as an evidence-first review queue. The first write affordance on the trajectory — nothing approves a prune in v1.</span>
+            <span class="wf-gallery-meta"><span class="wf-chip wf-chip--mono">review</span><span class="wf-chip wf-chip--mono">destructive-confirmation</span></span>
+          </a>
+          <a class="wf-gallery-card" href="central-deployment.html">
+            <span class="wf-badge wf-badge--future"><span class="wf-dot" aria-hidden="true"></span>future · not in v1</span>
+            <span class="wf-gallery-title">Central deployment</span>
+            <span class="wf-gallery-desc">One console, several stores: the loopback single-operator model widened into a registered fleet with a redesigned security boundary.</span>
+            <span class="wf-gallery-meta"><span class="wf-chip wf-chip--mono">topology</span><span class="wf-chip wf-chip--mono">health matrix</span></span>
+          </a>
+        </div>
+      </section>
     </main>
 
     <footer class="wf-foot">
       <div class="wf-foot-inner">
         <p>read-only by construction · loopback only · no authentication by design (single trusted operator)</p>
         <nav class="wf-pager" aria-label="Frame sequence">
-          <a class="wf-pager-link" href="binding-health.html">← Binding health</a>
+          <a class="wf-pager-link" href="central-deployment.html">← Central deployment</a>
           <a class="wf-pager-link" href="inventory.html">Inventory →</a>
         </nav>
       </div>

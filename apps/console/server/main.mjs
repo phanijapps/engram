@@ -9,6 +9,7 @@ import { dirname, join, resolve } from "node:path";
 import { homedir } from "node:os";
 import { fileURLToPath } from "node:url";
 import { spawn } from "node:child_process";
+import { existsSync } from "node:fs";
 import { loadNativeBinding } from "@engram/node";
 import { createConsoleServer } from "./app.mjs";
 
@@ -50,8 +51,7 @@ function parseArgs(argv) {
   return flags;
 }
 
-function providerConfig(flags) {
-  const storage = flags.storage ?? join(homedir(), ".engram");
+function providerConfig(flags, storage) {
   const base = {
     storage_path: storage,
     trusted_root: join(storage, ".."),
@@ -84,8 +84,19 @@ function openBrowser(url) {
 
 async function main() {
   const flags = parseArgs(process.argv.slice(2));
+  const storage = flags.storage ?? join(homedir(), ".engram");
+  // Degraded-state pre-check (NFR-005): a missing store directory is a named
+  // state, never a silently-created store — a read-only console must not
+  // materialize data directories (REQ-004 spirit; AC-013 absent case).
+  if (flags.backend === "sqlite" && !existsSync(storage)) {
+    console.error(
+      `engram-console: state: store-absent — storage directory '${storage}' does not exist. ` +
+        "The console is read-only and never creates a store; pass the path of an existing store."
+    );
+    process.exit(3);
+  }
   const binding = loadNativeBinding();
-  const { config, storage } = providerConfig(flags);
+  const { config } = providerConfig(flags, storage);
 
   let provider;
   try {

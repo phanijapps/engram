@@ -100,8 +100,8 @@ pub use provenance::{ProvenanceEntry, ProvenanceQuery, TimeWindow};
 pub use provider::{EngramProvider, EngramProviderBuilder};
 pub use recall::UnifiedRecall;
 pub use scope_inventory::{
-    MAX_PARTITION_PAGE_LIMIT, UNSET_LABEL, PartitionPage, PartitionRecords, PartitionSummary,
-    ScopeInventory, dimension_label, partition_matches, sort_summaries,
+    MAX_PARTITION_PAGE_LIMIT, PartitionPage, PartitionRecords, PartitionSummary, ScopeInventory,
+    UNSET_LABEL, dimension_label, partition_matches, sort_summaries, validate_recent_limit,
 };
 #[cfg(feature = "fastembed")]
 pub use sqlite::fastembed_embedding::FastEmbedEmbeddingProvider;

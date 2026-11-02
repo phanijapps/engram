@@ -68,6 +68,7 @@ futures.workspace = true
 
 [features]
 default = []
+
 # Code-authority lanes (review r6 findings 2/5): the shared registered-locator
 # refresh + bound-generation ingestion pipeline live on the coordinator and
 # need `engram-ingest`'s git acquisition + generation staging. Every shipped
@@ -102,3 +103,16 @@ sqlite = [
 # `rerank.strategy = "cross_encoder"` logs a warning and falls back to no
 # rerank.
 cross-encoder-rerank = ["dep:engram-rerank-cross-encoder"]
+
+# The bound-code integration tests drive the SQLite adapter and ingestion
+# lanes directly, which exist only under the `sqlite` feature. Declaring the
+# requirement here (instead of leaving it implicit) lets the single-crate
+# `cargo test -p engram-integration` invocation compile verbatim: these
+# targets are skipped when the feature is off and run under it.
+[[test]]
+name = "bound_source_status"
+required-features = ["sqlite"]
+
+[[test]]
+name = "code_publication"
+required-features = ["sqlite"]

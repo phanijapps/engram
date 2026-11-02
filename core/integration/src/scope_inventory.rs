@@ -232,12 +232,8 @@ pub trait ScopeInventory: Send + Sync {
 }
 
 /// Validates a recent-additions bound using the same rule as [`PartitionPage`].
-pub(crate) fn validate_recent_limit(limit: usize) -> CoreResult<()> {
-    PartitionPage {
-        limit,
-        offset: 0,
-    }
-    .validate()
+pub fn validate_recent_limit(limit: usize) -> CoreResult<()> {
+    PartitionPage { limit, offset: 0 }.validate()
 }
 
 #[cfg(test)]
@@ -270,16 +266,70 @@ mod tests {
             Some("prod"),
         );
         assert!(
-            partition_matches(&scope("acme", Some("agent-1"), Some("proj"), Some("s-1"), Some("prod")), &partition),
+            partition_matches(
+                &scope(
+                    "acme",
+                    Some("agent-1"),
+                    Some("proj"),
+                    Some("s-1"),
+                    Some("prod")
+                ),
+                &partition
+            ),
             "identical tuples match"
         );
         // Each dimension must match exactly; a differing value on any one
         // dimension is a different partition.
-        assert!(!partition_matches(&scope("other", Some("agent-1"), Some("proj"), Some("s-1"), Some("prod")), &partition));
-        assert!(!partition_matches(&scope("acme", Some("agent-2"), Some("proj"), Some("s-1"), Some("prod")), &partition));
-        assert!(!partition_matches(&scope("acme", Some("agent-1"), Some("other"), Some("s-1"), Some("prod")), &partition));
-        assert!(!partition_matches(&scope("acme", Some("agent-1"), Some("proj"), Some("s-2"), Some("prod")), &partition));
-        assert!(!partition_matches(&scope("acme", Some("agent-1"), Some("proj"), Some("s-1"), Some("staging")), &partition));
+        assert!(!partition_matches(
+            &scope(
+                "other",
+                Some("agent-1"),
+                Some("proj"),
+                Some("s-1"),
+                Some("prod")
+            ),
+            &partition
+        ));
+        assert!(!partition_matches(
+            &scope(
+                "acme",
+                Some("agent-2"),
+                Some("proj"),
+                Some("s-1"),
+                Some("prod")
+            ),
+            &partition
+        ));
+        assert!(!partition_matches(
+            &scope(
+                "acme",
+                Some("agent-1"),
+                Some("other"),
+                Some("s-1"),
+                Some("prod")
+            ),
+            &partition
+        ));
+        assert!(!partition_matches(
+            &scope(
+                "acme",
+                Some("agent-1"),
+                Some("proj"),
+                Some("s-2"),
+                Some("prod")
+            ),
+            &partition
+        ));
+        assert!(!partition_matches(
+            &scope(
+                "acme",
+                Some("agent-1"),
+                Some("proj"),
+                Some("s-1"),
+                Some("staging")
+            ),
+            &partition
+        ));
     }
 
     #[test]
@@ -303,7 +353,10 @@ mod tests {
             &unset_partition
         ));
         // Two unset tuples do match: NULL equals NULL.
-        assert!(partition_matches(&scope("acme", None, None, None, None), &unset_partition));
+        assert!(partition_matches(
+            &scope("acme", None, None, None, None),
+            &unset_partition
+        ));
     }
 
     #[test]
@@ -316,7 +369,13 @@ mod tests {
         // narrowing predicates cannot address "(unset)" partitions.
         let supplied = scope("acme", None, Some("proj"), None, None);
         assert!(!partition_matches(
-            &scope("acme", Some("agent-1"), Some("proj"), Some("s-9"), Some("prod")),
+            &scope(
+                "acme",
+                Some("agent-1"),
+                Some("proj"),
+                Some("s-9"),
+                Some("prod")
+            ),
             &supplied
         ));
     }
@@ -331,12 +390,13 @@ mod tests {
 
     #[test]
     fn scope_inventory_sort_order_is_deterministic() {
-        let summary = |tenant: &str, subject: Option<&str>, workspace: Option<&str>| PartitionSummary {
-            scope: scope(tenant, subject, workspace, None, None),
-            memory_count: 0,
-            entity_count: 0,
-            belief_count: 0,
-        };
+        let summary =
+            |tenant: &str, subject: Option<&str>, workspace: Option<&str>| PartitionSummary {
+                scope: scope(tenant, subject, workspace, None, None),
+                memory_count: 0,
+                entity_count: 0,
+                belief_count: 0,
+            };
         let mut rows = vec![
             summary("zzz", None, Some("b")),
             summary("acme", Some("z"), None),
@@ -373,10 +433,19 @@ mod tests {
     fn scope_inventory_page_validation_rejects_bad_windows() {
         assert!(PartitionPage::default().validate().is_ok());
         assert!(
-            PartitionPage { limit: MAX_PARTITION_PAGE_LIMIT, offset: 99 }.validate().is_ok(),
+            PartitionPage {
+                limit: MAX_PARTITION_PAGE_LIMIT,
+                offset: 99
+            }
+            .validate()
+            .is_ok(),
             "the maximum limit is accepted"
         );
-        let zero = PartitionPage { limit: 0, offset: 0 }.validate();
+        let zero = PartitionPage {
+            limit: 0,
+            offset: 0,
+        }
+        .validate();
         assert!(zero.is_err(), "zero limit is rejected");
         let oversized = PartitionPage {
             limit: MAX_PARTITION_PAGE_LIMIT + 1,

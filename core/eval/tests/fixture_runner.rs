@@ -7,10 +7,18 @@ use engram_store_sqlite::SqlMemoryService;
 use futures::executor::block_on;
 
 const ACCEPTED_RETRIEVAL_FIXTURES: &[&str] = &[
-    include_str!("../../../docs/constitution/registry/contracts/v1/examples/evaluation-fixture.positive-recall.json"),
-    include_str!("../../../docs/constitution/registry/contracts/v1/examples/evaluation-fixture.forbidden-recall.json"),
-    include_str!("../../../docs/constitution/registry/contracts/v1/examples/evaluation-fixture.budget-omission.json"),
-    include_str!("../../../docs/constitution/registry/contracts/v1/examples/evaluation-fixture.no-result.json"),
+    include_str!(
+        "../../../docs/constitution/registry/contracts/v1/examples/evaluation-fixture.positive-recall.json"
+    ),
+    include_str!(
+        "../../../docs/constitution/registry/contracts/v1/examples/evaluation-fixture.forbidden-recall.json"
+    ),
+    include_str!(
+        "../../../docs/constitution/registry/contracts/v1/examples/evaluation-fixture.budget-omission.json"
+    ),
+    include_str!(
+        "../../../docs/constitution/registry/contracts/v1/examples/evaluation-fixture.no-result.json"
+    ),
 ];
 
 #[test]

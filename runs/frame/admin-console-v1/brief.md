@@ -198,9 +198,11 @@ reads cited throughout.
 
 ## Owner ratification — the human gate
 
-Owner `videogamer`, pi framing session (this thread), Round 6 reply on
-2026-11-01, confirmed verbatim: "Q1 B , Q2 ratified" — size tier M, whole
-brief ratified as presented (MoSCoW, boundaries, outcomes, and decision
-ledger above; interview rounds 1–6 retained in session history).
-The spec receives this brief by content hash and MAY decide only the
-explicitly delegated `LED-*` boundaries.
+| Actor | Channel / message reference | Date | Verbatim confirmation |
+|---|---|---|---|
+| videogamer (owner) | pi framing session (this thread), Round 6 reply | 2026-11-01 | "Q1 B , Q2 ratified" |
+
+Size tier M, whole brief ratified as presented: MoSCoW, boundaries,
+outcomes, and decision ledger above (interview rounds 1–6 retained in session
+history). The spec receives this brief by content hash and MAY decide only
+the explicitly delegated `LED-*` boundaries.

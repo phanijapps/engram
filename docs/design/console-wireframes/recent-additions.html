@@ -10,26 +10,26 @@
 <body data-scope="v1" data-anchor="job-012:REQ-008 job-012:REQ-003">
   <a class="wf-skip" href="#main">Skip to frame content</a>
   <div class="wf-shell">
-    <aside class="wf-rail">
-      <div class="wf-rail-brand">
+    <aside class="wf-sidebar">
+      <div class="wf-sidebar-brand">
         <span class="wf-mark" aria-hidden="true"></span>
-        <span class="wf-rail-title">engram console</span>
-        <span class="wf-rail-sub">wireframe set v1</span>
+        <span class="wf-sidebar-title">engram console</span>
+        <span class="wf-sidebar-sub">wireframe set v1</span>
       </div>
-      <nav class="wf-rail-nav" aria-label="Frames">
-        <a class="wf-nav-link" href="index.html">Overview</a>
-        <a class="wf-nav-link" href="inventory.html">Inventory</a>
-        <a class="wf-nav-link" href="partition.html">Partition</a>
-        <a class="wf-nav-link" href="recent-additions.html" aria-current="page">Recent additions</a>
-        <a class="wf-nav-link" href="partition-graph.html">Knowledge graph</a>
-        <a class="wf-nav-link" href="anomalies.html">Anomalies</a>
-        <a class="wf-nav-link" href="binding-health.html">Binding health</a>
-        <span class="wf-nav-group-label">future</span>
-        <a class="wf-nav-link" href="job-monitor.html">Job monitoring</a>
-        <a class="wf-nav-link" href="pruning-review.html">Pruning review</a>
-        <a class="wf-nav-link" href="central-deployment.html">Central deployment</a>
+      <nav class="wf-sidebar-nav" aria-label="Frames">
+        <a class="wf-sidebar-link" href="index.html">Overview</a>
+        <a class="wf-sidebar-link" href="inventory.html">Inventory</a>
+        <a class="wf-sidebar-link" href="partition.html">Partition</a>
+        <a class="wf-sidebar-link" href="recent-additions.html" aria-current="page">Recent additions</a>
+        <a class="wf-sidebar-link" href="partition-graph.html">Knowledge graph</a>
+        <a class="wf-sidebar-link" href="anomalies.html">Anomalies</a>
+        <a class="wf-sidebar-link" href="binding-health.html">Binding health</a>
+        <span class="wf-micro-label wf-sidebar-group">future</span>
+        <a class="wf-sidebar-link" href="job-monitor.html">Job monitoring</a>
+        <a class="wf-sidebar-link" href="pruning-review.html">Pruning review</a>
+        <a class="wf-sidebar-link" href="central-deployment.html">Central deployment</a>
       </nav>
-      <div class="wf-rail-foot">
+      <div class="wf-sidebar-foot">
         <span class="wf-badge wf-badge--v1"><span class="wf-dot" aria-hidden="true"></span>read-only v1</span>
         <button type="button" class="wf-theme-toggle" data-action="toggle-theme">
           <span aria-hidden="true">◐</span><span class="wf-theme-label">Light theme</span>
@@ -37,6 +37,7 @@
       </div>
     </aside>
 
+    <div class="wf-main-col">
     <main id="main" class="wf-content">
       <header class="wf-frame-head">
         <p class="wf-eyebrow">v1 frame · read-only surface</p>
@@ -44,58 +45,35 @@
         <p class="wf-lede">The pulse of one partition: the newest memories in the engine’s own newest-first order. The order is the engine’s recency, never a client-side re-sort.</p>
         <p class="wf-lineage">lineage <code>job-012:REQ-008</code> <code>job-012:REQ-003</code> · this contract: <code>job-013:REQ-001</code> <code>job-013:REQ-004</code> <code>job-013:REQ-005</code> · shaped by ux-writing · frontend-engineering · component-contract</p>
       </header>
+      <section class="wf-kpi-row" aria-label="Frame metrics">
+        <div class="wf-kpi"><span class="wf-kpi-label">shown</span><span class="wf-kpi-value">5</span></div>
+        <div class="wf-kpi"><span class="wf-kpi-label">in partition</span><span class="wf-kpi-value">156</span></div>
+        <div class="wf-kpi"><span class="wf-kpi-label">newest</span><span class="wf-kpi-value">09:41Z</span></div>
+        <div class="wf-kpi"><span class="wf-kpi-label">default limit</span><span class="wf-kpi-value">20</span></div>
+      </section>
 
       <section class="wf-view" aria-labelledby="recent-view-title">
         <h2 id="recent-view-title">Newest memories — 可视化研究 / mem-alpha</h2>
         <p class="wf-quiet">Showing the 5 newest of 156 memories in this partition. In the shipped layout this list is a column of the partition page; this frame isolates it as its own design contract.</p>
 
-        <ol class="wf-records">
-          <li class="wf-record">
-            <span class="wf-record-meta">
-              <span class="wf-chip wf-chip--accent">#1 · newest</span>
-              <span class="wf-mono">01JD8Z4K7Q9H2V5N8C3E6F1TA0</span>
-              <span>written 2026-11-02T09:41:07Z</span>
-            </span>
-            <p class="wf-record-text">Partition keys must encode the UTF-8 bytes of the scope tuple — btoa on the raw string throws for any tenant outside Latin-1 and leaves the partition unopenable.</p>
-          </li>
-          <li class="wf-record">
-            <span class="wf-record-meta">
-              <span class="wf-chip wf-chip--accent">#2</span>
-              <span class="wf-mono">01JD8WZ2M4XC7B1P5T9K3H6DA8R</span>
-              <span>written 2026-11-02T08:12:44Z</span>
-            </span>
-            <p class="wf-record-text">Inventory stays a bounded summary: totals per partition, never a full record dump. Drill-down is the partition page’s job.</p>
-          </li>
-          <li class="wf-record">
-            <span class="wf-record-meta">
-              <span class="wf-chip wf-chip--accent">#3</span>
-              <span class="wf-mono">01JD8MQ6F2XB9R4V7T1K5N8CE3W</span>
-              <span>written 2026-11-01T22:03:19Z</span>
-            </span>
-            <p class="wf-record-text">Degraded inventory responses render a named state card with the next step — never a blank table and never a silent retry loop.</p>
-          </li>
-          <li class="wf-record">
-            <span class="wf-record-meta">
-              <span class="wf-chip wf-chip--accent">#4</span>
-              <span class="wf-mono">01JD8BQ9T5XN2W6R4V8K3H7FC1D</span>
-              <span>written 2026-11-01T19:47:52Z</span>
-            </span>
-            <p class="wf-record-text">The anomaly panel surfaces only the documented set: same subject under multiple partitions, same entity identity under multiple partitions. Repair is not a v1 capability anywhere.</p>
-          </li>
-          <li class="wf-record">
-            <span class="wf-record-meta">
-              <span class="wf-chip wf-chip--accent">#5</span>
-              <span class="wf-mono">01JD86M3C7PK9D2S6W1T4N8BX5Q</span>
-              <span>written 2026-11-01T14:26:08Z</span>
-            </span>
-            <p class="wf-record-text">Binding health resolves exact repo ids — the engine has no “default” binding, so the operator supplies the repo the partition actually indexes.</p>
-          </li>
-        </ol>
+        <div class="wf-table-wrap">
+          <table class="wf-table">
+            <caption>newest first — the engine's own recency order, never a client re-sort</caption>
+            <thead><tr><th scope="col" class="wf-num">#</th><th scope="col">memory id</th><th scope="col">content</th><th scope="col">written</th></tr></thead>
+            <tbody>
+          <tr><td class="wf-num">1</td><td class="wf-mono">01JD8Z4K7Q9H2V5N8C3E6F1TA0</td><td>Partition keys must encode the UTF-8 bytes of the scope tuple — btoa on the raw string throws for any tenant outside Latin-1 and leaves the partition unopenable.</td><td class="wf-mono">2026-11-02T09:41:07Z</td></tr>
+          <tr><td class="wf-num">2</td><td class="wf-mono">01JD8WZ2M4XC7B1P5T9K3H6DA8R</td><td>Inventory stays a bounded summary: totals per partition, never a full record dump. Drill-down is the partition page's job.</td><td class="wf-mono">2026-11-02T08:12:44Z</td></tr>
+          <tr><td class="wf-num">3</td><td class="wf-mono">01JD8MQ6F2XB9R4V7T1K5N8CE3W</td><td>Degraded inventory responses render a named state card with the next step — never a blank table and never a silent retry loop.</td><td class="wf-mono">2026-11-01T22:03:19Z</td></tr>
+          <tr><td class="wf-num">4</td><td class="wf-mono">01JD8BQ9T5XN2W6R4V8K3H7FC1D</td><td>The anomaly panel surfaces only the documented set: same subject under multiple partitions, same entity identity under multiple partitions. Repair is not a v1 capability anywhere.</td><td class="wf-mono">2026-11-01T19:47:52Z</td></tr>
+          <tr><td class="wf-num">5</td><td class="wf-mono">01JD86M3C7PK9D2S6W1T4N8BX5Q</td><td>Binding health resolves exact repo ids — the engine has no “default” binding, so the operator supplies the repo the partition actually indexes.</td><td class="wf-mono">2026-11-01T14:26:08Z</td></tr>
+            </tbody>
+          </table>
+        </div>
 
         <p class="wf-note">No pagination below the newest page by design: this view answers “what just landed,” and older history belongs to the paged memories column of the partition browse.</p>
       </section>
       <section class="wf-section" aria-labelledby="states-recent">
-        <h2 id="states-recent" class="wf-section-title">State matrix — every named state, designed</h2>
+        <h2 id="states-recent" class="wf-micro-label">State matrix — every named state, designed</h2>
         <p class="wf-quiet">Four states, one list — each designed so silence always means something specific.</p>
         <div class="wf-states-grid">
             <article class="wf-state-card wf-state-card--info">
@@ -134,23 +112,23 @@
           <div class="wf-panel-body">
             <p>Show the newest memories of one partition in the engine&rsquo;s newest-first order — the pulse, not the archive.</p>
             <div>
-              <h3 class="wf-col-title">Inputs</h3>
+              <h3 class="wf-micro-label">Inputs</h3>
               <table class="wf-spec-table"><thead><tr><th scope="col">Input</th><th scope="col">Contract</th></tr></thead><tbody><tr><td><code>scope</code></td><td>PartitionTuple — engine-scoped read</td></tr><tr><td><code>limit</code></td><td>20 by default — newest page only</td></tr></tbody></table>
             </div>
             <div>
-              <h3 class="wf-col-title">Outputs</h3>
+              <h3 class="wf-micro-label">Outputs</h3>
               <table class="wf-spec-table"><thead><tr><th scope="col">Output</th><th scope="col">Behavior</th></tr></thead><tbody><tr><td><code>none</code></td><td>render-only: no callbacks, no navigation — older history belongs to the partition page</td></tr></tbody></table>
             </div>
             <div>
-              <h3 class="wf-col-title">Slots</h3>
+              <h3 class="wf-micro-label">Slots</h3>
               <table class="wf-spec-table"><thead><tr><th scope="col">Slot</th><th scope="col">Renders when</th></tr></thead><tbody><tr><td><code>none</code></td><td>self-contained ordered list; composition is fixed</td></tr></tbody></table>
             </div>
             <div>
-              <h3 class="wf-col-title">States owned</h3>
+              <h3 class="wf-micro-label">States owned</h3>
               <table class="wf-spec-table"><thead><tr><th scope="col">State</th><th scope="col">Treatment</th></tr></thead><tbody><tr><td><code>loading</code></td><td>skeleton of the record list</td></tr><tr><td><code>ready</code></td><td>ordered list, newest first — order is the engine’s recency, never a client re-sort</td></tr><tr><td><code>empty</code></td><td>“no recent additions in this partition — new memories appear here as they are written”</td></tr><tr><td><code>engine-error</code></td><td>named state with the error text; retry is page-level</td></tr></tbody></table>
             </div>
             <div>
-              <h3 class="wf-col-title">Accessibility contract</h3>
+              <h3 class="wf-micro-label">Accessibility contract</h3>
               <table class="wf-spec-table"><thead><tr><th scope="col">Guarantee</th><th scope="col">Detail</th></tr></thead><tbody><tr><td><code>list semantics</code></td><td>an ordered list — position announces recency rank (#1 newest)</td></tr><tr><td><code>record anatomy</code></td><td>id and timestamp as mono meta text, content as body text — one tab stop per record only if interactive; records here are not links</td></tr></tbody></table>
             </div>
           </div>
@@ -161,11 +139,11 @@
           <summary id="kbd-title">Keyboard contract <span class="wf-faint">tab order · keys · focus destination — open to explore</span></summary>
           <div class="wf-panel-body">
             <div>
-              <h3 class="wf-col-title">Tab order (documented)</h3>
+              <h3 class="wf-micro-label">Tab order (documented)</h3>
               <ol class="wf-records wf-flow"><li>Skip to frame content</li><li>Frame navigation (aria-current marks Recent additions)</li><li>Theme toggle</li><li>Component-contract disclosure</li><li>Footer frame-sequence pager</li></ol>
             </div>
             <div>
-              <h3 class="wf-col-title">Keys</h3>
+              <h3 class="wf-micro-label">Keys</h3>
               <table class="wf-spec-table">
                 <thead><tr><th scope="col">Key</th><th scope="col">Action</th><th scope="col">Focus destination</th><th scope="col">Screen reader announcement</th></tr></thead>
                 <tbody><tr><td><kbd class="wf-kbd">Tab</kbd></td><td>Records are read-only text — no per-record tab stops; the frame has four control groups</td><td>Contract disclosure</td><td>Panel name</td></tr><tr><td>List semantics</td><td>Position announces recency: an ordered list, #1 newest</td><td>—</td><td>“list, 5 items” then each record</td></tr><tr><td><kbd class="wf-kbd">Tab</kbd> / <kbd class="wf-kbd">Shift+Tab</kbd></td><td>Move between controls in document order</td><td>Next / previous control</td><td>Control name and role</td></tr><tr><td><kbd class="wf-kbd">Enter</kbd></td><td>Activate the focused link, row, or summary</td><td>Moves to target frame / toggles panel</td><td>“link, visited” then new page</td></tr><tr><td><kbd class="wf-kbd">Space</kbd></td><td>Activate the focused button or disclosure</td><td>Unchanged (toggle)</td><td>“expanded” / “collapsed”</td></tr><tr><td><kbd class="wf-kbd">Enter</kbd> / <kbd class="wf-kbd">Space</kbd></td><td>Theme toggle: switch dark ⇄ light</td><td>Stays on the toggle</td><td>“Switch to light theme, button” — name reflects the action</td></tr></tbody>
@@ -186,6 +164,7 @@
         </nav>
       </div>
     </footer>
+    </div>
   </div>
 
   <script>

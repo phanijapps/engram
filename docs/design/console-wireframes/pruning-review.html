@@ -10,26 +10,26 @@
 <body data-scope="future" data-anchor="job-012:REQ-004 job-012:REQ-010">
   <a class="wf-skip" href="#main">Skip to frame content</a>
   <div class="wf-shell">
-    <aside class="wf-rail">
-      <div class="wf-rail-brand">
+    <aside class="wf-sidebar">
+      <div class="wf-sidebar-brand">
         <span class="wf-mark" aria-hidden="true"></span>
-        <span class="wf-rail-title">engram console</span>
-        <span class="wf-rail-sub">wireframe set v1</span>
+        <span class="wf-sidebar-title">engram console</span>
+        <span class="wf-sidebar-sub">wireframe set v1</span>
       </div>
-      <nav class="wf-rail-nav" aria-label="Frames">
-        <a class="wf-nav-link" href="index.html">Overview</a>
-        <a class="wf-nav-link" href="inventory.html">Inventory</a>
-        <a class="wf-nav-link" href="partition.html">Partition</a>
-        <a class="wf-nav-link" href="recent-additions.html">Recent additions</a>
-        <a class="wf-nav-link" href="partition-graph.html">Knowledge graph</a>
-        <a class="wf-nav-link" href="anomalies.html">Anomalies</a>
-        <a class="wf-nav-link" href="binding-health.html">Binding health</a>
-        <span class="wf-nav-group-label">future</span>
-        <a class="wf-nav-link" href="job-monitor.html">Job monitoring</a>
-        <a class="wf-nav-link" href="pruning-review.html" aria-current="page">Pruning review</a>
-        <a class="wf-nav-link" href="central-deployment.html">Central deployment</a>
+      <nav class="wf-sidebar-nav" aria-label="Frames">
+        <a class="wf-sidebar-link" href="index.html">Overview</a>
+        <a class="wf-sidebar-link" href="inventory.html">Inventory</a>
+        <a class="wf-sidebar-link" href="partition.html">Partition</a>
+        <a class="wf-sidebar-link" href="recent-additions.html">Recent additions</a>
+        <a class="wf-sidebar-link" href="partition-graph.html">Knowledge graph</a>
+        <a class="wf-sidebar-link" href="anomalies.html">Anomalies</a>
+        <a class="wf-sidebar-link" href="binding-health.html">Binding health</a>
+        <span class="wf-micro-label wf-sidebar-group">future</span>
+        <a class="wf-sidebar-link" href="job-monitor.html">Job monitoring</a>
+        <a class="wf-sidebar-link" href="pruning-review.html" aria-current="page">Pruning review</a>
+        <a class="wf-sidebar-link" href="central-deployment.html">Central deployment</a>
       </nav>
-      <div class="wf-rail-foot">
+      <div class="wf-sidebar-foot">
         <span class="wf-badge wf-badge--future"><span class="wf-dot" aria-hidden="true"></span>future · not in v1</span>
         <button type="button" class="wf-theme-toggle" data-action="toggle-theme">
           <span aria-hidden="true">◐</span><span class="wf-theme-label">Light theme</span>
@@ -37,6 +37,7 @@
       </div>
     </aside>
 
+    <div class="wf-main-col">
     <main id="main" class="wf-content">
       <header class="wf-frame-head">
         <p class="wf-eyebrow">future-trajectory frame · design target, not a v1 promise</p>
@@ -45,15 +46,31 @@
         <p class="wf-lineage">lineage <code>job-012:REQ-004</code> <code>job-012:REQ-010</code> · this contract: <code>job-013:REQ-002</code> <code>job-013:REQ-007</code> · shaped by ux-writing · component-contract · frontend-engineering</p>
         <p class="wf-note"><span class="wf-badge wf-badge--future"><span class="wf-dot" aria-hidden="true"></span>future</span> This is the first surface on the trajectory with a write affordance. v1 is read-only, no writes, ever — the review queue reads, the decision writes, and the decision does not exist in v1. Every action below is labeled future and stays that way until an owner decision opens a write path.</p>
       </header>
+      <section class="wf-kpi-row" aria-label="Frame metrics">
+        <div class="wf-kpi"><span class="wf-kpi-label">candidates</span><span class="wf-kpi-value">2</span></div>
+        <div class="wf-kpi"><span class="wf-kpi-label">decisions recorded</span><span class="wf-kpi-value">0</span></div>
+        <div class="wf-kpi"><span class="wf-kpi-label">likely copies</span><span class="wf-kpi-value">1</span></div>
+        <div class="wf-kpi"><span class="wf-kpi-label">keep-both reads</span><span class="wf-kpi-value">1</span></div>
+      </section>
 
       <section class="wf-view" aria-labelledby="pruning-view-title">
         <h2 id="pruning-view-title">Review queue</h2>
         <p class="wf-quiet">2 candidates — sourced from the same documented set as the anomaly panel: subject duplication (tenant-scoped) and entity-identity duplication. 0 decisions recorded (decisions are writes — future).</p>
+        <div class="wf-table-wrap">
+          <table class="wf-table">
+            <caption>review queue summary — decisions are future write affordances</caption>
+            <thead><tr><th scope="col">candidate</th><th scope="col">kind</th><th class="wf-num" scope="col">partitions</th><th scope="col">preliminary read</th></tr></thead>
+            <tbody>
+              <tr><td>«mem-alpha» (project)</td><td class="wf-mono">entity-identity</td><td class="wf-num">3</td><td>2 look like copies — evidence below</td></tr>
+              <tr><td>Subject «Πελάτης-42»</td><td class="wf-mono">subject-partitions</td><td class="wf-num">2</td><td>likely distinct — listed for completeness</td></tr>
+            </tbody>
+          </table>
+        </div>
 
         <ul class="wf-records">
           <li class="wf-anomaly">
             <p class="wf-anomaly-title">
-              <span class="wf-chip wf-chip--mono">entity-identity</span>
+              <span class="wf-anomaly-kind">entity-identity</span>
               «mem-alpha» (project) exists in 3 partitions — 2 look like copies
             </p>
             <div class="wf-records">
@@ -74,7 +91,7 @@
           </li>
           <li class="wf-anomaly">
             <p class="wf-anomaly-title">
-              <span class="wf-chip wf-chip--mono">subject-partitions</span>
+              <span class="wf-anomaly-kind">subject-partitions</span>
               Subject «Πελάτης-42» in 2 partitions of Archivo-histórico — likely distinct, listed for completeness
             </p>
             <p class="wf-record-text">The dev and production partitions have disjoint memory contents; the signal fires on the shared subject value alone. A reviewer would keep both.</p>
@@ -86,15 +103,15 @@
 
         <div class="wf-cols">
           <div class="wf-col">
-            <h3 class="wf-col-title">what exists in v1</h3>
+            <h3 class="wf-micro-label">what exists in v1</h3>
             <p class="wf-record-text">The anomaly panel — the same signals, surfaced read-only with drill-down links. No queue, no decisions, no history of decisions.</p>
           </div>
           <div class="wf-col">
-            <h3 class="wf-col-title">what the future adds</h3>
+            <h3 class="wf-micro-label">what the future adds</h3>
             <p class="wf-record-text">An evidence-first review flow: candidates carry their evidence, approvals state their blast radius, destructive confirmations default to cancel, and every decision is recorded with who decided and when.</p>
           </div>
           <div class="wf-col">
-            <h3 class="wf-col-title">why it is future</h3>
+            <h3 class="wf-micro-label">why it is future</h3>
             <p class="wf-record-text">Deletion is the one operation the console must never get wrong in silence. It needs an engine write path with audit, a review-decision store, and an owner decision that the read-only posture should lift at all.</p>
           </div>
         </div>
@@ -104,11 +121,11 @@
           <summary id="kbd-title">Keyboard contract <span class="wf-faint">tab order · keys · focus destination — open to explore</span></summary>
           <div class="wf-panel-body">
             <div>
-              <h3 class="wf-col-title">Tab order (documented)</h3>
+              <h3 class="wf-micro-label">Tab order (documented)</h3>
               <ol class="wf-records wf-flow"><li>Skip to frame content</li><li>Frame navigation (aria-current marks Pruning review)</li><li>Theme toggle</li><li>Evidence cards — text, not controls</li><li>Future controls — disabled buttons (approve prune, keep both): not focusable in v1</li><li>Footer frame-sequence pager</li></ol>
             </div>
             <div>
-              <h3 class="wf-col-title">Keys</h3>
+              <h3 class="wf-micro-label">Keys</h3>
               <table class="wf-spec-table">
                 <thead><tr><th scope="col">Key</th><th scope="col">Action</th><th scope="col">Focus destination</th><th scope="col">Screen reader announcement</th></tr></thead>
                 <tbody><tr><td><kbd class="wf-kbd">Tab</kbd></td><td>The frame’s only controls are the rail, the toggle, and the pager</td><td>Next control</td><td>Control name and role</td></tr><tr><td>Destructive posture</td><td>the approve action is designed as a destructive-confirmation: when it ships, it defaults to cancel, states the blast radius, and traps focus until resolved</td><td>—</td><td>Not reached — future</td></tr><tr><td><kbd class="wf-kbd">Tab</kbd> / <kbd class="wf-kbd">Shift+Tab</kbd></td><td>Move between controls in document order</td><td>Next / previous control</td><td>Control name and role</td></tr><tr><td><kbd class="wf-kbd">Enter</kbd></td><td>Activate the focused link, row, or summary</td><td>Moves to target frame / toggles panel</td><td>“link, visited” then new page</td></tr><tr><td><kbd class="wf-kbd">Space</kbd></td><td>Activate the focused button or disclosure</td><td>Unchanged (toggle)</td><td>“expanded” / “collapsed”</td></tr><tr><td><kbd class="wf-kbd">Enter</kbd> / <kbd class="wf-kbd">Space</kbd></td><td>Theme toggle: switch dark ⇄ light</td><td>Stays on the toggle</td><td>“Switch to light theme, button” — name reflects the action</td></tr></tbody>
@@ -129,6 +146,7 @@
         </nav>
       </div>
     </footer>
+    </div>
   </div>
 
   <script>

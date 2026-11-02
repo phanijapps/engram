@@ -10,26 +10,26 @@
 <body data-scope="v1" data-anchor="job-012:REQ-010 job-012:REQ-004">
   <a class="wf-skip" href="#main">Skip to frame content</a>
   <div class="wf-shell">
-    <aside class="wf-rail">
-      <div class="wf-rail-brand">
+    <aside class="wf-sidebar">
+      <div class="wf-sidebar-brand">
         <span class="wf-mark" aria-hidden="true"></span>
-        <span class="wf-rail-title">engram console</span>
-        <span class="wf-rail-sub">wireframe set v1</span>
+        <span class="wf-sidebar-title">engram console</span>
+        <span class="wf-sidebar-sub">wireframe set v1</span>
       </div>
-      <nav class="wf-rail-nav" aria-label="Frames">
-        <a class="wf-nav-link" href="index.html">Overview</a>
-        <a class="wf-nav-link" href="inventory.html">Inventory</a>
-        <a class="wf-nav-link" href="partition.html">Partition</a>
-        <a class="wf-nav-link" href="recent-additions.html">Recent additions</a>
-        <a class="wf-nav-link" href="partition-graph.html">Knowledge graph</a>
-        <a class="wf-nav-link" href="anomalies.html" aria-current="page">Anomalies</a>
-        <a class="wf-nav-link" href="binding-health.html">Binding health</a>
-        <span class="wf-nav-group-label">future</span>
-        <a class="wf-nav-link" href="job-monitor.html">Job monitoring</a>
-        <a class="wf-nav-link" href="pruning-review.html">Pruning review</a>
-        <a class="wf-nav-link" href="central-deployment.html">Central deployment</a>
+      <nav class="wf-sidebar-nav" aria-label="Frames">
+        <a class="wf-sidebar-link" href="index.html">Overview</a>
+        <a class="wf-sidebar-link" href="inventory.html">Inventory</a>
+        <a class="wf-sidebar-link" href="partition.html">Partition</a>
+        <a class="wf-sidebar-link" href="recent-additions.html">Recent additions</a>
+        <a class="wf-sidebar-link" href="partition-graph.html">Knowledge graph</a>
+        <a class="wf-sidebar-link" href="anomalies.html" aria-current="page">Anomalies</a>
+        <a class="wf-sidebar-link" href="binding-health.html">Binding health</a>
+        <span class="wf-micro-label wf-sidebar-group">future</span>
+        <a class="wf-sidebar-link" href="job-monitor.html">Job monitoring</a>
+        <a class="wf-sidebar-link" href="pruning-review.html">Pruning review</a>
+        <a class="wf-sidebar-link" href="central-deployment.html">Central deployment</a>
       </nav>
-      <div class="wf-rail-foot">
+      <div class="wf-sidebar-foot">
         <span class="wf-badge wf-badge--v1"><span class="wf-dot" aria-hidden="true"></span>read-only v1</span>
         <button type="button" class="wf-theme-toggle" data-action="toggle-theme">
           <span aria-hidden="true">◐</span><span class="wf-theme-label">Light theme</span>
@@ -37,6 +37,7 @@
       </div>
     </aside>
 
+    <div class="wf-main-col">
     <main id="main" class="wf-content">
       <header class="wf-frame-head">
         <p class="wf-eyebrow">v1 frame · read-only surface</p>
@@ -44,43 +45,59 @@
         <p class="wf-lede">Cross-partition duplication signals from the minimal documented set, computed only from engine reads. Surfacing is the whole v1 contract — there is no repair, prune, or enforcement action anywhere in this view.</p>
         <p class="wf-lineage">lineage <code>job-012:REQ-010</code> <code>job-012:REQ-004</code> · this contract: <code>job-013:REQ-001</code> <code>job-013:REQ-004</code> <code>job-013:REQ-005</code> <code>job-013:REQ-007</code> · shaped by ux-writing · component-contract · frontend-engineering</p>
       </header>
+      <section class="wf-kpi-row" aria-label="Frame metrics">
+        <div class="wf-kpi"><span class="wf-kpi-label">signals</span><span class="wf-kpi-value">2</span></div>
+        <div class="wf-kpi"><span class="wf-kpi-label">kinds</span><span class="wf-kpi-value">2</span></div>
+        <div class="wf-kpi"><span class="wf-kpi-label">partitions affected</span><span class="wf-kpi-value">5</span></div>
+        <div class="wf-kpi"><span class="wf-kpi-label">actions offered</span><span class="wf-kpi-value">0</span></div>
+      </section>
 
       <section class="wf-view" aria-labelledby="anomaly-view-title">
         <h2 id="anomaly-view-title">Cross-partition signals</h2>
         <p class="wf-quiet">2 cross-partition signals — read-only surfacing, no actions offered. Each affected partition drills down to its browse page.</p>
+        <div class="wf-table-wrap">
+          <table class="wf-table">
+            <caption>signal summary — the minimal documented set</caption>
+            <thead><tr><th scope="col">kind</th><th scope="col">signal</th><th class="wf-num" scope="col">partitions</th></tr></thead>
+            <tbody>
+              <tr><td class="wf-mono">subject-partitions</td><td>Subject «Πελάτης-42» appears in 2 partitions of tenant Archivo-histórico</td><td class="wf-num">2</td></tr>
+              <tr><td class="wf-mono">entity-identity</td><td>Entity «mem-alpha» (project) exists in 3 partitions</td><td class="wf-num">3</td></tr>
+            </tbody>
+          </table>
+        </div>
 
         <ul class="wf-records">
           <li class="wf-anomaly">
             <p class="wf-anomaly-title">
-              <span class="wf-chip wf-chip--mono">subject-partitions</span>
+              <span class="wf-anomaly-kind">subject-partitions</span>
               Subject «Πελάτης-42» appears in 2 partitions of tenant Archivo-histórico
             </p>
             <p class="wf-faint">A subject is an identity inside its tenant — the same subject under several partitions of one tenant is a duplication signal worth looking at.</p>
             <p class="wf-faint">affected partitions (view only):</p>
-            <ul class="wf-anomaly-partitions">
-              <li><a class="wf-chip wf-chip--mono" href="partition.html">Archivo-histórico / Πελάτης-42 / dev</a></li>
-              <li><a class="wf-chip wf-chip--mono" href="partition.html">Archivo-histórico / Πελάτης-42 / production</a></li>
-            </ul>
+<div class="wf-partition-list">
+            <div class="wf-partition-row"><span class="wf-mono">Archivo-histórico / Πελάτης-42 / dev</span><a href="partition.html">open</a></div>
+            <div class="wf-partition-row"><span class="wf-mono">Archivo-histórico / Πελάτης-42 / production</span><a href="partition.html">open</a></div>
+            </div>
           </li>
           <li class="wf-anomaly">
             <p class="wf-anomaly-title">
-              <span class="wf-chip wf-chip--mono">entity-identity</span>
+              <span class="wf-anomaly-kind">entity-identity</span>
               Entity «mem-alpha» (project) exists in 3 partitions
             </p>
             <p class="wf-faint">The same entity identity — name and kind — present in more than one partition. It may be legitimate reuse; the panel surfaces the signal and leaves the judgment to you.</p>
             <p class="wf-faint">affected partitions (view only):</p>
-            <ul class="wf-anomaly-partitions">
-              <li><a class="wf-chip wf-chip--mono" href="partition.html">videogamer / mem-alpha / dev</a></li>
-              <li><a class="wf-chip wf-chip--mono" href="partition.html">videogamer / mem-alpha / production</a></li>
-              <li><a class="wf-chip wf-chip--mono" href="partition.html">可视化研究 / mem-alpha / (unset)</a></li>
-            </ul>
+<div class="wf-partition-list">
+            <div class="wf-partition-row"><span class="wf-mono">videogamer / mem-alpha / dev</span><a href="partition.html">open</a></div>
+            <div class="wf-partition-row"><span class="wf-mono">videogamer / mem-alpha / production</span><a href="partition.html">open</a></div>
+            <div class="wf-partition-row"><span class="wf-mono">可视化研究 / mem-alpha / (unset)</span><a href="partition.html">open</a></div>
+            </div>
           </li>
         </ul>
 
         <p class="wf-note">The minimal documented set: (1) the same subject value under multiple partitions of one tenant; (2) the same entity identity under multiple partitions. Anything outside this set is not a v1 anomaly — widening the set is a decision, not a drive-by. When duplication becomes actionable, the pruning-review frame (future) is where review work would live; nothing here links to a write.</p>
       </section>
       <section class="wf-section" aria-labelledby="states-anomalies">
-        <h2 id="states-anomalies" class="wf-section-title">State matrix — every named state, designed</h2>
+        <h2 id="states-anomalies" class="wf-micro-label">State matrix — every named state, designed</h2>
         <p class="wf-quiet">The panel shares the inventory’s degraded-state family plus its own silence-is-meaningful empty state.</p>
         <div class="wf-states-grid">
             <article class="wf-state-card wf-state-card--info">
@@ -126,23 +143,23 @@
           <div class="wf-panel-body">
             <p>Surface cross-partition duplication signals from the minimal documented set — read-only; the panel offers no repair anywhere.</p>
             <div>
-              <h3 class="wf-col-title">Inputs</h3>
+              <h3 class="wf-micro-label">Inputs</h3>
               <table class="wf-spec-table"><thead><tr><th scope="col">Input</th><th scope="col">Contract</th></tr></thead><tbody><tr><td><code>onLoad</code></td><td>() =&gt; Promise&lt;AnomaliesResponse&gt; — injected fetch (testable)</td></tr><tr><td><code>onOpenPartition</code></td><td>(scope: PartitionTuple) =&gt; void — drill-down intent</td></tr></tbody></table>
             </div>
             <div>
-              <h3 class="wf-col-title">Outputs</h3>
+              <h3 class="wf-micro-label">Outputs</h3>
               <table class="wf-spec-table"><thead><tr><th scope="col">Output</th><th scope="col">Behavior after emitting</th></tr></thead><tbody><tr><td><code>onOpenPartition(scope)</code></td><td>emitted by a partition chip; the caller owns navigation</td></tr></tbody></table>
             </div>
             <div>
-              <h3 class="wf-col-title">Slots</h3>
+              <h3 class="wf-micro-label">Slots</h3>
               <table class="wf-spec-table"><thead><tr><th scope="col">Slot</th><th scope="col">Renders when</th></tr></thead><tbody><tr><td><code>degraded body</code></td><td>named-state line replaces the list when state &ne; ready</td></tr><tr><td><code>empty body</code></td><td>none-detected copy names the checked set</td></tr></tbody></table>
             </div>
             <div>
-              <h3 class="wf-col-title">States owned</h3>
+              <h3 class="wf-micro-label">States owned</h3>
               <table class="wf-spec-table"><thead><tr><th scope="col">State</th><th scope="col">Treatment</th></tr></thead><tbody><tr><td><code>loading</code></td><td>“loading anomalies…” placeholder in list position</td></tr><tr><td><code>ready</code></td><td>one card per signal with kind chip, title, evidence sentence, partition chips</td></tr><tr><td><code>empty</code></td><td>“No cross-partition anomalies detected in the minimal documented set…” — names the set so silence is meaningful</td></tr><tr><td><code>degraded family</code></td><td>any InventoryState renders as the named state line with message</td></tr></tbody></table>
             </div>
             <div>
-              <h3 class="wf-col-title">Accessibility contract</h3>
+              <h3 class="wf-micro-label">Accessibility contract</h3>
               <table class="wf-spec-table"><thead><tr><th scope="col">Guarantee</th><th scope="col">Detail</th></tr></thead><tbody><tr><td><code>card semantics</code></td><td>list of cards; each partition chip is a real link with the full tuple as its accessible name</td></tr><tr><td><code>kind labeling</code></td><td>kind renders as text (subject-partitions / entity-identity), never color alone</td></tr></tbody></table>
             </div>
           </div>
@@ -153,11 +170,11 @@
           <summary id="kbd-title">Keyboard contract <span class="wf-faint">tab order · keys · focus destination — open to explore</span></summary>
           <div class="wf-panel-body">
             <div>
-              <h3 class="wf-col-title">Tab order (documented)</h3>
+              <h3 class="wf-micro-label">Tab order (documented)</h3>
               <ol class="wf-records wf-flow"><li>Skip to frame content</li><li>Frame navigation (aria-current marks Anomalies)</li><li>Theme toggle</li><li>Partition chips — five links across the signal cards</li><li>Component-contract disclosure</li><li>Footer frame-sequence pager</li></ol>
             </div>
             <div>
-              <h3 class="wf-col-title">Keys</h3>
+              <h3 class="wf-micro-label">Keys</h3>
               <table class="wf-spec-table">
                 <thead><tr><th scope="col">Key</th><th scope="col">Action</th><th scope="col">Focus destination</th><th scope="col">Screen reader announcement</th></tr></thead>
                 <tbody><tr><td><kbd class="wf-kbd">Tab</kbd></td><td>Move between partition chips in card order</td><td>Chip link</td><td>“Archivo-histórico / Πελάτης-42 / dev, link”</td></tr><tr><td><kbd class="wf-kbd">Enter</kbd></td><td>Open the affected partition</td><td>New frame; focus at its skip link</td><td>“Partition browse” heading</td></tr><tr><td><kbd class="wf-kbd">Tab</kbd> / <kbd class="wf-kbd">Shift+Tab</kbd></td><td>Move between controls in document order</td><td>Next / previous control</td><td>Control name and role</td></tr><tr><td><kbd class="wf-kbd">Enter</kbd></td><td>Activate the focused link, row, or summary</td><td>Moves to target frame / toggles panel</td><td>“link, visited” then new page</td></tr><tr><td><kbd class="wf-kbd">Space</kbd></td><td>Activate the focused button or disclosure</td><td>Unchanged (toggle)</td><td>“expanded” / “collapsed”</td></tr><tr><td><kbd class="wf-kbd">Enter</kbd> / <kbd class="wf-kbd">Space</kbd></td><td>Theme toggle: switch dark ⇄ light</td><td>Stays on the toggle</td><td>“Switch to light theme, button” — name reflects the action</td></tr></tbody>
@@ -178,6 +195,7 @@
         </nav>
       </div>
     </footer>
+    </div>
   </div>
 
   <script>

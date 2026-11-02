@@ -10,26 +10,26 @@
 <body data-scope="v1" data-anchor="job-012:REQ-003 job-012:REQ-004">
   <a class="wf-skip" href="#main">Skip to frame content</a>
   <div class="wf-shell">
-    <aside class="wf-rail">
-      <div class="wf-rail-brand">
+    <aside class="wf-sidebar">
+      <div class="wf-sidebar-brand">
         <span class="wf-mark" aria-hidden="true"></span>
-        <span class="wf-rail-title">engram console</span>
-        <span class="wf-rail-sub">wireframe set v1</span>
+        <span class="wf-sidebar-title">engram console</span>
+        <span class="wf-sidebar-sub">wireframe set v1</span>
       </div>
-      <nav class="wf-rail-nav" aria-label="Frames">
-        <a class="wf-nav-link" href="index.html">Overview</a>
-        <a class="wf-nav-link" href="inventory.html">Inventory</a>
-        <a class="wf-nav-link" href="partition.html" aria-current="page">Partition</a>
-        <a class="wf-nav-link" href="recent-additions.html">Recent additions</a>
-        <a class="wf-nav-link" href="partition-graph.html">Knowledge graph</a>
-        <a class="wf-nav-link" href="anomalies.html">Anomalies</a>
-        <a class="wf-nav-link" href="binding-health.html">Binding health</a>
-        <span class="wf-nav-group-label">future</span>
-        <a class="wf-nav-link" href="job-monitor.html">Job monitoring</a>
-        <a class="wf-nav-link" href="pruning-review.html">Pruning review</a>
-        <a class="wf-nav-link" href="central-deployment.html">Central deployment</a>
+      <nav class="wf-sidebar-nav" aria-label="Frames">
+        <a class="wf-sidebar-link" href="index.html">Overview</a>
+        <a class="wf-sidebar-link" href="inventory.html">Inventory</a>
+        <a class="wf-sidebar-link" href="partition.html" aria-current="page">Partition</a>
+        <a class="wf-sidebar-link" href="recent-additions.html">Recent additions</a>
+        <a class="wf-sidebar-link" href="partition-graph.html">Knowledge graph</a>
+        <a class="wf-sidebar-link" href="anomalies.html">Anomalies</a>
+        <a class="wf-sidebar-link" href="binding-health.html">Binding health</a>
+        <span class="wf-micro-label wf-sidebar-group">future</span>
+        <a class="wf-sidebar-link" href="job-monitor.html">Job monitoring</a>
+        <a class="wf-sidebar-link" href="pruning-review.html">Pruning review</a>
+        <a class="wf-sidebar-link" href="central-deployment.html">Central deployment</a>
       </nav>
-      <div class="wf-rail-foot">
+      <div class="wf-sidebar-foot">
         <span class="wf-badge wf-badge--v1"><span class="wf-dot" aria-hidden="true"></span>read-only v1</span>
         <button type="button" class="wf-theme-toggle" data-action="toggle-theme">
           <span aria-hidden="true">◐</span><span class="wf-theme-label">Light theme</span>
@@ -37,6 +37,7 @@
       </div>
     </aside>
 
+    <div class="wf-main-col">
     <main id="main" class="wf-content">
       <header class="wf-frame-head">
         <p class="wf-eyebrow">v1 frame · read-only surface</p>
@@ -44,6 +45,12 @@
         <p class="wf-lede">One partition, opened from the inventory: engine-scoped reads of exactly this tuple, paged by the engine — the console never widens, filters, or reorders a scope.</p>
         <p class="wf-lineage">lineage <code>job-012:REQ-003</code> <code>job-012:REQ-004</code> · this contract: <code>job-013:REQ-001</code> <code>job-013:REQ-005</code> · shaped by frontend-engineering · ux-writing · responsive-layout · a11y-engineering</p>
       </header>
+      <section class="wf-kpi-row" aria-label="Frame metrics">
+        <div class="wf-kpi"><span class="wf-kpi-label">memories</span><span class="wf-kpi-value">156</span></div>
+        <div class="wf-kpi"><span class="wf-kpi-label">entities</span><span class="wf-kpi-value">31</span></div>
+        <div class="wf-kpi"><span class="wf-kpi-label">page size</span><span class="wf-kpi-value">25</span></div>
+        <div class="wf-kpi"><span class="wf-kpi-label">repos bound</span><span class="wf-kpi-value">1</span></div>
+      </section>
 
       <section class="wf-view" aria-labelledby="partition-view-title">
         <h2 id="partition-view-title" class="wf-sr-only">Selected partition</h2>
@@ -62,20 +69,20 @@
 
         <div class="wf-cols">
           <div class="wf-col">
-            <h3 class="wf-col-title">memories</h3>
+            <h3 class="wf-micro-label">memories</h3>
             <div class="wf-records">
-              <article class="wf-record">
-                <span class="wf-record-id">01JD8Z4K7Q9H2V5N8C3E6F1TA0</span>
-                <p class="wf-record-text">Partition keys must encode the UTF-8 bytes of the scope tuple — btoa on the raw string throws for any tenant outside Latin-1 and leaves the partition unopenable.</p>
-              </article>
-              <article class="wf-record">
-                <span class="wf-record-id">01JD8WZ2M4XC7B1P5T9K3H6DA8R</span>
-                <p class="wf-record-text">Inventory stays a bounded summary: totals per partition, never a full record dump. Drill-down is the partition page’s job.</p>
-              </article>
-              <article class="wf-record">
-                <span class="wf-record-id">01JD8MQ6F2XB9R4V7T1K5N8CE3W</span>
-                <p class="wf-record-text">Degraded inventory responses render a named state card with the next step — never a blank table and never a silent retry loop.</p>
-              </article>
+            <div class="wf-table-wrap">
+              <table class="wf-table">
+                <caption>knowledge entities — page 1 of 31</caption>
+                <thead><tr><th scope="col">entity id</th><th scope="col">name</th><th scope="col">kind</th></tr></thead>
+                <tbody>
+                  <tr><td class="wf-mono">ent_01K4QW</td><td>mem-alpha</td><td class="wf-mono">project</td></tr>
+                  <tr><td class="wf-mono">ent_01K4QX</td><td>console</td><td class="wf-mono">module</td></tr>
+                  <tr><td class="wf-mono">ent_01K4R2</td><td>degraded state</td><td class="wf-mono">concept</td></tr>
+                  <tr><td class="wf-mono">ent_01K4R7</td><td>partition key</td><td class="wf-mono">concept</td></tr>
+                </tbody>
+              </table>
+            </div>
             </div>
             <div class="wf-pager-inline">
               <button type="button" class="wf-btn" disabled>← previous</button>
@@ -85,7 +92,7 @@
           </div>
 
           <div class="wf-col">
-            <h3 class="wf-col-title">recent additions</h3>
+            <h3 class="wf-micro-label">recent additions</h3>
             <div class="wf-records">
               <article class="wf-record">
                 <span class="wf-record-id">01JD8Z4K7Q · #1 · 2026-11-02T09:41:07Z</span>
@@ -100,7 +107,7 @@
           </div>
 
           <div class="wf-col">
-            <h3 class="wf-col-title">knowledge entities</h3>
+            <h3 class="wf-micro-label">knowledge entities</h3>
             <div class="wf-records">
               <article class="wf-record">
                 <span class="wf-record-id">ent_01K4QW</span>
@@ -130,7 +137,7 @@
         <p class="wf-note">The knowledge graph for this partition has its own frame — in the shipped layout it renders directly below these columns, confined to the same tuple.</p>
       </section>
       <section class="wf-section" aria-labelledby="states-partition">
-        <h2 id="states-partition" class="wf-section-title">State matrix — every named state, designed</h2>
+        <h2 id="states-partition" class="wf-micro-label">State matrix — every named state, designed</h2>
         <p class="wf-quiet">Partition browsing owns the listing states — load, page, empty per column — plus the engine-error card with its built-in way back.</p>
         <div class="wf-states-grid">
             <article class="wf-state-card wf-state-card--info">
@@ -176,23 +183,23 @@
           <div class="wf-panel-body">
             <p>Browse exactly one partition: engine-scoped, paged listings of memories and entities with the recent-additions column and the binding line in their real placement.</p>
             <div>
-              <h3 class="wf-col-title">Inputs</h3>
+              <h3 class="wf-micro-label">Inputs</h3>
               <table class="wf-spec-table"><thead><tr><th scope="col">Input</th><th scope="col">Contract</th></tr></thead><tbody><tr><td><code>scope</code></td><td>PartitionTuple — the exact tuple; never widened or filtered client-side</td></tr><tr><td><code>onBack</code></td><td>() =&gt; void — return to inventory</td></tr><tr><td><code>page size</code></td><td>25 per listing, fixed — offsets are internal state</td></tr></tbody></table>
             </div>
             <div>
-              <h3 class="wf-col-title">Outputs</h3>
+              <h3 class="wf-micro-label">Outputs</h3>
               <table class="wf-spec-table"><thead><tr><th scope="col">Output</th><th scope="col">Behavior after emitting</th></tr></thead><tbody><tr><td><code>onBack()</code></td><td>emitted from the back affordance and from the engine-error card</td></tr><tr><td><code>no data events</code></td><td>paging mutates internal offsets only; scope never changes from inside</td></tr></tbody></table>
             </div>
             <div>
-              <h3 class="wf-col-title">Slots</h3>
+              <h3 class="wf-micro-label">Slots</h3>
               <table class="wf-spec-table"><thead><tr><th scope="col">Slot</th><th scope="col">Renders when</th></tr></thead><tbody><tr><td><code>error body</code></td><td>engine-error card replaces all three columns, carries the back affordance</td></tr><tr><td><code>composed children</code></td><td>RecentAdditionsView, PartitionGraphView, BindingHealthView render in their fixed positions</td></tr></tbody></table>
             </div>
             <div>
-              <h3 class="wf-col-title">States owned</h3>
+              <h3 class="wf-micro-label">States owned</h3>
               <table class="wf-spec-table"><thead><tr><th scope="col">State</th><th scope="col">Treatment</th></tr></thead><tbody><tr><td><code>loading</code></td><td>per column, skeleton matching the record-card shape</td></tr><tr><td><code>ready</code></td><td>three columns with independent pagination</td></tr><tr><td><code>engine-error</code></td><td>single card, error text + back link</td></tr><tr><td><code>empty (per listing)</code></td><td>“no memories in this partition (engine-scoped read returned none)” — per column, independently</td></tr><tr><td><code>partial</code></td><td>offset caption states position: “showing 1–4 of 31 · more pages”</td></tr></tbody></table>
             </div>
             <div>
-              <h3 class="wf-col-title">Accessibility contract</h3>
+              <h3 class="wf-micro-label">Accessibility contract</h3>
               <table class="wf-spec-table"><thead><tr><th scope="col">Guarantee</th><th scope="col">Detail</th></tr></thead><tbody><tr><td><code>pagination</code></td><td>previous/next are real buttons; disabled at bounds via the disabled attribute (announced as unavailable); position text sits adjacent, not inside buttons</td></tr><tr><td><code>headings</code></td><td>each column carries its own heading — memories, recent additions, knowledge entities</td></tr><tr><td><code>tuple line</code></td><td>the exact tuple with (unset) labels is text, announced in reading order</td></tr></tbody></table>
             </div>
           </div>
@@ -203,11 +210,11 @@
           <summary id="kbd-title">Keyboard contract <span class="wf-faint">tab order · keys · focus destination — open to explore</span></summary>
           <div class="wf-panel-body">
             <div>
-              <h3 class="wf-col-title">Tab order (documented)</h3>
+              <h3 class="wf-micro-label">Tab order (documented)</h3>
               <ol class="wf-records wf-flow"><li>Skip to frame content</li><li>Frame navigation (aria-current marks Partition)</li><li>Theme toggle</li><li>Binding repo input (text field)</li><li>Column pagination — memories previous / next, entities previous / next</li><li>Component-contract disclosure</li><li>Footer frame-sequence pager</li></ol>
             </div>
             <div>
-              <h3 class="wf-col-title">Keys</h3>
+              <h3 class="wf-micro-label">Keys</h3>
               <table class="wf-spec-table">
                 <thead><tr><th scope="col">Key</th><th scope="col">Action</th><th scope="col">Focus destination</th><th scope="col">Screen reader announcement</th></tr></thead>
                 <tbody><tr><td><kbd class="wf-kbd">Tab</kbd></td><td>Reach the repo input</td><td>Input, with visible label and placeholder example</td><td>“code binding repo, edit text, mem-alpha”</td></tr><tr><td><kbd class="wf-kbd">Enter</kbd></td><td>Resolve the binding line for the entered repo</td><td>Stays on the input; the line renders adjacent</td><td>Polite live region announces the resolved line</td></tr><tr><td><kbd class="wf-kbd">Space</kbd></td><td>Page a listing: previous / next</td><td>Stays on the pressed button</td><td>“next, button” — position text is adjacent, not inside</td></tr><tr><td>Disabled at bounds</td><td>previous disables at offset 0, next at the end — via the disabled attribute</td><td>Unfocusable, announced unavailable</td><td>Skipped by Tab</td></tr><tr><td><kbd class="wf-kbd">Tab</kbd> / <kbd class="wf-kbd">Shift+Tab</kbd></td><td>Move between controls in document order</td><td>Next / previous control</td><td>Control name and role</td></tr><tr><td><kbd class="wf-kbd">Enter</kbd></td><td>Activate the focused link, row, or summary</td><td>Moves to target frame / toggles panel</td><td>“link, visited” then new page</td></tr><tr><td><kbd class="wf-kbd">Space</kbd></td><td>Activate the focused button or disclosure</td><td>Unchanged (toggle)</td><td>“expanded” / “collapsed”</td></tr><tr><td><kbd class="wf-kbd">Enter</kbd> / <kbd class="wf-kbd">Space</kbd></td><td>Theme toggle: switch dark ⇄ light</td><td>Stays on the toggle</td><td>“Switch to light theme, button” — name reflects the action</td></tr></tbody>
@@ -228,6 +235,7 @@
         </nav>
       </div>
     </footer>
+    </div>
   </div>
 
   <script>

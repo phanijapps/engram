@@ -111,7 +111,7 @@ LAUNCH FLAGS
   --taxonomy <path>           Taxonomy config (JSON)
   --layout single|multi       SQLite file layout (default single)
   --db-file <name>            DB filename override
-  --tools core|full|all|consolidated   Tool profile (default core = 34 tools)
+  --tools core|full|all|consolidated   Tool profile (default core = 45 tools)
   --backend sqlite|pgvector   Engine recipe (default sqlite)
   --pg-connection-string <url> Postgres URL (pgvector; env ENGRAM_PG_CONNECTION_STRING)
   --slim                      Skip embeddings (no model download/load); keep lexical + graph
@@ -289,7 +289,7 @@ fn main() {
 /// stays focused. Pass via `--tools <profile>`.
 fn tool_profile_set(profile: &str) -> Option<&'static [&'static str]> {
     match profile {
-        // DEFAULT — the top-21 granular surface: the highest-leverage
+        // DEFAULT — the top-45 granular surface: the highest-leverage
         // discovery, code-intel, write, decision, and correction tools from
         // the 44-tool granular set (frequency-in-loop × decision leverage ×
         // non-redundancy). Consolidated verbs stay reachable via
@@ -314,7 +314,7 @@ fn tool_profile_set(profile: &str) -> Option<&'static [&'static str]> {
         }
         other => {
             eprintln!(
-                "engram-mcp: unknown --tools profile '{other}'; using core (34 tools). \
+                "engram-mcp: unknown --tools profile '{other}'; using core (45 tools). \
                  Options: core | full | all | consolidated"
             );
             Some(DEFAULT_TOOLS)
@@ -322,8 +322,8 @@ fn tool_profile_set(profile: &str) -> Option<&'static [&'static str]> {
     }
 }
 
-/// The 21 default granular tools — the DEFAULT (`--tools core`) agent surface.
-/// The original top-20 selected from the 44 granular tools by
+/// The 45 default granular tools — the DEFAULT (`--tools core`) agent surface.
+/// The original top-20 selected from the granular registry by
 /// frequency-in-loop × decision leverage × non-redundancy, plus
 /// `fetch_content` (content stitching):
 ///   discovery (4)  — get_context, recall, search, explore
@@ -437,7 +437,7 @@ fn register_all(registry: &mut ToolRegistry<App>, profile: &str) {
             register_specialist_tools(registry);
         }
         allowed => {
-            // Granular surface — the DEFAULT (top-21 core profile) plus
+            // Granular surface — the DEFAULT (top-45 core profile) plus
             // all/investigate/read/scan/write/maintain: register everything,
             // filter by the allowed list.
             register_all_tools(registry);

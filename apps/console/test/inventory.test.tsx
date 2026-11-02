@@ -84,6 +84,25 @@ describe("job012 inventory view (STEP-008)", () => {
     expect(markup).toContain("5 beliefs");
   });
 
+  it("inventory: rows are keyboard-operable with visible focus (FIND-ui-004)", async () => {
+    const rows = [partition()];
+    const markup = renderToStaticMarkup(
+      <InventoryView inventory={{ state: "ready", partitions: rows, partitionCount: 1 }} onSelect={() => {}} />
+    );
+    expect(markup).toContain('tabindex="0"');
+    expect(markup).toContain('role="link"');
+    expect(markup).toContain("focus-visible:outline");
+    expect(markup).toContain('aria-label="open partition');
+    // Event handlers never serialize into static markup; assert the key
+    // activation structurally (Enter and Space both open the partition).
+    const source = await import("node:fs").then((fs) =>
+      fs.readFileSync("src/views/Inventory.tsx", "utf8")
+    );
+    expect(source).toContain("onKeyDown");
+    expect(source).toMatch(/key === "Enter"/);
+    expect(source).toMatch(/key === " "/);
+  });
+
   it("inventory: the org/project alias header states the DEC-002 mapping", () => {
     const markup = renderToStaticMarkup(<AliasHeader />);
     expect(markup).toContain("--org");

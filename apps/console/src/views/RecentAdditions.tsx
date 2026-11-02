@@ -30,7 +30,7 @@ export function RecentAdditionsView({ scope, limit = 20 }: { scope: PartitionTup
     );
   }
   if (recent === null) {
-    return <p className="text-slate-500">loading recent additions…</p>;
+    return <p className="text-slate-400">loading recent additions…</p>;
   }
   if (recent.length === 0) {
     return (

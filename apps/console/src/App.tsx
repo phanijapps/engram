@@ -75,7 +75,7 @@ export function App() {
           <p className="text-slate-400">Select a partition from the inventory.</p>
         )}
       </main>
-      <footer className="px-6 py-4 text-xs text-slate-500">
+      <footer className="px-6 py-4 text-xs text-slate-400">
         read-only by construction · loopback only · no authentication by design (single trusted
         operator)
       </footer>

@@ -106,8 +106,17 @@ export function InventoryView({
           {inventory.partitions.map((partition) => (
             <tr
               key={JSON.stringify(partition.scope)}
-              className="cursor-pointer hover:bg-slate-900"
+              role="link"
+              tabIndex={0}
+              aria-label={`open partition ${partition.scope.tenant}${partition.scope.workspace ? ` / ${partition.scope.workspace}` : ""}`}
+              className="cursor-pointer hover:bg-slate-900 focus-visible:bg-slate-900 focus-visible:outline focus-visible:outline-2 focus-visible:outline-sky-500 focus-visible:-outline-offset-2"
               onClick={() => onSelect(partition)}
+              onKeyDown={(event) => {
+                if (event.key === "Enter" || event.key === " ") {
+                  event.preventDefault();
+                  onSelect(partition);
+                }
+              }}
             >
               <PartitionRow partition={partition} />
             </tr>

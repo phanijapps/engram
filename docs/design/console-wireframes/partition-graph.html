@@ -134,6 +134,47 @@
 
         <p class="wf-note">Honesty contract, learned the hard way: the canvas caption always tells the truth about what is rendered — never a static list under an interactive caption. This wireframe is a static excerpt of the 14 most-connected entities; the shipped canvas loads react-force-graph-2d dynamically and renders all 31 with pan, zoom, and hover labels — and when the canvas cannot load, the bounded summary list renders under a caption that says exactly that.</p>
       </section>
+      <section class="wf-section" aria-labelledby="states-graph">
+        <h2 id="states-graph" class="wf-section-title">State matrix — every named state, designed</h2>
+        <p class="wf-quiet">The graph owns two orthogonal state axes — data (loading / empty / error) and canvas (loading / ready / unavailable) — every combination is designed and honestly captioned.</p>
+        <div class="wf-states-grid">
+            <article class="wf-state-card wf-state-card--info">
+              <span class="wf-state-name">loading</span>
+              <p class="wf-state-headline">loading partition graph… / loading canvas…</p>
+              <p class="wf-state-body">Two loads, both honest: entity data loads first (the summary list can render), then the force-graph module loads in the background.</p>
+              <div class="wf-records" aria-hidden="true"><span class="wf-skel wf-skel--title"></span><span class="wf-skel wf-skel--row"></span><span class="wf-skel wf-skel--row"></span><span class="wf-skel wf-skel--chip"></span></div>
+              <p class="wf-state-src">apps/console/src/views/PartitionGraph.tsx:83,134-136,155</p>
+            </article>
+            <article class="wf-state-card wf-state-card--ok">
+              <span class="wf-state-name">ready</span>
+              <p class="wf-state-headline">interactive force-graph — 31 entities · 40 relationships.</p>
+              <p class="wf-state-body">The canvas above is the ready state: pan, zoom, hover for labels. The caption always states exactly what is rendered.</p>
+              
+              <p class="wf-state-src">apps/console/src/views/PartitionGraph.tsx:83,145-159</p>
+            </article>
+            <article class="wf-state-card ">
+              <span class="wf-state-name">unavailable</span>
+              <p class="wf-state-headline">canvas unavailable — summary view.</p>
+              <p class="wf-state-body">The interactive canvas couldn’t load (missing module, offline install). The bounded summary list IS the graph — same entities and relationships, list form — under a caption that says so.</p>
+              
+              <p class="wf-state-src">apps/console/src/views/PartitionGraph.tsx:83,111-113,156</p>
+            </article>
+            <article class="wf-state-card ">
+              <span class="wf-state-name">empty</span>
+              <p class="wf-state-headline">no knowledge entities in this partition — the graph renders once entities exist here.</p>
+              <p class="wf-state-body">An empty graph is a scoped fact: this tuple holds no entities yet. Write entities through the engine and the graph appears on reload.</p>
+              
+              <p class="wf-state-src">apps/console/src/views/PartitionGraph.tsx:137-143</p>
+            </article>
+            <article class="wf-state-card wf-state-card--danger">
+              <span class="wf-state-name">engine-error</span>
+              <p class="wf-state-headline">State: engine-error — the graph read failed.</p>
+              <p class="wf-state-body">Named state with the error text; the view never substitutes a fabricated or cached graph for a failed read.</p>
+              
+              <p class="wf-state-src">apps/console/src/views/PartitionGraph.tsx:131-133</p>
+            </article>
+        </div>
+      </section>
       <section class="wf-section" aria-labelledby="contract-title-graph">
         <details class="wf-panel" data-contract="component-contract">
           <summary id="contract-title-graph">Component contract — PartitionGraphView <span class="wf-faint">inputs · outputs · slots · states · a11y — open to explore</span></summary>

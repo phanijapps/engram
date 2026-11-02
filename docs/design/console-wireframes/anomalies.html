@@ -78,6 +78,47 @@
 
         <p class="wf-note">The minimal documented set: (1) the same subject value under multiple partitions of one tenant; (2) the same entity identity under multiple partitions. Anything outside this set is not a v1 anomaly — widening the set is a decision, not a drive-by. When duplication becomes actionable, the pruning-review frame (future) is where review work would live; nothing here links to a write.</p>
       </section>
+      <section class="wf-section" aria-labelledby="states-anomalies">
+        <h2 id="states-anomalies" class="wf-section-title">State matrix — every named state, designed</h2>
+        <p class="wf-quiet">The panel shares the inventory’s degraded-state family plus its own silence-is-meaningful empty state.</p>
+        <div class="wf-states-grid">
+            <article class="wf-state-card wf-state-card--info">
+              <span class="wf-state-name">loading</span>
+              <p class="wf-state-headline">loading anomalies…</p>
+              <p class="wf-state-body">The list position holds until the signal set returns — the panel never renders a half-computed anomaly set.</p>
+              <div class="wf-records" aria-hidden="true"><span class="wf-skel wf-skel--title"></span><span class="wf-skel wf-skel--row"></span><span class="wf-skel wf-skel--row"></span><span class="wf-skel wf-skel--chip"></span></div>
+              <p class="wf-state-src">apps/console/src/views/Anomalies.tsx:95</p>
+            </article>
+            <article class="wf-state-card wf-state-card--ok">
+              <span class="wf-state-name">ready</span>
+              <p class="wf-state-headline">2 cross-partition signals.</p>
+              <p class="wf-state-body">The panel above is the ready state: one card per signal, kind chip, evidence sentence, drill-down chips. Read-only surfacing, no actions offered.</p>
+              
+              <p class="wf-state-src">apps/console/src/views/Anomalies.tsx:100-135</p>
+            </article>
+            <article class="wf-state-card ">
+              <span class="wf-state-name">empty</span>
+              <p class="wf-state-headline">No cross-partition anomalies detected in the minimal documented set.</p>
+              <p class="wf-state-body">Silence is meaningful because the set is named: same subject under multiple partitions; same entity identity under multiple partitions. Nothing outside that set is silently checked — or silently skipped.</p>
+              
+              <p class="wf-state-src">apps/console/src/views/Anomalies.tsx:114-121</p>
+            </article>
+            <article class="wf-state-card ">
+              <span class="wf-state-name">store-locked</span>
+              <p class="wf-state-headline">State: store-locked — The store is locked or busy; retry shortly.</p>
+              <p class="wf-state-body">The panel degrades exactly like the inventory: the named state line replaces the list, with the server’s message. No actions exist to lock or unlock anything.</p>
+              
+              <p class="wf-state-src">apps/console/src/views/Anomalies.tsx:107-112 · app.mjs:85</p>
+            </article>
+            <article class="wf-state-card wf-state-card--danger">
+              <span class="wf-state-name">engine-error</span>
+              <p class="wf-state-headline">State: engine-error — the anomaly scan failed.</p>
+              <p class="wf-state-body">A failed scan is not “no anomalies”: the named state renders with the error so an absent signal is never mistaken for a clean one.</p>
+              
+              <p class="wf-state-src">apps/console/src/views/Anomalies.tsx:87-89</p>
+            </article>
+        </div>
+      </section>
       <section class="wf-section" aria-labelledby="contract-title-anomalies">
         <details class="wf-panel" data-contract="component-contract">
           <summary id="contract-title-anomalies">Component contract — AnomaliesView <span class="wf-faint">inputs · outputs · slots · states · a11y — open to explore</span></summary>

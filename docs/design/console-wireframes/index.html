@@ -120,6 +120,51 @@
           </a>
         </div>
       </section>
+      <section class="wf-section" aria-labelledby="boot-gallery-title">
+        <h2 id="boot-gallery-title" class="wf-section-title">Boot gallery — the states before there is anything to browse</h2>
+        <p class="wf-quiet">The console names its own failure to start. Two boot states are required vocabulary (<span class="wf-mono">ui-not-built</span>, <span class="wf-mono">port-in-use</span>); three more are named in the code and designed here for completeness. Terminal states render as terminals — that is where you meet them.</p>
+        <div class="wf-states-grid">
+          <article class="wf-state-card wf-state-card--danger">
+            <span class="wf-state-name">port-in-use</span>
+            <div class="wf-term" role="img" aria-label="Terminal showing: engram-console state port-in-use, 127.0.0.1:7777 is already bound. Stop the other listener or pass --port N. Exit code 4.">
+              <div class="wf-term-bar"><span aria-hidden="true">●</span> terminal — console start</div>
+              <p class="wf-term-body"><span class="wf-term-accent">engram-console: state: port-in-use</span> — 127.0.0.1:7777 is already bound.<br>Stop the other listener or pass --port &lt;N&gt;.<br>exit code 4</p>
+            </div>
+            <p class="wf-state-body">Another console already holds the port — two consoles on one store would race, so this one refuses to start. Stop the other listener, or start this one on a different port. Diagnosed before the engine loads, so it never depends on native addons.</p>
+            <p class="wf-state-src">apps/console/server/main.mjs:130,175 · exit 4</p>
+          </article>
+          <article class="wf-state-card">
+            <span class="wf-state-name">ui-not-built</span>
+            <div class="wf-view">
+              <h3 class="wf-gallery-title">engram console</h3>
+              <p class="wf-state-body"><strong>State: ui-not-built.</strong> Run <code>pnpm --filter @engram/console build</code> then restart. The JSON API is live at <code>/api/health</code>.</p>
+            </div>
+            <p class="wf-state-body">The UI bundle isn’t built yet — the server is fine. The API is already answering at /api/health; build the UI once and the console appears on the next start.</p>
+            <p class="wf-state-src">apps/console/server/app.mjs:374,405</p>
+          </article>
+          <article class="wf-state-card wf-state-card--danger">
+            <span class="wf-state-name">store-absent</span>
+            <div class="wf-term" role="img" aria-label="Terminal showing: engram-console state store-absent, storage directory does not exist. The console is read-only and never creates a store. Exit code 3.">
+              <div class="wf-term-bar"><span aria-hidden="true">●</span> terminal — console start</div>
+              <p class="wf-term-body"><span class="wf-term-accent">engram-console: state: store-absent</span> — storage directory ‘~/.engram’ does not exist.<br>The console is read-only and never creates a store.<br>exit code 3</p>
+            </div>
+            <p class="wf-state-body">The configured path has no store. A read-only console that silently created one would be a write — so it names the state and stops. Pass the path of an existing store.</p>
+            <p class="wf-state-src">apps/console/server/main.mjs:150 · exit 3</p>
+          </article>
+          <article class="wf-state-card">
+            <span class="wf-state-name">origin-refused</span>
+            <p class="wf-state-headline">Console requests must originate from a loopback host (127.0.0.1 / localhost / ::1).</p>
+            <p class="wf-state-body">This is the single-operator security model doing its job, not a malfunction. Reach the console from the same machine; remote origins are refused by design — with a named JSON state, never a silent hang.</p>
+            <p class="wf-state-src">apps/console/server/app.mjs:425-428</p>
+          </article>
+          <article class="wf-state-card">
+            <span class="wf-state-name">ui-read-error</span>
+            <p class="wf-state-headline">A served UI file couldn’t be read mid-stream.</p>
+            <p class="wf-state-body">The server stays up and answers with this named JSON state instead of crashing — the stream’s own error handler catches what the pipe would have swallowed. Reload; if it persists, rebuild the UI bundle.</p>
+            <p class="wf-state-src">apps/console/server/app.mjs:411-418</p>
+          </article>
+        </div>
+      </section>
     </main>
 
     <footer class="wf-foot">

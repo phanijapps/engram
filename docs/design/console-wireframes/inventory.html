@@ -158,6 +158,68 @@
         </div>
         <p class="wf-note">Design contract: the entire row is the select target (shown here as the tenant anchor). Scope values keep their exact engine spelling — including non-ASCII tenants and subjects, which encode to UTF-8 base64url partition keys and must open identically to ASCII scopes. Unset dimensions render as <span class="wf-unset">(unset)</span>, never blank.</p>
       </section>
+      <section class="wf-section" aria-labelledby="states-inventory">
+        <h2 id="states-inventory" class="wf-section-title">State matrix — every named state, designed</h2>
+        <p class="wf-quiet">One card per state the inventory endpoint can emit — names pinned to the code lines that emit them. Blame-free by rule: what happened, what to do next.</p>
+        <div class="wf-states-grid">
+            <article class="wf-state-card wf-state-card--ok">
+              <span class="wf-state-name">ready</span>
+              <p class="wf-state-headline">Every partition, one row each.</p>
+              <p class="wf-state-body">The table above is the ready state: summary strip, tuple columns, engine counts. Rows open the partition page.</p>
+              
+              <p class="wf-state-src">apps/console/src/api.ts:22 — InventoryState “ready”</p>
+            </article>
+            <article class="wf-state-card wf-state-card--info">
+              <span class="wf-state-name">loading</span>
+              <p class="wf-state-headline">Loading inventory…</p>
+              <p class="wf-state-body">A skeleton matching the final table shape holds the layout — no spinner, no shift when data lands. The container carries aria-busy and an aria-label.</p>
+              <div class="wf-records" aria-hidden="true"><span class="wf-skel wf-skel--title"></span><span class="wf-skel wf-skel--row"></span><span class="wf-skel wf-skel--row"></span><span class="wf-skel wf-skel--chip"></span></div>
+              <p class="wf-state-src">apps/console/src/views/Inventory.tsx:67-69</p>
+            </article>
+            <article class="wf-state-card ">
+              <span class="wf-state-name">empty</span>
+              <p class="wf-state-headline">Empty store — nothing is broken.</p>
+              <p class="wf-state-body">No partitions are present in this store’s data yet. Memories, knowledge entities, or beliefs written through the engine appear here automatically; reload after writing.</p>
+              
+              <p class="wf-state-src">apps/console/src/views/Inventory.tsx:78-88</p>
+            </article>
+            <article class="wf-state-card ">
+              <span class="wf-state-name">store-locked</span>
+              <p class="wf-state-headline">The store is locked or busy.</p>
+              <p class="wf-state-body">Another engine session holds the store right now. Nothing was changed — wait a moment and reload; the counts return once the lock frees.</p>
+              
+              <p class="wf-state-src">apps/console/server/app.mjs:85 · api.ts:23</p>
+            </article>
+            <article class="wf-state-card ">
+              <span class="wf-state-name">backend-unreachable</span>
+              <p class="wf-state-headline">The configured backend is unreachable.</p>
+              <p class="wf-state-body">The engine behind the console didn’t answer. Check that the engine process is running and the backend setting matches it, then reload.</p>
+              
+              <p class="wf-state-src">apps/console/server/app.mjs:88 · api.ts:24</p>
+            </article>
+            <article class="wf-state-card ">
+              <span class="wf-state-name">store-invalid</span>
+              <p class="wf-state-headline">The store directory does not hold a valid store.</p>
+              <p class="wf-state-body">The configured path isn’t an engram store. The console is read-only and never creates or repairs one — point it at the directory the engine created.</p>
+              
+              <p class="wf-state-src">apps/console/server/app.mjs:91 · api.ts:25</p>
+            </article>
+            <article class="wf-state-card ">
+              <span class="wf-state-name">configuration-invalid</span>
+              <p class="wf-state-headline">The console configuration is invalid.</p>
+              <p class="wf-state-body">A setting failed validation before any read happened. Fix the flagged flag — backend or storage path — and restart the console.</p>
+              
+              <p class="wf-state-src">apps/console/server/app.mjs:94 · api.ts:26</p>
+            </article>
+            <article class="wf-state-card wf-state-card--danger">
+              <span class="wf-state-name">engine-error</span>
+              <p class="wf-state-headline">The engine returned an unexpected error.</p>
+              <p class="wf-state-body">This response isn’t classified yet, so the raw engine text is shown verbatim — nothing hidden, nothing retried in a loop. Safe to reload; nothing was changed.</p>
+              
+              <p class="wf-state-src">apps/console/server/app.mjs:96 · api.ts:27</p>
+            </article>
+        </div>
+      </section>
       <section class="wf-section" aria-labelledby="contract-title-inventory">
         <details class="wf-panel" data-contract="component-contract">
           <summary id="contract-title-inventory">Component contract — InventoryView <span class="wf-faint">inputs · outputs · slots · states · a11y — open to explore</span></summary>

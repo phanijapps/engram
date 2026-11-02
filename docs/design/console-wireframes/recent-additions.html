@@ -93,6 +93,40 @@
 
         <p class="wf-note">No pagination below the newest page by design: this view answers “what just landed,” and older history belongs to the paged memories column of the partition browse.</p>
       </section>
+      <section class="wf-section" aria-labelledby="states-recent">
+        <h2 id="states-recent" class="wf-section-title">State matrix — every named state, designed</h2>
+        <p class="wf-quiet">Four states, one list — each designed so silence always means something specific.</p>
+        <div class="wf-states-grid">
+            <article class="wf-state-card wf-state-card--info">
+              <span class="wf-state-name">loading</span>
+              <p class="wf-state-headline">loading recent additions…</p>
+              <p class="wf-state-body">The list position is held by record-shaped skeletons so the page doesn’t shift when the newest page lands.</p>
+              <div class="wf-records" aria-hidden="true"><span class="wf-skel wf-skel--title"></span><span class="wf-skel wf-skel--row"></span><span class="wf-skel wf-skel--row"></span><span class="wf-skel wf-skel--chip"></span></div>
+              <p class="wf-state-src">apps/console/src/views/RecentAdditions.tsx:32-34</p>
+            </article>
+            <article class="wf-state-card wf-state-card--ok">
+              <span class="wf-state-name">ready</span>
+              <p class="wf-state-headline">Newest first — the engine’s order.</p>
+              <p class="wf-state-body">The list above is the ready state. Position #1 is the newest memory; the console never re-sorts what the engine ordered.</p>
+              
+              <p class="wf-state-src">apps/console/src/views/RecentAdditions.tsx:43-54</p>
+            </article>
+            <article class="wf-state-card ">
+              <span class="wf-state-name">empty</span>
+              <p class="wf-state-headline">no recent additions in this partition — new memories appear here as they are written.</p>
+              <p class="wf-state-body">Nothing has landed in this scope yet. The next engine write appears at position #1 on reload — no refresh loop, no polling.</p>
+              
+              <p class="wf-state-src">apps/console/src/views/RecentAdditions.tsx:35-41</p>
+            </article>
+            <article class="wf-state-card wf-state-card--danger">
+              <span class="wf-state-name">engine-error</span>
+              <p class="wf-state-headline">State: engine-error — the recent read failed.</p>
+              <p class="wf-state-body">The error text renders inline with the state name; retry is page-level. An empty list and a failed read are never confused.</p>
+              
+              <p class="wf-state-src">apps/console/src/views/RecentAdditions.tsx:27-31</p>
+            </article>
+        </div>
+      </section>
       <section class="wf-section" aria-labelledby="contract-title-recent">
         <details class="wf-panel" data-contract="component-contract">
           <summary id="contract-title-recent">Component contract — RecentAdditionsView <span class="wf-faint">inputs · outputs · slots · states · a11y — open to explore</span></summary>

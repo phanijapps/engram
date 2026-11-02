@@ -66,6 +66,54 @@
           <span class="wf-faint">observed 7a7ee95d — the branch is 1 commit past the indexed tip</span>
         </div>
       </section>
+      <section class="wf-section" aria-labelledby="states-binding">
+        <h2 id="states-binding" class="wf-section-title">State matrix — every named state, designed</h2>
+        <p class="wf-quiet">The line owns six states: prompt, loading, bound-fresh, bound-stale, unbound, engine-error. Stale is informational; unbound shows the engine’s own words.</p>
+        <div class="wf-states-grid">
+            <article class="wf-state-card wf-state-card--info">
+              <span class="wf-state-name">prompt</span>
+              <p class="wf-state-headline">enter the bound repo id to show its binding health line</p>
+              <p class="wf-state-body">The repo id is an engine key, not a free-text search — the placeholder teaches the real shape (e.g. mem-alpha) and the last-used value is remembered for the next visit.</p>
+              
+              <p class="wf-state-src">apps/console/src/views/BindingHealth.tsx:122-126</p>
+            </article>
+            <article class="wf-state-card wf-state-card--info">
+              <span class="wf-state-name">loading</span>
+              <p class="wf-state-headline">loading binding health…</p>
+              <p class="wf-state-body">The line’s own position carries the loading text — the layout never jumps when the resolved line replaces it.</p>
+              
+              <p class="wf-state-src">apps/console/src/views/BindingHealth.tsx:118-120</p>
+            </article>
+            <article class="wf-state-card wf-state-card--ok">
+              <span class="wf-state-name">bound</span>
+              <p class="wf-state-headline">mem-alpha: BOUND refs/heads/main · INDEXED 7a7ee95d · FRESHNESS-STATE: fresh</p>
+              <p class="wf-state-body">One line of facts: repo, branch, indexed commit, freshness. Status only — no browsing into indexed code, no actions on the binding.</p>
+              
+              <p class="wf-state-src">apps/console/src/views/BindingHealth.tsx:46-55</p>
+            </article>
+            <article class="wf-state-card ">
+              <span class="wf-state-name">stale</span>
+              <p class="wf-state-headline">FRESHNESS-STATE: ref-moved-past-indexed-commit — observed 7a7ee95d.</p>
+              <p class="wf-state-body">Stale is a state, not an error: the branch simply moved past the indexed tip. The line says by how much; re-indexing is a decision, not a prompt.</p>
+              
+              <p class="wf-state-src">apps/console/src/views/BindingHealth.tsx:46-52 · spec edge case</p>
+            </article>
+            <article class="wf-state-card ">
+              <span class="wf-state-name">unbound</span>
+              <p class="wf-state-headline">invalid request: BindingRequired — this partition has no binding for that repo.</p>
+              <p class="wf-state-body">The engine’s real denial surfaces verbatim, classified as unbound by the corrected matcher — never as a generic error. The owner’s store binds mem-alpha; a hard-coded “default” can never resolve.</p>
+              
+              <p class="wf-state-src">apps/console/src/views/BindingHealth.tsx:7,38-45 · job-012 review r1 lesson</p>
+            </article>
+            <article class="wf-state-card wf-state-card--danger">
+              <span class="wf-state-name">engine-error</span>
+              <p class="wf-state-headline">State: engine-error — the binding read failed.</p>
+              <p class="wf-state-body">The raw error text renders with the state name; the input keeps your repo id so the retry costs one keypress.</p>
+              
+              <p class="wf-state-src">apps/console/src/views/BindingHealth.tsx:84-87</p>
+            </article>
+        </div>
+      </section>
       <section class="wf-section" aria-labelledby="contract-title-binding">
         <details class="wf-panel" data-contract="component-contract">
           <summary id="contract-title-binding">Component contract — BindingHealthView <span class="wf-faint">inputs · outputs · slots · states · a11y — open to explore</span></summary>

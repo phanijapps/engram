@@ -98,20 +98,14 @@
           </table>
         </div>
 
-        <div class="wf-cols">
-          <div class="wf-col">
-            <h3 class="wf-micro-label">what exists in v1</h3>
-            <p class="wf-record-text">Exactly the first row: one console, one engine, one local store, loopback-enforced. Requests from any other origin are refused with the <span class="wf-mono">origin-refused</span> state — that refusal is the v1 security model working as designed.</p>
+        <details class="wf-panel">
+          <summary>Rationale — v1 today, what the future adds, why it is future <span class="wf-faint">open to explore</span></summary>
+          <div class="wf-panel-body">
+            <p class="wf-record-text"><span class="wf-micro-label">what exists in v1</span> — exactly the first row: one console, one engine, one local store, loopback-enforced. Requests from any other origin are refused with the <span class="wf-mono">origin-refused</span> state — that refusal is the v1 security model working as designed.</p>
+            <p class="wf-record-text"><span class="wf-micro-label">what the future adds</span> — a registry of engines with per-node health (the same named states as every other frame — a remote node can be store-locked or backend-unreachable exactly like the local one), aggregate inventory across stores, and per-node binding health.</p>
+            <p class="wf-record-text"><span class="wf-micro-label">why it is future</span> — widening the origin boundary is a security decision, not a UI feature: authentication, transport, and per-node authorization all need designing first. The read-only posture survives — even a central console starts read-only against every store it watches.</p>
           </div>
-          <div class="wf-col">
-            <h3 class="wf-micro-label">what the future adds</h3>
-            <p class="wf-record-text">A registry of engines with per-node health (the same named states as every other frame — a remote node can be store-locked or backend-unreachable exactly like the local one), aggregate inventory across stores, and per-node binding health.</p>
-          </div>
-          <div class="wf-col">
-            <h3 class="wf-micro-label">why it is future</h3>
-            <p class="wf-record-text">Widening the origin boundary is a security decision, not a UI feature: authentication, transport, and per-node authorization all need designing first. The read-only posture survives — even a central console starts read-only against every store it watches.</p>
-          </div>
-        </div>
+        </details>
       </section>
       <section class="wf-section" aria-labelledby="kbd-title">
         <details class="wf-panel" data-contract="keyboard-order">

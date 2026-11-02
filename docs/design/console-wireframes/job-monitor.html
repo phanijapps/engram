@@ -44,7 +44,13 @@
         <h1 class="wf-frame-title">Ingest &amp; maintain job monitoring</h1>
         <p class="wf-lede">The console watching long-running engine work — ingest and maintenance jobs with progress, queue, and history — instead of only ever showing finished state.</p>
         <p class="wf-lineage">lineage <code>job-012:REQ-006</code> <code>job-012:REQ-007</code> · this contract: <code>job-013:REQ-002</code> <code>job-013:REQ-007</code> · shaped by fe-status · frontend-engineering · ux-writing</p>
-        <p class="wf-note"><span class="wf-badge wf-badge--future"><span class="wf-dot" aria-hidden="true"></span>future</span> Nothing in this frame ships in v1. v1 is read-only by construction; the pause, resume, retry, and cancel affordances below are the first write-shaped capabilities on the trajectory, and every one of them is labeled future on purpose.</p>
+        <p class="wf-note"><span class="wf-badge wf-badge--future"><span class="wf-dot" aria-hidden="true"></span>future · not in v1</span> Design target only — every control below is labeled future.</p>
+        <details class="wf-panel">
+          <summary>Read me first — what future means here <span class="wf-faint">open to explore</span></summary>
+          <div class="wf-panel-body">
+            <p class="wf-record-text">Nothing in this frame ships in v1. v1 is read-only by construction; the pause, resume, retry, and cancel affordances below are the first write-shaped capabilities on the trajectory, and every one of them is labeled future on purpose.</p>
+          </div>
+        </details>
       </header>
       <section class="wf-kpi-row" aria-label="Frame metrics">
         <div class="wf-kpi"><span class="wf-kpi-label">running</span><span class="wf-kpi-value">1</span></div>
@@ -120,15 +126,14 @@
               </article>
             </div>
           </div>
-          <div class="wf-col">
-            <h3 class="wf-micro-label">what exists in v1</h3>
-            <p class="wf-record-text">None of this. v1 observes the store read-only through finished engine state: the inventory counts, the anomaly set, the binding line. Jobs are engine-side operations you run from the CLI; the console has no window into them.</p>
-          </div>
-          <div class="wf-col">
-            <h3 class="wf-micro-label">why it is future</h3>
-            <p class="wf-record-text">Job monitoring needs a status channel from the engine and a job registry — new engine surface, not console paint. The write-shaped controls (pause, resume, retry, cancel) additionally break the v1 read-only posture and land only with an explicit owner decision.</p>
-          </div>
         </div>
+        <details class="wf-panel">
+          <summary>Rationale — v1 today and why this is future <span class="wf-faint">open to explore</span></summary>
+          <div class="wf-panel-body">
+            <p class="wf-record-text"><span class="wf-micro-label">what exists in v1</span> — none of this. v1 observes the store read-only through finished engine state: the inventory counts, the anomaly set, the binding line. Jobs are engine-side operations you run from the CLI; the console has no window into them.</p>
+            <p class="wf-record-text"><span class="wf-micro-label">why it is future</span> — job monitoring needs a status channel from the engine and a job registry — new engine surface, not console paint. The write-shaped controls (pause, resume, retry, cancel) additionally break the v1 read-only posture and land only with an explicit owner decision.</p>
+          </div>
+        </details>
       </section>
       <section class="wf-section" aria-labelledby="kbd-title">
         <details class="wf-panel" data-contract="keyboard-order">

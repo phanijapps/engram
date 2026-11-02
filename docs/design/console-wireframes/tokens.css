@@ -1,235 +1,84 @@
 /* ==========================================================================
-   engram console — design tokens (wireframe set, cycle 2: dashboard idiom)
+   engram console — design tokens (cycle 4: TencentDB-Agent-Memory DNA reskin)
    ==========================================================================
-   The single styling source of truth for the console design contract
-   (job 013, NFR-002). Three tiers, one-way dependency:
+   Charter: evidence/design-dna-tencent-ref.md (vision-extracted, binding).
+   Light-first enterprise palette — #F8FAFC canvas, white cards, #2563EB blue
+   primary, #F1F5F9 grid gray, #EFF6FF light blue, #1E293B text — rounded
+   (6-12px) shadowed cards, underline tabs, status badges. The dark theme is
+   the secondary toggle, AA-verified in both.
 
-       primitive  →  semantic  →  component
-       (raw value)   (role)       (usage, scoped to a component class)
+   Tier order note: CSS custom properties resolve at computed-value time, so
+   declaration order is free — the SEMANTIC tier is declared first so the
+   light default is this file's first :root (the no-attribute resolution),
+   with raw values defined once in the primitive tier below and component
+   anatomy last. One-way dependency still holds: component -> semantic ->
+   primitive, never skipping sideways. No OS-preference fallback
+   exists (removed by DEC-010): light is the default, dark only via the
+   explicit [data-theme] toggle.
 
-   Cycle-2 rebase (REQ-009/REQ-010, rework-2): Grafana/Linear/Datadog-class
-   operations-dashboard idiom. Slate neutrals; ONE restrained blue accent
-   family (--primitive-accent-{grade}, hue 214, saturation <= 61%) reserved
-   for state and action; radius primitives collapsed to the two quiet steps
-   below with no pill geometry anywhere; spacing held on the 4px grid as rem
-   values; uppercase micro-labels and tabular numerals as component tokens.
-   The cycle-1 purple-blue family and its soft geometry are fully retired.
-
-   Rules enforced by the drift sweep (CHK-001):
-   - raw color values (hex, rgb/rgba, hsl) live ONLY in this file;
-   - wireframe.css and every frame consume var(--*) exclusively;
-   - a component token references semantics, never primitives directly;
-   - a semantic token references primitives, never raw literals inline.
-
-   Theming: light values are the :root defaults; [data-theme="dark"] is the
-   explicit override every frame ships with; the prefers-color-scheme block
-   is a fallback for an attribute-less load and MUST stay in sync with the
-   [data-theme="dark"] block (token-architecture: both are maintained).
-
-   Contrast: every composed fg/bg pair is asserted >= 4.5:1 in both themes
-   by the CHK-012 resolver (evidence/build/wf-c2-contrast.log); dark accent
-   lightness is contrast-driven (plan DEC-004, citation 1).
-
-   Naming: --primitive-* (tier 1), --ds-* (tier 2), --wf-<component>-*
-   (tier 3, scoped to a .wf-* class). Names encode role, never value.
+   Eliminations still in force: no pastel purple-blue family, no pill
+   (9999px) geometry, no decorative gradients on chrome. Raw color literals
+   live ONLY in the primitive tier (CHK-001/CHK-015b); #2563EB appears
+   exactly once (CHK-015). Contrast floors 4.5:1 asserted both themes by
+   the derived resolver (CHK-012, evidence/build/wf4-chk-012.log).
    ========================================================================== */
 
-/* tier: primitive — raw values, defined once, referenced only by the semantic tier */
+/* tier: semantic — role assignments; light default at this first :root, dark under [data-theme] */
 :root {
-  /* slate-neutral ramps — inks (dark surfaces) and papers (light surfaces) */
-  --primitive-ink-950: #090b0e;
-  --primitive-ink-900: #0e1015;
-  --primitive-ink-850: #14171d;
-  --primitive-ink-800: #1a1e26;
-  --primitive-ink-700: #262b35;
-  --primitive-ink-600: #3a4150;
-  --primitive-ink-300: #c6cdd9;
-  --primitive-paper-100: #eef0f4;
-  --primitive-paper-50: #f7f8fa;
-  --primitive-paper-0: #ffffff;
+  --ds-color-surface: #F8FAFC;
+  --ds-color-surface-raised: #FFFFFF;
+  --ds-color-surface-overlay: #F1F5F9;
+  --ds-color-surface-sunken: #F1F5F9;
+  --ds-color-surface-inverse: #0F172A;
 
-  /* slate data ramp — graph fills and neutral data marks (non-text) */
-  --primitive-slate-400: #94a3b8;
-  --primitive-slate-500: #64748b;
-  --primitive-slate-600: #475569;
+  --ds-color-on-surface: #1E293B;
+  --ds-color-on-surface-muted: #475569;
+  --ds-color-on-surface-faint: #55657A;
+  --ds-color-on-surface-inverse: #E2E8F0;
+  --ds-color-on-surface-inverse-muted: #94A3B8;
 
-  /* text inks (contrast-verified pairs: high >= 12:1, mid >= 7:1, faint >= 4.7:1) */
-  --primitive-text-dark-high: #e8ebf2;
-  --primitive-text-dark-mid: #a7aec0;
-  --primitive-text-dark-faint: #7e879c;
-  --primitive-text-light-high: #171a21;
-  --primitive-text-light-mid: #4b5262;
-  --primitive-text-light-faint: #5d6879;
+  --ds-color-outline: #E2E8F0;
+  --ds-color-outline-faint: #E2E8F0;
+  --ds-color-outline-strong: #55657A;
+  --ds-color-outline-inverse: #334155;
 
-  /* ONE accent family — blue, hue 214°, saturation <= 61%, four grades.
-     Reserved for state and action. Dark grades (300/400) are the dark-theme
-     text pairings (contrast-driven); 600/700 carry the light theme. */
-  --primitive-accent-300: #9dbde7;
-  --primitive-accent-400: #bed3ef;
-  --primitive-accent-600: #2e65ad;
-  --primitive-accent-700: #25528d;
+  --ds-color-primary: var(--primitive-blue-600);
+  --ds-color-primary-hover: var(--primitive-blue-700);
+  --ds-color-primary-strong: var(--primitive-blue-600);
+  --ds-color-on-primary: #FFFFFF;
+  --ds-color-primary-wash: var(--primitive-blue-wash-light);
+  --ds-color-primary-wash-raised: var(--primitive-blue-wash-raised-light);
 
-  /* accent washes — flat tints used behind accent text; blended values
-     verified against the 4.5:1 floor by CHK-012 */
-  --primitive-accent-wash-light: #eaf0f7;
-  --primitive-accent-wash-raised-light: #dee6f2;
-  --primitive-accent-wash-dark: rgba(157, 189, 231, 0.14);
-  --primitive-accent-wash-raised-dark: rgba(157, 189, 231, 0.22);
+  --ds-color-focus: var(--primitive-blue-700);
 
-  /* status — green / amber / red; the informational role reuses the accent */
-  --primitive-green-700: #137037;
-  --primitive-green-400: #4ade80;
-  --primitive-green-wash-dark: rgba(74, 222, 128, 0.12);
-  --primitive-green-wash-light: #e7f6ed;
-  --primitive-amber-700: #a64d08;
-  --primitive-amber-400: #fbbf24;
-  --primitive-amber-wash-dark: rgba(251, 191, 36, 0.12);
-  --primitive-amber-wash-light: #fdf3e3;
-  --primitive-red-700: #b91c1c;
-  --primitive-red-400: #f87171;
-  --primitive-red-wash-dark: rgba(248, 113, 113, 0.12);
-  --primitive-red-wash-light: #fdecec;
-
-  /* neutral washes for hovers and static skeletons */
-  --primitive-wash-dark: rgba(232, 235, 242, 0.06);
-  --primitive-wash-raised-dark: rgba(232, 235, 242, 0.11);
-  --primitive-skeleton-dark: rgba(232, 235, 242, 0.09);
-  --primitive-skeleton-light: rgba(23, 26, 33, 0.08);
-
-  /* spacing — 4px grid, rem values (0.25rem steps at 1rem = 16px) */
-  --primitive-space-1: 0.25rem;
-  --primitive-space-2: 0.5rem;
-  --primitive-space-3: 0.75rem;
-  --primitive-space-4: 1rem;
-  --primitive-space-5: 1.5rem;
-  --primitive-space-6: 2rem;
-  --primitive-space-7: 3rem;
-  --primitive-space-8: 4rem;
-
-  /* hairline metric — border-class primitive, not a spacing-scale step */
-  --primitive-hairline: 2px;
-
-  /* type scale — major third for UI text; sizes in rem */
-  --primitive-size-sm: 0.75rem;
-  --primitive-size-base: 0.875rem;
-  --primitive-size-lg: 1rem;
-  --primitive-size-xl: 1.125rem;
-  --primitive-size-2xl: 1.25rem;
-  --primitive-size-3xl: 1.5rem;
-
-  --primitive-weight-regular: 400;
-  --primitive-weight-medium: 500;
-  --primitive-weight-semibold: 600;
-  --primitive-weight-bold: 700;
-
-  --primitive-leading-tight: 1.25;
-  --primitive-leading-normal: 1.5;
-  --primitive-leading-loose: 1.75;
-
-  --primitive-tracking-micro: 0.08em;
-
-  --primitive-font-sans: system-ui, -apple-system, "Segoe UI", Roboto,
-    "Helvetica Neue", Arial, sans-serif;
-  --primitive-font-mono: ui-monospace, "SF Mono", "Cascadia Code",
-    "JetBrains Mono", Menlo, Consolas, monospace;
-
-  /* radius — two quiet sizes only; no pill geometry exists in this system */
-  --primitive-radius-sm: 2px;
-  --primitive-radius-md: 4px;
-
-  /* elevation — flat-first; a single subtle level for raised surfaces */
-  --primitive-shadow-sm-dark: 0 1px 2px rgba(9, 11, 14, 0.5);
-  --primitive-shadow-md-dark: 0 4px 12px rgba(9, 11, 14, 0.45);
-  --primitive-shadow-sm-light: 0 1px 2px rgba(23, 26, 33, 0.07);
-  --primitive-shadow-md-light: 0 4px 12px rgba(23, 26, 33, 0.09);
-
-  /* named z-index scale — no magic numbers in wireframe.css */
-  --primitive-z-base: 0;
-  --primitive-z-raised: 10;
-  --primitive-z-sticky: 100;
-  --primitive-z-overlay: 200;
-
-  /* motion — durations only; no keyframes exist in this system (CHK-008) */
-  --primitive-duration-quick: 120ms;
-  --primitive-duration-moderate: 200ms;
-  --primitive-ease-standard: cubic-bezier(0.4, 0, 0.2, 1);
-
-  /* breakpoints — documentation tokens only: @media cannot consume custom
-     properties, so wireframe.css states the same values in rem literally */
-  --primitive-bp-md: 48rem;
-  --primitive-bp-lg: 64rem;
-
-  /* layout metrics */
-  --primitive-sidebar-width: 13.75rem;
-  --primitive-measure: 72rem;
-}
-
-/* tier: semantic — role assignments; [data-theme] and prefers-color-scheme overrides ride this tier */
-:root {
-  /* surfaces (light defaults) */
-  --ds-color-surface: var(--primitive-paper-50);
-  --ds-color-surface-raised: var(--primitive-paper-0);
-  --ds-color-surface-overlay: var(--primitive-paper-100);
-  --ds-color-surface-sunken: var(--primitive-paper-100);
-  --ds-color-surface-inverse: var(--primitive-ink-900);
-
-  /* content on surfaces */
-  --ds-color-on-surface: var(--primitive-text-light-high);
-  --ds-color-on-surface-muted: var(--primitive-text-light-mid);
-  --ds-color-on-surface-faint: var(--primitive-text-light-faint);
-  --ds-color-on-surface-inverse: var(--primitive-text-dark-high);
-  --ds-color-on-surface-inverse-muted: var(--primitive-text-dark-mid);
-
-  /* hairlines and borders */
-  --ds-color-outline: var(--primitive-ink-300);
-  --ds-color-outline-faint: var(--primitive-ink-300);
-  --ds-color-outline-strong: var(--primitive-text-light-faint);
-  --ds-color-outline-inverse: var(--primitive-ink-700);
-
-  /* accent — state and action only */
-  --ds-color-primary: var(--primitive-accent-600);
-  --ds-color-primary-hover: var(--primitive-accent-700);
-  --ds-color-primary-strong: var(--primitive-accent-600);
-  --ds-color-on-primary: var(--primitive-paper-0);
-  --ds-color-primary-wash: var(--primitive-accent-wash-light);
-  --ds-color-primary-wash-raised: var(--primitive-accent-wash-raised-light);
-
-  /* focus indicator — the action hue, >= 3:1 against every surface */
-  --ds-color-focus: var(--primitive-accent-700);
-
-  /* status roles — fg pairs >= 4.5:1 on their washes and surfaces */
   --ds-color-success: var(--primitive-green-700);
   --ds-color-success-wash: var(--primitive-green-wash-light);
+  --ds-color-success-fill: var(--primitive-green-500);
   --ds-color-warning: var(--primitive-amber-700);
   --ds-color-warning-wash: var(--primitive-amber-wash-light);
+  --ds-color-warning-fill: var(--primitive-amber-500);
   --ds-color-danger: var(--primitive-red-700);
   --ds-color-danger-wash: var(--primitive-red-wash-light);
+  --ds-color-info: var(--primitive-blue-600);
+  --ds-color-info-wash: var(--primitive-blue-wash-light);
 
-  /* informational role reuses the one accent family — no second blue */
-  --ds-color-info: var(--primitive-accent-600);
-  --ds-color-info-wash: var(--primitive-accent-wash-light);
-
-  /* neutral hover wash */
-  --ds-color-wash: var(--primitive-paper-100);
+  --ds-color-wash: #EFF1F5;
   --ds-color-skeleton: var(--primitive-skeleton-light);
 
-  /* code / data wells */
-  --ds-color-well-bg: var(--primitive-paper-100);
-  --ds-color-well-fg: var(--primitive-text-light-high);
+  --ds-color-well-bg: #F1F5F9;
+  --ds-color-well-fg: #1E293B;
 
-  /* graph node fills — at most TWO primitive families: accent + slate.
-     Kind is carried by SHAPE and border in the markup, not by hue. */
-  --ds-color-graph-project: var(--primitive-accent-600);
-  --ds-color-graph-repository: var(--primitive-accent-600);
-  --ds-color-graph-concept: var(--primitive-slate-500);
-  --ds-color-graph-function: var(--primitive-slate-500);
-  --ds-color-graph-class: var(--primitive-slate-600);
-  --ds-color-graph-module: var(--primitive-slate-600);
-  --ds-color-graph-file: var(--primitive-slate-400);
-  --ds-color-graph-default: var(--primitive-slate-500);
-  --ds-color-graph-link: var(--primitive-slate-500);
+  /* graph data fills — exactly two data families: blue + orange (DNA move 10) */
+  --ds-color-graph-project: var(--primitive-blue-600);
+  --ds-color-graph-repository: var(--primitive-blue-600);
+  --ds-color-graph-concept: var(--primitive-orange-600);
+  --ds-color-graph-function: var(--primitive-blue-500);
+  --ds-color-graph-class: var(--primitive-orange-600);
+  --ds-color-graph-module: var(--primitive-blue-500);
+  --ds-color-graph-file: var(--primitive-orange-500);
+  --ds-color-graph-default: var(--primitive-blue-500);
+  --ds-color-graph-link: var(--primitive-blue-200);
 
-  /* spacing (rem grid) */
   --ds-space-1: var(--primitive-space-1);
   --ds-space-2: var(--primitive-space-2);
   --ds-space-3: var(--primitive-space-3);
@@ -239,13 +88,20 @@
   --ds-space-7: var(--primitive-space-7);
   --ds-space-8: var(--primitive-space-8);
 
-  /* type */
   --ds-text-sm: var(--primitive-size-sm);
   --ds-text-base: var(--primitive-size-base);
   --ds-text-lg: var(--primitive-size-lg);
   --ds-text-xl: var(--primitive-size-xl);
   --ds-text-2xl: var(--primitive-size-2xl);
   --ds-text-3xl: var(--primitive-size-3xl);
+  --ds-font-size-sm: var(--primitive-size-sm);
+  --ds-font-size-base: var(--primitive-size-base);
+  --ds-font-size-lg: var(--primitive-size-lg);
+  --ds-font-size-xl: var(--primitive-size-xl);
+  --ds-font-size-2xl: var(--primitive-size-2xl);
+  --ds-font-size-3xl: var(--primitive-size-3xl);
+  --ds-font-family-sans: var(--primitive-font-sans);
+  --ds-font-family-mono: var(--primitive-font-mono);
   --ds-font-regular: var(--primitive-weight-regular);
   --ds-font-medium: var(--primitive-weight-medium);
   --ds-font-semibold: var(--primitive-weight-semibold);
@@ -257,139 +113,211 @@
   --ds-font-sans: var(--primitive-font-sans);
   --ds-font-mono: var(--primitive-font-mono);
 
-  /* radius — quiet, two steps */
   --ds-radius-sm: var(--primitive-radius-sm);
   --ds-radius-md: var(--primitive-radius-md);
+  --ds-radius-lg: var(--primitive-radius-lg);
 
-  /* elevation */
   --ds-shadow-sm: var(--primitive-shadow-sm-light);
   --ds-shadow-md: var(--primitive-shadow-md-light);
+  --ds-shadow-lg: var(--primitive-shadow-lg-light);
+  --ds-shadow-lift: var(--primitive-shadow-lift-light);
 
-  /* z-index */
   --ds-z-base: var(--primitive-z-base);
   --ds-z-raised: var(--primitive-z-raised);
   --ds-z-sticky: var(--primitive-z-sticky);
   --ds-z-overlay: var(--primitive-z-overlay);
 
-  /* motion (durations for background shifts only — no keyframes exist) */
   --ds-duration-quick: var(--primitive-duration-quick);
   --ds-duration-moderate: var(--primitive-duration-moderate);
   --ds-ease-standard: var(--primitive-ease-standard);
 
-  /* layout */
   --ds-sidebar-width: var(--primitive-sidebar-width);
   --ds-measure: var(--primitive-measure);
 }
 
-@media (prefers-color-scheme: dark) {
-  /* Fallback for a frame that lost its data-theme attribute.
-     KEEP IN SYNC with [data-theme="dark"] below — token-architecture:
-     the media query and the explicit toggle are both maintained. */
-  :root:not([data-theme]) {
-    --ds-color-surface: var(--primitive-ink-900);
-    --ds-color-surface-raised: var(--primitive-ink-850);
-    --ds-color-surface-overlay: var(--primitive-ink-800);
-    --ds-color-surface-sunken: var(--primitive-ink-950);
-    --ds-color-surface-inverse: var(--primitive-paper-0);
-    --ds-color-on-surface: var(--primitive-text-dark-high);
-    --ds-color-on-surface-muted: var(--primitive-text-dark-mid);
-    --ds-color-on-surface-faint: var(--primitive-text-dark-faint);
-    --ds-color-on-surface-inverse: var(--primitive-text-light-high);
-    --ds-color-on-surface-inverse-muted: var(--primitive-text-light-mid);
-    --ds-color-outline: var(--primitive-ink-700);
-    --ds-color-outline-faint: var(--primitive-ink-700);
-    --ds-color-outline-strong: var(--primitive-ink-600);
-    --ds-color-outline-inverse: var(--primitive-ink-300);
-    --ds-color-primary: var(--primitive-accent-300);
-    --ds-color-primary-hover: var(--primitive-accent-400);
-    --ds-color-primary-strong: var(--primitive-accent-300);
-    --ds-color-on-primary: var(--primitive-ink-950);
-    --ds-color-primary-wash: var(--primitive-accent-wash-dark);
-    --ds-color-primary-wash-raised: var(--primitive-accent-wash-raised-dark);
-    --ds-color-focus: var(--primitive-accent-300);
-    --ds-color-success: var(--primitive-green-400);
-    --ds-color-success-wash: var(--primitive-green-wash-dark);
-    --ds-color-warning: var(--primitive-amber-400);
-    --ds-color-warning-wash: var(--primitive-amber-wash-dark);
-    --ds-color-danger: var(--primitive-red-400);
-    --ds-color-danger-wash: var(--primitive-red-wash-dark);
-    --ds-color-info: var(--primitive-accent-300);
-    --ds-color-info-wash: var(--primitive-accent-wash-dark);
-    --ds-color-wash: var(--primitive-wash-dark);
-    --ds-color-skeleton: var(--primitive-skeleton-dark);
-    --ds-color-well-bg: var(--primitive-ink-950);
-    --ds-color-well-fg: var(--primitive-text-dark-high);
-    --ds-color-graph-project: var(--primitive-accent-300);
-    --ds-color-graph-repository: var(--primitive-accent-300);
-    --ds-color-graph-concept: var(--primitive-slate-400);
-    --ds-color-graph-function: var(--primitive-slate-400);
-    --ds-color-graph-class: var(--primitive-slate-400);
-    --ds-color-graph-module: var(--primitive-slate-400);
-    --ds-color-graph-file: var(--primitive-slate-400);
-    --ds-color-graph-default: var(--primitive-slate-400);
-    --ds-color-graph-link: var(--primitive-slate-400);
-    --ds-shadow-sm: var(--primitive-shadow-sm-dark);
-    --ds-shadow-md: var(--primitive-shadow-md-dark);
-  }
-}
-
 [data-theme="dark"] {
-  --ds-color-surface: var(--primitive-ink-900);
-  --ds-color-surface-raised: var(--primitive-ink-850);
-  --ds-color-surface-overlay: var(--primitive-ink-800);
-  --ds-color-surface-sunken: var(--primitive-ink-950);
-  --ds-color-surface-inverse: var(--primitive-paper-0);
-  --ds-color-on-surface: var(--primitive-text-dark-high);
-  --ds-color-on-surface-muted: var(--primitive-text-dark-mid);
-  --ds-color-on-surface-faint: var(--primitive-text-dark-faint);
-  --ds-color-on-surface-inverse: var(--primitive-text-light-high);
-  --ds-color-on-surface-inverse-muted: var(--primitive-text-light-mid);
-  --ds-color-outline: var(--primitive-ink-700);
-  --ds-color-outline-faint: var(--primitive-ink-700);
-  --ds-color-outline-strong: var(--primitive-ink-600);
-  --ds-color-outline-inverse: var(--primitive-ink-300);
-  --ds-color-primary: var(--primitive-accent-300);
-  --ds-color-primary-hover: var(--primitive-accent-400);
-  --ds-color-primary-strong: var(--primitive-accent-300);
-  --ds-color-on-primary: var(--primitive-ink-950);
-  --ds-color-primary-wash: var(--primitive-accent-wash-dark);
-  --ds-color-primary-wash-raised: var(--primitive-accent-wash-raised-dark);
-  --ds-color-focus: var(--primitive-accent-300);
+  --ds-color-surface: #0F172A;
+  --ds-color-surface-raised: #162032;
+  --ds-color-surface-overlay: #1C2740;
+  --ds-color-surface-sunken: #0B1120;
+  --ds-color-surface-inverse: #FFFFFF;
+  --ds-color-on-surface: #E2E8F0;
+  --ds-color-on-surface-muted: #94A3B8;
+  --ds-color-on-surface-faint: #8494AC;
+  --ds-color-on-surface-inverse: #1E293B;
+  --ds-color-on-surface-inverse-muted: #475569;
+  --ds-color-outline: #2A3850;
+  --ds-color-outline-faint: #243044;
+  --ds-color-outline-strong: #8494AC;
+  --ds-color-outline-inverse: #E2E8F0;
+  --ds-color-primary: var(--primitive-blue-300);
+  --ds-color-primary-hover: var(--primitive-blue-200);
+  --ds-color-primary-strong: var(--primitive-blue-300);
+  --ds-color-on-primary: #0B1120;
+  --ds-color-primary-wash: var(--primitive-blue-wash-dark);
+  --ds-color-primary-wash-raised: var(--primitive-blue-wash-raised-dark);
+  --ds-color-focus: var(--primitive-blue-300);
   --ds-color-success: var(--primitive-green-400);
   --ds-color-success-wash: var(--primitive-green-wash-dark);
+  --ds-color-success-fill: var(--primitive-green-500);
   --ds-color-warning: var(--primitive-amber-400);
   --ds-color-warning-wash: var(--primitive-amber-wash-dark);
+  --ds-color-warning-fill: var(--primitive-amber-500);
   --ds-color-danger: var(--primitive-red-400);
   --ds-color-danger-wash: var(--primitive-red-wash-dark);
-  --ds-color-info: var(--primitive-accent-300);
-  --ds-color-info-wash: var(--primitive-accent-wash-dark);
+  --ds-color-info: var(--primitive-blue-300);
+  --ds-color-info-wash: var(--primitive-blue-wash-dark);
   --ds-color-wash: var(--primitive-wash-dark);
   --ds-color-skeleton: var(--primitive-skeleton-dark);
-  --ds-color-well-bg: var(--primitive-ink-950);
-  --ds-color-well-fg: var(--primitive-text-dark-high);
-  --ds-color-graph-project: var(--primitive-accent-300);
-  --ds-color-graph-repository: var(--primitive-accent-300);
-  --ds-color-graph-concept: var(--primitive-slate-400);
-  --ds-color-graph-function: var(--primitive-slate-400);
-  --ds-color-graph-class: var(--primitive-slate-400);
-  --ds-color-graph-module: var(--primitive-slate-400);
-  --ds-color-graph-file: var(--primitive-slate-400);
-  --ds-color-graph-default: var(--primitive-slate-400);
-  --ds-color-graph-link: var(--primitive-slate-400);
+  --ds-color-well-bg: #0B1120;
+  --ds-color-well-fg: #E2E8F0;
+  --ds-color-graph-project: var(--primitive-blue-300);
+  --ds-color-graph-repository: var(--primitive-blue-300);
+  --ds-color-graph-concept: var(--primitive-orange-400);
+  --ds-color-graph-function: var(--primitive-blue-500);
+  --ds-color-graph-class: var(--primitive-orange-400);
+  --ds-color-graph-module: var(--primitive-blue-500);
+  --ds-color-graph-file: var(--primitive-orange-500);
+  --ds-color-graph-default: var(--primitive-blue-500);
+  --ds-color-graph-link: var(--primitive-blue-500);
   --ds-shadow-sm: var(--primitive-shadow-sm-dark);
   --ds-shadow-md: var(--primitive-shadow-md-dark);
+  --ds-shadow-lg: var(--primitive-shadow-lg-dark);
+  --ds-shadow-lift: var(--primitive-shadow-lift-dark);
+}
+
+/* tier: primitive — raw values, defined once; referenced only by the semantic tier */
+:root {
+  /* blue accent family — the charter primary #2563EB at grade 600 */
+  --primitive-blue-200: #BFDBFE;
+  --primitive-blue-300: #93C5FD;
+  --primitive-blue-500: #3B82F6;
+  --primitive-blue-600: #2563EB;
+  --primitive-blue-700: #1D4ED8;
+  --primitive-blue-wash-light: #EFF6FF;
+  --primitive-blue-wash-raised-light: #DBEAFE;
+  --primitive-blue-wash-dark: rgba(37, 99, 235, 0.25);
+  --primitive-blue-wash-raised-dark: rgba(37, 99, 235, 0.35);
+
+  /* orange data family (graph fills; non-text carries via stroke) */
+  --primitive-orange-400: #FB923C;
+  --primitive-orange-500: #F97316;
+  --primitive-orange-600: #EA580C;
+
+  /* success-green indicator family (#10B981 charter); grade 700 is the
+     light-theme text grade, 400 the dark text grade, 500 the fill */
+  --primitive-green-400: #34D399;
+  --primitive-green-500: #10B981;
+  --primitive-green-700: #166B37;
+  --primitive-green-wash-light: #E6F5EB;
+  --primitive-green-wash-dark: rgba(16, 185, 129, 0.15);
+
+  --primitive-amber-400: #FBBF24;
+  --primitive-amber-500: #F59E0B;
+  --primitive-amber-700: #A24B08;
+  --primitive-amber-wash-light: #FDF3E3;
+  --primitive-amber-wash-dark: rgba(245, 158, 11, 0.15);
+
+  --primitive-red-400: #F87171;
+  --primitive-red-500: #EF4444;
+  --primitive-red-700: #B91C1C;
+  --primitive-red-wash-light: #FDE8E8;
+  --primitive-red-wash-dark: rgba(239, 68, 68, 0.15);
+
+  --primitive-wash-dark: rgba(148, 163, 184, 0.08);
+  --primitive-skeleton-light: rgba(30, 41, 59, 0.07);
+  --primitive-skeleton-dark: rgba(226, 232, 240, 0.08);
+
+  /* spacing — 4px grid, rem values */
+  --primitive-space-1: 0.25rem;
+  --primitive-space-2: 0.5rem;
+  --primitive-space-3: 0.75rem;
+  --primitive-space-4: 1rem;
+  --primitive-space-5: 1.5rem;
+  --primitive-space-6: 2rem;
+  --primitive-space-7: 3rem;
+  --primitive-space-8: 4rem;
+
+  --primitive-hairline: 2px;
+
+  /* type scale */
+  --primitive-size-sm: 0.75rem;
+  --primitive-size-base: 0.875rem;
+  --primitive-size-lg: 1rem;
+  --primitive-size-xl: 1.125rem;
+  --primitive-size-2xl: 1.25rem;
+  --primitive-size-3xl: 1.5rem;
+  --primitive-size-4xl: 1.875rem;
+
+  --primitive-weight-regular: 400;
+  --primitive-weight-medium: 500;
+  --primitive-weight-semibold: 600;
+  --primitive-weight-bold: 700;
+
+  --primitive-leading-tight: 1.25;
+  --primitive-leading-normal: 1.5;
+  --primitive-leading-loose: 1.75;
+  --primitive-tracking-micro: 0.08em;
+
+  --primitive-font-sans: system-ui, -apple-system, "Segoe UI", Roboto,
+    "Helvetica Neue", Arial, "Inter", sans-serif;
+  --primitive-font-mono: ui-monospace, "SF Mono", "Cascadia Code",
+    "JetBrains Mono", Menlo, Consolas, monospace;
+
+  /* radius — the DNA 6-12px band */
+  --primitive-radius-sm: 6px;
+  --primitive-radius-md: 8px;
+  --primitive-radius-lg: 12px;
+
+  /* subtle shadow scale (charter: cards with subtle shadows) */
+  --primitive-shadow-sm-light: 0 1px 2px rgba(15, 23, 42, 0.05);
+  --primitive-shadow-md-light: 0 1px 3px rgba(15, 23, 42, 0.08), 0 1px 2px rgba(15, 23, 42, 0.04);
+  --primitive-shadow-lg-light: 0 4px 12px rgba(15, 23, 42, 0.10);
+  --primitive-shadow-lift-light: 0 6px 16px rgba(37, 99, 235, 0.12);
+  --primitive-shadow-sm-dark: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --primitive-shadow-md-dark: 0 2px 6px rgba(0, 0, 0, 0.45);
+  --primitive-shadow-lg-dark: 0 4px 12px rgba(0, 0, 0, 0.5);
+  --primitive-shadow-lift-dark: 0 6px 16px rgba(0, 0, 0, 0.55);
+
+  --primitive-z-base: 0;
+  --primitive-z-raised: 10;
+  --primitive-z-sticky: 100;
+  --primitive-z-overlay: 200;
+
+  --primitive-duration-quick: 120ms;
+  --primitive-duration-moderate: 200ms;
+  --primitive-ease-standard: cubic-bezier(0.4, 0, 0.2, 1);
+
+  --primitive-bp-md: 48rem;
+  --primitive-bp-lg: 64rem;
+
+  --primitive-sidebar-width: 14rem;
+  --primitive-measure: 72rem;
 }
 
 /* tier: component — component-scoped anatomy tokens; reference semantics only */
-.wf-btn {
-  --wf-btn-bg: var(--ds-color-surface-raised);
-  --wf-btn-bg-hover: var(--ds-color-surface-overlay);
-  --wf-btn-fg: var(--ds-color-on-surface);
-  --wf-btn-border: var(--ds-color-outline);
-  --wf-btn-radius: var(--ds-radius-sm);
-  --wf-btn-padding-x: var(--ds-space-3);
-  --wf-btn-padding-y: var(--ds-space-1);
-  --wf-btn-min-target: var(--ds-space-6);
+.wf-card {
+  --wf-card-bg: var(--ds-color-surface-raised);
+  --wf-card-border: var(--ds-color-outline);
+  --wf-card-radius: var(--ds-radius-md);
+  --wf-card-shadow: var(--ds-shadow-md);
+  --wf-card-shadow-hover: var(--ds-shadow-lg);
+  --wf-card-padding: var(--ds-space-4);
+}
+
+.wf-tab {
+  --wf-tab-fg: var(--ds-color-on-surface-muted);
+  --wf-tab-fg-active: var(--ds-color-primary);
+  --wf-tab-indicator: var(--ds-color-primary);
+  --wf-tab-min-target: var(--ds-space-6);
+}
+
+.wf-search {
+  --wf-search-bg: var(--ds-color-wash);
+  --wf-search-border: var(--ds-color-outline);
+  --wf-search-fg: var(--ds-color-on-surface-muted);
+  --wf-search-radius: var(--ds-radius-md);
+  --wf-search-icon: var(--ds-color-on-surface-faint);
 }
 
 .wf-sidebar {
@@ -405,21 +333,22 @@
 .wf-kpi {
   --wf-kpi-bg: var(--ds-color-surface-raised);
   --wf-kpi-border: var(--ds-color-outline);
-  --wf-kpi-radius: var(--ds-radius-sm);
-  --wf-kpi-padding: var(--ds-space-3);
+  --wf-kpi-radius: var(--ds-radius-md);
+  --wf-kpi-shadow: var(--ds-shadow-sm);
+  --wf-kpi-padding: var(--ds-space-4);
   --wf-kpi-label-size: var(--ds-text-sm);
-  --wf-kpi-label-color: var(--ds-color-on-surface-faint);
-  --wf-kpi-value-size: var(--ds-text-2xl);
+  --wf-kpi-label-color: var(--ds-color-on-surface-muted);
+  --wf-kpi-value-size: var(--ds-text-3xl);
   --wf-kpi-value-weight: var(--ds-font-bold);
   --wf-kpi-value-color: var(--ds-color-on-surface);
 }
 
 .wf-table {
   --wf-table-border: var(--ds-color-outline);
-  --wf-table-header-bg: var(--ds-color-surface-sunken);
-  --wf-table-header-fg: var(--ds-color-on-surface-faint);
+  --wf-table-header-bg: var(--ds-color-surface-overlay);
+  --wf-table-header-fg: var(--ds-color-on-surface-muted);
   --wf-table-cell-padding-x: var(--ds-space-2);
-  --wf-table-cell-padding-y: var(--ds-space-1);
+  --wf-table-cell-padding-y: var(--ds-space-2);
   --wf-table-row-border: var(--ds-color-outline-faint);
   --wf-table-row-bg-hover: var(--ds-color-wash);
 }
@@ -428,51 +357,50 @@
   --wf-micro-label-size: var(--ds-text-sm);
   --wf-micro-label-weight: var(--ds-font-semibold);
   --wf-micro-label-tracking: var(--ds-tracking-micro);
-  --wf-micro-label-color: var(--ds-color-on-surface-faint);
+  --wf-micro-label-color: var(--ds-color-on-surface-muted);
 }
 
 .wf-badge {
   --wf-badge-fg: var(--ds-color-on-surface-muted);
-  --wf-badge-border: var(--ds-color-outline-strong);
+  --wf-badge-bg: var(--ds-color-surface-overlay);
+  --wf-badge-border: var(--ds-color-outline);
+  --wf-badge-dot: var(--ds-color-on-surface-faint);
   --wf-badge-radius: var(--ds-radius-sm);
 }
 
-.wf-badge--future {
-  --wf-badge-fg: var(--ds-color-warning);
-  --wf-badge-border: var(--ds-color-warning);
-}
+.wf-badge--v1 { --wf-badge-fg: var(--ds-color-success); --wf-badge-bg: var(--ds-color-success-wash); --wf-badge-border: var(--ds-color-success-wash); --wf-badge-dot: var(--ds-color-success-fill); }
+.wf-badge--future { --wf-badge-fg: var(--ds-color-warning); --wf-badge-bg: var(--ds-color-warning-wash); --wf-badge-border: var(--ds-color-warning-wash); --wf-badge-dot: var(--ds-color-warning-fill); }
+.wf-badge--ready { --wf-badge-fg: var(--ds-color-success); --wf-badge-bg: var(--ds-color-success-wash); --wf-badge-border: var(--ds-color-success-wash); --wf-badge-dot: var(--ds-color-success-fill); }
+.wf-badge--info { --wf-badge-fg: var(--ds-color-info); --wf-badge-bg: var(--ds-color-info-wash); --wf-badge-border: var(--ds-color-info-wash); --wf-badge-dot: var(--ds-color-primary); }
+.wf-badge--warning { --wf-badge-fg: var(--ds-color-warning); --wf-badge-bg: var(--ds-color-warning-wash); --wf-badge-border: var(--ds-color-warning-wash); --wf-badge-dot: var(--ds-color-warning-fill); }
+.wf-badge--danger { --wf-badge-fg: var(--ds-color-danger); --wf-badge-bg: var(--ds-color-danger-wash); --wf-badge-border: var(--ds-color-danger-wash); --wf-badge-dot: var(--ds-color-danger); }
 
-.wf-badge--v1 {
-  --wf-badge-fg: var(--ds-color-success);
-  --wf-badge-border: var(--ds-color-success);
+.wf-btn {
+  --wf-btn-bg: var(--ds-color-surface-raised);
+  --wf-btn-bg-hover: var(--ds-color-wash);
+  --wf-btn-fg: var(--ds-color-on-surface);
+  --wf-btn-border: var(--ds-color-outline);
+  --wf-btn-radius: var(--ds-radius-md);
+  --wf-btn-padding-x: var(--ds-space-3);
+  --wf-btn-padding-y: var(--ds-space-1);
+  --wf-btn-min-target: var(--ds-space-6);
 }
 
 .wf-state-card {
   --wf-state-accent: var(--ds-color-warning);
   --wf-state-accent-fg: var(--ds-color-warning);
-  --wf-state-radius: var(--ds-radius-sm);
-  --wf-state-padding: var(--ds-space-3);
+  --wf-state-radius: var(--ds-radius-md);
+  --wf-state-padding: var(--ds-space-4);
 }
 
-.wf-state-card--ok {
-  --wf-state-accent: var(--ds-color-success);
-  --wf-state-accent-fg: var(--ds-color-success);
-}
-
-.wf-state-card--info {
-  --wf-state-accent: var(--ds-color-info);
-  --wf-state-accent-fg: var(--ds-color-info);
-}
-
-.wf-state-card--danger {
-  --wf-state-accent: var(--ds-color-danger);
-  --wf-state-accent-fg: var(--ds-color-danger);
-}
+.wf-state-card--ok { --wf-state-accent: var(--ds-color-success); --wf-state-accent-fg: var(--ds-color-success); }
+.wf-state-card--info { --wf-state-accent: var(--ds-color-info); --wf-state-accent-fg: var(--ds-color-info); }
+.wf-state-card--danger { --wf-state-accent: var(--ds-color-danger); --wf-state-accent-fg: var(--ds-color-danger); }
 
 .wf-panel {
   --wf-panel-bg: var(--ds-color-surface-raised);
   --wf-panel-border: var(--ds-color-outline);
-  --wf-panel-radius: var(--ds-radius-md);
+  --wf-panel-radius: var(--ds-radius-lg);
   --wf-panel-padding: var(--ds-space-3);
 }
 
@@ -494,7 +422,23 @@
   --wf-term-border: var(--ds-color-outline);
   --wf-term-fg: var(--ds-color-on-surface-muted);
   --wf-term-accent: var(--ds-color-warning);
-  --wf-term-radius: var(--ds-radius-sm);
+  --wf-term-radius: var(--ds-radius-md);
+}
+
+.wf-graph {
+  --wf-graph-bg: var(--ds-color-surface-raised);
+  --wf-graph-border: var(--ds-color-outline);
+  --wf-graph-radius: var(--ds-radius-lg);
+  --wf-graph-node-stroke: var(--ds-color-surface-raised);
+}
+
+.wf-graph-grid {
+  --wf-grid-line: var(--primitive-graph-line-light);
+  --wf-grid-size: var(--ds-space-8);
+}
+
+[data-theme="dark"] .wf-graph-grid {
+  --wf-grid-line: var(--primitive-graph-line-dark);
 }
 
 .wf-node--project { --wf-node-fill: var(--ds-color-graph-project); }
@@ -505,15 +449,6 @@
 .wf-node--module { --wf-node-fill: var(--ds-color-graph-module); }
 .wf-node--file { --wf-node-fill: var(--ds-color-graph-file); }
 .wf-node { --wf-node-fill: var(--ds-color-graph-default); }
-
-.wf-graph {
-  --wf-graph-bg: var(--ds-color-surface-sunken);
-  --wf-graph-border: var(--ds-color-outline);
-  --wf-graph-link: var(--ds-color-graph-link);
-  --wf-graph-label: var(--ds-color-on-surface-muted);
-  --wf-graph-radius: var(--ds-radius-sm);
-  --wf-graph-node-stroke: var(--ds-color-surface-sunken);
-}
 
 .wf-meter {
   --wf-meter-track-bg: var(--ds-color-wash);

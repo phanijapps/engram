@@ -42,6 +42,22 @@ describe("job012 partition graph derivation (STEP-010)", () => {
     }
   });
 
+  it("partition-graph: the interactive canvas is genuinely wired (FIND-ui-001)", async () => {
+    // Structural: the view imports react-force-graph-2d (dynamic, browser-only)
+    // and its captions are honest — no false capability claim, and a fallback
+    // caption naming the summary view. The shipped-bundle proof (vite build
+    // emits the react-force-graph-2d chunk) is recorded in the GATE-007 r2
+    // evidence log — dist/ is gitignored, so asserting it here would fail on
+    // a fresh checkout.
+    const source = await import("node:fs").then((fs) =>
+      fs.readFileSync("src/views/PartitionGraph.tsx", "utf8")
+    );
+    expect(source).toContain('import("react-force-graph-2d")');
+    expect(source).toContain("interactive force-graph");
+    expect(source).toContain("canvas unavailable — summary view");
+    expect(source).not.toContain("canvas loads in the browser build");
+  });
+
   it("partition-graph: empty partition renders the named empty state", () => {
     const markup = renderToStaticMarkup(<PartitionGraphView scope={PARTITION} />);
     expect(markup).toContain("loading partition graph");

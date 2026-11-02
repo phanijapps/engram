@@ -1,3 +1,1 @@
-# Feature: admin console for maintaining workspaces (owner ask, verbatim)
-
 Analyze the datamodel/ddl of Engram. Beacuse I want an admin console for maintaining workspaces. This will be like https://github.com/TencentCloud/TencentDB-Agent-Memory/ . Check screenshots for visual reference. https://github.com/TencentCloud/TencentDB-Agent-Memory/tree/feat/server_team/assets/images has different images for reference. Analyze and use some debates using gpt models as well and frame my problem

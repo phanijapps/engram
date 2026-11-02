@@ -17,7 +17,15 @@ import { createConsoleServer } from "./app.mjs";
 const here = dirname(fileURLToPath(import.meta.url));
 
 function parseArgs(argv) {
-  const flags = { storage: null, backend: "sqlite", port: 8788, open: false, pg: null };
+  const flags = {
+    storage: null,
+    backend: "sqlite",
+    port: 8788,
+    open: false,
+    pg: null,
+    layout: "single",
+    dbFile: "engram_data.db"
+  };
   for (let i = 0; i < argv.length; i += 1) {
     const arg = argv[i];
     const next = argv[i + 1];
@@ -33,12 +41,19 @@ function parseArgs(argv) {
     } else if (arg === "--pg-connection-string") {
       flags.pg = next;
       i += 1;
+    } else if (arg === "--layout") {
+      flags.layout = next;
+      i += 1;
+    } else if (arg === "--db-file") {
+      flags.dbFile = next;
+      i += 1;
     } else if (arg === "--open") {
       flags.open = true;
     } else {
       console.error(`engram-console: unknown flag ${arg}`);
       console.error(
         "usage: engram-console [--storage <path>] [--backend sqlite|pgvector] [--port N] " +
+          "[--layout single|multi] [--db-file NAME] " +
           "[--pg-connection-string URL | ENGRAM_PG_CONNECTION_STRING] [--open]"
       );
       process.exit(2);
@@ -46,6 +61,10 @@ function parseArgs(argv) {
   }
   if (flags.backend !== "sqlite" && flags.backend !== "pgvector") {
     console.error(`engram-console: unknown backend '${flags.backend}' (sqlite | pgvector)`);
+    process.exit(2);
+  }
+  if (flags.layout !== "single" && flags.layout !== "multi") {
+    console.error(`engram-console: unknown layout '${flags.layout}' (single | multi)`);
     process.exit(2);
   }
   if (flags.backend === "pgvector" && !flags.pg && !process.env.ENGRAM_PG_CONNECTION_STRING) {
@@ -61,6 +80,14 @@ function parseArgs(argv) {
 function providerConfig(flags, storage) {
   const base = {
     storage_path: storage,
+    // Mirror the engram-mcp vocabulary: single layout + db-file default open
+    // the same one-file store the CLI opens (e.g. engram_data.db); the engine
+    // provider's own default is multi-file, which would open empty per-domain
+    // databases beside a single-file store.
+    sqlite_storage_layout:
+      flags.layout === "single"
+        ? { kind: "single_file", file_name: flags.dbFile }
+        : { kind: "multi_file_directory" },
     trusted_root: join(storage, ".."),
     scope_policy: "Strict",
     embedding_provider: {

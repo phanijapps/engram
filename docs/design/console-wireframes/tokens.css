@@ -171,8 +171,8 @@
   --ds-color-outline-inverse: var(--primitive-ink-700);
 
   /* accent */
-  --ds-color-primary: var(--primitive-indigo-500);
-  --ds-color-primary-hover: var(--primitive-indigo-700);
+  --ds-color-primary: var(--primitive-indigo-700);
+  --ds-color-primary-hover: var(--primitive-indigo-900);
   --ds-color-primary-strong: var(--primitive-indigo-700);
   --ds-color-on-primary: var(--primitive-paper-0);
   --ds-color-primary-wash: var(--primitive-indigo-wash-light);

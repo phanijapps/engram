@@ -128,6 +128,32 @@ describe("job012 partition isolation (STEP-009)", () => {
     expect(offsets).toEqual([0, 2]);
   });
 
+  it("isolation: non-ASCII partitions are openable — client and server keys are byte-identical (FIND-code-001)", async () => {
+    // The client encoder is the TS twin of the server's; import it for parity.
+    const { partitionKey: clientKey } = await import("../src/api");
+    const unicodePartition = {
+      tenant: "日本",
+      subject: "агент-1",
+      workspace: "プロジェクト",
+      session: null,
+      environment: "prod"
+    };
+    const key = clientKey(unicodePartition as never);
+    expect(key).toMatch(/^[A-Za-z0-9_-]+$/);
+
+    const provider = recordingProvider();
+    const base = await start(provider);
+    const response = await fetch(`${base}/api/partitions/${key}/memories?limit=10&offset=0`);
+    expect(response.status).toBe(200);
+    const body = await response.json();
+    expect(body.items).toEqual([]);
+    // The server decoded the exact tuple the client encoded.
+    expect(provider.requests[0].partition).toEqual(unicodePartition);
+    // And the server-side encoder produces the identical string.
+    const { partitionKey: serverKey } = await import("../server/app.mjs");
+    expect(serverKey(unicodePartition)).toBe(key);
+  });
+
   it("isolation: malformed partition keys are rejected as bad requests", async () => {
     const base = await start(recordingProvider());
     const response = await fetch(`${base}/api/partitions/not-a-key/memories`);

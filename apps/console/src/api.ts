@@ -34,9 +34,18 @@ export interface InventoryResponse {
   message?: string;
 }
 
-/** URL-safe key for one partition tuple (mirrors the server's encoding). */
+/**
+ * URL-safe key for one partition tuple — byte-identical to the server's
+ * Buffer.from(json, "utf8").toString("base64url") encoding. btoa() alone
+ * throws InvalidCharacterError for any scope value outside Latin-1 (review r1
+ * FIND-code-001), leaving listed non-ASCII partitions unopenable; encoding the
+ * UTF-8 bytes fixes that.
+ */
 export function partitionKey(scope: PartitionSummary["scope"]): string {
-  return btoa(JSON.stringify(scope)).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+  const bytes = new TextEncoder().encode(JSON.stringify(scope));
+  let binary = "";
+  for (const byte of bytes) binary += String.fromCharCode(byte);
+  return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
 }
 
 async function getJson<T>(path: string): Promise<T> {

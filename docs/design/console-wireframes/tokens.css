@@ -17,7 +17,7 @@
    explicit [data-theme] toggle.
 
    Eliminations still in force: no pastel purple-blue family, no pill
-   (9999px) geometry, no decorative gradients on chrome. Raw color literals
+   geometry, no decorative gradients on chrome. Raw color literals
    live ONLY in the primitive tier (CHK-001/CHK-015b); #2563EB appears
    exactly once (CHK-015). Contrast floors 4.5:1 asserted both themes by
    the derived resolver (CHK-012, evidence/build/wf4-chk-012.log).

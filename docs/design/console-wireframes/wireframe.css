@@ -949,7 +949,7 @@
   }
 
   .wf-graph-edge {
-    stroke: var(--wf-graph-link);
+    stroke: var(--ds-color-graph-link);
     fill: none;
   }
 

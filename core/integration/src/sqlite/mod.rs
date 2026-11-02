@@ -30,6 +30,7 @@ mod observability;
 mod provenance;
 mod recall;
 mod recall_lanes;
+mod scope_inventory;
 
 pub(crate) use bootstrap::bootstrap_sqlite;
 
@@ -39,6 +40,9 @@ pub(crate) use bootstrap::bootstrap_sqlite;
 // test-facing path. They are `pub` only within the crate's public surface; the
 // engine-neutral port traits they implement are the preferred handles.
 pub use batch::SqlBatchIngest;
+/// The adapter crate's scope-inventory reader; implements the engine-neutral
+/// [`crate::ScopeInventory`] port (trait impl in `scope_inventory`).
+pub use engram_store_sqlite::SqlScopeInventory;
 pub use export_import::SqlExportImport;
 pub use migration_service::SqlMigrationService;
 pub use observability::SqlObservability;

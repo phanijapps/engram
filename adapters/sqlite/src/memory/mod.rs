@@ -18,5 +18,6 @@ mod write;
 
 pub use dependencies::{AllowAllPolicyAuthorizer, SequentialIdGenerator, SystemClock};
 pub use engine::SqlMemoryService;
+pub use scope::{ScopeCountRow, SqlScopeInventory};
 pub use service::SqlMemoryStore;
 pub use temporal_retrieval::{TemporalMemorySource, TemporalRetrievalIndex};

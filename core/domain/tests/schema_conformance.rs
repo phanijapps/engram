@@ -6,7 +6,7 @@ use serde_json::{Value, json};
 
 fn schema() -> Value {
     let path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("../../contracts/v1/schemas/engram-v1.schema.json");
+        .join("../../docs/constitution/registry/contracts/v1/schemas/engram-v1.schema.json");
     serde_json::from_str(&fs::read_to_string(path).expect("read v1 schema"))
         .expect("parse v1 schema")
 }
@@ -29,7 +29,7 @@ fn assert_matches_definition(definition: &str, value: Value) {
 
 fn contract_example(path: &str) -> String {
     let path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("../../contracts/v1/examples")
+        .join("../../docs/constitution/registry/contracts/v1/examples")
         .join(path);
     fs::read_to_string(path).expect("read contract example")
 }

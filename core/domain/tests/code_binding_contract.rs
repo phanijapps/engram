@@ -223,7 +223,7 @@ mod task_002 {
     use std::{fs, path::PathBuf, process::Command};
     fn schema() -> serde_json::Value {
         let path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-            .join("../../contracts/v1/schemas/engram-v1.schema.json");
+            .join("../../docs/constitution/registry/contracts/v1/schemas/engram-v1.schema.json");
         serde_json::from_str(&fs::read_to_string(path).unwrap()).unwrap()
     }
     fn valid_values() -> Vec<(&'static str, serde_json::Value)> {
@@ -397,7 +397,10 @@ mod task_002 {
     #[test]
     fn breaking_compatibility_no_migration() {
         let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..");
-        let text = fs::read_to_string(root.join("contracts/v1/compatibility.md")).unwrap();
+        let text = fs::read_to_string(
+            root.join("docs/constitution/registry/contracts/v1/compatibility.md"),
+        )
+        .unwrap();
         assert!(text.contains("breaking behavior change"));
         assert!(text.contains("MUST NOT infer bindings"));
         assert!(!text.contains("contracts/v2/"));

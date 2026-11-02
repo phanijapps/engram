@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { fetchInventory, type InventoryResponse } from "./api";
 import { AliasHeader, InventoryView } from "./views/Inventory";
+import { PartitionView, type PartitionTuple } from "./views/Partition";
 
 /**
  * Console shell (job 012 STEP-007 scaffold): the org/project alias header
@@ -11,6 +12,7 @@ import { AliasHeader, InventoryView } from "./views/Inventory";
 export function App() {
   const [inventory, setInventory] = useState<InventoryResponse | null>(null);
   const [view, setView] = useState<"inventory" | "partition">("inventory");
+  const [selected, setSelected] = useState<PartitionTuple | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -44,9 +46,17 @@ export function App() {
       </nav>
       <main className="px-6 py-4">
         {view === "inventory" ? (
-          <InventoryView inventory={inventory} onSelect={() => setView("partition")} />
+          <InventoryView
+            inventory={inventory}
+            onSelect={(partition) => {
+              setSelected(partition.scope);
+              setView("partition");
+            }}
+          />
+        ) : selected ? (
+          <PartitionView scope={selected} onBack={() => setView("inventory")} />
         ) : (
-          <p className="text-slate-400">Partition view lands with STEP-009.</p>
+          <p className="text-slate-400">Select a partition from the inventory.</p>
         )}
       </main>
       <footer className="px-6 py-4 text-xs text-slate-500">

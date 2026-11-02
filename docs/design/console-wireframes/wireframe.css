@@ -1137,6 +1137,7 @@
   }
 
   .wf-meter-fill {
+    display: block;
     block-size: 100%;
     border-radius: var(--wf-meter-radius);
     background-color: var(--wf-meter-fill-bg);

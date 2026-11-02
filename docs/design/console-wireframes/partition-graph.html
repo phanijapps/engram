@@ -57,12 +57,12 @@
 
         <div class="wf-graph">
           <div class="wf-graph-caption">
-            <span>31 entities · 40 relationships · confined to this partition · drag to pan, scroll to zoom, hover for labels</span>
-            <span class="wf-badge">ready</span> <span>interactive force-graph</span>
+            <span>static excerpt — 14 of 31 entities · 15 of 40 relationships · confined to this partition</span>
+            <span class="wf-badge">static excerpt</span>
           </div>
 
           <svg class="wf-graph-canvas" viewBox="0 0 960 480" role="img" aria-labelledby="graph-svg-title graph-svg-desc">
-            <title id="graph-svg-title">Knowledge graph of the partition 可视化研究 / mem-alpha</title>
+            <title id="graph-svg-title">Static excerpt of the knowledge graph of the partition 可视化研究 / mem-alpha — 14 of 31 entities, 15 of 40 relationships</title>
             <desc id="graph-svg-desc">Static wireframe excerpt of the 14 most-connected entities. Node kind is carried by shape, not hue: project squares and repository circles take the accent; concept diamonds, function triangles, class hexagons, module squares and file circles stay slate. The mem-alpha project hub anchors console modules and files; the engine repository opens the store; the partition model scopes it; scope-inventory enumerates partitions; the binding concept binds the indexed repo to the project; degraded engine responses are classified by the console server.</desc>
 
             <g stroke-width="1.5">
@@ -140,7 +140,13 @@
           </ul>
         </div>
 
-        <p class="wf-note">Honesty contract, learned the hard way: the canvas caption always tells the truth about what is rendered — never a static list under an interactive caption. This wireframe is a static excerpt of the 14 most-connected entities; the shipped canvas loads react-force-graph-2d dynamically and renders all 31 with pan, zoom, and hover labels — and when the canvas cannot load, the bounded summary list renders under a caption that says exactly that.</p>
+        <p class="wf-note">What is displayed: the static excerpt above — the partition&rsquo;s 14 most-connected entities and 15 of its 40 relationships, kind carried by shape. The caption states exactly that; a static canvas is never dressed as an interactive one.</p>
+        <details class="wf-panel">
+          <summary>Shipped-canvas interaction contract <span class="wf-faint">the design target this excerpt stands in for — open to explore</span></summary>
+          <div class="wf-panel-body">
+            <p class="wf-record-text">In the shipped console, react-force-graph-2d loads dynamically and renders all 31 entities and 40 relationships of this partition: drag to pan, scroll to zoom, hover for labels. When the canvas cannot load, the bounded summary list renders under a caption that says exactly that — the honesty contract, learned the hard way in job 012: the caption always tells the truth about what is rendered.</p>
+          </div>
+        </details>
       </section>
       <section class="wf-section" aria-labelledby="states-graph">
         <h2 id="states-graph" class="wf-micro-label">State matrix — every named state, designed</h2>
@@ -155,8 +161,8 @@
             </article>
             <article class="wf-state-card wf-state-card--ok">
               <span class="wf-state-name">ready</span>
-              <p class="wf-state-headline">interactive force-graph — 31 entities · 40 relationships.</p>
-              <p class="wf-state-body">The canvas above is the ready state: pan, zoom, hover for labels. The caption always states exactly what is rendered.</p>
+              <p class="wf-state-headline">ready — interactive force-graph over 31 entities · 40 relationships.</p>
+              <p class="wf-state-body">In the shipped console this state replaces the static excerpt with the live canvas: pan, zoom, hover for labels. The caption always states exactly what is rendered.</p>
               
               <p class="wf-state-src">apps/console/src/views/PartitionGraph.tsx:83,145-159</p>
             </article>

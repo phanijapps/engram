@@ -10,6 +10,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createConsoleServer, classifyDegradedState } from "../server/app.mjs";
+import { createServer as createServerNode } from "node:net";
 import type { Server } from "node:http";
 
 const MAIN = fileURLToPath(new URL("../server/main.mjs", import.meta.url));
@@ -99,6 +100,23 @@ describe("job012 degraded states (STEP-012)", () => {
     const body = await (await fetch(`${base}/api/inventory`)).json();
     expect(body.state).toBe("backend-unreachable");
     expect(body.partitions).toEqual([]);
+  });
+
+  it("degraded: port-in-use startup failure is a named state with a distinct exit (FIND-ops-005)", async () => {
+    const blocker = await new Promise<import("node:net").Server>((resolve) => {
+      const srv = createServerNode();
+      srv.listen(0, "127.0.0.1", () => resolve(srv));
+    });
+    const { port } = blocker.address() as { port: number };
+    const result = spawnSync(
+      process.execPath,
+      [MAIN, "--storage", "/tmp", "--backend", "sqlite", "--port", String(port)],
+      { encoding: "utf8", timeout: 30_000 }
+    );
+    blocker.close();
+    expect(result.status).toBe(4);
+    expect(result.stderr).toContain("state: port-in-use");
+    expect(result.stderr).toContain("--port");
   });
 
   it("degraded: the classifier covers every documented state name", () => {

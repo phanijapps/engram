@@ -8,6 +8,7 @@ import {
 } from "../api";
 import { dimensionLabel } from "./Inventory";
 import { RecentAdditionsView } from "./RecentAdditions";
+import { PartitionGraphView } from "./PartitionGraph";
 
 /** Header for the selected partition: the exact tuple with "(unset)" labels. */
 export function PartitionHeader({ scope }: { scope: PartitionTuple }) {
@@ -169,6 +170,12 @@ export function PartitionView({
             </ul>
           )}
         </div>
+      </div>
+      <div className="mt-6">
+        <h3 className="mb-1 text-sm font-semibold uppercase tracking-wide text-slate-400">
+          knowledge graph (this partition)
+        </h3>
+        <PartitionGraphView scope={scope} />
       </div>
     </section>
   );

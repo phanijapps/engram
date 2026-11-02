@@ -174,10 +174,14 @@ export function createConsoleServer({ provider, backend, storage, uiDir }) {
         }
         if (view === "graph") {
           // The partition-confined graph view: entities + relationships of
-          // exactly this partition, joined client-side into nodes/links.
+          // exactly this partition, joined client-side into nodes/links. The
+          // page envelopes unwrap to plain arrays (bounded by the page limit).
           const entities = JSON.parse(api.partitionEntitiesJson(request));
           const relationships = JSON.parse(api.partitionRelationshipsJson(request));
-          return sendJson(res, 200, { entities, relationships });
+          return sendJson(res, 200, {
+            entities: entities.items ?? [],
+            relationships: relationships.items ?? []
+          });
         }
         return sendJson(res, 404, { state: "not-found", message: `unknown view: ${view}` });
       } catch (error) {

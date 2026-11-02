@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { fetchInventory, type InventoryResponse } from "./api";
-import { InventoryView } from "./views/Inventory";
+import { AliasHeader, InventoryView } from "./views/Inventory";
 
 /**
  * Console shell (job 012 STEP-007 scaffold): the org/project alias header
@@ -32,10 +32,7 @@ export function App() {
     <div className="min-h-screen bg-slate-950 text-slate-100">
       <header className="border-b border-slate-800 px-6 py-4">
         <h1 className="text-lg font-semibold tracking-tight">engram console</h1>
-        <p className="text-sm text-slate-400">
-          Read-only partition inventory — aliases: <code>--org</code> → tenant,{" "}
-          <code>--project</code> → workspace
-        </p>
+        <AliasHeader />
       </header>
       <nav className="flex gap-1 px-6 pt-4 text-sm">
         <button

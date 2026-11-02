@@ -5,6 +5,36 @@ export function dimensionLabel(value: string | null | undefined): string {
   return value === null || value === undefined || value === "" ? "(unset)" : value;
 }
 
+/** The org/project alias note (DEC-002): engine vocabulary with the owner's
+ * launch-flag aliases stated once, visibly, in the inventory header. */
+export function AliasHeader() {
+  return (
+    <p className="text-sm text-slate-400">
+      Engine vocabulary: partitions are distinct tenant/subject/workspace/session/environment
+      tuples. Launch aliases map <code>--org</code> → tenant and <code>--project</code> →
+      workspace.
+    </p>
+  );
+}
+
+/** The bounded summary line over the whole inventory (NFR-006): totals only,
+ * never a full record dump. */
+export function InventorySummary({
+  partitions
+}: {
+  partitions: PartitionSummary[];
+}) {
+  const memories = partitions.reduce((sum, row) => sum + row.memoryCount, 0);
+  const entities = partitions.reduce((sum, row) => sum + row.entityCount, 0);
+  const beliefs = partitions.reduce((sum, row) => sum + row.beliefCount, 0);
+  return (
+    <p className="mb-2 text-sm text-slate-400">
+      {partitions.length} partition{partitions.length === 1 ? "" : "s"} · {memories} memories ·{" "}
+      {entities} entities · {beliefs} beliefs
+    </p>
+  );
+}
+
 /** One inventory row: the partition tuple with counts (REQ-001). */
 export function PartitionRow({ partition }: { partition: PartitionSummary }) {
   const s = partition.scope;
@@ -58,10 +88,7 @@ export function InventoryView({
   }
   return (
     <section>
-      <p className="mb-2 text-sm text-slate-400">
-        {inventory.partitionCount} partition{inventory.partitions.length === 1 ? "" : "s"} present
-        in the data
-      </p>
+      <InventorySummary partitions={inventory.partitions} />
       <table className="w-full text-sm">
         <thead>
           <tr className="border-b border-slate-700 text-left text-xs uppercase tracking-wide text-slate-400">

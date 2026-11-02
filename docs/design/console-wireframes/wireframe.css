@@ -145,10 +145,20 @@
     .wf-sidebar-link,
     .wf-btn,
     .wf-theme-toggle,
-    .wf-table tbody tr {
+    .wf-table tbody tr,
+    .wf-card,
+    .wf-kpi,
+    .wf-gallery-card {
       transition:
         background-color var(--ds-duration-quick) var(--ds-ease-standard),
-        border-color var(--ds-duration-quick) var(--ds-ease-standard);
+        border-color var(--ds-duration-quick) var(--ds-ease-standard),
+        box-shadow var(--ds-duration-moderate) var(--ds-ease-standard),
+        transform var(--ds-duration-quick) var(--ds-ease-standard);
+    }
+
+    .wf-gallery-card:hover,
+    .wf-kpi:hover {
+      transform: translateY(-1px);
     }
   }
 }
@@ -395,11 +405,12 @@
   .wf-kpi {
     display: flex;
     flex-direction: column;
-    gap: 1px;
+    gap: var(--ds-space-1);
     padding: var(--wf-kpi-padding);
     border: 1px solid var(--wf-kpi-border);
     border-radius: var(--wf-kpi-radius);
     background-color: var(--wf-kpi-bg);
+    box-shadow: var(--wf-kpi-shadow);
   }
 
   .wf-kpi-label {
@@ -411,7 +422,7 @@
   }
 
   .wf-kpi-value {
-    font-size: var(--wf-kpi-value-size);
+    font-size: var(--ds-size-4xl, var(--wf-kpi-value-size));
     font-weight: var(--wf-kpi-value-weight);
     font-variant-numeric: tabular-nums;
     letter-spacing: -0.01em;
@@ -421,10 +432,14 @@
   /* ---- surfaces ---- */
   .wf-view,
   .wf-card {
-    background-color: var(--ds-color-surface-raised);
-    border: 1px solid var(--ds-color-outline);
-    border-radius: var(--ds-radius-md);
-    box-shadow: var(--ds-shadow-sm);
+    background-color: var(--wf-card-bg, var(--ds-color-surface-raised));
+    border: 1px solid var(--wf-card-border, var(--ds-color-outline));
+    border-radius: var(--wf-card-radius, var(--ds-radius-md));
+    box-shadow: var(--wf-card-shadow, var(--ds-shadow-md));
+  }
+
+  .wf-card:hover {
+    box-shadow: var(--ds-shadow-lg);
   }
 
   .wf-view {
@@ -483,21 +498,20 @@
     display: inline-flex;
     align-items: center;
     gap: var(--ds-space-1);
-    padding: 1px var(--ds-space-1);
+    padding: var(--ds-space-px, 1px) var(--ds-space-2);
     border: 1px solid var(--wf-badge-border);
     border-radius: var(--wf-badge-radius);
+    background-color: var(--wf-badge-bg);
     color: var(--wf-badge-fg);
     font-size: var(--ds-text-sm);
     font-weight: var(--ds-font-semibold);
-    text-transform: uppercase;
-    letter-spacing: var(--ds-tracking-micro);
     white-space: nowrap;
   }
 
   .wf-dot {
-    inline-size: var(--ds-space-1);
-    block-size: var(--ds-space-1);
-    border-radius: var(--ds-radius-sm);
+    inline-size: var(--ds-space-2);
+    block-size: var(--ds-space-2);
+    border-radius: 50%;
     background-color: var(--wf-badge-fg);
     flex: 0 0 auto;
   }
@@ -1153,6 +1167,91 @@
     inline-size: 70%;
   }
 
+
+  /* ---- DNA: underline tabs (move 4) ---- */
+  .wf-tab {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--ds-space-4);
+    border-block-end: 1px solid var(--ds-color-outline);
+    padding-block-end: var(--ds-space-px, 1px);
+  }
+
+  .wf-tab a {
+    display: inline-flex;
+    align-items: center;
+    min-height: var(--ds-space-6);
+    padding: var(--ds-space-1) var(--ds-space-1) var(--ds-space-2);
+    border-block-end: var(--ds-space-px, 2px) solid transparent;
+    color: var(--wf-tab-fg);
+    font-size: var(--ds-text-base);
+    font-weight: var(--ds-font-medium);
+  }
+
+  .wf-tab a:hover {
+    color: var(--ds-color-on-surface);
+    background-color: transparent;
+    border-block-end-color: var(--ds-color-outline-strong);
+    text-decoration: none;
+  }
+
+  .wf-tab a[aria-current] {
+    color: var(--wf-tab-fg-active);
+    border-block-end-color: var(--wf-tab-indicator);
+  }
+
+  /* ---- DNA: header search with magnifier (move 6) ---- */
+  .wf-search {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--ds-space-2);
+    min-height: var(--ds-space-6);
+    padding: var(--ds-space-1) var(--ds-space-3);
+    border: 1px solid var(--wf-search-border);
+    border-radius: var(--wf-search-radius);
+    background-color: var(--wf-search-bg);
+    color: var(--wf-search-fg);
+    font-size: var(--ds-text-base);
+  }
+
+  .wf-search svg {
+    inline-size: var(--ds-space-4);
+    block-size: var(--ds-space-4);
+    stroke: var(--wf-search-icon);
+    flex: 0 0 auto;
+  }
+
+  .wf-search input {
+    border: none;
+    background: transparent;
+    color: var(--ds-color-on-surface);
+    font: inherit;
+    min-inline-size: 10rem;
+  }
+
+  .wf-search input:focus {
+    outline: none;
+  }
+
+  .wf-search:focus-within {
+    border-color: var(--ds-color-primary);
+    box-shadow: var(--ds-shadow-lift);
+  }
+
+  /* ---- DNA: grid backdrop for data canvases (move 9) ---- */
+  .wf-graph-grid {
+    background-image:
+      linear-gradient(to right, var(--wf-grid-line) 1px, transparent 1px),
+      linear-gradient(to bottom, var(--wf-grid-line) 1px, transparent 1px);
+    background-size: var(--wf-grid-size) var(--wf-grid-size);
+  }
+
+  /* ---- DNA: hover lift on interactive cards (move 8, motion-guarded) ---- */
+  .wf-gallery-card:hover {
+    border-color: var(--ds-color-primary);
+    box-shadow: var(--ds-shadow-lift);
+    background-color: var(--ds-color-surface-raised);
+  }
   /* ---- focus contract: token-driven, visible on every control ---- */
   a:focus-visible,
   summary:focus-visible,

@@ -2,8 +2,7 @@
 """Validate a constitution tree (portable, stdlib only).
 
 Checks: root INDEX exists; every pack has 00-INDEX.md + knowledge.md +
-rules/*.md; catalogue rule paths exist; rule IDs unique; STE lint quick pass
-(sentence caps). Exit 1 on structural failure; STE findings are advisory
+rules/*.md; catalogue rule paths exist; rule IDs unique + sentence length check. Exit 1 on structural failure; length findings are advisory
 unless --strict.
 """
 import json, re, sys
@@ -31,7 +30,7 @@ for pd in sorted(p for p in C.iterdir() if p.is_dir() and p.name not in ("regist
         body = rf.read_text(errors="replace")
         for m in re.finditer(r"^#\s+([A-Z]{3}-\d{3})\b", body, re.M):
             if m.group(1) in ids and str(rf.relative_to(repo)) not in str(ids): pass
-# quick STE pass over rule statements
+# sentence length check
 SENT = re.compile(r"[.!?]\s+|\n")
 for rf in C.rglob("*.md"):
     limit = 20 if "/rules/" in str(rf) else 25
@@ -40,5 +39,5 @@ for rf in C.rglob("*.md"):
         ste.append(f"{rf.relative_to(repo)}: {len(s.split())}-word sentence")
 for f in fails: print(f"constitution-validate: FAIL {f}", file=sys.stderr)
 if ste:
-    print(f"constitution-validate: {len(ste)} STE advisory finding(s){' — STRICT FAIL' if strict else ''}", file=sys.stderr)
+    print(f"constitution-validate: {len(ste)} length advisory finding(s){' — STRICT FAIL' if strict else ''}", file=sys.stderr)
 sys.exit(1 if fails or (strict and ste) else 0)

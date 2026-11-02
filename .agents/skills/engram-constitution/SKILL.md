@@ -1,27 +1,28 @@
 ---
-name: engram-constitution
-description: Build, grow, and MAINTAIN a Software Constitution for ANY repository — greenfield (interview) or brownfield (code + docs + interview) — with 8 domain packs (product/architecture/dev/testing/ci/security/release/platform), knowledge/rules split, one rule per file, ASD-STE100 style, DERIVED catalogue (never hand-edited), health detection, module sub-constitutions for monorepos. Self-maintaining: lane 1 derives, lane 2 detects and advises, lane 3 drafts only when the owner asks. Trigger on "build a constitution", "constitution health", "split a pack", "add a module", "ground the packs", or when adopting any codebase to govern.
+name: constitution
+description: Build, grow, and MAINTAIN a Software Constitution for ANY repository — greenfield (interview) or brownfield (code + docs + interview) — with 8 domain packs (product/architecture/dev/testing/ci/security/release/platform), knowledge/rules split, one rule per file, DERIVED catalogue (never hand-edited), health detection, module sub-constitutions for monorepos. Self-maintaining: lane 1 derives, lane 2 detects and advises, lane 3 drafts only when the owner asks. Trigger on "build a constitution", "constitution health", "split a pack", "add a module", "ground the packs", or when adopting any codebase to govern.
 ---
 
-# engram-constitution
+# constitution
 
 Turn a repository's actual law — or a greenfield owner's intent — into a
 federated constitution: knowledge and rules in ONE tree, one rule per file,
-STE-compliant, catalogue-machined. You are the analyst-drafter; the OWNER
+catalogue-machined. You are the analyst-drafter; the OWNER
 legislates.
 
 ## Layout (this skill)
 
 ```
 assets/templates/    root-INDEX · pack-INDEX · knowledge · rule · catalogue
-references/          pack-charters (the 7-pack cut, merge rules) · ste-style
+references/          pack-charters (the 8-pack cut, merge rules)
                      (the mechanical subset) · evidence-mining (brownfield)
                      · interview-guide (greenfield)
 scripts/             scaffold.py (greenfield|brownfield|module skeleton) ·
                      derive_catalogue.py (lane 1: regenerate the registry) ·
                      health.py (lane 2: detect size law, drift, orphans) ·
                      query.py (search rules, knowledge, runbooks by terms) ·
-                     validate.py (structure + catalogue) · lint.py (STE)
+                     graph.py (build/validate/visualize the knowledge graph) ·
+                     validate.py (structure + catalogue) · lint.py (length)
 evals/               test_scaffold.py (6 tests)
 ```
 
@@ -36,7 +37,7 @@ No code exists; the constitution encodes INTENT.
    mandatory (what this software is NOT).
 3. Fill knowledge.md from answers (descriptive register, marked
    intent-until-code). Convert outcome/never answers into rules via
-   `assets/templates/rule.template.md` — EARS + BCP 14 + STE + counterexample
+   `assets/templates/rule.template.md` — EARS + BCP 14 + counterexample
    from the owner's own scenario.
 4. Read the whole draft back; owner ratifies; then `scripts/validate.py` +
    `scripts/lint.py` clean + `scripts/derive_catalogue.py <repo> --write`.
@@ -94,8 +95,42 @@ revision it was last tested on), and a change log. After every incident the
 runbook MUST be updated with what actually worked (increment `version`);
 the post-incident checklist in the template enforces this. Runbooks are
 scar-born: they start from the first incident and grow from real experience,
-never from speculation. The engram-constitution skill drafts them in the
-procedural STE register (imperative, ≤20 words per step).
+never from speculation. The constitution skill drafts them in the
+imperative steps.
+
+## Knowledge graph (OKF frontmatter)
+
+Every constitution artifact carries OKF-style YAML frontmatter with typed links:
+
+```yaml
+---
+type: rule | knowledge | runbook | index
+id: PLT-001
+title: Per-project storage isolation
+description: One-line summary
+pack: platform
+status: draft | stable | deprecated
+tags: [storage, isolation]
+created_on: 2026-11-01
+forward_links:
+  - { target: PRD-101, relation: refines }
+  - { target: check_distribution_drift, relation: enforced-by }
+backward_links:
+  - { target: SEC-601, relation: refined-by }
+semantic_links:
+  - { target: knowledge/platform/storage.md, relation: described-by }
+---
+```
+
+The link kinds: `forward` (this node points to another), `backward` (reverse
+edges, validated for reciprocity), `semantic` (cross-domain "see also").
+Build and validate with:
+
+```bash
+python3 scripts/graph.py <repo> --validate   # check link integrity
+python3 scripts/graph.py <repo> --dot        # Graphviz DOT output
+python3 scripts/graph.py <repo> --json       # full graph as JSON
+```
 
 ## Searching the constitution
 
@@ -114,10 +149,9 @@ capability; no separate skill is needed.
 4. Enforcement claims are verified against gate code, never assumed.
 5. One rule, one home: `rules/<ID>.md`; ci/ is an enforcement view only.
 6. Nothing is law until the owner ratifies; aspirations are labeled proposals.
-7. ASD-STE100 registers: procedural (rules, <= 20 words) and descriptive
-   (knowledge, <= 25 words); lint clean before handoff.
 
 ## Self-host
 
-This skill built engram's own constitution (docs/constitution/) — the
-dogfood path is the reference implementation.
+This skill builds constitutions for any repository. The reference
+implementation is the engram project: https://github.com/phanijapps/engram
+(docs/constitution/).

@@ -1,18 +1,23 @@
-# {{RULE_ID}}
+---
+type: rule
+id: {{RULE_ID}}
+title: {{TITLE}}
+description: {{ONE_LINE_SUMMARY}}
+pack: {{PACK}}
+status: draft
+tags: []
+created_on: {{DATE}}
+generated: { by: {{GENERATED_BY}}, at: {{DATE}} }
+verified: null
+forward_links: []
+backward_links: []
+semantic_links: []
+sources:
+  - { id: evidence, resource: {{EVIDENCE_PATH}}, lines: {{EVIDENCE_LINES}} }
+---
 
-<!-- ASD-STE100 procedural register: one instruction per sentence, <= 20
-     words, active voice, BCP 14 keywords. This file is the single home of
-     {{RULE_ID}}. -->
-
-| Field | Value |
-|---|---|
-| Pack | {{PACK}} |
-| Statement | {{STATEMENT: When X, the system SHALL Y.}} |
-| References | {{REFS: governs/refines/enforced-by}} |
-| Evidence | {{EVIDENCE: file:line or doc — brownfield only}} |
-| Enforcement | {{GATE or review — stated honestly}} |
+{{STATEMENT}}
 
 ## Counterexample
 
-{{COUNTEREXAMPLE: the concrete change that violates this rule. No
-counterexample, no rule.}}
+{{COUNTEREXAMPLE}}

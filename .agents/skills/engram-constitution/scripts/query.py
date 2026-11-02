@@ -79,6 +79,16 @@ if type_filter in ("all", "knowledge"):
                         add("knowledge", str(frag_path.relative_to(repo)) if frag_path else frag_rel,
                             title_clean, prereq, pack, sc)
 
+# Search monolithic knowledge.md files (not in knowledge/ dirs)
+if type_filter in ("all", "knowledge"):
+    for kn in C.rglob("knowledge.md"):
+        pack = kn.relative_to(C).parts[0]
+        if pack_filter and pack != pack_filter: continue
+        body = kn.read_text(errors="replace")
+        sc = score(body)
+        if sc:
+            add("knowledge", str(kn.relative_to(repo)), f"monolithic knowledge (~{len(body.split())} words)", "", pack, sc)
+
 # Search root INDEX (universal rules + principles)
 if type_filter in ("all", "rules"):
     root_idx = C / "00-INDEX.md"

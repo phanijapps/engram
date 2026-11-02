@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
-"""Portable STE lint (ASD-STE100 mechanical subset) for any constitution tree.
-Usage: lint.py <repo> [--strict]. Sentence caps + passive voice heuristic."""
+"""Lint constitution prose: sentence length + passive voice.
+Usage: lint.py <repo> [--strict]"""
 import re, sys
 from pathlib import Path
 repo = Path(sys.argv[1] if len(sys.argv) > 1 else ".").resolve()

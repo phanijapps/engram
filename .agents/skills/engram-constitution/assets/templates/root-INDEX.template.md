@@ -5,7 +5,7 @@ subordinate packs (merge/split per reality — see charters reference).
 
 ## The project in one page
 
-{{ONE_PAGE: what this software IS and IS NOT — STE descriptive register}}
+{{ONE_PAGE: what this software IS and IS NOT}}
 
 ## Universal rules
 

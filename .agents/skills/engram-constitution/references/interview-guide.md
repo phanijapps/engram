@@ -18,7 +18,7 @@ No code exists; the constitution encodes INTENT. Interview option-based,
 - release: "How do users get this? What breaks them?"
 
 ## From answers to artifacts
-- Outcome language -> knowledge.md (descriptive) + PRD rules (EARS + STE).
+- Outcome language -> knowledge.md (descriptive) + PRD rules (EARS + BCP 14).
 - "Never" answers -> rules with counterexamples from the owner's scenario.
 - Tool choices -> dev/release rules; merge decisions -> pack merges.
 - Close with tier/ratification: read the whole draft back; owner ratifies.

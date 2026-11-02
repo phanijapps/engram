@@ -348,7 +348,10 @@ export function createConsoleServer({ provider, backend, storage, uiDir }) {
         });
       } catch (error) {
         const text = String(error?.message ?? error);
-        if (/NotFound|no binding|not bound|AuthorizationRequired/i.test(text)) {
+        // The engine's typed no-binding denial crosses N-API as
+        // "invalid request: BindingRequired" (review r1 FIND-ui-003) — the
+        // normal unbound case, never an engine error.
+        if (/BindingRequired|NotFound|no binding|not bound|AuthorizationRequired/i.test(text)) {
           return sendJson(res, 200, {
             state: "unbound",
             repo,

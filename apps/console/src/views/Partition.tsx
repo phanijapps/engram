@@ -104,7 +104,7 @@ export function PartitionView({
         ← inventory
       </button>
       <PartitionHeader scope={scope} />
-      <BindingHealthView scope={scope} repo="default" onLoad={fetchBindingHealth} />
+      <BindingHealthView scope={scope} onLoad={fetchBindingHealth} />
       <div className="grid gap-6 lg:grid-cols-3">
         <div>
           <h3 className="mb-1 text-sm font-semibold uppercase tracking-wide text-slate-400">

@@ -8,7 +8,7 @@
  */
 import { describe, expect, it, afterEach } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
-import { BindingHealthRow } from "../src/views/BindingHealth";
+import { BindingHealthRow, BindingHealthView } from "../src/views/BindingHealth";
 import { createConsoleServer, partitionKey } from "../server/app.mjs";
 import type { Server } from "node:http";
 
@@ -93,15 +93,27 @@ describe("job012 binding health line (STEP-011)", () => {
     expect(markup).not.toContain("error");
   });
 
-  it("binding-health: an unbound partition renders the named unbound state", async () => {
-    const base = await start(provider(BOUND_STATUS, "NotFound: no binding for repo"));
+  it("binding-health: the engine's REAL unbound denial ('invalid request: BindingRequired') renders the named unbound state (FIND-ui-003)", async () => {
+    // The real engine text: CoreError::InvalidRequest { reason: "BindingRequired" }
+    // crosses N-API as from_reason("invalid request: BindingRequired") — the
+    // round-1 stub fabricated a "NotFound:" shape the engine never emits.
+    const base = await start(provider(BOUND_STATUS, "invalid request: BindingRequired"));
     const body = await (
-      await fetch(`${base}/api/partitions/${partitionKey(PARTITION)}/binding-health?repo=mem-alpha`)
+      await fetch(`${base}/api/partitions/${partitionKey(PARTITION)}/binding-health?repo=not-bound-repo`)
     ).json();
     expect(body.state).toBe("unbound");
     expect(body.message).toContain("No code index is bound");
     const markup = renderToStaticMarkup(<BindingHealthRow line={body} />);
     expect(markup).toContain("unbound");
+  });
+
+  it("binding-health: the view carries a repo input, not a hardcoded repo (FIND-ui-002)", () => {
+    const markup = renderToStaticMarkup(
+      <BindingHealthView scope={PARTITION} onLoad={async () => ({ state: "unbound", repo: "x" })} />
+    );
+    expect(markup).toContain('id="binding-repo"');
+    expect(markup).toContain("enter the bound repo id");
+    expect(markup).not.toContain('value="default"');
   });
 
   it("binding-health: missing repo parameter is a bad request", async () => {

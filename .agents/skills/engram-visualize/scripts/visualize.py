@@ -16,7 +16,7 @@ output = Path(sys.argv[sys.argv.index("--output") + 1]) if "--output" in sys.arg
 open_browser = "--open" in sys.argv
 
 # Get graph data
-graph_script = Path(__file__).parent / "graph.py"
+graph_script = Path(__file__).parent.parent.parent / "engram-constitution" / "scripts" / "graph.py"
 r = subprocess.run(
     [sys.executable, str(graph_script), str(repo), "--json"],
     capture_output=True, text=True)
@@ -43,7 +43,28 @@ nodes = [{"id": c["id"], "title": c.get("title", c["id"]), "type": c["type"],
           "description": c.get("description", ""), "tags": c.get("tags", []),
           "degree": sum(1 for e in clean_edges if e["from"] == c["id"] or e["to"] == c["id"])}
          for c in concepts]
-links = [{"source": e["from"], "target": e["to"], "type": e["type"]} for e in clean_edges]
+
+# Add placeholder nodes for edge targets that don't have concept files
+# (root principles like PR-001, EN-001, RULE-1 live in 00-INDEX, not in rules/)
+node_ids = {n["id"] for n in nodes}
+for e in clean_edges:
+    for target in (e["to"], e["from"]):
+        if target not in node_ids and target and not target.startswith("{"):
+            nodes.append({
+                "id": target, "title": f"root principle ({target})",
+                "type": "root", "pack": "root", "status": "stable",
+                "description": "", "tags": [], "degree": 0
+            })
+            node_ids.add(target)
+
+# Recompute degrees
+for n in nodes:
+    n["degree"] = sum(1 for e in clean_edges if e["from"] == n["id"] or e["to"] == n["id"])
+
+# Filter edges to only those with valid targets (skip malformed)
+links = [{"source": e["from"], "target": e["to"], "type": e["type"]}
+         for e in clean_edges
+         if e["from"] in node_ids and e["to"] in node_ids]
 
 # Count types for legend
 type_counts = {}
@@ -302,7 +323,7 @@ html = (HTML
     .replace("__LINKS_JSON__", json.dumps(links))
     .replace("__TYPE_COLORS__", json.dumps({
         "rule": "#e0af68", "knowledge": "#7aa2f7", "runbook": "#9ece6a",
-        "index": "#f7768e", "unknown": "#8b949e"}))
+        "index": "#f7768e", "root": "#c0caf5", "unknown": "#8b949e"}))
     .replace("__EDGE_COLORS__", json.dumps({
         "refines": "#e0af68", "governs": "#f7768e", "enforced_by": "#9ece6a",
         "described_by": "#7aa2f7", "used_by": "#bb9af7", "applies_to": "#7dcfff",

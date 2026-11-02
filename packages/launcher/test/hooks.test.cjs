@@ -299,7 +299,7 @@ test('version lockstep normalizes the v prefix (Windows 2026-10-18 repro)', () =
   assert.match(binJs, /replace\(\/\^v\/, ""\)/, 'bin.js normalizes v prefix in lockstep check');
   // And the stamper stamps clean versions (no v) for future packages.
   const stamper = fs.readFileSync(
-    path.join(__dirname, '..', '..', '..', 'scripts', 'release', 'stamp-platform-package.py'),
+    path.join(__dirname, '..', '..', '..', 'tools', 'release', 'stamp-platform-package.py'),
     'utf8',
   );
   assert.match(stamper, /raw_version\[1:\]/, 'stamper strips the v prefix');

@@ -179,7 +179,7 @@ test('RISK-001 stale payload aborts: verify-launcher-package.py asserts the payl
   // exists and fails on an empty-payload tarball built in an isolated
   // launcher copy (prepack bypassed via --ignore-scripts; no real-tree
   // mutation, so parallel test files cannot race).
-  const verifier = path.join(REPO, 'scripts', 'release', 'verify-launcher-package.py');
+  const verifier = path.join(__dirname, '..', '..', '..', 'tools', 'release', 'verify-launcher-package.py');
   const source = fs.readFileSync(verifier, 'utf8');
   assert.match(source, /assert_payload/, 'payload assertion present in the release verifier');
   const { pkg } = launcherCopy('stale');

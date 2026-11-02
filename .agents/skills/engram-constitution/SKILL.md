@@ -22,6 +22,7 @@ scripts/             scaffold.py (greenfield|brownfield|module skeleton) ·
                      health.py (lane 2: detect size law, drift, orphans) ·
                      query.py (search rules, knowledge, runbooks by terms) ·
                      graph.py (build/validate/visualize the knowledge graph) ·
+                     visualize.py (interactive D3.js force-directed graph) ·
                      validate.py (structure + catalogue) · lint.py (length)
 evals/               test_scaffold.py (6 tests)
 ```
@@ -131,6 +132,23 @@ python3 scripts/graph.py <repo> --validate   # check link integrity
 python3 scripts/graph.py <repo> --dot        # Graphviz DOT output
 python3 scripts/graph.py <repo> --json       # full graph as JSON
 ```
+
+## Visualizing the constitution
+
+```bash
+python3 scripts/visualize.py <repo> [--open]
+```
+
+Generates a standalone HTML file with an interactive D3.js force-directed graph:
+- Nodes colored by type (rule=gold, knowledge=blue, runbook=green)
+- Edges colored by relationship type (refines, enforced_by, described_by, etc.)
+- Click any node: highlights its connections, shows detail panel with incoming/outgoing edges
+- Search: filter by ID, title, pack, or type
+- Zoom + drag: pan and zoom the graph, drag nodes to rearrange
+- Legend: node types and edge types with counts
+
+The output is a single self-contained HTML file at `docs/constitution/graph.html`
+(requires internet for the D3.js CDN). Opens in any browser.
 
 ## Searching the constitution
 

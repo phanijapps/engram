@@ -63,7 +63,7 @@
 
           <svg class="wf-graph-canvas" viewBox="0 0 960 480" role="img" aria-labelledby="graph-svg-title graph-svg-desc">
             <title id="graph-svg-title">Knowledge graph of the partition 可视化研究 / mem-alpha</title>
-            <desc id="graph-svg-desc">Static wireframe excerpt of the 14 most-connected entities. The mem-alpha project hub anchors console modules and files; the engine repository opens the store; the partition model scopes it; scope-inventory enumerates partitions; the binding concept binds the indexed repo to the project; degraded engine responses are classified by the console server.</desc>
+            <desc id="graph-svg-desc">Static wireframe excerpt of the 14 most-connected entities. Node kind is carried by shape, not hue: project squares and repository circles take the accent; concept diamonds, function triangles, class hexagons, module squares and file circles stay slate. The mem-alpha project hub anchors console modules and files; the engine repository opens the store; the partition model scopes it; scope-inventory enumerates partitions; the binding concept binds the indexed repo to the project; degraded engine responses are classified by the console server.</desc>
 
             <g stroke-width="1.5">
               <line class="wf-graph-edge" x1="95" y1="150" x2="200" y2="240"></line>
@@ -95,20 +95,20 @@
             </g>
 
             <g aria-hidden="true">
-              <circle class="wf-graph-node wf-node--project" cx="200" cy="240" r="8"></circle>
-              <circle class="wf-graph-node wf-node--module" cx="95" cy="150" r="6"></circle>
-              <circle class="wf-graph-node wf-node--file" cx="240" cy="95" r="6"></circle>
-              <circle class="wf-graph-node wf-node--file" cx="85" cy="345" r="6"></circle>
-              <circle class="wf-graph-node wf-node--function" cx="420" cy="70" r="6"></circle>
+              <rect class="wf-graph-node wf-node--project" x="191" y="231" width="18" height="18"></rect>
+              <rect class="wf-graph-node wf-node--module" x="89" y="144" width="12" height="12"></rect>
+              <circle class="wf-graph-node wf-node--file" cx="240" cy="95" r="4"></circle>
+              <circle class="wf-graph-node wf-node--file" cx="85" cy="345" r="4"></circle>
+              <polygon class="wf-graph-node wf-node--function" points="420,63 427,77 413,77"></polygon>
               <circle class="wf-graph-node wf-node--repository" cx="470" cy="180" r="8"></circle>
-              <circle class="wf-graph-node wf-node--class" cx="430" cy="300" r="6"></circle>
-              <circle class="wf-graph-node wf-node--concept" cx="660" cy="330" r="6"></circle>
-              <circle class="wf-graph-node wf-node--concept" cx="700" cy="170" r="6"></circle>
-              <circle class="wf-graph-node wf-node--function" cx="875" cy="105" r="6"></circle>
-              <circle class="wf-graph-node wf-node--function" cx="855" cy="275" r="6"></circle>
-              <circle class="wf-graph-node wf-node--concept" cx="250" cy="395" r="6"></circle>
-              <circle class="wf-graph-node wf-node--concept" cx="450" cy="415" r="6"></circle>
-              <circle class="wf-graph-node wf-node--function" cx="90" cy="455" r="6"></circle>
+              <polygon class="wf-graph-node wf-node--class" points="430,293 436,296.5 436,303.5 430,307 424,303.5 424,296.5"></polygon>
+              <polygon class="wf-graph-node wf-node--concept" points="660,322 668,330 660,338 652,330"></polygon>
+              <polygon class="wf-graph-node wf-node--concept" points="700,162 708,170 700,178 692,170"></polygon>
+              <polygon class="wf-graph-node wf-node--function" points="875,98 882,112 868,112"></polygon>
+              <polygon class="wf-graph-node wf-node--function" points="855,268 862,282 848,282"></polygon>
+              <polygon class="wf-graph-node wf-node--concept" points="250,387 258,395 250,403 242,395"></polygon>
+              <polygon class="wf-graph-node wf-node--concept" points="450,407 458,415 450,423 442,415"></polygon>
+              <polygon class="wf-graph-node wf-node--function" points="90,448 97,462 83,462"></polygon>
             </g>
 
             <g class="wf-graph-node-labels" aria-hidden="true">
@@ -130,13 +130,13 @@
           </svg>
 
           <ul class="wf-legend">
-            <li class="wf-legend-item"><span class="wf-swatch wf-swatch--project" aria-hidden="true"></span>project</li>
-            <li class="wf-legend-item"><span class="wf-swatch wf-swatch--repository" aria-hidden="true"></span>repository</li>
-            <li class="wf-legend-item"><span class="wf-swatch wf-swatch--concept" aria-hidden="true"></span>concept</li>
-            <li class="wf-legend-item"><span class="wf-swatch wf-swatch--function" aria-hidden="true"></span>function</li>
-            <li class="wf-legend-item"><span class="wf-swatch wf-swatch--class" aria-hidden="true"></span>class</li>
-            <li class="wf-legend-item"><span class="wf-swatch wf-swatch--module" aria-hidden="true"></span>module</li>
-            <li class="wf-legend-item"><span class="wf-swatch wf-swatch--file" aria-hidden="true"></span>file</li>
+            <li class="wf-legend-item"><svg class="wf-glyph wf-node--project" width="12" height="12" viewBox="0 0 12 12" aria-hidden="true"><rect x="1" y="1" width="10" height="10"></rect></svg>project</li>
+            <li class="wf-legend-item"><svg class="wf-glyph wf-node--repository" width="12" height="12" viewBox="0 0 12 12" aria-hidden="true"><circle cx="6" cy="6" r="5"></circle></svg>repository</li>
+            <li class="wf-legend-item"><svg class="wf-glyph wf-node--concept" width="12" height="12" viewBox="0 0 12 12" aria-hidden="true"><polygon points="6,0.5 11.5,6 6,11.5 0.5,6"></polygon></svg>concept</li>
+            <li class="wf-legend-item"><svg class="wf-glyph wf-node--function" width="12" height="12" viewBox="0 0 12 12" aria-hidden="true"><polygon points="6,1 11,11 1,11"></polygon></svg>function</li>
+            <li class="wf-legend-item"><svg class="wf-glyph wf-node--class" width="12" height="12" viewBox="0 0 12 12" aria-hidden="true"><polygon points="6,0.5 11,3.25 11,8.75 6,11.5 1,8.75 1,3.25"></polygon></svg>class</li>
+            <li class="wf-legend-item"><svg class="wf-glyph wf-node--module" width="12" height="12" viewBox="0 0 12 12" aria-hidden="true"><rect x="1" y="1" width="10" height="10"></rect></svg>module</li>
+            <li class="wf-legend-item"><svg class="wf-glyph wf-node--file" width="12" height="12" viewBox="0 0 12 12" aria-hidden="true"><circle cx="6" cy="6" r="3.5"></circle></svg>file</li>
           </ul>
         </div>
 

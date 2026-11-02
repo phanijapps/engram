@@ -53,6 +53,7 @@ scan_dependencies
 scan_ownership
 scan_protocols
 scan_repo
+scope_inventory
 search
 store_knowledge
 subscribe_changes

@@ -12,7 +12,8 @@ of your **code + docs**, with the docs linked to the code they describe.
   **your docs**, then **connects them** (a doc section *describes* a function).
 - One SQLite file (`engram_data.db`) in **WAL** mode, so several tools can read it
   at once (the MCP, a gateway, a visualizer).
-- 21 tools the agent can call by default: scan, search, graph traversal, beliefs,
+- 22 tools the agent can call by default: scan, search, graph traversal, beliefs,
+  partition inventory (scope_inventory),
   recall, etc. (larger surfaces via `--tools full|all` — see the
   [argument contract](#launch--runtime-arguments-the-contract) below).
 
@@ -261,7 +262,7 @@ table must not drift from it).
 | `--taxonomy <path>` | Taxonomy config (JSON); always wins over the conventional path below | baked-in default |
 | `--layout single\|multi` | SQLite file layout | `single` |
 | `--db-file <name>` | DB filename override | — |
-| `--tools core\|full\|all\|consolidated` | Tool profile (21 / 28 / all / 7) | `core` |
+| `--tools core\|full\|all\|consolidated` | Tool profile (22 / 29 / all / 7) | `core` |
 | `--backend sqlite\|pgvector` | Engine recipe | `sqlite` |
 | `--pg-connection-string <url>` | Postgres URL (pgvector only; env `ENGRAM_PG_CONNECTION_STRING`) | — |
 | `--slim` | Skip embedding setup/downloads; preserve non-vector capabilities and stored vectors | embeddings enabled |
@@ -398,7 +399,7 @@ the same constant.
 
 ---
 
-## Tools at a glance (default surface: 21)
+## Tools at a glance (default surface: 22)
 
 The default `--tools core` profile — the highest-leverage set (frequency ×
 decision-value × non-redundancy):
@@ -414,8 +415,9 @@ decision-value × non-redundancy):
 | Lifecycle / health | `forget`, `graph_health` |
 | Source | `fetch_content` |
 | Bound code | `code_repo_register`, `code_bind`, `code_status`, `code_refresh` |
+| Partitions | `scope_inventory` |
 
-Larger surfaces: `--tools full` (28 — adds maintenance tools) and
+Larger surfaces: `--tools full` (29 — adds maintenance tools) and
 `--tools all` (the complete granular set, including `graph_neighbors`,
 `belief_put`, `hierarchy_path`, `consolidate`, `ontology_read`, and
 friends). `--tools consolidated` is the 7-verb legacy surface. Ask your

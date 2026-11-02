@@ -18,7 +18,7 @@ use engram_ingest::{
 };
 use engram_integration::BatchIngestRequest;
 use futures::executor::block_on;
-use serde_json::Value;
+use serde_json::{Value, json};
 
 use crate::app::App;
 use crate::protocol;
@@ -2951,4 +2951,89 @@ pub fn register_code_tools(registry: &mut crate::registry::ToolRegistry<App>) {
         }),
         handler: code_refresh,
     });
+}
+
+/// Distinct-partition inventory with per-kind counts (job 012): one row per
+/// partition present in the governed data. NULL scope dimensions are their
+/// own distinct value — consumers render them "(unset)". Read-only by
+/// construction: the underlying port has no write operations.
+pub fn scope_inventory(app: &App, _args: &Value) -> Result<Value, ToolError> {
+    let inventory = app.provider.require_scope_inventory().map_err(internal)?;
+    let rows = block_on(inventory.inventory()).map_err(internal)?;
+    Ok(json!({
+        "partitions": rows,
+        "partitionCount": rows.len()
+    }))
+}
+
+#[cfg(test)]
+mod scope_inventory_tests {
+    //! TASK-007 focused proofs (GATE-D): the `scope_inventory` tool serves the
+    //! provider's port through the stdio handler path, partitions group NULL
+    //! dimensions as their own value, and the tool is registered + default.
+
+    use super::tests::test_app;
+    use super::*;
+
+    /// A write request mirroring the handler's shape with a caller-chosen scope.
+    fn write_request(content: &str) -> WriteMemoryRequest {
+        WriteMemoryRequest {
+            kind: MemoryKind::Observation,
+            content: MemoryContent {
+                text: content.to_owned(),
+                summary: None,
+                entities: Vec::new(),
+                language: None,
+                format: None,
+                structured: None,
+                hash: None,
+            },
+            scope: crate::scope::project_scope("test-project", "default"),
+            requester: requester(),
+            provenance: provenance("mcp-write"),
+            policy: policy(),
+            links: Vec::new(),
+            verdict: None,
+            idempotency_key: None,
+        }
+    }
+
+    #[test]
+    fn scope_inventory_tool_lists_partitions() {
+        let dir = tempfile::tempdir().unwrap();
+        let app = test_app(dir.path());
+        // Two memories in the launch workspace and one in an "(unset)"-workspace
+        // tenant via a direct engine write (the handler always writes the
+        // launch scope, so the sibling partition is seeded through the port's
+        // own store handle).
+        write_memory(&app, &json!({ "content": "one" })).unwrap();
+        write_memory(&app, &json!({ "content": "two" })).unwrap();
+        let unset_scope = engram_domain::Scope {
+            tenant: app.scope.tenant.clone(),
+            subject: None,
+            workspace: None,
+            session: None,
+            environment: None,
+        };
+        let memory = app.provider.require_memory().unwrap();
+        let unset_request = WriteMemoryRequest {
+            scope: unset_scope,
+            ..write_request("memory in the unset-workspace partition")
+        };
+        block_on(memory.write_memory(unset_request)).expect("write unset memory");
+
+        let result = scope_inventory(&app, &json!({})).unwrap();
+        let partitions = result["partitions"].as_array().unwrap();
+        let launch = partitions
+            .iter()
+            .find(|row| row["scope"]["workspace"] == json!(app.scope.workspace.clone()))
+            .expect("launch-workspace partition");
+        assert_eq!(launch["memoryCount"], json!(2));
+        let unset = partitions
+            .iter()
+            .find(|row| row["scope"].get("workspace").is_none())
+            .expect("unset-workspace partition listed separately");
+        assert_eq!(unset["memoryCount"], json!(1));
+        assert_eq!(result["partitionCount"], json!(2));
+    }
 }

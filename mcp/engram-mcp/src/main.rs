@@ -395,6 +395,8 @@ pub static DEFAULT_TOOLS: &[&str] = &[
     // Inspectable typed diagnostics — the capability report is part of the
     // default surface (TASK-021).
     "capability_report",
+    // Partition visibility — the read-only scope inventory (job 012).
+    "scope_inventory",
     // The outcome loop — attribute task results to recalls.
     "report_outcome",
     "list_outcomes",
@@ -1175,6 +1177,14 @@ fn register_all_tools(registry: &mut ToolRegistry<App>) {
         handler: fetch_content::fetch_content,
     });
     registry.register(ToolRecord {
+        name: "scope_inventory",
+        description: "List every distinct memory partition present in the store's governed data \
+                      with per-kind counts (memories, knowledge entities, beliefs). NULL scope \
+                      dimensions are their own partition value (render '(unset)'). Read-only.",
+        input_schema: json!({ "type": "object", "properties": {}, "additionalProperties": false }),
+        handler: tools::scope_inventory,
+    });
+    registry.register(ToolRecord {
         name: "capability_report",
         description: "Report which provider capabilities are wired.",
         input_schema: json!({ "type": "object", "properties": {} }),
@@ -1774,6 +1784,7 @@ mod default_profile_tests {
             "proposal_submit",
             "proposal_approve",
             "report_outcome",
+            "scope_inventory",
         ] {
             assert!(
                 DEFAULT_TOOLS.contains(&required),

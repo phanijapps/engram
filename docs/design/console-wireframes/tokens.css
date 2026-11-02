@@ -1,5 +1,5 @@
 /* ==========================================================================
-   engram console — design tokens (wireframe set v1)
+   engram console — design tokens (wireframe set, cycle 2: dashboard idiom)
    ==========================================================================
    The single styling source of truth for the console design contract
    (job 013, NFR-002). Three tiers, one-way dependency:
@@ -7,7 +7,15 @@
        primitive  →  semantic  →  component
        (raw value)   (role)       (usage, scoped to a component class)
 
-   Rules enforced by the drift sweep (CHK-1):
+   Cycle-2 rebase (REQ-009/REQ-010, rework-2): Grafana/Linear/Datadog-class
+   operations-dashboard idiom. Slate neutrals; ONE restrained blue accent
+   family (--primitive-accent-{grade}, hue 214, saturation <= 61%) reserved
+   for state and action; radius primitives collapsed to the two quiet steps
+   below with no pill geometry anywhere; spacing held on the 4px grid as rem
+   values; uppercase micro-labels and tabular numerals as component tokens.
+   The cycle-1 purple-blue family and its soft geometry are fully retired.
+
+   Rules enforced by the drift sweep (CHK-001):
    - raw color values (hex, rgb/rgba, hsl) live ONLY in this file;
    - wireframe.css and every frame consume var(--*) exclusively;
    - a component token references semantics, never primitives directly;
@@ -18,13 +26,17 @@
    is a fallback for an attribute-less load and MUST stay in sync with the
    [data-theme="dark"] block (token-architecture: both are maintained).
 
+   Contrast: every composed fg/bg pair is asserted >= 4.5:1 in both themes
+   by the CHK-012 resolver (evidence/build/wf-c2-contrast.log); dark accent
+   lightness is contrast-driven (plan DEC-004, citation 1).
+
    Naming: --primitive-* (tier 1), --ds-* (tier 2), --wf-<component>-*
    (tier 3, scoped to a .wf-* class). Names encode role, never value.
    ========================================================================== */
 
 /* tier: primitive — raw values, defined once, referenced only by the semantic tier */
 :root {
-  /* neutral ramp — slate-tinted inks (dark surfaces) and papers (light surfaces) */
+  /* slate-neutral ramps — inks (dark surfaces) and papers (light surfaces) */
   --primitive-ink-950: #090b0e;
   --primitive-ink-900: #0e1015;
   --primitive-ink-850: #14171d;
@@ -36,7 +48,12 @@
   --primitive-paper-50: #f7f8fa;
   --primitive-paper-0: #ffffff;
 
-  /* text inks (contrast-verified pairs: high ≥ 12:1, mid ≥ 7:1, faint ≥ 4.5:1) */
+  /* slate data ramp — graph fills and neutral data marks (non-text) */
+  --primitive-slate-400: #94a3b8;
+  --primitive-slate-500: #64748b;
+  --primitive-slate-600: #475569;
+
+  /* text inks (contrast-verified pairs: high >= 12:1, mid >= 7:1, faint >= 4.7:1) */
   --primitive-text-dark-high: #e8ebf2;
   --primitive-text-dark-mid: #a7aec0;
   --primitive-text-dark-faint: #7e879c;
@@ -44,19 +61,23 @@
   --primitive-text-light-mid: #4b5262;
   --primitive-text-light-faint: #66707f;
 
-  /* accent — one restrained indigo family (aesthetic reference: Linear) */
-  --primitive-indigo-900: #2c3370;
-  --primitive-indigo-700: #4a54b8;
-  --primitive-indigo-500: #5e6ad2;
-  --primitive-indigo-400: #7a85e0;
-  --primitive-indigo-300: #8b93e8;
-  --primitive-indigo-wash-light: #eef0fc;
-  --primitive-indigo-wash-raised-light: #e2e5fa;
-  --primitive-indigo-wash-dark: rgba(139, 147, 232, 0.14);
-  --primitive-indigo-wash-raised-dark: rgba(139, 147, 232, 0.22);
+  /* ONE accent family — blue, hue 214°, saturation <= 61%, four grades.
+     Reserved for state and action. Dark grades (300/400) are the dark-theme
+     text pairings (contrast-driven); 600/700 carry the light theme. */
+  --primitive-accent-300: #9dbde7;
+  --primitive-accent-400: #bed3ef;
+  --primitive-accent-600: #2e65ad;
+  --primitive-accent-700: #25528d;
 
-  /* status — green / amber / red / sky, dark-safe 400s and light-safe 700s */
-  --primitive-green-700: #15803d;
+  /* accent washes — flat tints used behind accent text; blended values
+     verified against the 4.5:1 floor by CHK-012 */
+  --primitive-accent-wash-light: #eaf0f7;
+  --primitive-accent-wash-raised-light: #dee6f2;
+  --primitive-accent-wash-dark: rgba(157, 189, 231, 0.14);
+  --primitive-accent-wash-raised-dark: rgba(157, 189, 231, 0.22);
+
+  /* status — green / amber / red; the informational role reuses the accent */
+  --primitive-green-700: #137037;
   --primitive-green-400: #4ade80;
   --primitive-green-wash-dark: rgba(74, 222, 128, 0.12);
   --primitive-green-wash-light: #e7f6ed;
@@ -68,29 +89,27 @@
   --primitive-red-400: #f87171;
   --primitive-red-wash-dark: rgba(248, 113, 113, 0.12);
   --primitive-red-wash-light: #fdecec;
-  --primitive-sky-700: #075985;
-  --primitive-sky-400: #38bdf8;
-  --primitive-sky-wash-dark: rgba(56, 189, 248, 0.12);
-  --primitive-sky-wash-light: #e5f3fb;
 
-  /* neutral washes for chips, hovers, skeletons */
+  /* neutral washes for hovers and static skeletons */
   --primitive-wash-dark: rgba(232, 235, 242, 0.06);
   --primitive-wash-raised-dark: rgba(232, 235, 242, 0.11);
   --primitive-skeleton-dark: rgba(232, 235, 242, 0.09);
   --primitive-skeleton-light: rgba(23, 26, 33, 0.08);
 
-  /* spacing — minor third (×1.25), 4px base: data-dense console rhythm */
-  --primitive-space-px: 2px;
-  --primitive-space-1: 4px;
-  --primitive-space-2: 8px;
-  --primitive-space-3: 12px;
-  --primitive-space-4: 16px;
-  --primitive-space-5: 24px;
-  --primitive-space-6: 32px;
-  --primitive-space-7: 48px;
-  --primitive-space-8: 64px;
+  /* spacing — 4px grid, rem values (0.25rem steps at 1rem = 16px) */
+  --primitive-space-1: 0.25rem;
+  --primitive-space-2: 0.5rem;
+  --primitive-space-3: 0.75rem;
+  --primitive-space-4: 1rem;
+  --primitive-space-5: 1.5rem;
+  --primitive-space-6: 2rem;
+  --primitive-space-7: 3rem;
+  --primitive-space-8: 4rem;
 
-  /* type scale — major third for UI text; sizes in rem (16px root) */
+  /* hairline metric — border-class primitive, not a spacing-scale step */
+  --primitive-hairline: 2px;
+
+  /* type scale — major third for UI text; sizes in rem */
   --primitive-size-sm: 0.75rem;
   --primitive-size-base: 0.875rem;
   --primitive-size-lg: 1rem;
@@ -107,16 +126,16 @@
   --primitive-leading-normal: 1.5;
   --primitive-leading-loose: 1.75;
 
+  --primitive-tracking-micro: 0.08em;
+
   --primitive-font-sans: system-ui, -apple-system, "Segoe UI", Roboto,
     "Helvetica Neue", Arial, sans-serif;
   --primitive-font-mono: ui-monospace, "SF Mono", "Cascadia Code",
     "JetBrains Mono", Menlo, Consolas, monospace;
 
-  /* radius — distinct by element type, never one size everywhere */
-  --primitive-radius-sm: 4px;
-  --primitive-radius-md: 8px;
-  --primitive-radius-lg: 12px;
-  --primitive-radius-full: 9999px;
+  /* radius — two quiet sizes only; no pill geometry exists in this system */
+  --primitive-radius-sm: 2px;
+  --primitive-radius-md: 4px;
 
   /* elevation — flat-first; a single subtle level for raised surfaces */
   --primitive-shadow-sm-dark: 0 1px 2px rgba(9, 11, 14, 0.5);
@@ -130,21 +149,18 @@
   --primitive-z-sticky: 100;
   --primitive-z-overlay: 200;
 
-  /* motion */
+  /* motion — durations only; no keyframes exist in this system (CHK-008) */
   --primitive-duration-quick: 120ms;
   --primitive-duration-moderate: 200ms;
-  --primitive-duration-gentle: 300ms;
   --primitive-ease-standard: cubic-bezier(0.4, 0, 0.2, 1);
-  --primitive-ease-decelerate: cubic-bezier(0, 0, 0.2, 1);
 
   /* breakpoints — documentation tokens only: @media cannot consume custom
      properties, so wireframe.css states the same values in rem literally */
   --primitive-bp-md: 48rem;
   --primitive-bp-lg: 64rem;
-  --primitive-bp-xl: 80rem;
 
   /* layout metrics */
-  --primitive-rail-width: 15rem;
+  --primitive-sidebar-width: 13.75rem;
   --primitive-measure: 72rem;
 }
 
@@ -170,49 +186,50 @@
   --ds-color-outline-strong: var(--primitive-text-light-faint);
   --ds-color-outline-inverse: var(--primitive-ink-700);
 
-  /* accent */
-  --ds-color-primary: var(--primitive-indigo-700);
-  --ds-color-primary-hover: var(--primitive-indigo-900);
-  --ds-color-primary-strong: var(--primitive-indigo-700);
+  /* accent — state and action only */
+  --ds-color-primary: var(--primitive-accent-600);
+  --ds-color-primary-hover: var(--primitive-accent-700);
+  --ds-color-primary-strong: var(--primitive-accent-600);
   --ds-color-on-primary: var(--primitive-paper-0);
-  --ds-color-primary-wash: var(--primitive-indigo-wash-light);
-  --ds-color-primary-wash-raised: var(--primitive-indigo-wash-raised-light);
+  --ds-color-primary-wash: var(--primitive-accent-wash-light);
+  --ds-color-primary-wash-raised: var(--primitive-accent-wash-raised-light);
 
-  /* focus indicator (≥ 3:1 against every surface it sits on) */
-  --ds-color-focus: var(--primitive-sky-700);
+  /* focus indicator — the action hue, >= 3:1 against every surface */
+  --ds-color-focus: var(--primitive-accent-700);
 
-  /* status roles — fg pairs stay ≥ 4.5:1 on their surface */
+  /* status roles — fg pairs >= 4.5:1 on their washes and surfaces */
   --ds-color-success: var(--primitive-green-700);
   --ds-color-success-wash: var(--primitive-green-wash-light);
   --ds-color-warning: var(--primitive-amber-700);
   --ds-color-warning-wash: var(--primitive-amber-wash-light);
   --ds-color-danger: var(--primitive-red-700);
   --ds-color-danger-wash: var(--primitive-red-wash-light);
-  --ds-color-info: var(--primitive-sky-700);
-  --ds-color-info-wash: var(--primitive-sky-wash-light);
 
-  /* neutral chip / hover washes */
+  /* informational role reuses the one accent family — no second blue */
+  --ds-color-info: var(--primitive-accent-600);
+  --ds-color-info-wash: var(--primitive-accent-wash-light);
+
+  /* neutral hover wash */
   --ds-color-wash: var(--primitive-paper-100);
-  --ds-color-wash-raised: var(--primitive-indigo-wash-raised-light);
   --ds-color-skeleton: var(--primitive-skeleton-light);
 
   /* code / data wells */
   --ds-color-well-bg: var(--primitive-paper-100);
   --ds-color-well-fg: var(--primitive-text-light-high);
 
-  /* graph node kinds (semantic hue per entity kind; component tier scopes them) */
-  --ds-color-graph-project: var(--primitive-sky-700);
-  --ds-color-graph-repository: var(--primitive-green-700);
-  --ds-color-graph-concept: var(--primitive-indigo-700);
-  --ds-color-graph-function: var(--primitive-amber-700);
-  --ds-color-graph-class: var(--primitive-red-700);
-  --ds-color-graph-module: var(--primitive-amber-700);
-  --ds-color-graph-file: var(--primitive-text-light-faint);
-  --ds-color-graph-default: var(--primitive-text-light-mid);
-  --ds-color-graph-link: var(--primitive-ink-300);
+  /* graph node fills — at most TWO primitive families: accent + slate.
+     Kind is carried by SHAPE and border in the markup, not by hue. */
+  --ds-color-graph-project: var(--primitive-accent-600);
+  --ds-color-graph-repository: var(--primitive-accent-600);
+  --ds-color-graph-concept: var(--primitive-slate-500);
+  --ds-color-graph-function: var(--primitive-slate-500);
+  --ds-color-graph-class: var(--primitive-slate-600);
+  --ds-color-graph-module: var(--primitive-slate-600);
+  --ds-color-graph-file: var(--primitive-slate-400);
+  --ds-color-graph-default: var(--primitive-slate-500);
+  --ds-color-graph-link: var(--primitive-slate-500);
 
-  /* spacing */
-  --ds-space-px: var(--primitive-space-px);
+  /* spacing (rem grid) */
   --ds-space-1: var(--primitive-space-1);
   --ds-space-2: var(--primitive-space-2);
   --ds-space-3: var(--primitive-space-3);
@@ -236,14 +253,13 @@
   --ds-leading-tight: var(--primitive-leading-tight);
   --ds-leading-normal: var(--primitive-leading-normal);
   --ds-leading-loose: var(--primitive-leading-loose);
+  --ds-tracking-micro: var(--primitive-tracking-micro);
   --ds-font-sans: var(--primitive-font-sans);
   --ds-font-mono: var(--primitive-font-mono);
 
-  /* radius */
+  /* radius — quiet, two steps */
   --ds-radius-sm: var(--primitive-radius-sm);
   --ds-radius-md: var(--primitive-radius-md);
-  --ds-radius-lg: var(--primitive-radius-lg);
-  --ds-radius-full: var(--primitive-radius-full);
 
   /* elevation */
   --ds-shadow-sm: var(--primitive-shadow-sm-light);
@@ -255,15 +271,13 @@
   --ds-z-sticky: var(--primitive-z-sticky);
   --ds-z-overlay: var(--primitive-z-overlay);
 
-  /* motion */
+  /* motion (durations for background shifts only — no keyframes exist) */
   --ds-duration-quick: var(--primitive-duration-quick);
   --ds-duration-moderate: var(--primitive-duration-moderate);
-  --ds-duration-gentle: var(--primitive-duration-gentle);
   --ds-ease-standard: var(--primitive-ease-standard);
-  --ds-ease-decelerate: var(--primitive-ease-decelerate);
 
   /* layout */
-  --ds-rail-width: var(--primitive-rail-width);
+  --ds-sidebar-width: var(--primitive-sidebar-width);
   --ds-measure: var(--primitive-measure);
 }
 
@@ -286,35 +300,34 @@
     --ds-color-outline-faint: var(--primitive-ink-700);
     --ds-color-outline-strong: var(--primitive-ink-600);
     --ds-color-outline-inverse: var(--primitive-ink-300);
-    --ds-color-primary: var(--primitive-indigo-300);
-    --ds-color-primary-hover: var(--primitive-indigo-400);
-    --ds-color-primary-strong: var(--primitive-indigo-300);
+    --ds-color-primary: var(--primitive-accent-300);
+    --ds-color-primary-hover: var(--primitive-accent-400);
+    --ds-color-primary-strong: var(--primitive-accent-300);
     --ds-color-on-primary: var(--primitive-ink-950);
-    --ds-color-primary-wash: var(--primitive-indigo-wash-dark);
-    --ds-color-primary-wash-raised: var(--primitive-indigo-wash-raised-dark);
-    --ds-color-focus: var(--primitive-sky-400);
+    --ds-color-primary-wash: var(--primitive-accent-wash-dark);
+    --ds-color-primary-wash-raised: var(--primitive-accent-wash-raised-dark);
+    --ds-color-focus: var(--primitive-accent-300);
     --ds-color-success: var(--primitive-green-400);
     --ds-color-success-wash: var(--primitive-green-wash-dark);
     --ds-color-warning: var(--primitive-amber-400);
     --ds-color-warning-wash: var(--primitive-amber-wash-dark);
     --ds-color-danger: var(--primitive-red-400);
     --ds-color-danger-wash: var(--primitive-red-wash-dark);
-    --ds-color-info: var(--primitive-sky-400);
-    --ds-color-info-wash: var(--primitive-sky-wash-dark);
+    --ds-color-info: var(--primitive-accent-300);
+    --ds-color-info-wash: var(--primitive-accent-wash-dark);
     --ds-color-wash: var(--primitive-wash-dark);
-    --ds-color-wash-raised: var(--primitive-wash-raised-dark);
     --ds-color-skeleton: var(--primitive-skeleton-dark);
     --ds-color-well-bg: var(--primitive-ink-950);
     --ds-color-well-fg: var(--primitive-text-dark-high);
-    --ds-color-graph-project: var(--primitive-sky-400);
-    --ds-color-graph-repository: var(--primitive-green-400);
-    --ds-color-graph-concept: var(--primitive-indigo-400);
-    --ds-color-graph-function: var(--primitive-amber-400);
-    --ds-color-graph-class: var(--primitive-red-400);
-    --ds-color-graph-module: var(--primitive-indigo-300);
-    --ds-color-graph-file: var(--primitive-text-dark-faint);
-    --ds-color-graph-default: var(--primitive-text-dark-mid);
-    --ds-color-graph-link: var(--primitive-ink-600);
+    --ds-color-graph-project: var(--primitive-accent-300);
+    --ds-color-graph-repository: var(--primitive-accent-300);
+    --ds-color-graph-concept: var(--primitive-slate-400);
+    --ds-color-graph-function: var(--primitive-slate-400);
+    --ds-color-graph-class: var(--primitive-slate-400);
+    --ds-color-graph-module: var(--primitive-slate-400);
+    --ds-color-graph-file: var(--primitive-slate-400);
+    --ds-color-graph-default: var(--primitive-slate-400);
+    --ds-color-graph-link: var(--primitive-slate-400);
     --ds-shadow-sm: var(--primitive-shadow-sm-dark);
     --ds-shadow-md: var(--primitive-shadow-md-dark);
   }
@@ -335,35 +348,34 @@
   --ds-color-outline-faint: var(--primitive-ink-700);
   --ds-color-outline-strong: var(--primitive-ink-600);
   --ds-color-outline-inverse: var(--primitive-ink-300);
-  --ds-color-primary: var(--primitive-indigo-300);
-  --ds-color-primary-hover: var(--primitive-indigo-400);
-  --ds-color-primary-strong: var(--primitive-indigo-300);
+  --ds-color-primary: var(--primitive-accent-300);
+  --ds-color-primary-hover: var(--primitive-accent-400);
+  --ds-color-primary-strong: var(--primitive-accent-300);
   --ds-color-on-primary: var(--primitive-ink-950);
-  --ds-color-primary-wash: var(--primitive-indigo-wash-dark);
-  --ds-color-primary-wash-raised: var(--primitive-indigo-wash-raised-dark);
-  --ds-color-focus: var(--primitive-sky-400);
+  --ds-color-primary-wash: var(--primitive-accent-wash-dark);
+  --ds-color-primary-wash-raised: var(--primitive-accent-wash-raised-dark);
+  --ds-color-focus: var(--primitive-accent-300);
   --ds-color-success: var(--primitive-green-400);
   --ds-color-success-wash: var(--primitive-green-wash-dark);
   --ds-color-warning: var(--primitive-amber-400);
   --ds-color-warning-wash: var(--primitive-amber-wash-dark);
   --ds-color-danger: var(--primitive-red-400);
   --ds-color-danger-wash: var(--primitive-red-wash-dark);
-  --ds-color-info: var(--primitive-sky-400);
-  --ds-color-info-wash: var(--primitive-sky-wash-dark);
+  --ds-color-info: var(--primitive-accent-300);
+  --ds-color-info-wash: var(--primitive-accent-wash-dark);
   --ds-color-wash: var(--primitive-wash-dark);
-  --ds-color-wash-raised: var(--primitive-wash-raised-dark);
   --ds-color-skeleton: var(--primitive-skeleton-dark);
   --ds-color-well-bg: var(--primitive-ink-950);
   --ds-color-well-fg: var(--primitive-text-dark-high);
-  --ds-color-graph-project: var(--primitive-sky-400);
-  --ds-color-graph-repository: var(--primitive-green-400);
-  --ds-color-graph-concept: var(--primitive-indigo-400);
-  --ds-color-graph-function: var(--primitive-amber-400);
-  --ds-color-graph-class: var(--primitive-red-400);
-  --ds-color-graph-module: var(--primitive-indigo-300);
-  --ds-color-graph-file: var(--primitive-text-dark-faint);
-  --ds-color-graph-default: var(--primitive-text-dark-mid);
-  --ds-color-graph-link: var(--primitive-ink-600);
+  --ds-color-graph-project: var(--primitive-accent-300);
+  --ds-color-graph-repository: var(--primitive-accent-300);
+  --ds-color-graph-concept: var(--primitive-slate-400);
+  --ds-color-graph-function: var(--primitive-slate-400);
+  --ds-color-graph-class: var(--primitive-slate-400);
+  --ds-color-graph-module: var(--primitive-slate-400);
+  --ds-color-graph-file: var(--primitive-slate-400);
+  --ds-color-graph-default: var(--primitive-slate-400);
+  --ds-color-graph-link: var(--primitive-slate-400);
   --ds-shadow-sm: var(--primitive-shadow-sm-dark);
   --ds-shadow-md: var(--primitive-shadow-md-dark);
 }
@@ -374,35 +386,54 @@
   --wf-btn-bg-hover: var(--ds-color-surface-overlay);
   --wf-btn-fg: var(--ds-color-on-surface);
   --wf-btn-border: var(--ds-color-outline);
-  --wf-btn-radius: var(--ds-radius-md);
+  --wf-btn-radius: var(--ds-radius-sm);
   --wf-btn-padding-x: var(--ds-space-3);
-  --wf-btn-padding-y: var(--ds-space-2);
+  --wf-btn-padding-y: var(--ds-space-1);
   --wf-btn-min-target: var(--ds-space-6);
 }
 
-.wf-btn--primary {
-  --wf-btn-bg: var(--ds-color-primary);
-  --wf-btn-bg-hover: var(--ds-color-primary-hover);
-  --wf-btn-fg: var(--ds-color-on-primary);
-  --wf-btn-border: var(--ds-color-primary);
+.wf-sidebar {
+  --wf-sidebar-width: var(--ds-sidebar-width);
+  --wf-sidebar-bg: var(--ds-color-surface-raised);
+  --wf-sidebar-border: var(--ds-color-outline);
+  --wf-sidebar-link-fg: var(--ds-color-on-surface-muted);
+  --wf-sidebar-link-bg-hover: var(--ds-color-wash);
+  --wf-sidebar-current-bar: var(--ds-color-primary);
+  --wf-sidebar-current-bg: var(--ds-color-primary-wash);
 }
 
-.wf-chip {
-  --wf-chip-bg: var(--ds-color-wash);
-  --wf-chip-fg: var(--ds-color-on-surface-muted);
-  --wf-chip-border: var(--ds-color-outline);
-  --wf-chip-radius: var(--ds-radius-full);
+.wf-kpi {
+  --wf-kpi-bg: var(--ds-color-surface-raised);
+  --wf-kpi-border: var(--ds-color-outline);
+  --wf-kpi-radius: var(--ds-radius-sm);
+  --wf-kpi-padding: var(--ds-space-3);
+  --wf-kpi-label-size: var(--ds-text-sm);
+  --wf-kpi-label-color: var(--ds-color-on-surface-faint);
+  --wf-kpi-value-size: var(--ds-text-2xl);
+  --wf-kpi-value-weight: var(--ds-font-bold);
+  --wf-kpi-value-color: var(--ds-color-on-surface);
 }
 
-.wf-chip--accent {
-  --wf-chip-bg: var(--ds-color-primary-wash);
-  --wf-chip-fg: var(--ds-color-primary);
-  --wf-chip-border: var(--ds-color-primary-wash-raised);
+.wf-table {
+  --wf-table-border: var(--ds-color-outline);
+  --wf-table-header-bg: var(--ds-color-surface-sunken);
+  --wf-table-header-fg: var(--ds-color-on-surface-faint);
+  --wf-table-cell-padding-x: var(--ds-space-2);
+  --wf-table-cell-padding-y: var(--ds-space-1);
+  --wf-table-row-border: var(--ds-color-outline-faint);
+  --wf-table-row-bg-hover: var(--ds-color-wash);
+}
+
+.wf-micro-label {
+  --wf-micro-label-size: var(--ds-text-sm);
+  --wf-micro-label-weight: var(--ds-font-semibold);
+  --wf-micro-label-tracking: var(--ds-tracking-micro);
+  --wf-micro-label-color: var(--ds-color-on-surface-faint);
 }
 
 .wf-badge {
   --wf-badge-fg: var(--ds-color-on-surface-muted);
-  --wf-badge-border: var(--ds-color-outline);
+  --wf-badge-border: var(--ds-color-outline-strong);
   --wf-badge-radius: var(--ds-radius-sm);
 }
 
@@ -419,34 +450,30 @@
 .wf-state-card {
   --wf-state-accent: var(--ds-color-warning);
   --wf-state-accent-fg: var(--ds-color-warning);
-  --wf-state-accent-wash: var(--ds-color-warning-wash);
-  --wf-state-radius: var(--ds-radius-md);
-  --wf-state-padding: var(--ds-space-4);
+  --wf-state-radius: var(--ds-radius-sm);
+  --wf-state-padding: var(--ds-space-3);
 }
 
 .wf-state-card--ok {
   --wf-state-accent: var(--ds-color-success);
   --wf-state-accent-fg: var(--ds-color-success);
-  --wf-state-accent-wash: var(--ds-color-success-wash);
 }
 
 .wf-state-card--info {
   --wf-state-accent: var(--ds-color-info);
   --wf-state-accent-fg: var(--ds-color-info);
-  --wf-state-accent-wash: var(--ds-color-info-wash);
 }
 
 .wf-state-card--danger {
   --wf-state-accent: var(--ds-color-danger);
   --wf-state-accent-fg: var(--ds-color-danger);
-  --wf-state-accent-wash: var(--ds-color-danger-wash);
 }
 
 .wf-panel {
   --wf-panel-bg: var(--ds-color-surface-raised);
   --wf-panel-border: var(--ds-color-outline);
-  --wf-panel-radius: var(--ds-radius-lg);
-  --wf-panel-padding: var(--ds-space-4);
+  --wf-panel-radius: var(--ds-radius-md);
+  --wf-panel-padding: var(--ds-space-3);
 }
 
 .wf-kbd {
@@ -467,7 +494,7 @@
   --wf-term-border: var(--ds-color-outline);
   --wf-term-fg: var(--ds-color-on-surface-muted);
   --wf-term-accent: var(--ds-color-warning);
-  --wf-term-radius: var(--ds-radius-md);
+  --wf-term-radius: var(--ds-radius-sm);
 }
 
 .wf-node--project { --wf-node-fill: var(--ds-color-graph-project); }
@@ -484,5 +511,13 @@
   --wf-graph-border: var(--ds-color-outline);
   --wf-graph-link: var(--ds-color-graph-link);
   --wf-graph-label: var(--ds-color-on-surface-muted);
-  --wf-graph-radius: var(--ds-radius-md);
+  --wf-graph-radius: var(--ds-radius-sm);
+  --wf-graph-node-stroke: var(--ds-color-surface-sunken);
+}
+
+.wf-meter {
+  --wf-meter-track-bg: var(--ds-color-wash);
+  --wf-meter-track-border: var(--ds-color-outline-faint);
+  --wf-meter-fill-bg: var(--ds-color-primary);
+  --wf-meter-radius: var(--ds-radius-sm);
 }

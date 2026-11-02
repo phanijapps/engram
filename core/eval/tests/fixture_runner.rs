@@ -7,10 +7,10 @@ use engram_store_sqlite::SqlMemoryService;
 use futures::executor::block_on;
 
 const ACCEPTED_RETRIEVAL_FIXTURES: &[&str] = &[
-    include_str!("../../../contracts/v1/examples/evaluation-fixture.positive-recall.json"),
-    include_str!("../../../contracts/v1/examples/evaluation-fixture.forbidden-recall.json"),
-    include_str!("../../../contracts/v1/examples/evaluation-fixture.budget-omission.json"),
-    include_str!("../../../contracts/v1/examples/evaluation-fixture.no-result.json"),
+    include_str!("../../../docs/constitution/registry/contracts/v1/examples/evaluation-fixture.positive-recall.json"),
+    include_str!("../../../docs/constitution/registry/contracts/v1/examples/evaluation-fixture.forbidden-recall.json"),
+    include_str!("../../../docs/constitution/registry/contracts/v1/examples/evaluation-fixture.budget-omission.json"),
+    include_str!("../../../docs/constitution/registry/contracts/v1/examples/evaluation-fixture.no-result.json"),
 ];
 
 #[test]
@@ -18,7 +18,7 @@ fn runner_passes_contract_evaluation_fixture() {
     let service = Arc::new(SqlMemoryService::open_in_memory().expect("open sql service"));
     let runner = MemoryFixtureRunner::new(service);
     let fixture: EvaluationFixture = serde_json::from_str(include_str!(
-        "../../../contracts/v1/examples/evaluation-fixture.json"
+        "../../../docs/constitution/registry/contracts/v1/examples/evaluation-fixture.json"
     ))
     .expect("deserialize evaluation fixture");
 
@@ -61,7 +61,7 @@ fn runner_reports_forbidden_target_leak() {
     let service = Arc::new(SqlMemoryService::open_in_memory().expect("open sql service"));
     let runner = MemoryFixtureRunner::new(service);
     let mut fixture: EvaluationFixture = serde_json::from_str(include_str!(
-        "../../../contracts/v1/examples/evaluation-fixture.json"
+        "../../../docs/constitution/registry/contracts/v1/examples/evaluation-fixture.json"
     ))
     .expect("deserialize evaluation fixture");
     fixture.cases[0].expect.must_exclude = fixture.cases[0].expect.must_include.clone();

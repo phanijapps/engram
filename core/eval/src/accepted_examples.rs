@@ -7,25 +7,25 @@ use engram_domain::*;
 
 /// Accepted write-memory request example from the portable v1 contracts.
 pub const WRITE_MEMORY_REQUEST_JSON: &str =
-    include_str!("../../../contracts/v1/examples/write-memory-request.json");
+    include_str!("../../../docs/constitution/registry/contracts/v1/examples/write-memory-request.json");
 
 /// Accepted retrieval request example from the portable v1 contracts.
 pub const RETRIEVAL_REQUEST_JSON: &str =
-    include_str!("../../../contracts/v1/examples/retrieval-request.json");
+    include_str!("../../../docs/constitution/registry/contracts/v1/examples/retrieval-request.json");
 
 /// Invalid write-memory request with a missing scope tenant.
 pub const INVALID_WRITE_MISSING_SCOPE_TENANT_JSON: &str = include_str!(
-    "../../../contracts/v1/examples/invalid/write-memory-request.missing-scope-tenant.json"
+    "../../../docs/constitution/registry/contracts/v1/examples/invalid/write-memory-request.missing-scope-tenant.json"
 );
 
 /// Invalid write-memory request that asks for training export.
 pub const INVALID_WRITE_TRAINING_EXPORT_JSON: &str = include_str!(
-    "../../../contracts/v1/examples/invalid/write-memory-request.training-export.json"
+    "../../../docs/constitution/registry/contracts/v1/examples/invalid/write-memory-request.training-export.json"
 );
 
 /// Invalid retrieval request with a missing requester.
 pub const INVALID_RETRIEVAL_MISSING_REQUESTER_JSON: &str =
-    include_str!("../../../contracts/v1/examples/invalid/retrieval-request.missing-requester.json");
+    include_str!("../../../docs/constitution/registry/contracts/v1/examples/invalid/retrieval-request.missing-requester.json");
 
 /// Parses the accepted write-memory request example into a domain request.
 ///

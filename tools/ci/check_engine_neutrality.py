@@ -43,6 +43,7 @@ GATED_PATHS = [
     "core/integration/src/observability.rs",
     "core/integration/src/knowledge_query.rs",
     "core/integration/src/lexical_feed.rs",
+    "core/integration/src/scope_inventory.rs",
     "core/packs/src",
     "mcp/engram-mcp/src",
 ]

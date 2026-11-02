@@ -65,6 +65,7 @@ pub mod ollama_provider;
 mod provenance;
 pub mod provider;
 pub mod recall;
+pub mod scope_inventory;
 #[cfg(feature = "sqlite")]
 pub mod sqlite;
 
@@ -98,5 +99,9 @@ pub use observability::{DiagnosticsSnapshot, Observability, RecordCounts};
 pub use provenance::{ProvenanceEntry, ProvenanceQuery, TimeWindow};
 pub use provider::{EngramProvider, EngramProviderBuilder};
 pub use recall::UnifiedRecall;
+pub use scope_inventory::{
+    MAX_PARTITION_PAGE_LIMIT, UNSET_LABEL, PartitionPage, PartitionRecords, PartitionSummary,
+    ScopeInventory, dimension_label, partition_matches, sort_summaries,
+};
 #[cfg(feature = "fastembed")]
 pub use sqlite::fastembed_embedding::FastEmbedEmbeddingProvider;

@@ -7,6 +7,7 @@ import {
   type PartitionRecords
 } from "../api";
 import { dimensionLabel } from "./Inventory";
+import { RecentAdditionsView } from "./RecentAdditions";
 
 /** Header for the selected partition: the exact tuple with "(unset)" labels. */
 export function PartitionHeader({ scope }: { scope: PartitionTuple }) {
@@ -100,7 +101,7 @@ export function PartitionView({
         ← inventory
       </button>
       <PartitionHeader scope={scope} />
-      <div className="grid gap-6 lg:grid-cols-2">
+      <div className="grid gap-6 lg:grid-cols-3">
         <div>
           <h3 className="mb-1 text-sm font-semibold uppercase tracking-wide text-slate-400">
             memories
@@ -141,6 +142,12 @@ export function PartitionView({
               {memories?.nextOffset != null ? ", more pages" : ", end"}
             </span>
           </div>
+        </div>
+        <div>
+          <h3 className="mb-1 text-sm font-semibold uppercase tracking-wide text-slate-400">
+            recent additions
+          </h3>
+          <RecentAdditionsView scope={scope} />
         </div>
         <div>
           <h3 className="mb-1 text-sm font-semibold uppercase tracking-wide text-slate-400">

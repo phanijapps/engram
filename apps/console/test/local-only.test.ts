@@ -156,6 +156,43 @@ describe("job012 console local-only surface (STEP-007)", () => {
     expect(isLoopbackOriginHeader("not-a-url")).toBe(false);
   });
 
+  it("local-only: GET on a directory path serves the SPA entry, never a crash (FIND-backend-001)", async () => {
+    const { mkdtempSync, mkdirSync, writeFileSync } = await import("node:fs");
+    const { tmpdir } = await import("node:os");
+    const { join } = await import("node:path");
+    const uiDir = mkdtempSync(join(tmpdir(), "job012-uidir-"));
+    writeFileSync(join(uiDir, "index.html"), "<!doctype html><title>engram console</title>");
+    mkdirSync(join(uiDir, "assets"));
+    writeFileSync(join(uiDir, "assets", "app.js"), "console.log('app');");
+
+    const app = createConsoleServer({
+      provider: stubProvider(),
+      backend: "sqlite",
+      storage: "/tmp/engram-console-test",
+      uiDir
+    });
+    const server = await app.listen(0, "127.0.0.1");
+    servers.push(server);
+    const address = server.address();
+    if (typeof address === "string" || address === null) throw new Error("tcp expected");
+    const base = `http://127.0.0.1:${address.port}`;
+
+    // The exact repro from the finding: /assets exists as a directory.
+    const directoryGet = await fetch(`${base}/assets`);
+    expect(directoryGet.status).toBe(200);
+    expect(directoryGet.headers.get("content-type")).toContain("text/html");
+    expect(await directoryGet.text()).toContain("engram console");
+
+    // The process must still be alive and serving afterwards.
+    const after = await fetch(`${base}/api/health`);
+    expect(after.status).toBe(200);
+
+    // Regular files still serve with their own content type.
+    const asset = await fetch(`${base}/assets/app.js`);
+    expect(asset.status).toBe(200);
+    expect(asset.headers.get("content-type")).toContain("text/javascript");
+  });
+
   it("local-only: partition keys round-trip the exact tuple", () => {
     const scope = { tenant: "acme", subject: null, workspace: "proj", session: null, environment: null };
     const key = partitionKey(scope);

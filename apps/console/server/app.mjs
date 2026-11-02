@@ -12,7 +12,7 @@
  * is a read.
  */
 import { createServer } from "node:http";
-import { createReadStream, existsSync } from "node:fs";
+import { createReadStream, existsSync, statSync } from "node:fs";
 import { extname, join, normalize } from "node:path";
 import { readFile } from "node:fs/promises";
 
@@ -379,10 +379,41 @@ export function createConsoleServer({ provider, backend, storage, uiDir }) {
       res.writeHead(403).end("forbidden");
       return;
     }
-    const file = existsSync(candidate) ? candidate : join(uiDir, "index.html");
+    // Serve REGULAR FILES only (review r1 FIND-backend-001): a directory
+    // that exists (every Vite build ships dist/assets/) made
+    // createReadStream emit an async EISDIR that pipe() never forwarded —
+    // an uncaught exception that killed the whole console process. Directories
+    // and anything unreadable fall back to the SPA entry, and the stream
+    // itself carries an error handler so no serving failure can escalate.
+    const isRegularFile = (path) => {
+      try {
+        return statSync(path).isFile();
+      } catch {
+        return false;
+      }
+    };
+    const file = isRegularFile(candidate)
+      ? candidate
+      : isRegularFile(join(uiDir, "index.html"))
+        ? join(uiDir, "index.html")
+        : null;
+    if (file === null) {
+      res.writeHead(200, { "content-type": MIME[".html"] });
+      res.end("<!doctype html><title>engram console</title><p>State: ui-not-built.</p>");
+      return;
+    }
     const type = MIME[extname(file)] ?? "application/octet-stream";
     res.writeHead(200, { "content-type": type });
-    createReadStream(file).pipe(res);
+    const stream = createReadStream(file);
+    stream.on("error", (error) => {
+      if (!res.headersSent) {
+        res.writeHead(500, { "content-type": "application/json; charset=utf-8" });
+      }
+      res.end(
+        JSON.stringify({ state: "ui-read-error", message: String(error?.message ?? error) })
+      );
+    });
+    stream.pipe(res);
   }
 
   const server = createServer(async (req, res) => {

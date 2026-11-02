@@ -65,9 +65,17 @@ afterEach(async () => {
 });
 
 async function start(transport: NativeProviderTransport): Promise<number> {
-  const port = 4000 + Math.floor(Math.random() * 1000);
-  servers.push(await startMcpHttpServer({ transport, port }));
-  return port;
+  // Ephemeral port (listen on 0, read back the bound port): the previous
+  // random 4000-4999 pick collided across parallel test files / retries and
+  // flaked the suite with "bad port" fetch failures under load. The OS
+  // allocator cannot hand out a port it just gave another listener.
+  const server = await startMcpHttpServer({ transport, port: 0 });
+  servers.push(server);
+  const address = server.address();
+  if (typeof address === "string" || address === null) {
+    throw new Error("expected a TCP address from the MCP HTTP server");
+  }
+  return address.port;
 }
 
 function postWithHost(port: number, host: string, body: string): Promise<number> {

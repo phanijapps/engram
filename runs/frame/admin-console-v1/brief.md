@@ -13,7 +13,7 @@ updated_at: "2026-11-01T21:16:21-05:00"
 size_tier: "M"
 owner: "videogamer (project owner, pi session)"
 ratified_at: "2026-11-01T21:16:21-05:00"
-constitution_rules_touched: [PRD-101, PRD-102, PRD-107, rail-engine-neutrality, rail-surface-parity]
+constitution_rules_touched: ["PRD-101", "PRD-102", "PRD-107", "EN-004", "SP-004"]
 brief_ref: null
 ---
 

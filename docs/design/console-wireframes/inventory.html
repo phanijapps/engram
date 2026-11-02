@@ -1,0 +1,189 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Partition inventory — engram console wireframes</title>
+  <link rel="stylesheet" href="tokens.css">
+  <link rel="stylesheet" href="wireframe.css">
+</head>
+<body data-scope="v1">
+  <a class="wf-skip" href="#main">Skip to frame content</a>
+  <div class="wf-shell">
+    <aside class="wf-rail">
+      <div class="wf-rail-brand">
+        <span class="wf-mark" aria-hidden="true"></span>
+        <span class="wf-rail-title">engram console</span>
+        <span class="wf-rail-sub">wireframe set v1</span>
+      </div>
+      <nav class="wf-rail-nav" aria-label="Frames">
+        <a class="wf-nav-link" href="index.html">Overview</a>
+        <a class="wf-nav-link" href="inventory.html" aria-current="page">Inventory</a>
+        <a class="wf-nav-link" href="partition.html">Partition</a>
+        <a class="wf-nav-link" href="recent-additions.html">Recent additions</a>
+        <a class="wf-nav-link" href="partition-graph.html">Knowledge graph</a>
+        <a class="wf-nav-link" href="anomalies.html">Anomalies</a>
+        <a class="wf-nav-link" href="binding-health.html">Binding health</a>
+      </nav>
+      <div class="wf-rail-foot">
+        <span class="wf-badge wf-badge--v1"><span class="wf-dot" aria-hidden="true"></span>read-only v1</span>
+        <button type="button" class="wf-theme-toggle" data-action="toggle-theme">
+          <span aria-hidden="true">◐</span><span class="wf-theme-label">Light theme</span>
+        </button>
+      </div>
+    </aside>
+
+    <main id="main" class="wf-content">
+      <header class="wf-frame-head">
+        <p class="wf-eyebrow">v1 frame · read-only surface</p>
+        <h1 class="wf-frame-title">Partition inventory</h1>
+        <p class="wf-lede">The front door of the console: every partition in the store as one row — the exact scope tuple with the engine’s own counts, nothing summarized away and nothing writable.</p>
+      </header>
+
+      <section class="wf-view" aria-labelledby="inventory-view-title">
+        <h2 id="inventory-view-title">Inventory</h2>
+        <p class="wf-quiet">Engine vocabulary: partitions are distinct tenant / subject / workspace / session / environment tuples. Launch aliases map <code>--org</code> → tenant and <code>--project</code> → workspace.</p>
+
+        <div class="wf-stats">
+          <div class="wf-stat">
+            <span class="wf-stat-value">7</span>
+            <span class="wf-stat-label">partitions</span>
+          </div>
+          <div class="wf-stat">
+            <span class="wf-stat-value">1,284</span>
+            <span class="wf-stat-label">memories</span>
+          </div>
+          <div class="wf-stat">
+            <span class="wf-stat-value">372</span>
+            <span class="wf-stat-label">entities</span>
+          </div>
+          <div class="wf-stat">
+            <span class="wf-stat-value">96</span>
+            <span class="wf-stat-label">beliefs</span>
+          </div>
+        </div>
+
+        <div class="wf-table-wrap">
+          <table class="wf-table wf-table--collapse wf-table--linked">
+            <caption>Bounded summary — totals per partition, never a full record dump. Select a row to browse that partition in isolation.</caption>
+            <thead>
+              <tr>
+                <th scope="col">tenant (org)</th>
+                <th scope="col">subject</th>
+                <th scope="col">workspace (project)</th>
+                <th scope="col">session</th>
+                <th scope="col">environment</th>
+                <th scope="col" class="wf-num">memories</th>
+                <th scope="col" class="wf-num">entities</th>
+                <th scope="col" class="wf-num">beliefs</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr class="wf-row-link">
+                <td><a class="wf-row-anchor wf-mono" href="partition.html" aria-label="Open partition videogamer / mem-alpha / dev">videogamer</a></td>
+                <td class="wf-mono wf-unset">(unset)</td>
+                <td class="wf-mono">mem-alpha</td>
+                <td class="wf-mono wf-unset">(unset)</td>
+                <td class="wf-mono">dev</td>
+                <td class="wf-num">412</td>
+                <td class="wf-num">168</td>
+                <td class="wf-num">42</td>
+              </tr>
+              <tr class="wf-row-link">
+                <td><a class="wf-row-anchor wf-mono" href="partition.html" aria-label="Open partition videogamer / mem-alpha / production">videogamer</a></td>
+                <td class="wf-mono wf-unset">(unset)</td>
+                <td class="wf-mono">mem-alpha</td>
+                <td class="wf-mono wf-unset">(unset)</td>
+                <td class="wf-mono">production</td>
+                <td class="wf-num">238</td>
+                <td class="wf-num">54</td>
+                <td class="wf-num">12</td>
+              </tr>
+              <tr class="wf-row-link">
+                <td><a class="wf-row-anchor wf-mono" href="partition.html" aria-label="Open partition engram-labs / agentzero / production">engram-labs</a></td>
+                <td class="wf-mono">agentzero</td>
+                <td class="wf-mono wf-unset">(unset)</td>
+                <td class="wf-mono wf-unset">(unset)</td>
+                <td class="wf-mono">production</td>
+                <td class="wf-num">187</td>
+                <td class="wf-num">63</td>
+                <td class="wf-num">18</td>
+              </tr>
+              <tr class="wf-row-link">
+                <td><a class="wf-row-anchor wf-mono" href="partition.html" aria-label="Open partition 可视化研究 / mem-alpha (non-ASCII scope values are first-class keys)">可视化研究</a></td>
+                <td class="wf-mono wf-unset">(unset)</td>
+                <td class="wf-mono">mem-alpha</td>
+                <td class="wf-mono wf-unset">(unset)</td>
+                <td class="wf-mono wf-unset">(unset)</td>
+                <td class="wf-num">156</td>
+                <td class="wf-num">31</td>
+                <td class="wf-num">9</td>
+              </tr>
+              <tr class="wf-row-link">
+                <td><a class="wf-row-anchor wf-mono" href="partition.html" aria-label="Open partition Archivo-histórico / Πελάτης-42 / dev">Archivo-histórico</a></td>
+                <td class="wf-mono">Πελάτης-42</td>
+                <td class="wf-mono wf-unset">(unset)</td>
+                <td class="wf-mono wf-unset">(unset)</td>
+                <td class="wf-mono">dev</td>
+                <td class="wf-num">121</td>
+                <td class="wf-num">24</td>
+                <td class="wf-num">7</td>
+              </tr>
+              <tr class="wf-row-link">
+                <td><a class="wf-row-anchor wf-mono" href="partition.html" aria-label="Open partition videogamer / 日本語テスト / session 3f9c2e1d">videogamer</a></td>
+                <td class="wf-mono wf-unset">(unset)</td>
+                <td class="wf-mono">日本語テスト</td>
+                <td class="wf-mono">3f9c2e1d</td>
+                <td class="wf-mono wf-unset">(unset)</td>
+                <td class="wf-num">94</td>
+                <td class="wf-num">19</td>
+                <td class="wf-num">5</td>
+              </tr>
+              <tr class="wf-row-link">
+                <td><a class="wf-row-anchor wf-mono" href="partition.html" aria-label="Open partition test-env (all dimensions unset)">test-env</a></td>
+                <td class="wf-mono wf-unset">(unset)</td>
+                <td class="wf-mono wf-unset">(unset)</td>
+                <td class="wf-mono wf-unset">(unset)</td>
+                <td class="wf-mono wf-unset">(unset)</td>
+                <td class="wf-num">76</td>
+                <td class="wf-num">13</td>
+                <td class="wf-num">3</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <p class="wf-note">Design contract: the entire row is the select target (shown here as the tenant anchor). Scope values keep their exact engine spelling — including non-ASCII tenants and subjects, which encode to UTF-8 base64url partition keys and must open identically to ASCII scopes. Unset dimensions render as <span class="wf-unset">(unset)</span>, never blank.</p>
+      </section>
+    </main>
+
+    <footer class="wf-foot">
+      <div class="wf-foot-inner">
+        <p>read-only by construction · loopback only · no authentication by design (single trusted operator)</p>
+        <nav class="wf-pager" aria-label="Frame sequence">
+          <a class="wf-pager-link" href="index.html">← Overview</a>
+          <a class="wf-pager-link" href="partition.html">Partition →</a>
+        </nav>
+      </div>
+    </footer>
+  </div>
+
+  <script>
+    (function () {
+      var root = document.documentElement;
+      var toggle = document.querySelector("[data-action=\"toggle-theme\"]");
+      if (!toggle) { return; }
+      var label = toggle.querySelector(".wf-theme-label");
+      function paint() {
+        var dark = root.getAttribute("data-theme") === "dark";
+        toggle.setAttribute("aria-label", dark ? "Switch to light theme" : "Switch to dark theme");
+        if (label) { label.textContent = dark ? "Light theme" : "Dark theme"; }
+      }
+      toggle.addEventListener("click", function () {
+        root.setAttribute("data-theme", root.getAttribute("data-theme") === "dark" ? "light" : "dark");
+        paint();
+      });
+      paint();
+    })();
+  </script>
+</body>
+</html>

@@ -1,0 +1,128 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>engram console — wireframe set v1 (design contract)</title>
+  <link rel="stylesheet" href="tokens.css">
+  <link rel="stylesheet" href="wireframe.css">
+</head>
+<body data-scope="v1">
+  <a class="wf-skip" href="#main">Skip to frame content</a>
+  <div class="wf-shell">
+    <aside class="wf-rail">
+      <div class="wf-rail-brand">
+        <span class="wf-mark" aria-hidden="true"></span>
+        <span class="wf-rail-title">engram console</span>
+        <span class="wf-rail-sub">wireframe set v1</span>
+      </div>
+      <nav class="wf-rail-nav" aria-label="Frames">
+        <a class="wf-nav-link" href="index.html" aria-current="page">Overview</a>
+        <a class="wf-nav-link" href="inventory.html">Inventory</a>
+        <a class="wf-nav-link" href="partition.html">Partition</a>
+        <a class="wf-nav-link" href="recent-additions.html">Recent additions</a>
+        <a class="wf-nav-link" href="partition-graph.html">Knowledge graph</a>
+        <a class="wf-nav-link" href="anomalies.html">Anomalies</a>
+        <a class="wf-nav-link" href="binding-health.html">Binding health</a>
+      </nav>
+      <div class="wf-rail-foot">
+        <span class="wf-badge wf-badge--v1"><span class="wf-dot" aria-hidden="true"></span>read-only v1</span>
+        <button type="button" class="wf-theme-toggle" data-action="toggle-theme">
+          <span aria-hidden="true">◐</span><span class="wf-theme-label">Light theme</span>
+        </button>
+      </div>
+    </aside>
+
+    <main id="main" class="wf-content">
+      <header class="wf-frame-head">
+        <p class="wf-eyebrow">design contract · job 013 · cycle 1</p>
+        <h1 class="wf-frame-title">engram console — professional wireframe set</h1>
+        <p class="wf-lede">The design contract every future console job builds against: six v1 surfaces as interactive frames, every code-named state with designed microcopy, one three-tier token layer, and a clearly-labeled future trajectory. Open any frame over <code>file://</code> — zero build, zero server, zero tooling.</p>
+      </header>
+
+      <section class="wf-hero" aria-labelledby="hero-title">
+        <h2 id="hero-title">How to judge this set</h2>
+        <ol class="wf-flow">
+          <li>Open this folder in a stock browser — <code>index.html</code> over <code>file://</code> is the whole runtime.</li>
+          <li>Click through every frame from the rail; each opens standalone with relative links only.</li>
+          <li>Toggle dark and light themes on every frame — both themes are designed, not derived.</li>
+          <li>Walk each frame’s state gallery: every named state the code can emit appears with designed microcopy pinned to its source line.</li>
+          <li>Tab through each frame: every control reachable, focus visible, order documented in the frame’s keyboard panel.</li>
+        </ol>
+        <p class="wf-quiet">Aesthetic reference: Linear (professional SaaS — dark surface, high contrast, one restrained accent) at Raycast-tier data density. One accent, flat elevation, monospace for engine vocabulary, no gradients.</p>
+      </section>
+
+      <section class="wf-section" aria-labelledby="v1-gallery-title">
+        <h2 id="v1-gallery-title" class="wf-section-title">v1 frames — shipped surfaces, read-only</h2>
+        <div class="wf-gallery">
+          <a class="wf-gallery-card" href="inventory.html">
+            <span class="wf-badge wf-badge--v1"><span class="wf-dot" aria-hidden="true"></span>v1 · read-only</span>
+            <span class="wf-gallery-title">Partition inventory</span>
+            <span class="wf-gallery-desc">Every partition as one row: the exact scope tuple with the engine’s own counts. The front door of the console.</span>
+            <span class="wf-gallery-meta"><span class="wf-chip wf-chip--mono">table</span><span class="wf-chip wf-chip--mono">8 states</span></span>
+          </a>
+          <a class="wf-gallery-card" href="partition.html">
+            <span class="wf-badge wf-badge--v1"><span class="wf-dot" aria-hidden="true"></span>v1 · read-only</span>
+            <span class="wf-gallery-title">Partition browse</span>
+            <span class="wf-gallery-desc">One tuple in isolation: paged memories, recent additions, entities — engine-scoped reads only, non-ASCII scopes first-class.</span>
+            <span class="wf-gallery-meta"><span class="wf-chip wf-chip--mono">3 columns</span><span class="wf-chip wf-chip--mono">pagination</span></span>
+          </a>
+          <a class="wf-gallery-card" href="recent-additions.html">
+            <span class="wf-badge wf-badge--v1"><span class="wf-dot" aria-hidden="true"></span>v1 · read-only</span>
+            <span class="wf-gallery-title">Recent additions</span>
+            <span class="wf-gallery-desc">The pulse of one partition: newest memories in the engine’s newest-first order, never a client-side re-sort.</span>
+            <span class="wf-gallery-meta"><span class="wf-chip wf-chip--mono">list</span><span class="wf-chip wf-chip--mono">recency</span></span>
+          </a>
+          <a class="wf-gallery-card" href="partition-graph.html">
+            <span class="wf-badge wf-badge--v1"><span class="wf-dot" aria-hidden="true"></span>v1 · read-only</span>
+            <span class="wf-gallery-title">Partition knowledge graph</span>
+            <span class="wf-gallery-desc">Entities and relationships resolved inside one tuple only — a link that does not resolve inside the partition is dropped.</span>
+            <span class="wf-gallery-meta"><span class="wf-chip wf-chip--mono">canvas + fallback</span><span class="wf-chip wf-chip--mono">kind legend</span></span>
+          </a>
+          <a class="wf-gallery-card" href="anomalies.html">
+            <span class="wf-badge wf-badge--v1"><span class="wf-dot" aria-hidden="true"></span>v1 · read-only</span>
+            <span class="wf-gallery-title">Anomaly panel</span>
+            <span class="wf-gallery-desc">Cross-partition duplication signals from the minimal documented set — surfacing only, no repair anywhere in v1.</span>
+            <span class="wf-gallery-meta"><span class="wf-chip wf-chip--mono">signals</span><span class="wf-chip wf-chip--mono">drill-down</span></span>
+          </a>
+          <a class="wf-gallery-card" href="binding-health.html">
+            <span class="wf-badge wf-badge--v1"><span class="wf-dot" aria-hidden="true"></span>v1 · read-only</span>
+            <span class="wf-gallery-title">Index-binding health</span>
+            <span class="wf-gallery-desc">One line of facts about indexed code: repo, branch, indexed commit, freshness. Exact repo ids — never a default.</span>
+            <span class="wf-gallery-meta"><span class="wf-chip wf-chip--mono">line + input</span><span class="wf-chip wf-chip--mono">fresh/stale</span></span>
+          </a>
+        </div>
+      </section>
+    </main>
+
+    <footer class="wf-foot">
+      <div class="wf-foot-inner">
+        <p>read-only by construction · loopback only · no authentication by design (single trusted operator)</p>
+        <nav class="wf-pager" aria-label="Frame sequence">
+          <a class="wf-pager-link" href="binding-health.html">← Binding health</a>
+          <a class="wf-pager-link" href="inventory.html">Inventory →</a>
+        </nav>
+      </div>
+    </footer>
+  </div>
+
+  <script>
+    (function () {
+      var root = document.documentElement;
+      var toggle = document.querySelector("[data-action=\"toggle-theme\"]");
+      if (!toggle) { return; }
+      var label = toggle.querySelector(".wf-theme-label");
+      function paint() {
+        var dark = root.getAttribute("data-theme") === "dark";
+        toggle.setAttribute("aria-label", dark ? "Switch to light theme" : "Switch to dark theme");
+        if (label) { label.textContent = dark ? "Light theme" : "Dark theme"; }
+      }
+      toggle.addEventListener("click", function () {
+        root.setAttribute("data-theme", root.getAttribute("data-theme") === "dark" ? "light" : "dark");
+        paint();
+      });
+      paint();
+    })();
+  </script>
+</body>
+</html>

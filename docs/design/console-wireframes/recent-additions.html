@@ -1,0 +1,124 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Recent additions — engram console wireframes</title>
+  <link rel="stylesheet" href="tokens.css">
+  <link rel="stylesheet" href="wireframe.css">
+</head>
+<body data-scope="v1">
+  <a class="wf-skip" href="#main">Skip to frame content</a>
+  <div class="wf-shell">
+    <aside class="wf-rail">
+      <div class="wf-rail-brand">
+        <span class="wf-mark" aria-hidden="true"></span>
+        <span class="wf-rail-title">engram console</span>
+        <span class="wf-rail-sub">wireframe set v1</span>
+      </div>
+      <nav class="wf-rail-nav" aria-label="Frames">
+        <a class="wf-nav-link" href="index.html">Overview</a>
+        <a class="wf-nav-link" href="inventory.html">Inventory</a>
+        <a class="wf-nav-link" href="partition.html">Partition</a>
+        <a class="wf-nav-link" href="recent-additions.html" aria-current="page">Recent additions</a>
+        <a class="wf-nav-link" href="partition-graph.html">Knowledge graph</a>
+        <a class="wf-nav-link" href="anomalies.html">Anomalies</a>
+        <a class="wf-nav-link" href="binding-health.html">Binding health</a>
+      </nav>
+      <div class="wf-rail-foot">
+        <span class="wf-badge wf-badge--v1"><span class="wf-dot" aria-hidden="true"></span>read-only v1</span>
+        <button type="button" class="wf-theme-toggle" data-action="toggle-theme">
+          <span aria-hidden="true">◐</span><span class="wf-theme-label">Light theme</span>
+        </button>
+      </div>
+    </aside>
+
+    <main id="main" class="wf-content">
+      <header class="wf-frame-head">
+        <p class="wf-eyebrow">v1 frame · read-only surface</p>
+        <h1 class="wf-frame-title">Recent additions</h1>
+        <p class="wf-lede">The pulse of one partition: the newest memories in the engine’s own newest-first order. The order is the engine’s recency, never a client-side re-sort.</p>
+      </header>
+
+      <section class="wf-view" aria-labelledby="recent-view-title">
+        <h2 id="recent-view-title">Newest memories — 可视化研究 / mem-alpha</h2>
+        <p class="wf-quiet">Showing the 5 newest of 156 memories in this partition. In the shipped layout this list is a column of the partition page; this frame isolates it as its own design contract.</p>
+
+        <ol class="wf-records">
+          <li class="wf-record">
+            <span class="wf-record-meta">
+              <span class="wf-chip wf-chip--accent">#1 · newest</span>
+              <span class="wf-mono">01JD8Z4K7Q9H2V5N8C3E6F1TA0</span>
+              <span>written 2026-11-02T09:41:07Z</span>
+            </span>
+            <p class="wf-record-text">Partition keys must encode the UTF-8 bytes of the scope tuple — btoa on the raw string throws for any tenant outside Latin-1 and leaves the partition unopenable.</p>
+          </li>
+          <li class="wf-record">
+            <span class="wf-record-meta">
+              <span class="wf-chip wf-chip--accent">#2</span>
+              <span class="wf-mono">01JD8WZ2M4XC7B1P5T9K3H6DA8R</span>
+              <span>written 2026-11-02T08:12:44Z</span>
+            </span>
+            <p class="wf-record-text">Inventory stays a bounded summary: totals per partition, never a full record dump. Drill-down is the partition page’s job.</p>
+          </li>
+          <li class="wf-record">
+            <span class="wf-record-meta">
+              <span class="wf-chip wf-chip--accent">#3</span>
+              <span class="wf-mono">01JD8MQ6F2XB9R4V7T1K5N8CE3W</span>
+              <span>written 2026-11-01T22:03:19Z</span>
+            </span>
+            <p class="wf-record-text">Degraded inventory responses render a named state card with the next step — never a blank table and never a silent retry loop.</p>
+          </li>
+          <li class="wf-record">
+            <span class="wf-record-meta">
+              <span class="wf-chip wf-chip--accent">#4</span>
+              <span class="wf-mono">01JD8BQ9T5XN2W6R4V8K3H7FC1D</span>
+              <span>written 2026-11-01T19:47:52Z</span>
+            </span>
+            <p class="wf-record-text">The anomaly panel surfaces only the documented set: same subject under multiple partitions, same entity identity under multiple partitions. Repair is not a v1 capability anywhere.</p>
+          </li>
+          <li class="wf-record">
+            <span class="wf-record-meta">
+              <span class="wf-chip wf-chip--accent">#5</span>
+              <span class="wf-mono">01JD86M3C7PK9D2S6W1T4N8BX5Q</span>
+              <span>written 2026-11-01T14:26:08Z</span>
+            </span>
+            <p class="wf-record-text">Binding health resolves exact repo ids — the engine has no “default” binding, so the operator supplies the repo the partition actually indexes.</p>
+          </li>
+        </ol>
+
+        <p class="wf-note">No pagination below the newest page by design: this view answers “what just landed,” and older history belongs to the paged memories column of the partition browse.</p>
+      </section>
+    </main>
+
+    <footer class="wf-foot">
+      <div class="wf-foot-inner">
+        <p>read-only by construction · loopback only · no authentication by design (single trusted operator)</p>
+        <nav class="wf-pager" aria-label="Frame sequence">
+          <a class="wf-pager-link" href="partition.html">← Partition</a>
+          <a class="wf-pager-link" href="partition-graph.html">Knowledge graph →</a>
+        </nav>
+      </div>
+    </footer>
+  </div>
+
+  <script>
+    (function () {
+      var root = document.documentElement;
+      var toggle = document.querySelector("[data-action=\"toggle-theme\"]");
+      if (!toggle) { return; }
+      var label = toggle.querySelector(".wf-theme-label");
+      function paint() {
+        var dark = root.getAttribute("data-theme") === "dark";
+        toggle.setAttribute("aria-label", dark ? "Switch to light theme" : "Switch to dark theme");
+        if (label) { label.textContent = dark ? "Light theme" : "Dark theme"; }
+      }
+      toggle.addEventListener("click", function () {
+        root.setAttribute("data-theme", root.getAttribute("data-theme") === "dark" ? "light" : "dark");
+        paint();
+      });
+      paint();
+    })();
+  </script>
+</body>
+</html>

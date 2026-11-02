@@ -602,6 +602,32 @@
     background-color: var(--ds-color-wash);
   }
 
+  /* whole-row target (stretchy pattern): the first-cell anchor covers its
+     row while staying a single native link for keyboard and AT */
+  .wf-table--linked tbody tr {
+    position: relative;
+  }
+
+  .wf-table--linked .wf-row-anchor {
+    color: var(--ds-color-on-surface);
+    font-weight: var(--ds-font-medium);
+  }
+
+  .wf-table--linked .wf-row-anchor::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+  }
+
+  .wf-table--linked tbody tr:hover {
+    background-color: var(--ds-color-wash);
+  }
+
+  .wf-table--linked .wf-row-anchor:hover {
+    color: var(--ds-color-primary);
+    text-decoration: none;
+  }
+
   /* row-as-link pattern still anchors via a real link in the first cell so
      keyboard and assistive tech get native semantics (a11y contract) */
 

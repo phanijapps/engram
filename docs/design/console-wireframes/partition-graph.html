@@ -1,0 +1,165 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Partition knowledge graph — engram console wireframes</title>
+  <link rel="stylesheet" href="tokens.css">
+  <link rel="stylesheet" href="wireframe.css">
+</head>
+<body data-scope="v1">
+  <a class="wf-skip" href="#main">Skip to frame content</a>
+  <div class="wf-shell">
+    <aside class="wf-rail">
+      <div class="wf-rail-brand">
+        <span class="wf-mark" aria-hidden="true"></span>
+        <span class="wf-rail-title">engram console</span>
+        <span class="wf-rail-sub">wireframe set v1</span>
+      </div>
+      <nav class="wf-rail-nav" aria-label="Frames">
+        <a class="wf-nav-link" href="index.html">Overview</a>
+        <a class="wf-nav-link" href="inventory.html">Inventory</a>
+        <a class="wf-nav-link" href="partition.html">Partition</a>
+        <a class="wf-nav-link" href="recent-additions.html">Recent additions</a>
+        <a class="wf-nav-link" href="partition-graph.html" aria-current="page">Knowledge graph</a>
+        <a class="wf-nav-link" href="anomalies.html">Anomalies</a>
+        <a class="wf-nav-link" href="binding-health.html">Binding health</a>
+      </nav>
+      <div class="wf-rail-foot">
+        <span class="wf-badge wf-badge--v1"><span class="wf-dot" aria-hidden="true"></span>read-only v1</span>
+        <button type="button" class="wf-theme-toggle" data-action="toggle-theme">
+          <span aria-hidden="true">◐</span><span class="wf-theme-label">Light theme</span>
+        </button>
+      </div>
+    </aside>
+
+    <main id="main" class="wf-content">
+      <header class="wf-frame-head">
+        <p class="wf-eyebrow">v1 frame · read-only surface</p>
+        <h1 class="wf-frame-title">Partition knowledge graph</h1>
+        <p class="wf-lede">The entities and relationships of exactly one partition, resolved against that partition alone — a link whose endpoints do not resolve inside the tuple is dropped, so no foreign record can ever appear on this canvas.</p>
+      </header>
+
+      <section class="wf-view" aria-labelledby="graph-view-title">
+        <h2 id="graph-view-title">Knowledge graph — 可视化研究 / mem-alpha</h2>
+
+        <div class="wf-graph">
+          <div class="wf-graph-caption">
+            <span>31 entities · 40 relationships · confined to this partition · drag to pan, scroll to zoom, hover for labels</span>
+            <span class="wf-chip wf-chip--accent wf-chip--mono">ready — interactive force-graph</span>
+          </div>
+
+          <svg class="wf-graph-canvas" viewBox="0 0 960 480" role="img" aria-labelledby="graph-svg-title graph-svg-desc">
+            <title id="graph-svg-title">Knowledge graph of the partition 可视化研究 / mem-alpha</title>
+            <desc id="graph-svg-desc">Static wireframe excerpt of the 14 most-connected entities. The mem-alpha project hub anchors console modules and files; the engine repository opens the store; the partition model scopes it; scope-inventory enumerates partitions; the binding concept binds the indexed repo to the project; degraded engine responses are classified by the console server.</desc>
+
+            <g stroke-width="1.5">
+              <line class="wf-graph-edge" x1="95" y1="150" x2="200" y2="240"></line>
+              <line class="wf-graph-edge" x1="240" y1="95" x2="95" y2="150"></line>
+              <line class="wf-graph-edge" x1="85" y1="345" x2="95" y2="150"></line>
+              <line class="wf-graph-edge" x1="420" y1="70" x2="85" y2="345"></line>
+              <line class="wf-graph-edge" x1="420" y1="70" x2="700" y2="170"></line>
+              <line class="wf-graph-edge" x1="95" y1="150" x2="470" y2="180"></line>
+              <line class="wf-graph-edge" x1="430" y1="300" x2="470" y2="180"></line>
+              <line class="wf-graph-edge" x1="470" y1="180" x2="660" y2="330"></line>
+              <line class="wf-graph-edge" x1="700" y1="170" x2="660" y2="330"></line>
+              <line class="wf-graph-edge" x1="875" y1="105" x2="700" y2="170"></line>
+              <line class="wf-graph-edge" x1="855" y1="275" x2="875" y2="105"></line>
+              <line class="wf-graph-edge" x1="250" y1="395" x2="200" y2="240"></line>
+              <line class="wf-graph-edge" x1="450" y1="415" x2="90" y2="455"></line>
+              <line class="wf-graph-edge" x1="90" y1="455" x2="470" y2="180"></line>
+              <line class="wf-graph-edge" x1="240" y1="95" x2="470" y2="180"></line>
+            </g>
+
+            <g class="wf-graph-edge-labels" aria-hidden="true">
+              <text class="wf-graph-edge-label" x="132" y="188" text-anchor="middle">part of</text>
+              <text class="wf-graph-edge-label" x="560" y="108" text-anchor="middle">derives</text>
+              <text class="wf-graph-edge-label" x="258" y="152" text-anchor="middle">reads · loopback</text>
+              <text class="wf-graph-edge-label" x="558" y="270" text-anchor="middle">opens</text>
+              <text class="wf-graph-edge-label" x="697" y="258" text-anchor="middle">scopes</text>
+              <text class="wf-graph-edge-label" x="800" y="126" text-anchor="middle">enumerates</text>
+              <text class="wf-graph-edge-label" x="212" y="312" text-anchor="middle">binds</text>
+              <text class="wf-graph-edge-label" x="268" y="449" text-anchor="middle">classified by</text>
+            </g>
+
+            <g aria-hidden="true">
+              <circle class="wf-graph-node wf-node--project" cx="200" cy="240" r="8"></circle>
+              <circle class="wf-graph-node wf-node--module" cx="95" cy="150" r="6"></circle>
+              <circle class="wf-graph-node wf-node--file" cx="240" cy="95" r="6"></circle>
+              <circle class="wf-graph-node wf-node--file" cx="85" cy="345" r="6"></circle>
+              <circle class="wf-graph-node wf-node--function" cx="420" cy="70" r="6"></circle>
+              <circle class="wf-graph-node wf-node--repository" cx="470" cy="180" r="8"></circle>
+              <circle class="wf-graph-node wf-node--class" cx="430" cy="300" r="6"></circle>
+              <circle class="wf-graph-node wf-node--concept" cx="660" cy="330" r="6"></circle>
+              <circle class="wf-graph-node wf-node--concept" cx="700" cy="170" r="6"></circle>
+              <circle class="wf-graph-node wf-node--function" cx="875" cy="105" r="6"></circle>
+              <circle class="wf-graph-node wf-node--function" cx="855" cy="275" r="6"></circle>
+              <circle class="wf-graph-node wf-node--concept" cx="250" cy="395" r="6"></circle>
+              <circle class="wf-graph-node wf-node--concept" cx="450" cy="415" r="6"></circle>
+              <circle class="wf-graph-node wf-node--function" cx="90" cy="455" r="6"></circle>
+            </g>
+
+            <g class="wf-graph-node-labels" aria-hidden="true">
+              <text class="wf-graph-node-label" x="200" y="262" text-anchor="middle">mem-alpha</text>
+              <text class="wf-graph-node-label" x="95" y="172" text-anchor="middle">apps/console</text>
+              <text class="wf-graph-node-label" x="240" y="117" text-anchor="middle">api.ts</text>
+              <text class="wf-graph-node-label" x="85" y="367" text-anchor="middle">PartitionGraph.tsx</text>
+              <text class="wf-graph-node-label" x="420" y="92" text-anchor="middle">toGraphData</text>
+              <text class="wf-graph-node-label" x="470" y="202" text-anchor="middle">mem-engine</text>
+              <text class="wf-graph-node-label" x="430" y="322" text-anchor="middle">NativeProvider</text>
+              <text class="wf-graph-node-label" x="660" y="352" text-anchor="middle">store</text>
+              <text class="wf-graph-node-label" x="700" y="192" text-anchor="middle">partition model</text>
+              <text class="wf-graph-node-label" x="875" y="127" text-anchor="middle">scope_inventory</text>
+              <text class="wf-graph-node-label" x="855" y="297" text-anchor="middle">inventoryJson</text>
+              <text class="wf-graph-node-label" x="250" y="417" text-anchor="middle">binding</text>
+              <text class="wf-graph-node-label" x="450" y="437" text-anchor="middle">degraded state</text>
+              <text class="wf-graph-node-label" x="90" y="477" text-anchor="middle">classifyDegradedState</text>
+            </g>
+          </svg>
+
+          <ul class="wf-legend">
+            <li class="wf-legend-item"><span class="wf-swatch wf-swatch--project" aria-hidden="true"></span>project</li>
+            <li class="wf-legend-item"><span class="wf-swatch wf-swatch--repository" aria-hidden="true"></span>repository</li>
+            <li class="wf-legend-item"><span class="wf-swatch wf-swatch--concept" aria-hidden="true"></span>concept</li>
+            <li class="wf-legend-item"><span class="wf-swatch wf-swatch--function" aria-hidden="true"></span>function</li>
+            <li class="wf-legend-item"><span class="wf-swatch wf-swatch--class" aria-hidden="true"></span>class</li>
+            <li class="wf-legend-item"><span class="wf-swatch wf-swatch--module" aria-hidden="true"></span>module</li>
+            <li class="wf-legend-item"><span class="wf-swatch wf-swatch--file" aria-hidden="true"></span>file</li>
+          </ul>
+        </div>
+
+        <p class="wf-note">Honesty contract, learned the hard way: the canvas caption always tells the truth about what is rendered — never a static list under an interactive caption. This wireframe is a static excerpt of the 14 most-connected entities; the shipped canvas loads react-force-graph-2d dynamically and renders all 31 with pan, zoom, and hover labels — and when the canvas cannot load, the bounded summary list renders under a caption that says exactly that.</p>
+      </section>
+    </main>
+
+    <footer class="wf-foot">
+      <div class="wf-foot-inner">
+        <p>read-only by construction · loopback only · no authentication by design (single trusted operator)</p>
+        <nav class="wf-pager" aria-label="Frame sequence">
+          <a class="wf-pager-link" href="recent-additions.html">← Recent additions</a>
+          <a class="wf-pager-link" href="anomalies.html">Anomalies →</a>
+        </nav>
+      </div>
+    </footer>
+  </div>
+
+  <script>
+    (function () {
+      var root = document.documentElement;
+      var toggle = document.querySelector("[data-action=\"toggle-theme\"]");
+      if (!toggle) { return; }
+      var label = toggle.querySelector(".wf-theme-label");
+      function paint() {
+        var dark = root.getAttribute("data-theme") === "dark";
+        toggle.setAttribute("aria-label", dark ? "Switch to light theme" : "Switch to dark theme");
+        if (label) { label.textContent = dark ? "Light theme" : "Dark theme"; }
+      }
+      toggle.addEventListener("click", function () {
+        root.setAttribute("data-theme", root.getAttribute("data-theme") === "dark" ? "light" : "dark");
+        paint();
+      });
+      paint();
+    })();
+  </script>
+</body>
+</html>

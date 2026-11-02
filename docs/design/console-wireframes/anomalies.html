@@ -1,0 +1,109 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Anomaly panel — engram console wireframes</title>
+  <link rel="stylesheet" href="tokens.css">
+  <link rel="stylesheet" href="wireframe.css">
+</head>
+<body data-scope="v1">
+  <a class="wf-skip" href="#main">Skip to frame content</a>
+  <div class="wf-shell">
+    <aside class="wf-rail">
+      <div class="wf-rail-brand">
+        <span class="wf-mark" aria-hidden="true"></span>
+        <span class="wf-rail-title">engram console</span>
+        <span class="wf-rail-sub">wireframe set v1</span>
+      </div>
+      <nav class="wf-rail-nav" aria-label="Frames">
+        <a class="wf-nav-link" href="index.html">Overview</a>
+        <a class="wf-nav-link" href="inventory.html">Inventory</a>
+        <a class="wf-nav-link" href="partition.html">Partition</a>
+        <a class="wf-nav-link" href="recent-additions.html">Recent additions</a>
+        <a class="wf-nav-link" href="partition-graph.html">Knowledge graph</a>
+        <a class="wf-nav-link" href="anomalies.html" aria-current="page">Anomalies</a>
+        <a class="wf-nav-link" href="binding-health.html">Binding health</a>
+      </nav>
+      <div class="wf-rail-foot">
+        <span class="wf-badge wf-badge--v1"><span class="wf-dot" aria-hidden="true"></span>read-only v1</span>
+        <button type="button" class="wf-theme-toggle" data-action="toggle-theme">
+          <span aria-hidden="true">◐</span><span class="wf-theme-label">Light theme</span>
+        </button>
+      </div>
+    </aside>
+
+    <main id="main" class="wf-content">
+      <header class="wf-frame-head">
+        <p class="wf-eyebrow">v1 frame · read-only surface</p>
+        <h1 class="wf-frame-title">Anomaly panel</h1>
+        <p class="wf-lede">Cross-partition duplication signals from the minimal documented set, computed only from engine reads. Surfacing is the whole v1 contract — there is no repair, prune, or enforcement action anywhere in this view.</p>
+      </header>
+
+      <section class="wf-view" aria-labelledby="anomaly-view-title">
+        <h2 id="anomaly-view-title">Cross-partition signals</h2>
+        <p class="wf-quiet">2 cross-partition signals — read-only surfacing, no actions offered. Each affected partition drills down to its browse page.</p>
+
+        <ul class="wf-records">
+          <li class="wf-anomaly">
+            <p class="wf-anomaly-title">
+              <span class="wf-chip wf-chip--mono">subject-partitions</span>
+              Subject «Πελάτης-42» appears in 2 partitions of tenant Archivo-histórico
+            </p>
+            <p class="wf-faint">A subject is an identity inside its tenant — the same subject under several partitions of one tenant is a duplication signal worth looking at.</p>
+            <p class="wf-faint">affected partitions (view only):</p>
+            <ul class="wf-anomaly-partitions">
+              <li><a class="wf-chip wf-chip--mono" href="partition.html">Archivo-histórico / Πελάτης-42 / dev</a></li>
+              <li><a class="wf-chip wf-chip--mono" href="partition.html">Archivo-histórico / Πελάτης-42 / production</a></li>
+            </ul>
+          </li>
+          <li class="wf-anomaly">
+            <p class="wf-anomaly-title">
+              <span class="wf-chip wf-chip--mono">entity-identity</span>
+              Entity «mem-alpha» (project) exists in 3 partitions
+            </p>
+            <p class="wf-faint">The same entity identity — name and kind — present in more than one partition. It may be legitimate reuse; the panel surfaces the signal and leaves the judgment to you.</p>
+            <p class="wf-faint">affected partitions (view only):</p>
+            <ul class="wf-anomaly-partitions">
+              <li><a class="wf-chip wf-chip--mono" href="partition.html">videogamer / mem-alpha / dev</a></li>
+              <li><a class="wf-chip wf-chip--mono" href="partition.html">videogamer / mem-alpha / production</a></li>
+              <li><a class="wf-chip wf-chip--mono" href="partition.html">可视化研究 / mem-alpha / (unset)</a></li>
+            </ul>
+          </li>
+        </ul>
+
+        <p class="wf-note">The minimal documented set: (1) the same subject value under multiple partitions of one tenant; (2) the same entity identity under multiple partitions. Anything outside this set is not a v1 anomaly — widening the set is a decision, not a drive-by. When duplication becomes actionable, the pruning-review frame (future) is where review work would live; nothing here links to a write.</p>
+      </section>
+    </main>
+
+    <footer class="wf-foot">
+      <div class="wf-foot-inner">
+        <p>read-only by construction · loopback only · no authentication by design (single trusted operator)</p>
+        <nav class="wf-pager" aria-label="Frame sequence">
+          <a class="wf-pager-link" href="partition-graph.html">← Knowledge graph</a>
+          <a class="wf-pager-link" href="binding-health.html">Binding health →</a>
+        </nav>
+      </div>
+    </footer>
+  </div>
+
+  <script>
+    (function () {
+      var root = document.documentElement;
+      var toggle = document.querySelector("[data-action=\"toggle-theme\"]");
+      if (!toggle) { return; }
+      var label = toggle.querySelector(".wf-theme-label");
+      function paint() {
+        var dark = root.getAttribute("data-theme") === "dark";
+        toggle.setAttribute("aria-label", dark ? "Switch to light theme" : "Switch to dark theme");
+        if (label) { label.textContent = dark ? "Light theme" : "Dark theme"; }
+      }
+      toggle.addEventListener("click", function () {
+        root.setAttribute("data-theme", root.getAttribute("data-theme") === "dark" ? "light" : "dark");
+        paint();
+      });
+      paint();
+    })();
+  </script>
+</body>
+</html>

@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Index-binding health — engram console wireframes</title>
+  <link rel="stylesheet" href="tokens.css">
+  <link rel="stylesheet" href="wireframe.css">
+</head>
+<body data-scope="v1">
+  <a class="wf-skip" href="#main">Skip to frame content</a>
+  <div class="wf-shell">
+    <aside class="wf-rail">
+      <div class="wf-rail-brand">
+        <span class="wf-mark" aria-hidden="true"></span>
+        <span class="wf-rail-title">engram console</span>
+        <span class="wf-rail-sub">wireframe set v1</span>
+      </div>
+      <nav class="wf-rail-nav" aria-label="Frames">
+        <a class="wf-nav-link" href="index.html">Overview</a>
+        <a class="wf-nav-link" href="inventory.html">Inventory</a>
+        <a class="wf-nav-link" href="partition.html">Partition</a>
+        <a class="wf-nav-link" href="recent-additions.html">Recent additions</a>
+        <a class="wf-nav-link" href="partition-graph.html">Knowledge graph</a>
+        <a class="wf-nav-link" href="anomalies.html">Anomalies</a>
+        <a class="wf-nav-link" href="binding-health.html" aria-current="page">Binding health</a>
+      </nav>
+      <div class="wf-rail-foot">
+        <span class="wf-badge wf-badge--v1"><span class="wf-dot" aria-hidden="true"></span>read-only v1</span>
+        <button type="button" class="wf-theme-toggle" data-action="toggle-theme">
+          <span aria-hidden="true">◐</span><span class="wf-theme-label">Light theme</span>
+        </button>
+      </div>
+    </aside>
+
+    <main id="main" class="wf-content">
+      <header class="wf-frame-head">
+        <p class="wf-eyebrow">v1 frame · read-only surface</p>
+        <h1 class="wf-frame-title">Index-binding health</h1>
+        <p class="wf-lede">One line of facts about the code a partition indexes: repo, branch, indexed commit, freshness. Status only — no code-intelligence browsing, no writes.</p>
+      </header>
+
+      <section class="wf-view" aria-labelledby="binding-view-title">
+        <h2 id="binding-view-title">Binding health line</h2>
+
+        <div class="wf-binding">
+          <label class="wf-binding-label" for="binding-repo-frame">code binding repo:</label>
+          <input class="wf-input" id="binding-repo-frame" type="text" value="mem-alpha" placeholder="e.g. mem-alpha">
+          <span class="wf-faint">the repo id is an engine key — bindings are per scope + repo, so supply the repo this partition actually indexes; your last-used value is remembered</span>
+        </div>
+
+        <div class="wf-binding">
+          <span class="wf-binding-label">line for 可视化研究 / mem-alpha:</span>
+          <p class="wf-binding-line">mem-alpha: <span class="wf-fresh">BOUND</span> refs/heads/main · INDEXED 7a7ee95d · <span class="wf-fresh">FRESHNESS-STATE: fresh</span></p>
+        </div>
+
+        <p class="wf-note">Corrected contract: the engine resolves exact repo ids — there is no “default” binding, so a hard-coded repo never resolves and every real partition would render an error. The operator supplies the id; the engine’s answer is the line. Stale freshness (<span class="wf-stale">ref-moved-past-indexed-commit</span>) is a state, not an error — the branch simply moved past what was indexed, and the line says so.</p>
+
+        <div class="wf-binding">
+          <span class="wf-binding-label">stale variant:</span>
+          <p class="wf-binding-line">mem-alpha: <span class="wf-fresh">BOUND</span> refs/heads/main · INDEXED 49136b7e · <span class="wf-stale">FRESHNESS-STATE: ref-moved-past-indexed-commit</span></p>
+          <span class="wf-faint">observed 7a7ee95d — the branch is 1 commit past the indexed tip</span>
+        </div>
+      </section>
+    </main>
+
+    <footer class="wf-foot">
+      <div class="wf-foot-inner">
+        <p>read-only by construction · loopback only · no authentication by design (single trusted operator)</p>
+        <nav class="wf-pager" aria-label="Frame sequence">
+          <a class="wf-pager-link" href="anomalies.html">← Anomalies</a>
+          <a class="wf-pager-link" href="index.html">Overview →</a>
+        </nav>
+      </div>
+    </footer>
+  </div>
+
+  <script>
+    (function () {
+      var root = document.documentElement;
+      var toggle = document.querySelector("[data-action=\"toggle-theme\"]");
+      if (!toggle) { return; }
+      var label = toggle.querySelector(".wf-theme-label");
+      function paint() {
+        var dark = root.getAttribute("data-theme") === "dark";
+        toggle.setAttribute("aria-label", dark ? "Switch to light theme" : "Switch to dark theme");
+        if (label) { label.textContent = dark ? "Light theme" : "Dark theme"; }
+      }
+      toggle.addEventListener("click", function () {
+        root.setAttribute("data-theme", root.getAttribute("data-theme") === "dark" ? "light" : "dark");
+        paint();
+      });
+      paint();
+    })();
+  </script>
+</body>
+</html>

@@ -34,8 +34,8 @@ use engram_ingest::{
 use engram_integration::{
     BatchIngest, BatchIngestRequest, BatchOutcome, BatchStatus, BatchStep, CommunityQuery,
     EmbeddingProvider, EngramConfig, EngramProvider, ExportImport, KnowledgeQuery, LexicalFeed,
-    MigrationService, Observability, ProvenanceQuery, StepStatus, SupersessionCounts,
-    TransactionGuarantee, UnifiedRecall,
+    MigrationService, Observability, PartitionPage, ProvenanceQuery, ScopeInventory, StepStatus,
+    SupersessionCounts, TransactionGuarantee, UnifiedRecall,
 };
 use engram_knowledge::{
     GraphMaintenanceRepository, KnowledgeGraphRepository, KnowledgeRepository, OntologyRepository,
@@ -269,6 +269,18 @@ impl NativeProvider {
             .map_err(to_napi_error)?
             .clone();
         Ok(NativeProvenanceApi { handle })
+    }
+
+    /// Returns a scope-inventory handle (distinct-partition enumeration +
+    /// exact-partition listings), or throws if not wired.
+    #[napi(js_name = "requireScopeInventoryApi")]
+    pub fn require_scope_inventory_api(&self) -> Result<NativeScopeInventoryApi> {
+        let handle = self
+            .inner
+            .require_scope_inventory()
+            .map_err(to_napi_error)?
+            .clone();
+        Ok(NativeScopeInventoryApi { handle })
     }
 
     /// Returns a batch-ingest handle, or throws if not wired.
@@ -1048,6 +1060,97 @@ impl NativeProvenanceApi {
         let result: Provenance = block_on(
             self.handle
                 .attach_evidence(target, &target_id, evidence, &scope),
+        )
+        .map_err(to_napi_error)?;
+        encode(&result)
+    }
+}
+
+// ---------------------------------------------------------------------------
+// NativeScopeInventoryApi — partition inventory + exact-partition listings
+// ---------------------------------------------------------------------------
+
+/// Scope-inventory handle proxy. Holds an `Arc<dyn ScopeInventory>` and
+/// exposes the partition reads as JSON-in / JSON-out methods. Read-only by
+/// construction: the port has no write operations.
+#[napi]
+pub struct NativeScopeInventoryApi {
+    handle: Arc<dyn ScopeInventory>,
+}
+
+/// Request shape shared by the partition-listing methods: the exact partition
+/// tuple plus an optional page window (`{ limit, offset }`, defaults 50/0).
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct PartitionListingRequest {
+    partition: Scope,
+    page: Option<PartitionPage>,
+}
+
+/// Request shape of the recent-additions method.
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct PartitionRecentRequest {
+    partition: Scope,
+    limit: Option<usize>,
+}
+
+#[napi]
+impl NativeScopeInventoryApi {
+    /// Every distinct partition with per-kind counts, in canonical partition
+    /// order. Takes `{}` (no arguments beyond the JSON envelope), returns
+    /// `[PartitionSummary, …]`.
+    #[napi(js_name = "inventoryJson")]
+    pub fn inventory_json(&self) -> Result<String> {
+        let rows = block_on(self.handle.inventory()).map_err(to_napi_error)?;
+        encode(&rows)
+    }
+
+    /// Memories of exactly one partition, ascending by id. Takes
+    /// `{ partition, page? }`, returns `{ items, nextOffset }`.
+    #[napi(js_name = "partitionMemoriesJson")]
+    pub fn partition_memories_json(&self, request_json: String) -> Result<String> {
+        let request: PartitionListingRequest = decode(&request_json)?;
+        let page = request.page.unwrap_or_default();
+        let result = block_on(self.handle.partition_memories(&request.partition, page))
+            .map_err(to_napi_error)?;
+        encode(&result)
+    }
+
+    /// Knowledge entities of exactly one partition, ascending by id. Takes
+    /// `{ partition, page? }`, returns `{ items, nextOffset }`.
+    #[napi(js_name = "partitionEntitiesJson")]
+    pub fn partition_entities_json(&self, request_json: String) -> Result<String> {
+        let request: PartitionListingRequest = decode(&request_json)?;
+        let page = request.page.unwrap_or_default();
+        let result = block_on(self.handle.partition_entities(&request.partition, page))
+            .map_err(to_napi_error)?;
+        encode(&result)
+    }
+
+    /// Knowledge relationships of exactly one partition, ascending by id.
+    /// Takes `{ partition, page? }`, returns `{ items, nextOffset }`.
+    #[napi(js_name = "partitionRelationshipsJson")]
+    pub fn partition_relationships_json(&self, request_json: String) -> Result<String> {
+        let request: PartitionListingRequest = decode(&request_json)?;
+        let page = request.page.unwrap_or_default();
+        let result = block_on(
+            self.handle
+                .partition_relationships(&request.partition, page),
+        )
+        .map_err(to_napi_error)?;
+        encode(&result)
+    }
+
+    /// Most recently created memories of exactly one partition, newest first.
+    /// Takes `{ partition, limit? }`, returns `[MemoryRecord, …]`.
+    #[napi(js_name = "partitionRecentMemoriesJson")]
+    pub fn partition_recent_memories_json(&self, request_json: String) -> Result<String> {
+        let request: PartitionRecentRequest = decode(&request_json)?;
+        let limit = request.limit.unwrap_or(50);
+        let result = block_on(
+            self.handle
+                .partition_recent_memories(&request.partition, limit),
         )
         .map_err(to_napi_error)?;
         encode(&result)

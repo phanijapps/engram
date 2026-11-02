@@ -43,7 +43,7 @@ use crate::{
 /// hierarchy, retrieval, vectors, migration — through backend-neutral
 /// `Arc<dyn ...>` handles, with no engine-specific types in scope.
 ///
-/// Read the [`CapabilityReport`] (20 keys) via [`capabilities`](Self::capabilities)
+/// Read the [`CapabilityReport`] (21 keys) via [`capabilities`](Self::capabilities)
 /// before using a family: each handle is `Some` only when that family's
 /// conformance fixture passed during bootstrap; otherwise the family is reported
 /// [`CapabilityState::Unsupported`] with a stable reason code and the handle is
@@ -90,6 +90,7 @@ pub struct EngramProvider {
     code_source: Option<Arc<dyn engram_knowledge::RetainedSourceReader>>,
     #[cfg(feature = "code-lanes")]
     code_ingestion: Option<Arc<crate::code_binding::CodeIngestionLanes>>,
+    scope_inventory: Option<Arc<dyn crate::scope_inventory::ScopeInventory>>,
     schema_version: String,
     adapter_version: String,
 }
@@ -422,6 +423,24 @@ impl EngramProvider {
         self.identity.as_ref()
     }
 
+    /// Returns the scope-inventory handle (distinct-partition enumeration +
+    /// exact-partition listings) if the `scope_inventory` capability is
+    /// supported.
+    pub fn scope_inventory(&self) -> Option<&Arc<dyn crate::scope_inventory::ScopeInventory>> {
+        self.scope_inventory.as_ref()
+    }
+
+    /// Returns the scope-inventory handle or an error if it is not wired.
+    pub fn require_scope_inventory(
+        &self,
+    ) -> CoreResult<&Arc<dyn crate::scope_inventory::ScopeInventory>> {
+        self.scope_inventory()
+            .ok_or_else(|| CoreError::CapabilityUnsupported {
+                capability: "scope_inventory".to_string(),
+                reason: "not wired".to_string(),
+            })
+    }
+
     /// Returns the knowledge-query handle (list entities/relationships) if supported.
     pub fn knowledge_query(&self) -> Option<&Arc<dyn KnowledgeQuery>> {
         self.knowledge_query.as_ref()
@@ -747,6 +766,7 @@ impl EngramProvider {
             code_source: None,
             #[cfg(feature = "code-lanes")]
             code_ingestion: None,
+            scope_inventory: None,
             schema_version: "unwired".to_string(),
             adapter_version: "unwired".to_string(),
         }
@@ -794,6 +814,7 @@ pub struct EngramProviderBuilder {
     code_source: Option<Arc<dyn engram_knowledge::RetainedSourceReader>>,
     #[cfg(feature = "code-lanes")]
     code_ingestion: Option<Arc<crate::code_binding::CodeIngestionLanes>>,
+    scope_inventory: Option<Arc<dyn crate::scope_inventory::ScopeInventory>>,
     schema_version: String,
     adapter_version: String,
 }
@@ -835,6 +856,7 @@ impl EngramProviderBuilder {
             code_bindings: None,
             #[cfg(feature = "code-lanes")]
             code_ingestion: None,
+            scope_inventory: None,
             schema_version: "unknown".to_string(),
             adapter_version: "unknown".to_string(),
         }
@@ -1049,6 +1071,16 @@ impl EngramProviderBuilder {
         self
     }
 
+    /// Attaches the scope-inventory handle (distinct-partition enumeration +
+    /// exact-partition listings; job 012).
+    pub fn scope_inventory(
+        mut self,
+        handle: Arc<dyn crate::scope_inventory::ScopeInventory>,
+    ) -> Self {
+        self.scope_inventory = Some(handle);
+        self
+    }
+
     /// Builds the provider.
     pub fn build(self) -> EngramProvider {
         EngramProvider {
@@ -1085,6 +1117,7 @@ impl EngramProviderBuilder {
             code_source: self.code_source,
             #[cfg(feature = "code-lanes")]
             code_ingestion: self.code_ingestion,
+            scope_inventory: self.scope_inventory,
             schema_version: self.schema_version,
             adapter_version: self.adapter_version,
         }

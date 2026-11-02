@@ -97,6 +97,54 @@
         }
       }
     },
+    "PartitionSummary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "scope",
+        "memoryCount",
+        "entityCount",
+        "beliefCount"
+      ],
+      "properties": {
+        "scope": {
+          "$ref": "#/$defs/Scope"
+        },
+        "memoryCount": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "entityCount": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "beliefCount": {
+          "type": "integer",
+          "minimum": 0
+        }
+      },
+      "description": "One scope-inventory row: a distinct partition tuple (NULL dimensions are their own value; render unset dimensions as '(unset)') plus its counts of memories, knowledge entities, and beliefs. Read model only — no table, no registry (job 012-admin-console-v1)."
+    },
+    "PartitionPage": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "limit",
+        "offset"
+      ],
+      "properties": {
+        "limit": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 500
+        },
+        "offset": {
+          "type": "integer",
+          "minimum": 0
+        }
+      },
+      "description": "A bounded listing window into one partition (job 012-admin-console-v1)."
+    },
     "Policy": {
       "type": "object",
       "additionalProperties": false,
@@ -1347,7 +1395,7 @@
         },
         "verdict": {
           "type": "string",
-          "description": "Optional assertion verdict stamped onto the written record (DEC-P06); absent means no verdict on this write surface. 'derived' is reserved for the derivation layer and is rejected by every write surface \u2014 it is not a legal value here.",
+          "description": "Optional assertion verdict stamped onto the written record (DEC-P06); absent means no verdict on this write surface. 'derived' is reserved for the derivation layer and is rejected by every write surface — it is not a legal value here.",
           "enum": [
             "asserted_by_agent",
             "grounded_in_source"
@@ -1878,7 +1926,7 @@
     },
     "KnowledgeChangesPage": {
       "type": "object",
-      "description": "One bounded page of changes plus resume state. resetRequired means the cursor predates the retained window \u2014 take a fresh snapshot.",
+      "description": "One bounded page of changes plus resume state. resetRequired means the cursor predates the retained window — take a fresh snapshot.",
       "additionalProperties": false,
       "properties": {
         "items": {
@@ -1979,7 +2027,7 @@
     },
     "CodeGraphStaleness": {
       "type": "object",
-      "description": "Code-graph freshness vs its repository. commitsBehind is local-ancestry-only; null means unknown \u2014 never a fabricated 0.",
+      "description": "Code-graph freshness vs its repository. commitsBehind is local-ancestry-only; null means unknown — never a fabricated 0.",
       "additionalProperties": false,
       "properties": {
         "sourceKey": {
@@ -2023,7 +2071,7 @@
     },
     "TaskOutcome": {
       "type": "object",
-      "description": "Host-verified task result. Association data \u2014 never causal proof.",
+      "description": "Host-verified task result. Association data — never causal proof.",
       "additionalProperties": false,
       "properties": {
         "success": {

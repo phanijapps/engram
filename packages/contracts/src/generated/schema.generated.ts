@@ -1,4 +1,4 @@
-/* Generated from docs/contracts/v1/schemas/engram-v1.schema.json. Do not edit. */
+/* Generated from docs/constitution/registry/contracts/v1/schemas/engram-v1.schema.json. Do not edit. */
 export const engramV1Schema = {
   "$defs": {
     "Actor": {
@@ -1638,6 +1638,54 @@ export const engramV1Schema = {
         "rejected"
       ],
       "type": "string"
+    },
+    "PartitionPage": {
+      "additionalProperties": false,
+      "description": "A bounded listing window into one partition (job 012-admin-console-v1).",
+      "properties": {
+        "limit": {
+          "maximum": 500,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "offset": {
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "limit",
+        "offset"
+      ],
+      "type": "object"
+    },
+    "PartitionSummary": {
+      "additionalProperties": false,
+      "description": "One scope-inventory row: a distinct partition tuple (NULL dimensions are their own value; render unset dimensions as '(unset)') plus its counts of memories, knowledge entities, and beliefs. Read model only \u2014 no table, no registry (job 012-admin-console-v1).",
+      "properties": {
+        "beliefCount": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "entityCount": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "memoryCount": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "scope": {
+          "$ref": "#/$defs/Scope"
+        }
+      },
+      "required": [
+        "scope",
+        "memoryCount",
+        "entityCount",
+        "beliefCount"
+      ],
+      "type": "object"
     },
     "Policy": {
       "additionalProperties": false,

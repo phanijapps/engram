@@ -83,7 +83,12 @@ export {
   type LegacyDocumentScanResult,
   type RepositoryRegistration,
   type RecordCounts,
-  type ScopeCounts
+  type ScopeCounts,
+  type PartitionSummary,
+  type PartitionPage,
+  type PartitionRecords,
+  type PartitionRequest,
+  type PartitionRecentRequest
 } from "./provider.js";
 
 export {

@@ -129,6 +129,19 @@ pub struct CapabilityReport {
     /// the full exact-preview reset lands with TASK-023/TASK-024).
     #[serde(default = "default_code_graph")]
     pub code_reset: CapabilityState,
+
+    /// Distinct-partition enumeration plus exact-partition listings
+    /// (job 012-admin-console-v1): the `ScopeInventory` port over the
+    /// governed tables, wired per recipe.
+    #[serde(default = "default_scope_inventory")]
+    pub scope_inventory: CapabilityState,
+}
+
+/// Serde default for the `scope_inventory` field.
+fn default_scope_inventory() -> CapabilityState {
+    CapabilityState::Unsupported {
+        reason: CapabilityReason::FeatureDisabled,
+    }
 }
 
 /// Serde default for the `code_graph` field.
@@ -204,7 +217,8 @@ impl CapabilityReport {
             code_graph: state.clone(),
             code_binding: state.clone(),
             code_source: state.clone(),
-            code_reset: state,
+            code_reset: state.clone(),
+            scope_inventory: state,
         }
     }
 
@@ -309,6 +323,12 @@ impl CapabilityReport {
         self.code_graph.is_supported()
     }
 
+    /// Returns true if the scope inventory (distinct-partition enumeration +
+    /// exact-partition listings) is supported.
+    pub fn scope_inventory_supported(&self) -> bool {
+        self.scope_inventory.is_supported()
+    }
+
     /// Returns true if contradiction tracking is supported.
     pub fn contradiction_supported(&self) -> bool {
         self.contradiction.is_supported()
@@ -397,6 +417,7 @@ impl CapabilityReportBuilder {
                 code_binding: provider_unavailable.clone(),
                 code_source: provider_unavailable.clone(),
                 code_reset: provider_unavailable.clone(),
+                scope_inventory: provider_unavailable.clone(),
                 migration: provider_unavailable,
                 hybrid_search: feature_disabled.clone(),
                 episodes_evidence: feature_disabled.clone(),
@@ -524,6 +545,12 @@ impl CapabilityReportBuilder {
     /// Sets the code-reset capability state (TASK-019).
     pub fn code_reset(mut self, state: CapabilityState) -> Self {
         self.report.code_reset = state;
+        self
+    }
+
+    /// Sets the scope-inventory capability state (job 012).
+    pub fn scope_inventory(mut self, state: CapabilityState) -> Self {
+        self.report.scope_inventory = state;
         self
     }
 

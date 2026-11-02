@@ -282,6 +282,25 @@ class StubNativeProvider {
       },
     };
   }
+  requireScopeInventoryApi() {
+    return {
+      inventoryJson(): string {
+        return "[]";
+      },
+      partitionMemoriesJson(): string {
+        return JSON.stringify({ items: [], nextOffset: null });
+      },
+      partitionEntitiesJson(): string {
+        return JSON.stringify({ items: [], nextOffset: null });
+      },
+      partitionRelationshipsJson(): string {
+        return JSON.stringify({ items: [], nextOffset: null });
+      },
+      partitionRecentMemoriesJson(): string {
+        return "[]";
+      },
+    };
+  }
   static fromProfileFile(_path: string): StubNativeProvider {
     return new StubNativeProvider();
   }

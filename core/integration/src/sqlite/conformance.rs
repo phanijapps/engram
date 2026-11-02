@@ -1376,3 +1376,78 @@ pub(crate) fn code_binding_ok() -> bool {
         Ok(Some(stored)) if stored == first
     )
 }
+
+/// Scope-inventory family (job 012): distinct-partition enumeration with
+/// NULL-as-own-value grouping, and exact-tuple partition reads, over real
+/// in-memory stores through the adapter's own write path.
+pub(crate) fn scope_inventory_ok() -> bool {
+    use std::sync::Arc;
+
+    use engram_store_sqlite::{SqlBeliefStore, SqlKnowledgeStore, SqlScopeInventory};
+
+    let Ok(memory) = SqlMemoryService::open_in_memory() else {
+        return false;
+    };
+    let Ok(knowledge) = SqlKnowledgeStore::open_in_memory() else {
+        return false;
+    };
+    let Ok(belief) = SqlBeliefStore::open_in_memory() else {
+        return false;
+    };
+    let memory = Arc::new(memory);
+    let knowledge = Arc::new(knowledge);
+    let belief = Arc::new(belief);
+    let inventory = SqlScopeInventory::new(memory.clone(), knowledge, belief);
+
+    // Two memories whose partitions differ only by NULL vs "default"
+    // workspace, plus one sibling-partition memory.
+    let mut base = write_request("tenant-inv");
+    base.scope.workspace = None;
+    if block_on(memory.write_memory(base)).is_err() {
+        return false;
+    }
+    let mut defaulted = write_request("tenant-inv");
+    defaulted.scope.workspace = Some("default".to_string());
+    if block_on(memory.write_memory(defaulted)).is_err() {
+        return false;
+    }
+    let mut sibling = write_request("tenant-inv");
+    sibling.scope.workspace = Some("sibling".to_string());
+    if block_on(memory.write_memory(sibling)).is_err() {
+        return false;
+    }
+
+    let Ok(groups) = inventory.count_memory_partitions() else {
+        return false;
+    };
+    if groups.len() != 3 {
+        return false;
+    }
+    if !groups
+        .iter()
+        .any(|row| row.scope.workspace.is_none() && row.count == 1)
+    {
+        return false;
+    }
+    // Exact-tuple read: the "(unset)"-workspace partition (same subject and
+    // environment as every fixture row) sees only its own row.
+    let unset = engram_domain::Scope {
+        workspace: None,
+        ..scope("tenant-inv")
+    };
+    let Ok(listed) = inventory.list_partition_memories(&unset, 10, 0) else {
+        return false;
+    };
+    listed.len() == 1
+}
+
+#[cfg(test)]
+mod scope_inventory_conformance_tests {
+    #[test]
+    fn scope_inventory_ok_passes() {
+        assert!(
+            super::scope_inventory_ok(),
+            "the scope-inventory conformance check must pass against real in-memory stores"
+        );
+    }
+}

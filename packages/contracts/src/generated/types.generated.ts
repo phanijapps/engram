@@ -1,4 +1,4 @@
-/* Generated from docs/contracts/v1/schemas/engram-v1.schema.json. Do not edit. */
+/* Generated from docs/constitution/registry/contracts/v1/schemas/engram-v1.schema.json. Do not edit. */
 
 export type Identifier = string;
 /**
@@ -154,6 +154,8 @@ export interface EngramV1Types {
   OmittedResult: OmittedResult;
   OperatorProposal: OperatorProposal;
   OperatorProposalStatus: OperatorProposalStatus;
+  PartitionPage: PartitionPage;
+  PartitionSummary: PartitionSummary;
   Policy: Policy;
   PreservationEntry: PreservationEntry;
   PreservationInventory: PreservationInventory;
@@ -709,6 +711,22 @@ export interface ProposalMemoryWrite {
   kind: MemoryKind;
   links?: MemoryLink[];
   policy: Policy;
+}
+/**
+ * A bounded listing window into one partition (job 012-admin-console-v1).
+ */
+export interface PartitionPage {
+  limit: number;
+  offset: number;
+}
+/**
+ * One scope-inventory row: a distinct partition tuple (NULL dimensions are their own value; render unset dimensions as '(unset)') plus its counts of memories, knowledge entities, and beliefs. Read model only — no table, no registry (job 012-admin-console-v1).
+ */
+export interface PartitionSummary {
+  beliefCount: number;
+  entityCount: number;
+  memoryCount: number;
+  scope: Scope;
 }
 /**
  * Attributed post-action outcome for one recall (F2 outcome loop).

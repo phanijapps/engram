@@ -243,6 +243,16 @@ export interface NativeCheckpointsApiBinding {
   putCheckpointJson(checkpointJson: string): string;
 }
 
+/** Scope-inventory handle proxy: distinct-partition enumeration +
+ *  exact-partition listings (read-only port; job 012). */
+export interface NativeScopeInventoryApiBinding {
+  inventoryJson(): string;
+  partitionMemoriesJson(requestJson: string): string;
+  partitionEntitiesJson(requestJson: string): string;
+  partitionRelationshipsJson(requestJson: string): string;
+  partitionRecentMemoriesJson(requestJson: string): string;
+}
+
 /** Native handle for configured Rust embedding inference and space identity. */
 export interface NativeEmbeddingProviderApiBinding {
   embeddingSpace(): string;
@@ -298,6 +308,7 @@ export interface NativeProviderBinding {
   requireChangeLogApi(): NativeChangeLogApiBinding;
   requireOutcomesApi(): NativeOutcomesApiBinding;
   requireCheckpointsApi(): NativeCheckpointsApiBinding;
+  requireScopeInventoryApi(): NativeScopeInventoryApiBinding;
 }
 
 /** Constructor shape for the held `EngramProvider`. */

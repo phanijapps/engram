@@ -731,6 +731,23 @@ pub(crate) fn bootstrap_sqlite(config: &EngramConfig) -> CoreResult<EngramProvid
         reason: CapabilityReason::ProviderUnavailable,
     };
     let mut code_source: Option<Arc<dyn engram_knowledge::RetainedSourceReader>> = None;
+    // Scope inventory (job 012): the port reads over the three governed
+    // stores; wired only when its conformance check passes AND all three
+    // file-backed stores are healthy — a missing store reports the capability
+    // unsupported rather than a partial inventory.
+    let mut scope_inventory: Option<Arc<dyn crate::scope_inventory::ScopeInventory>> = None;
+    let mut scope_inventory_state = failed();
+    if conformance::scope_inventory_ok()
+        && let (Some(memory_handle), Some(knowledge_handle), Some(belief_handle)) =
+            (&memory_store, &knowledge_store, &belief_store)
+    {
+        scope_inventory = Some(Arc::new(engram_store_sqlite::SqlScopeInventory::new(
+            memory_handle.clone(),
+            knowledge_handle.clone(),
+            belief_handle.clone(),
+        )));
+        scope_inventory_state = CapabilityState::Supported;
+    }
     // Bound-code ingestion lanes (review r6 finding 2): registered-locator
     // acquisition + generation staging/publication need the neutral
     // knowledge/graph write handles and the retained-snapshot custody root.
@@ -783,6 +800,7 @@ pub(crate) fn bootstrap_sqlite(config: &EngramConfig) -> CoreResult<EngramProvid
     }
 
     let report = CapabilityReport::builder()
+        .scope_inventory(scope_inventory_state)
         .memory(memory_state)
         .knowledge(knowledge_state)
         .graph(graph_state)
@@ -931,6 +949,9 @@ pub(crate) fn bootstrap_sqlite(config: &EngramConfig) -> CoreResult<EngramProvid
     }
     if let Some(lanes) = code_ingestion {
         builder = builder.code_ingestion(lanes);
+    }
+    if let Some(handle) = scope_inventory {
+        builder = builder.scope_inventory(handle);
     }
     Ok(builder.build())
 }

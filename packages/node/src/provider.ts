@@ -87,6 +87,41 @@ export interface ScopeCounts {
   hierarchyRelations: number;
 }
 
+/** One inventory row: a partition's exact scope tuple plus its per-kind
+ *  counts (mirrors engram-integration `PartitionSummary`). Unset dimensions
+ *  are `null` in the tuple; render them as "(unset)". */
+export interface PartitionSummary {
+  scope: Scope;
+  memoryCount: number;
+  entityCount: number;
+  beliefCount: number;
+}
+
+/** A bounded listing window (mirrors engram-integration `PartitionPage`). */
+export interface PartitionPage {
+  limit: number;
+  offset: number;
+}
+
+/** One page of partition-scoped records plus the continuation offset
+ *  (mirrors engram-integration `PartitionRecords`). */
+export interface PartitionRecords<T> {
+  items: T[];
+  nextOffset: number | null;
+}
+
+/** The exact partition tuple shared by every partition read. */
+export interface PartitionRequest {
+  partition: Scope;
+  page?: PartitionPage;
+}
+
+/** Recent-additions request: the partition plus an optional bound. */
+export interface PartitionRecentRequest {
+  partition: Scope;
+  limit?: number;
+}
+
 /** One on-request ref observation as the Rust coordinator serializes it
  *  (policy `on_request`; r6 finding 6: carried with GENERATED contract types,
  *  never `unknown`). */
@@ -324,6 +359,16 @@ export interface NativeProviderTransport {
   communityMemberIndex(scope: unknown): Promise<CommunityMemberIndex>;
   /** Scope-filtered record counts (Rust-backed fast SQL COUNT). */
   scopeCounts(scope: unknown): Promise<ScopeCounts>;
+  /** Distinct-partition inventory with per-kind counts (job 012, read-only). */
+  scopeInventory(): Promise<PartitionSummary[]>;
+  /** Memories of exactly one partition, ascending by id. */
+  partitionMemories(request: PartitionRequest): Promise<PartitionRecords<unknown>>;
+  /** Knowledge entities of exactly one partition, ascending by id. */
+  partitionEntities(request: PartitionRequest): Promise<PartitionRecords<unknown>>;
+  /** Knowledge relationships of exactly one partition, ascending by id. */
+  partitionRelationships(request: PartitionRequest): Promise<PartitionRecords<unknown>>;
+  /** Most recently created memories of exactly one partition, newest first. */
+  partitionRecentMemories(request: PartitionRecentRequest): Promise<unknown[]>;
   /** Get a single belief by id (Rust-backed). Returns the `Belief` JSON or null. */
   beliefGet(request: unknown): Promise<unknown>;
   /** Retract (soft-delete) a belief (Rust-backed). Returns the retracted belief. */
@@ -575,6 +620,34 @@ class JsonNativeProviderTransport implements NativeProviderTransport {
   async communityMemberIndex(scope: unknown): Promise<CommunityMemberIndex> {
     return decode<CommunityMemberIndex>(
       this.provider.requireCommunityQueryApi().memberIndexJson(encode(scope))
+    );
+  }
+
+  async scopeInventory(): Promise<PartitionSummary[]> {
+    return decode<PartitionSummary[]>(this.provider.requireScopeInventoryApi().inventoryJson());
+  }
+
+  async partitionMemories(request: PartitionRequest): Promise<PartitionRecords<unknown>> {
+    return decode(
+      this.provider.requireScopeInventoryApi().partitionMemoriesJson(encode(request))
+    );
+  }
+
+  async partitionEntities(request: PartitionRequest): Promise<PartitionRecords<unknown>> {
+    return decode(
+      this.provider.requireScopeInventoryApi().partitionEntitiesJson(encode(request))
+    );
+  }
+
+  async partitionRelationships(request: PartitionRequest): Promise<PartitionRecords<unknown>> {
+    return decode(
+      this.provider.requireScopeInventoryApi().partitionRelationshipsJson(encode(request))
+    );
+  }
+
+  async partitionRecentMemories(request: PartitionRecentRequest): Promise<unknown[]> {
+    return decode(
+      this.provider.requireScopeInventoryApi().partitionRecentMemoriesJson(encode(request))
     );
   }
 

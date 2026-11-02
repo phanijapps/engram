@@ -150,6 +150,7 @@ pub fn next_page_offset<T>(items: &[T], page: &PartitionPage) -> Option<u64> {
 /// beliefs); deeper per-kind breakdowns are out of scope for the console v1
 /// read model.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct PartitionSummary {
     /// The partition identity: exact values, with NULL as NULL.
     pub scope: Scope,
@@ -198,6 +199,7 @@ pub const MAX_PARTITION_PAGE_LIMIT: usize = 500;
 /// record id). `next_offset` on the result continues the walk; `None` means
 /// the listing is exhausted.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct PartitionPage {
     /// Page size: at least 1, at most [`MAX_PARTITION_PAGE_LIMIT`].
     pub limit: usize,
@@ -238,6 +240,7 @@ impl PartitionPage {
 
 /// One page of partition-scoped records plus the continuation offset.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct PartitionRecords<T> {
     /// The page's records in the listing's deterministic order.
     pub items: Vec<T>,

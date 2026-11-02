@@ -1,5 +1,9 @@
 # v1 Changelog
 
+## 2026-11-02 (scope inventory)
+
+- Added `PartitionSummary` (a distinct partition tuple with `memoryCount`/`entityCount`/`beliefCount`; NULL dimensions are their own value, rendered "(unset)" by consumers) and `PartitionPage` (bounded listing window) definitions for the read-only scope-inventory port (job 012-admin-console-v1). Additive/compatible: new read-model shapes only; no stored contract changes.
+
 ## 2026-10-30 (preservation record class)
 
 - Added optional `PreservationEntry.recordClass` for the camelCase knowledge class emitted by the Rust preservation-record serializer. Additive/compatible: the property remains optional so existing inventory payloads validate unchanged; current Rust serialization emits it for every preserved record.

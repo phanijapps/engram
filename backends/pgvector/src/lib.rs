@@ -184,6 +184,12 @@ pub fn open(config: &EngramConfig) -> CoreResult<EngramProvider> {
         None
     };
 
+    // Scope inventory (job 012): the port over this database's governed
+    // tables (exact-tuple partition reads; trait impl on PgScopeInventoryPort).
+    let scope_inventory: Arc<dyn engram_integration::ScopeInventory> = Arc::new(
+        PgScopeInventoryPort(engram_store_pgvector::PgScopeInventory::new(mk_conn()?)),
+    );
+
     // Scoped chunk listing (engine-neutral KnowledgeQuery port) — constructed
     // before the recall so the bound vector lane can resolve its eligible
     // target set.
@@ -309,6 +315,7 @@ pub fn open(config: &EngramConfig) -> CoreResult<EngramProvider> {
         .code_binding(CapabilityState::Supported)
         .code_source(CapabilityState::Supported)
         .code_reset(CapabilityState::Supported)
+        .scope_inventory(CapabilityState::Supported)
         .build();
 
     let mut provider_builder = EngramProviderBuilder::new(report)
@@ -330,7 +337,8 @@ pub fn open(config: &EngramConfig) -> CoreResult<EngramProvider> {
     let provider = provider_builder
         .code_bindings(code_coordinator)
         .code_source(code_source)
-        .code_ingestion(code_ingestion);
+        .code_ingestion(code_ingestion)
+        .scope_inventory(scope_inventory);
 
     Ok(provider.build())
 }

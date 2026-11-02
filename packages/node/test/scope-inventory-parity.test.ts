@@ -55,12 +55,14 @@ function runLeg(recipe: string, nonce: string): LegResult {
     stdio: ["ignore", "pipe", "inherit"]
   });
   const lines = stdout.trim().split("\n");
-  return JSON.parse(lines[lines.length - 1]);
+  const last = lines[lines.length - 1];
+  if (last === undefined) throw new Error(`${recipe} leg produced no output`);
+  return JSON.parse(last);
 }
 
 /** Canonical projection of the inventory for set/shape comparison. */
 function partitionKey(row: PartitionSummary): string {
-  const d = (v: string | null): string => (v === null || v === undefined ? "(unset)" : v);
+  const d = (v: string | null | undefined): string => (v === null || v === undefined ? "(unset)" : v);
   return [
     row.scope.tenant,
     d(row.scope.subject),
@@ -104,6 +106,7 @@ describe.skipIf(!process.env.ENGRAM_TEST_PG_URL)("job012 scope-inventory parity 
     for (const [key, sqliteRow] of sqliteMap) {
       const pgRow = pgMap.get(key);
       expect(pgRow, `pgvector must report partition ${key}`).toBeDefined();
+      if (!pgRow) throw new Error(`pgvector missing partition ${key}`);
       expect(pgRow.memoryCount).toBe(sqliteRow.memoryCount);
       expect(pgRow.entityCount).toBe(sqliteRow.entityCount);
       expect(pgRow.beliefCount).toBe(sqliteRow.beliefCount);

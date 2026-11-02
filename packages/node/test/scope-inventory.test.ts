@@ -26,7 +26,7 @@ beforeAll(
 );
 
 interface PartitionSummary {
-  scope: { tenant: string; workspace?: string | null };
+  scope: { tenant: string; workspace?: string | null; subject?: string | null };
   memoryCount: number;
   entityCount: number;
   beliefCount: number;
@@ -34,7 +34,7 @@ interface PartitionSummary {
 
 const TENANT = "job012-scope-inventory";
 
-function scope(workspace?: string) {
+function scope(workspace?: string | null) {
   return { tenant: TENANT, workspace: workspace ?? null };
 }
 

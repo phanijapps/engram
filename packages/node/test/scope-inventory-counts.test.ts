@@ -35,10 +35,12 @@ function runLeg(recipe: string, nonce: string): LegResult {
     stdio: ["ignore", "pipe", "inherit"]
   });
   const lines = stdout.trim().split("\n");
-  return JSON.parse(lines[lines.length - 1]);
+  const last = lines[lines.length - 1];
+  if (last === undefined) throw new Error(`${recipe} leg produced no output`);
+  return JSON.parse(last);
 }
 
-function assertCountTruth(result: LegResult) {
+function assertCountTruth(result: LegResult): void {
   for (const kind of ["memory", "entity", "belief"] as const) {
     expect(
       result.direct[kind],

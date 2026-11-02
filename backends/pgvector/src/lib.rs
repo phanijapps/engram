@@ -26,6 +26,105 @@ use engram_store_pgvector::{
 use query::PgKnowledgeQuery;
 use recall::PgUnifiedRecall;
 
+// === Scope inventory (job 012-admin-console-v1, STEP-003) ==================
+//
+// The port trait lives in the facade (`engram_integration::ScopeInventory`),
+// so — like `PgKnowledgeQuery` — implementing it belongs to this recipe (the
+// composition layer), not to the `adapters/pgvector` cells (which implement
+// core ports only). The cells' `PgScopeInventory` supplies the exact-tuple
+// reads (`IS NOT DISTINCT FROM`, never the divergent `list_scoped`
+// predicates); this impl supplies the port contract: page validation, the
+// shared merge/order helpers, and continuation offsets.
+
+/// Facade-side wrapper giving the adapter's reader the port trait: the trait
+/// is foreign to both this crate and the adapter crate, so the recipe owns a
+/// local newtype (orphan rule) and delegates every op to the inner reader.
+pub struct PgScopeInventoryPort(pub(crate) engram_store_pgvector::PgScopeInventory);
+
+#[async_trait::async_trait]
+impl engram_integration::ScopeInventory for PgScopeInventoryPort {
+    async fn inventory(
+        &self,
+    ) -> engram_runtime::CoreResult<Vec<engram_integration::scope_inventory::PartitionSummary>>
+    {
+        let memories = self.0.count_memory_partitions()?;
+        let entities = self.0.count_entity_partitions()?;
+        let beliefs = self.0.count_belief_partitions()?;
+        Ok(engram_integration::scope_inventory::merge_partition_counts(
+            &memories
+                .into_iter()
+                .map(|r| (r.scope, r.count))
+                .collect::<Vec<_>>(),
+            &entities
+                .into_iter()
+                .map(|r| (r.scope, r.count))
+                .collect::<Vec<_>>(),
+            &beliefs
+                .into_iter()
+                .map(|r| (r.scope, r.count))
+                .collect::<Vec<_>>(),
+        ))
+    }
+
+    async fn partition_memories(
+        &self,
+        partition: &engram_domain::Scope,
+        page: engram_integration::scope_inventory::PartitionPage,
+    ) -> engram_runtime::CoreResult<
+        engram_integration::scope_inventory::PartitionRecords<engram_domain::MemoryRecord>,
+    > {
+        page.validate()?;
+        let items =
+            self.0
+                .list_partition_memories(partition, page.limit as i64, page.offset as i64)?;
+        let next_offset = engram_integration::scope_inventory::next_page_offset(&items, &page);
+        Ok(engram_integration::scope_inventory::PartitionRecords { items, next_offset })
+    }
+
+    async fn partition_entities(
+        &self,
+        partition: &engram_domain::Scope,
+        page: engram_integration::scope_inventory::PartitionPage,
+    ) -> engram_runtime::CoreResult<
+        engram_integration::scope_inventory::PartitionRecords<engram_domain::KnowledgeEntity>,
+    > {
+        page.validate()?;
+        let items =
+            self.0
+                .list_partition_entities(partition, page.limit as i64, page.offset as i64)?;
+        let next_offset = engram_integration::scope_inventory::next_page_offset(&items, &page);
+        Ok(engram_integration::scope_inventory::PartitionRecords { items, next_offset })
+    }
+
+    async fn partition_relationships(
+        &self,
+        partition: &engram_domain::Scope,
+        page: engram_integration::scope_inventory::PartitionPage,
+    ) -> engram_runtime::CoreResult<
+        engram_integration::scope_inventory::PartitionRecords<engram_domain::KnowledgeRelationship>,
+    > {
+        page.validate()?;
+        let items = self.0.list_partition_relationships(
+            partition,
+            page.limit as i64,
+            page.offset as i64,
+        )?;
+        let next_offset = engram_integration::scope_inventory::next_page_offset(&items, &page);
+        Ok(engram_integration::scope_inventory::PartitionRecords { items, next_offset })
+    }
+
+    async fn partition_recent_memories(
+        &self,
+        partition: &engram_domain::Scope,
+        limit: usize,
+    ) -> engram_runtime::CoreResult<Vec<engram_domain::MemoryRecord>> {
+        engram_integration::scope_inventory::validate_recent_limit(limit)?;
+        Ok(self
+            .0
+            .list_recent_partition_memories(partition, limit as i64)?)
+    }
+}
+
 /// Opens a Postgres (pgvector)-backed [`EngramProvider`] from a config carrying
 /// a `pgvector_connection_string`.
 ///

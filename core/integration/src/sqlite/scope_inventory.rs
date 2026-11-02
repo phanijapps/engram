@@ -3,10 +3,11 @@
 //! The adapter crate (`engram-store-sqlite`) cannot depend on the facade, so
 //! the capability's reads live there as inherent methods on
 //! [`SqlScopeInventory`] (over the same store handles the provider wires),
-//! and this module supplies the port trait implementation: page validation,
-//! count merging into [`PartitionSummary`] rows, the canonical partition
-//! order, and continuation offsets. The provider bootstrap attaches the
-//! handle when the scope-inventory conformance check passes.
+//! and this module supplies the port trait implementation. Merge, canonical
+//! order, page validation, and continuation offsets come from the port module
+//! itself — one shared truth for both engine recipes (RISK-002). The provider
+//! bootstrap attaches the handle when the scope-inventory conformance check
+//! passes.
 
 use async_trait::async_trait;
 use engram_domain::{KnowledgeEntity, KnowledgeRelationship, MemoryRecord, Scope};
@@ -14,45 +15,30 @@ use engram_runtime::CoreResult;
 use engram_store_sqlite::SqlScopeInventory;
 
 use crate::scope_inventory::{
-    PartitionPage, PartitionRecords, PartitionSummary, ScopeInventory, sort_summaries,
+    PartitionPage, PartitionRecords, ScopeInventory, merge_partition_counts, next_page_offset,
     validate_recent_limit,
 };
 
 #[async_trait]
 impl ScopeInventory for SqlScopeInventory {
-    async fn inventory(&self) -> CoreResult<Vec<PartitionSummary>> {
+    async fn inventory(&self) -> CoreResult<Vec<crate::scope_inventory::PartitionSummary>> {
         let memories = self.count_memory_partitions()?;
         let entities = self.count_entity_partitions()?;
         let beliefs = self.count_belief_partitions()?;
-
-        // Merge the three per-kind groupings into one row per distinct
-        // partition, zero-filling kinds the partition does not carry. Each
-        // grouping already arrives as one row per distinct tuple with that
-        // tuple's row count; the merge is bounded by the store's distinct
-        // partition count — the bounded summary the port promises.
-        let mut merged: Vec<PartitionSummary> = Vec::new();
-        let mut absorb = |rows: Vec<engram_store_sqlite::ScopeCountRow>, kind: Kind| {
-            for row in rows {
-                match merged.iter_mut().find(|summary| summary.scope == row.scope) {
-                    Some(summary) => summary.add(kind, row.count),
-                    None => {
-                        let mut summary = PartitionSummary {
-                            scope: row.scope,
-                            memory_count: 0,
-                            entity_count: 0,
-                            belief_count: 0,
-                        };
-                        summary.add(kind, row.count);
-                        merged.push(summary);
-                    }
-                }
-            }
-        };
-        absorb(memories, Kind::Memory);
-        absorb(entities, Kind::Entity);
-        absorb(beliefs, Kind::Belief);
-        sort_summaries(&mut merged);
-        Ok(merged)
+        Ok(merge_partition_counts(
+            &memories
+                .into_iter()
+                .map(|r| (r.scope, r.count))
+                .collect::<Vec<_>>(),
+            &entities
+                .into_iter()
+                .map(|r| (r.scope, r.count))
+                .collect::<Vec<_>>(),
+            &beliefs
+                .into_iter()
+                .map(|r| (r.scope, r.count))
+                .collect::<Vec<_>>(),
+        ))
     }
 
     async fn partition_memories(
@@ -100,37 +86,6 @@ impl ScopeInventory for SqlScopeInventory {
         Ok(self.list_recent_partition_memories(partition, limit as i64)?)
     }
 }
-
-/// Continuation offset for a page: advance only when the page came back full,
-/// so an exactly-full final page yields a next offset whose follow-up page is
-/// empty (terminating), and a short page ends the walk.
-fn next_page_offset<T>(items: &[T], page: &PartitionPage) -> Option<u64> {
-    if items.len() < page.limit {
-        None
-    } else {
-        Some(page.offset + items.len() as u64)
-    }
-}
-
-/// The three governed kinds the inventory counts.
-#[derive(Clone, Copy)]
-enum Kind {
-    Memory,
-    Entity,
-    Belief,
-}
-
-impl PartitionSummary {
-    /// Adds `count` rows of one kind to this summary.
-    fn add(&mut self, kind: Kind, count: u64) {
-        match kind {
-            Kind::Memory => self.memory_count += count,
-            Kind::Entity => self.entity_count += count,
-            Kind::Belief => self.belief_count += count,
-        }
-    }
-}
-
 #[cfg(all(test, feature = "sqlite"))]
 mod scope_inventory_trait_tests {
     //! Trait-level proofs over the real in-memory SQLite stores: the port's

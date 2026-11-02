@@ -78,6 +78,72 @@ pub fn sort_summaries(summaries: &mut [PartitionSummary]) {
     summaries.sort_by(|a, b| a.compare_partitions(b));
 }
 
+/// Merges per-kind grouped counts into one summary row per distinct
+/// partition, zero-filling kinds the partition does not carry, and returns
+/// the rows in the canonical order. One implementation for both engine
+/// recipes — the adapters deliver `(scope, count)` groupings and never
+/// re-derive merge or order semantics (RISK-002).
+pub fn merge_partition_counts(
+    memories: &[(Scope, u64)],
+    entities: &[(Scope, u64)],
+    beliefs: &[(Scope, u64)],
+) -> Vec<PartitionSummary> {
+    let mut merged: Vec<PartitionSummary> = Vec::new();
+    let mut absorb = |rows: &[(Scope, u64)], kind: CountedKind| {
+        for (scope, count) in rows {
+            match merged.iter_mut().find(|summary| &summary.scope == scope) {
+                Some(summary) => summary.add(kind, *count),
+                None => {
+                    let mut summary = PartitionSummary {
+                        scope: scope.clone(),
+                        memory_count: 0,
+                        entity_count: 0,
+                        belief_count: 0,
+                    };
+                    summary.add(kind, *count);
+                    merged.push(summary);
+                }
+            }
+        }
+    };
+    absorb(memories, CountedKind::Memory);
+    absorb(entities, CountedKind::Entity);
+    absorb(beliefs, CountedKind::Belief);
+    sort_summaries(&mut merged);
+    merged
+}
+
+/// The three governed kinds the inventory counts.
+#[derive(Clone, Copy)]
+enum CountedKind {
+    Memory,
+    Entity,
+    Belief,
+}
+
+impl PartitionSummary {
+    /// Adds `count` rows of one kind to this summary.
+    fn add(&mut self, kind: CountedKind, count: u64) {
+        match kind {
+            CountedKind::Memory => self.memory_count += count,
+            CountedKind::Entity => self.entity_count += count,
+            CountedKind::Belief => self.belief_count += count,
+        }
+    }
+}
+
+/// Continuation offset for a page: advance only when the page came back full,
+/// so an exactly-full final page yields a next offset whose follow-up page is
+/// empty (terminating), and a short page ends the walk. Shared by both engine
+/// recipes so pagination semantics never diverge.
+pub fn next_page_offset<T>(items: &[T], page: &PartitionPage) -> Option<u64> {
+    if items.len() < page.limit {
+        None
+    } else {
+        Some(page.offset + items.len() as u64)
+    }
+}
+
 /// One inventory row: a partition's exact scope tuple plus its record counts.
 ///
 /// Counts cover the owner-named trio only (memories, knowledge entities,
@@ -456,6 +522,32 @@ mod tests {
         assert!(validate_recent_limit(0).is_err());
         assert!(validate_recent_limit(MAX_PARTITION_PAGE_LIMIT).is_ok());
         assert!(validate_recent_limit(MAX_PARTITION_PAGE_LIMIT + 1).is_err());
+    }
+
+    #[test]
+    fn scope_inventory_merge_zero_fills_and_orders() {
+        let count = |workspace: Option<&str>| scope("acme", None, workspace, None, None);
+        let memories = vec![(count(None), 1), (count(Some("proj-a")), 2)];
+        let entities = vec![(count(Some("proj-a")), 3), (count(Some("proj-z")), 4)];
+        let beliefs: Vec<(Scope, u64)> = vec![];
+        let merged = merge_partition_counts(&memories, &entities, &beliefs);
+        assert_eq!(merged.len(), 3, "union of partition tuples");
+        let order: Vec<Option<String>> = merged.iter().map(|m| m.scope.workspace.clone()).collect();
+        assert_eq!(
+            order,
+            vec![None, Some("proj-a".into()), Some("proj-z".into())]
+        );
+        assert_eq!(
+            merged[0].memory_count, 1,
+            "unset row zero-fills other kinds"
+        );
+        assert_eq!(merged[0].entity_count, 0);
+        assert_eq!(merged[1].memory_count, 2);
+        assert_eq!(merged[1].entity_count, 3);
+        assert_eq!(
+            merged[2].belief_count, 0,
+            "belief-only-missing kind zero-fills"
+        );
     }
 
     #[test]

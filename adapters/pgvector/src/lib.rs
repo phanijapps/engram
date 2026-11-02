@@ -18,7 +18,10 @@ pub mod memory;
 pub mod schema;
 pub mod vector;
 
-pub use cells::{PgBeliefStore, PgHierarchyStore, PgMemoryService, PgProcedureStore};
+pub use cells::{
+    PgBeliefStore, PgHierarchyStore, PgMemoryService, PgProcedureStore, PgScopeCountRow,
+    PgScopeInventory,
+};
 pub use code_binding_port::PgCodeBindingRepository;
 pub use connection::PgConnection;
 pub use knowledge::PgKnowledgeStore;

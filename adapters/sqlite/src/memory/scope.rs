@@ -110,21 +110,22 @@ impl SqlScopeInventory {
     /// archive column).
     pub fn count_memory_partitions(&self) -> CoreResult<Vec<ScopeCountRow>> {
         let connection = self.memory.store.lock_connection()?;
-        count_scope_groups(&connection, "memories", false)
+        count_scope_groups(&connection, "memories")
     }
 
-    /// Distinct knowledge-entity partitions with counts of active entities
-    /// (`archived_at IS NULL`, matching the engine's active-read semantics so
-    /// counts agree with listings).
+    /// Distinct knowledge-entity partitions with row counts. Counts reflect
+    /// rows present in the governed table (soft-archived rows included): the
+    /// pgvector mirror of this table has no archive column, so rows-present is
+    /// the one shape both engines can aggregate identically (RISK-002).
     pub fn count_entity_partitions(&self) -> CoreResult<Vec<ScopeCountRow>> {
         let connection = self.knowledge.lock_conn()?;
-        count_scope_groups(&connection, "knowledge_entities", true)
+        count_scope_groups(&connection, "knowledge_entities")
     }
 
     /// Distinct belief partitions with counts of stored belief rows.
     pub fn count_belief_partitions(&self) -> CoreResult<Vec<ScopeCountRow>> {
         let connection = self.belief.lock()?;
-        count_scope_groups(&connection, "beliefs", false)
+        count_scope_groups(&connection, "beliefs")
     }
 
     /// Memories of exactly one partition, ascending by record id, bounded by
@@ -150,8 +151,9 @@ impl SqlScopeInventory {
         decode_rows(rows)
     }
 
-    /// Active knowledge entities of exactly one partition, ascending by
-    /// record id, bounded by `limit`/`offset`.
+    /// Knowledge entities of exactly one partition (rows present, matching
+    /// the count semantics), ascending by record id, bounded by
+    /// `limit`/`offset`.
     pub fn list_partition_entities(
         &self,
         partition: &Scope,
@@ -162,7 +164,7 @@ impl SqlScopeInventory {
         let mut stmt = connection
             .prepare(&format!(
                 "SELECT record_json FROM knowledge_entities WHERE {EXACT_PARTITION_WHERE} \
-                 AND archived_at IS NULL ORDER BY id ASC LIMIT ?6 OFFSET ?7"
+                 ORDER BY id ASC LIMIT ?6 OFFSET ?7"
             ))
             .map_err(sql_error)?;
         let rows = stmt
@@ -173,8 +175,9 @@ impl SqlScopeInventory {
         decode_rows(rows)
     }
 
-    /// Active knowledge relationships of exactly one partition, ascending by
-    /// record id, bounded by `limit`/`offset`.
+    /// Knowledge relationships of exactly one partition (rows present,
+    /// matching the count semantics), ascending by record id, bounded by
+    /// `limit`/`offset`.
     pub fn list_partition_relationships(
         &self,
         partition: &Scope,
@@ -185,7 +188,7 @@ impl SqlScopeInventory {
         let mut stmt = connection
             .prepare(&format!(
                 "SELECT record_json FROM knowledge_relationships WHERE {EXACT_PARTITION_WHERE} \
-                 AND archived_at IS NULL ORDER BY id ASC LIMIT ?6 OFFSET ?7"
+                 ORDER BY id ASC LIMIT ?6 OFFSET ?7"
             ))
             .map_err(sql_error)?;
         let rows = stmt
@@ -231,13 +234,10 @@ impl SqlScopeInventory {
 
 /// Groups one governed table by the five scope columns and counts each
 /// distinct tuple. SQLite `GROUP BY` treats NULLs as their own single group —
-/// the NULL-as-own-value semantics the port requires. `active_only` adds the
-/// archive filter for tables that soft-delete (knowledge graph tables).
-fn count_scope_groups(
-    connection: &Connection,
-    table: &str,
-    active_only: bool,
-) -> CoreResult<Vec<ScopeCountRow>> {
+/// the NULL-as-own-value semantics the port requires. Counts reflect rows
+/// present in the table (the pgvector mirror has no archive column; see the
+/// method docs for the parity rationale).
+fn count_scope_groups(connection: &Connection, table: &str) -> CoreResult<Vec<ScopeCountRow>> {
     // Table names come from this crate's own call sites only — never caller
     // input. The match keeps that invariant visible at compile time.
     let table = match table {
@@ -249,15 +249,10 @@ fn count_scope_groups(
             });
         }
     };
-    let archive_clause = if active_only {
-        " WHERE archived_at IS NULL"
-    } else {
-        ""
-    };
     let mut stmt = connection
         .prepare(&format!(
             "SELECT tenant, subject, workspace, session, environment, COUNT(*) \
-             FROM {table}{archive_clause} \
+             FROM {table} \
              GROUP BY tenant, subject, workspace, session, environment"
         ))
         .map_err(sql_error)?;

@@ -691,3 +691,610 @@ impl engram_procedures::ProcedureRepository for PgProcedureStore {
         delete_scoped(&self.conn, "procedures", &id.to_string(), s)
     }
 }
+
+// === Scope inventory (job 012-admin-console-v1, STEP-003) ===
+//
+// The port trait lives in the facade (`engram_integration::ScopeInventory`);
+// this crate implements core ports only, so — exactly like the SQLite mirror —
+// the capability is implemented here as inherent methods and the trait impl +
+// recipe wiring live in `backends/pgvector` (the composition layer).
+//
+// Semantics are the unified partition semantics, NOT the divergent
+// `list_scoped` predicates above: NULL dimensions are their own distinct value
+// (Postgres `GROUP BY` groups NULLs together), and partition reads match
+// every dimension with `IS NOT DISTINCT FROM` — never the
+// `(subject IS NULL OR subject=$n)` wildcard shapes used by the scoped reads.
+
+/// One grouped row of the scope inventory: a distinct partition tuple plus
+/// the number of governed rows of one kind stored under exactly that tuple.
+/// Shape-mirrors the SQLite adapter's row type (the two adapter crates cannot
+/// share a type); the port's merge treats them identically.
+#[derive(Debug, Clone, PartialEq)]
+pub struct PgScopeCountRow {
+    pub scope: Scope,
+    pub count: u64,
+}
+
+/// pgvector scope-inventory reader over the governed Postgres tables.
+///
+/// One connection serves every table (all governed tables share the
+/// database); every read is a short read-only query.
+pub struct PgScopeInventory {
+    conn: PgConnection,
+}
+
+/// The exact-tuple partition predicate: every scope dimension matched with
+/// NULL-equality (`IS NOT DISTINCT FROM`), the unified partition semantics.
+const EXACT_PARTITION_WHERE: &str = "tenant=$1 \
+     AND subject IS NOT DISTINCT FROM $2 \
+     AND workspace IS NOT DISTINCT FROM $3 \
+     AND session IS NOT DISTINCT FROM $4 \
+     AND environment IS NOT DISTINCT FROM $5";
+
+impl PgScopeInventory {
+    pub fn new(conn: PgConnection) -> Self {
+        Self { conn }
+    }
+
+    /// Distinct memory partitions with row counts (NULL dimensions are their
+    /// own group; counts reflect rows present — the pgvector tables carry no
+    /// archive column).
+    pub fn count_memory_partitions(&self) -> CoreResult<Vec<PgScopeCountRow>> {
+        self.count_partitions("memories")
+    }
+
+    /// Distinct knowledge-entity partitions with row counts.
+    pub fn count_entity_partitions(&self) -> CoreResult<Vec<PgScopeCountRow>> {
+        self.count_partitions("knowledge_entities")
+    }
+
+    /// Distinct belief partitions with row counts.
+    pub fn count_belief_partitions(&self) -> CoreResult<Vec<PgScopeCountRow>> {
+        self.count_partitions("beliefs")
+    }
+
+    fn count_partitions(&self, table: &str) -> CoreResult<Vec<PgScopeCountRow>> {
+        // Table names come from this crate's own call sites only.
+        let table = match table {
+            "memories" | "knowledge_entities" | "knowledge_relationships" | "beliefs" => table,
+            other => {
+                return Err(pg_err(format!(
+                    "scope inventory queried an unexpected table: {other}"
+                )))
+            }
+        };
+        self.conn
+            .block_on(async {
+                let rows = self
+                    .conn
+                    .client
+                    .query(
+                        &format!(
+                            "SELECT tenant, subject, workspace, session, environment, COUNT(*) \
+                             FROM {table} \
+                             GROUP BY tenant, subject, workspace, session, environment"
+                        ),
+                        &[],
+                    )
+                    .await
+                    .map_err(|e| pg_err(e.to_string()))?;
+                Ok(rows
+                    .iter()
+                    .map(|row| PgScopeCountRow {
+                        scope: Scope {
+                            tenant: row.get(0),
+                            subject: row.get(1),
+                            workspace: row.get(2),
+                            session: row.get(3),
+                            environment: row.get(4),
+                        },
+                        count: row.get::<_, i64>(5) as u64,
+                    })
+                    .collect())
+            })
+            .map_err(|e: CoreError| e)
+    }
+
+    /// Memories of exactly one partition, ascending by record id, bounded by
+    /// `limit`/`offset`.
+    pub fn list_partition_memories(
+        &self,
+        partition: &Scope,
+        limit: i64,
+        offset: i64,
+    ) -> CoreResult<Vec<MemoryRecord>> {
+        self.list_partition_records(
+            "memories",
+            partition,
+            limit,
+            offset,
+            "ORDER BY id ASC LIMIT $6 OFFSET $7",
+        )
+    }
+
+    /// Knowledge entities of exactly one partition, ascending by record id,
+    /// bounded by `limit`/`offset`.
+    pub fn list_partition_entities(
+        &self,
+        partition: &Scope,
+        limit: i64,
+        offset: i64,
+    ) -> CoreResult<Vec<KnowledgeEntity>> {
+        self.list_partition_records(
+            "knowledge_entities",
+            partition,
+            limit,
+            offset,
+            "ORDER BY id ASC LIMIT $6 OFFSET $7",
+        )
+    }
+
+    /// Knowledge relationships of exactly one partition, ascending by record
+    /// id, bounded by `limit`/`offset`.
+    pub fn list_partition_relationships(
+        &self,
+        partition: &Scope,
+        limit: i64,
+        offset: i64,
+    ) -> CoreResult<Vec<KnowledgeRelationship>> {
+        self.list_partition_records(
+            "knowledge_relationships",
+            partition,
+            limit,
+            offset,
+            "ORDER BY id ASC LIMIT $6 OFFSET $7",
+        )
+    }
+
+    /// The most recently created memories of exactly one partition, newest
+    /// first (`created_at DESC, id DESC`), bounded by `limit`. The shared
+    /// listing binds `OFFSET $7` as 0 (Postgres requires every bound
+    /// parameter to appear in the statement).
+    pub fn list_recent_partition_memories(
+        &self,
+        partition: &Scope,
+        limit: i64,
+    ) -> CoreResult<Vec<MemoryRecord>> {
+        self.list_partition_records(
+            "memories",
+            partition,
+            limit,
+            0,
+            "ORDER BY created_at DESC, id DESC LIMIT $6 OFFSET $7",
+        )
+    }
+
+    /// Shared exact-partition listing over one governed table.
+    fn list_partition_records<T: serde::de::DeserializeOwned + Send>(
+        &self,
+        table: &str,
+        partition: &Scope,
+        limit: i64,
+        offset: i64,
+        tail: &str,
+    ) -> CoreResult<Vec<T>> {
+        let tenant = partition.tenant.clone();
+        let subject = partition.subject.clone();
+        let workspace = partition.workspace.clone();
+        let session = partition.session.clone();
+        let environment = partition.environment.clone();
+        self.conn.block_on(async {
+            let rows = self
+                .conn
+                .client
+                .query(
+                    &format!(
+                        "SELECT record_json FROM {table} WHERE {EXACT_PARTITION_WHERE} {tail}"
+                    ),
+                    &[
+                        &tenant,
+                        &subject,
+                        &workspace,
+                        &session,
+                        &environment,
+                        &limit,
+                        &offset,
+                    ],
+                )
+                .await
+                .map_err(|e| pg_err(e.to_string()))?;
+            rows.iter()
+                .map(|row| {
+                    serde_json::from_value::<T>(row.get(0)).map_err(|e| pg_err(e.to_string()))
+                })
+                .collect()
+        })
+    }
+}
+
+#[cfg(test)]
+mod scope_inventory_tests {
+    //! STEP-003 focused proofs: the pgvector scope-inventory aggregation and
+    //! partition-scoped listings against a REAL marked-disposable Postgres,
+    //! exercised through the cells' own write APIs. Gated behind `--ignored` +
+    //! `ENGRAM_TEST_PG_URL` like every accepted PG suite.
+
+    use super::*;
+    use engram_domain::{
+        Actor, ActorKind, AllowedUse, Belief, BeliefId, BeliefStatus, BeliefSubject, EntityKind,
+        EntityRef, Id, KnowledgeEntity, MemoryContent, MemoryKind, Policy, Provenance, Requester,
+        Retention, Visibility, WriteMemoryRequest,
+    };
+    use futures::executor::block_on;
+
+    fn url() -> String {
+        std::env::var("ENGRAM_TEST_PG_URL").expect("marked disposable PostgreSQL URL required")
+    }
+
+    /// Asserts the disposable marker before touching the fixture (the accepted
+    /// PG-suite contract; CI marks its ephemeral service the same way).
+    fn assert_disposable(conn: &PgConnection) {
+        let marker: Option<String> = conn
+            .block_on(async {
+                conn.client
+                    .query_one(
+                        "SELECT shobj_description(oid,'pg_database') FROM pg_database \
+                         WHERE datname=current_database()",
+                        &[],
+                    )
+                    .await
+            })
+            .expect("marker query")
+            .get(0);
+        assert!(
+            marker
+                .as_deref()
+                .is_some_and(|m| m.contains("disposable=true")),
+            "refusing to run against a database not marked disposable"
+        );
+    }
+
+    struct Fixture {
+        tenant: String,
+        memory: PgMemoryService,
+        knowledge: crate::knowledge::PgKnowledgeStore,
+        belief: PgBeliefStore,
+    }
+
+    fn fixture() -> Fixture {
+        let conn = PgConnection::connect(&url()).expect("connect fixture");
+        assert_disposable(&conn);
+        conn.block_on(async {
+            conn.client
+                .batch_execute(&crate::schema::schema_sql_without_vectors())
+                .await
+        })
+        .expect("apply schema");
+        let tenant = format!(
+            "job012-inv-{}-{}",
+            std::process::id(),
+            chrono::Utc::now().timestamp_nanos_opt().unwrap_or_default()
+        );
+        Fixture {
+            memory: PgMemoryService::new(PgConnection::connect(&url()).expect("memory conn")),
+            knowledge: crate::knowledge::PgKnowledgeStore::new(
+                PgConnection::connect(&url()).expect("knowledge conn"),
+            ),
+            belief: PgBeliefStore::new(PgConnection::connect(&url()).expect("belief conn")),
+            tenant,
+        }
+    }
+
+    fn inventory(fixture: &Fixture) -> PgScopeInventory {
+        PgScopeInventory::new(PgConnection::connect(&url()).expect("inventory conn"))
+    }
+
+    fn scope(fixture: &Fixture, workspace: Option<&str>) -> Scope {
+        Scope {
+            tenant: fixture.tenant.clone(),
+            subject: None,
+            workspace: workspace.map(str::to_string),
+            session: None,
+            environment: None,
+        }
+    }
+
+    fn actor() -> Actor {
+        Actor {
+            id: Id::from("job012-scope-inventory"),
+            kind: ActorKind::Agent,
+            display_name: None,
+            metadata: None,
+        }
+    }
+
+    fn write_req(text: &str, scope: Scope) -> WriteMemoryRequest {
+        let now = chrono::Utc::now();
+        WriteMemoryRequest {
+            kind: MemoryKind::Observation,
+            content: MemoryContent {
+                text: text.to_owned(),
+                summary: None,
+                entities: Vec::new(),
+                language: None,
+                format: None,
+                structured: None,
+                hash: None,
+            },
+            scope,
+            requester: Requester {
+                actor: actor(),
+                roles: Vec::new(),
+                permissions: vec!["memory.write".to_owned()],
+                on_behalf_of: None,
+            },
+            provenance: Provenance {
+                source: "job012-scope-inventory".to_owned(),
+                actor: actor(),
+                observed_at: now,
+                evidence: Vec::new(),
+                derivations: Vec::new(),
+                confidence: Some(1.0),
+                method: None,
+            },
+            policy: Policy {
+                visibility: Visibility::Private,
+                retention: Retention::Durable,
+                sensitivity: None,
+                allowed_uses: vec![AllowedUse::Retrieval],
+                expires_at: None,
+                delete_mode: None,
+            },
+            links: Vec::new(),
+            verdict: None,
+            idempotency_key: None,
+        }
+    }
+
+    fn entity(id: &str, name: &str, scope: Scope) -> KnowledgeEntity {
+        KnowledgeEntity {
+            id: Id::new(id).expect("entity id"),
+            graph_id: None,
+            kind: EntityKind::Project,
+            name: name.to_owned(),
+            aliases: Vec::new(),
+            scope,
+            source_refs: Vec::new(),
+            concept_refs: Vec::new(),
+            ontology_class_refs: Vec::new(),
+            provenance: Provenance {
+                source: "job012-scope-inventory".to_owned(),
+                actor: actor(),
+                observed_at: chrono::Utc::now(),
+                evidence: Vec::new(),
+                derivations: Vec::new(),
+                confidence: Some(1.0),
+                method: None,
+            },
+            created_at: chrono::Utc::now(),
+            updated_at: None,
+            valid_from: None,
+            valid_until: None,
+            archived_at: None,
+            metadata: None,
+        }
+    }
+
+    fn belief(id: &str, scope: Scope) -> Belief {
+        Belief {
+            id: BeliefId::new(id).expect("belief id"),
+            scope,
+            subject: BeliefSubject {
+                key: format!("belief-{id}"),
+                entity_ref: None,
+                concept_ref: None,
+                aliases: Vec::new(),
+            },
+            content: format!("belief {id}"),
+            status: BeliefStatus::Active,
+            confidence: 0.9,
+            sources: Vec::new(),
+            valid_from: None,
+            valid_until: None,
+            superseded_by: None,
+            stale: None,
+            synthesizer: None,
+            reasoning: None,
+            embedding_refs: Vec::new(),
+            policy: Policy {
+                visibility: Visibility::Private,
+                retention: Retention::Durable,
+                sensitivity: None,
+                allowed_uses: vec![AllowedUse::Retrieval],
+                expires_at: None,
+                delete_mode: None,
+            },
+            provenance: Provenance {
+                source: "job012-scope-inventory".to_owned(),
+                actor: actor(),
+                observed_at: chrono::Utc::now(),
+                evidence: Vec::new(),
+                derivations: Vec::new(),
+                confidence: Some(1.0),
+                method: None,
+            },
+            created_at: chrono::Utc::now(),
+            updated_at: None,
+            metadata: None,
+        }
+    }
+
+    #[test]
+    #[ignore = "requires ENGRAM_TEST_PG_URL against the approved marked disposable fixture"]
+    fn scope_inventory_groups_null_as_its_own_value() {
+        let fx = fixture();
+        let inv = inventory(&fx);
+        let unset = scope(&fx, None);
+        let defaulted = scope(&fx, Some("default"));
+        block_on(async {
+            use engram_memory::MemoryService;
+            fx.memory
+                .write_memory(write_req("unset workspace memory", unset))
+                .await
+                .expect("write");
+            fx.memory
+                .write_memory(write_req("default workspace memory", defaulted))
+                .await
+                .expect("write");
+        });
+        let rows = inv.count_memory_partitions().expect("memory partitions");
+        let mine: Vec<_> = rows
+            .iter()
+            .filter(|r| r.scope.tenant == fx.tenant)
+            .collect();
+        assert_eq!(
+            mine.len(),
+            2,
+            "NULL workspace and 'default' are distinct partitions"
+        );
+        assert_eq!(
+            mine.iter()
+                .find(|r| r.scope.workspace.is_none())
+                .expect("unset row")
+                .count,
+            1
+        );
+        assert_eq!(
+            mine.iter()
+                .find(|r| r.scope.workspace.as_deref() == Some("default"))
+                .expect("default row")
+                .count,
+            1
+        );
+    }
+
+    #[test]
+    #[ignore = "requires ENGRAM_TEST_PG_URL against the approved marked disposable fixture"]
+    fn scope_inventory_counts_three_kinds_and_lists_exactly() {
+        let fx = fixture();
+        let inv = inventory(&fx);
+        let a = scope(&fx, Some("proj-a"));
+        let sibling = scope(&fx, Some("proj-b"));
+        let unset = scope(&fx, None);
+        block_on(async {
+            use engram_belief::BeliefRepository;
+            use engram_knowledge::KnowledgeRepository;
+            use engram_memory::MemoryService;
+            fx.memory
+                .write_memory(write_req("a1", a.clone()))
+                .await
+                .expect("write");
+            fx.memory
+                .write_memory(write_req("a2", a.clone()))
+                .await
+                .expect("write");
+            fx.memory
+                .write_memory(write_req("sibling-only", sibling.clone()))
+                .await
+                .expect("write");
+            fx.memory
+                .write_memory(write_req("unset-only", unset.clone()))
+                .await
+                .expect("write");
+            // Run-unique ids: the fixture database persists across runs and
+            // `put_entity`'s conflict path keeps the stored scope columns, so
+            // reused ids would silently strand rows under a prior run's scope.
+            for i in 1..=3 {
+                fx.knowledge
+                    .put_entity(entity(
+                        &format!("{}-ent-a-{i}", fx.tenant),
+                        &format!("Entity {i}"),
+                        a.clone(),
+                    ))
+                    .await
+                    .expect("put entity");
+            }
+            fx.belief
+                .put_belief(belief(&format!("{}-bel-a-1", fx.tenant), a.clone()))
+                .await
+                .expect("put belief");
+        });
+
+        let memories = inv
+            .count_memory_partitions()
+            .expect("memories")
+            .into_iter()
+            .find(|r| r.scope == a)
+            .expect("partition A memory row");
+        assert_eq!(memories.count, 2);
+        let entities = inv
+            .count_entity_partitions()
+            .expect("entities")
+            .into_iter()
+            .find(|r| r.scope == a)
+            .expect("partition A entity row");
+        assert_eq!(entities.count, 3);
+        let beliefs = inv
+            .count_belief_partitions()
+            .expect("beliefs")
+            .into_iter()
+            .find(|r| r.scope == a)
+            .expect("partition A belief row");
+        assert_eq!(beliefs.count, 1);
+
+        let listed = inv
+            .list_partition_memories(&a, 10, 0)
+            .expect("list memories");
+        let texts: Vec<&str> = listed.iter().map(|m| m.content.text.as_str()).collect();
+        assert_eq!(texts.len(), 2);
+        assert!(texts.contains(&"a1") && texts.contains(&"a2"));
+        assert!(
+            !texts.contains(&"sibling-only") && !texts.contains(&"unset-only"),
+            "exact-tuple predicate excludes sibling and '(unset)' partitions"
+        );
+        let mut ids: Vec<String> = listed.iter().map(|m| m.id.to_string()).collect();
+        let mut sorted = ids.clone();
+        sorted.sort();
+        ids.sort();
+        assert_eq!(ids, sorted, "ascending id order");
+
+        let entities_listed = inv
+            .list_partition_entities(&a, 10, 0)
+            .expect("list entities");
+        assert_eq!(entities_listed.len(), 3);
+
+        let unset_listed = inv
+            .list_partition_memories(&unset, 10, 0)
+            .expect("list unset");
+        assert_eq!(
+            unset_listed
+                .iter()
+                .map(|m| m.content.text.clone())
+                .collect::<Vec<_>>(),
+            vec!["unset-only".to_owned()],
+            "the '(unset)' partition is addressable exactly"
+        );
+    }
+
+    #[test]
+    #[ignore = "requires ENGRAM_TEST_PG_URL against the approved marked disposable fixture"]
+    fn scope_inventory_recent_memories_newest_first() {
+        let fx = fixture();
+        let inv = inventory(&fx);
+        let a = scope(&fx, Some("recent"));
+        let other = scope(&fx, Some("other-recent"));
+        block_on(async {
+            use engram_memory::MemoryService;
+            fx.memory
+                .write_memory(write_req("r1", a.clone()))
+                .await
+                .expect("write");
+            fx.memory
+                .write_memory(write_req("r2", a.clone()))
+                .await
+                .expect("write");
+            fx.memory
+                .write_memory(write_req("r3", a.clone()))
+                .await
+                .expect("write");
+            fx.memory
+                .write_memory(write_req("elsewhere", other))
+                .await
+                .expect("write");
+        });
+        let recent = inv.list_recent_partition_memories(&a, 2).expect("recent");
+        assert_eq!(recent.len(), 2, "bounded by limit");
+        let texts: Vec<&str> = recent.iter().map(|m| m.content.text.as_str()).collect();
+        assert_eq!(texts, vec!["r3", "r2"], "newest first, partition-confined");
+    }
+}

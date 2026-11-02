@@ -9,10 +9,12 @@ import { describe, expect, it, afterEach } from "vitest";
 import {
   createConsoleServer,
   assertLoopbackHost,
+  isLoopbackHostHeader,
+  isLoopbackOriginHeader,
   partitionKey,
   parsePartitionKey
 } from "../server/app.mjs";
-import type { Server } from "node:http";
+import { request as httpRequest, type Server } from "node:http";
 
 /** A `NativeProviderBinding`-shaped stub: the ONLY surface the server touches. */
 function stubProvider() {
@@ -95,6 +97,63 @@ describe("job012 console local-only surface (STEP-007)", () => {
       expect(response.status).not.toBe(403);
       expect(response.headers.get("www-authenticate")).toBeNull();
     }
+  });
+
+  it("local-only: rebind-shape requests are refused (FIND-sec-001 negative)", async () => {
+    const base = await startServer();
+    const { port } = new URL(base);
+
+    // DNS-rebinding shape: an external hostname resolving to 127.0.0.1. The
+    // Host header is forbidden in fetch, so drive a raw request for it.
+    const statusWithHost = (host: string) =>
+      new Promise<number>((resolve, reject) => {
+        const req = httpRequest(
+          { host: "127.0.0.1", port: Number(port), path: "/api/inventory", headers: { Host: host } },
+          (res) => {
+            res.resume();
+            resolve(res.statusCode ?? 0);
+          }
+        );
+        req.on("error", reject);
+        req.end();
+      });
+
+    expect(await statusWithHost("attacker.example:8788")).toBe(403);
+    expect(await statusWithHost("127.0.0.1:" + port)).toBe(200);
+
+    // Origin header (browsers send it on every cross-site fetch; fetch allows it).
+    const reboundOrigin = await fetch(`${base}/api/inventory`, {
+      headers: { Origin: "http://attacker.example" }
+    });
+    expect(reboundOrigin.status).toBe(403);
+    expect((await reboundOrigin.json()).state).toBe("origin-refused");
+
+    // The no-preflight CSRF shape against the shutdown route also dies at the gate.
+    const crossOriginShutdown = await fetch(`${base}/api/shutdown`, {
+      method: "POST",
+      headers: { Origin: "http://attacker.example", "Content-Type": "text/plain" },
+      body: "{}"
+    });
+    expect(crossOriginShutdown.status).toBe(403);
+
+    // Legitimate loopback Origin still passes (negative's positive twin).
+    const legit = await fetch(`${base}/api/inventory`, {
+      headers: { Origin: new URL(base).origin }
+    });
+    expect(legit.status).toBe(200);
+  });
+
+  it("local-only: the header classifiers accept loopback and reject external names", () => {
+    expect(isLoopbackHostHeader("127.0.0.1:8788")).toBe(true);
+    expect(isLoopbackHostHeader("localhost:8788")).toBe(true);
+    expect(isLoopbackHostHeader("[::1]:8788")).toBe(true);
+    expect(isLoopbackHostHeader("attacker.example:8788")).toBe(false);
+    expect(isLoopbackHostHeader(undefined)).toBe(false);
+    expect(isLoopbackOriginHeader(undefined)).toBe(true);
+    expect(isLoopbackOriginHeader("http://127.0.0.1:8788")).toBe(true);
+    expect(isLoopbackOriginHeader("http://localhost:8788")).toBe(true);
+    expect(isLoopbackOriginHeader("http://attacker.example")).toBe(false);
+    expect(isLoopbackOriginHeader("not-a-url")).toBe(false);
   });
 
   it("local-only: partition keys round-trip the exact tuple", () => {

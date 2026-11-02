@@ -8,6 +8,10 @@ export declare const LOOPBACK_HOSTS: Set<string>;
 
 export declare function assertLoopbackHost(host: string): void;
 
+export declare function isLoopbackHostHeader(hostHeader: string | undefined): boolean;
+
+export declare function isLoopbackOriginHeader(originHeader: string | undefined): boolean;
+
 export declare function partitionKey(scope: {
   tenant: string;
   subject?: string | null;

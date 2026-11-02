@@ -29,6 +29,36 @@ export function assertLoopbackHost(host) {
   }
 }
 
+/**
+ * Origin pinning (review r1 FIND-sec-001): the loopback bind alone does not
+ * stop DNS rebinding — a page the operator visits can point its own domain at
+ * 127.0.0.1 and then read this server same-origin. Every request must carry
+ * a loopback Host (hostname) and, when an Origin header is present (browsers
+ * always send it on cross-site fetches), a loopback Origin. This is NOT
+ * authentication: the ratified no-auth single-operator boundary (B-1,
+ * LED-009) is unchanged; it pins WHO may speak to the loopback port (the
+ * operator's own browser at a loopback origin), closing the rebinding class
+ * for every endpoint, including POST /api/shutdown.
+ */
+const LOOPBACK_HOST_PATTERN = /^(127\.0\.0\.1|localhost|\[::1\])(:\d+)?$/i;
+
+/** True when a Host header value names a loopback origin (optionally with port). */
+export function isLoopbackHostHeader(hostHeader) {
+  return hostHeader !== undefined && LOOPBACK_HOST_PATTERN.test(hostHeader.trim());
+}
+
+/** True when an Origin header value is a loopback origin (or is absent —
+ * same-origin navigations and non-browser clients send none). */
+export function isLoopbackOriginHeader(originHeader) {
+  if (originHeader === undefined || originHeader === "") return true;
+  try {
+    const { hostname } = new URL(originHeader);
+    return hostname === "127.0.0.1" || hostname === "localhost" || hostname === "::1";
+  } catch {
+    return false;
+  }
+}
+
 /** URL-safe encoding of one partition tuple (the five scope values). */
 export function partitionKey(scope) {
   return Buffer.from(JSON.stringify(scope), "utf8").toString("base64url");
@@ -356,6 +386,15 @@ export function createConsoleServer({ provider, backend, storage, uiDir }) {
   }
 
   const server = createServer(async (req, res) => {
+    // Origin pinning runs before every route (FIND-sec-001): non-loopback
+    // Host or Origin is refused with a named state, never routed.
+    if (!isLoopbackHostHeader(req.headers.host) || !isLoopbackOriginHeader(req.headers.origin)) {
+      sendJson(res, 403, {
+        state: "origin-refused",
+        message: "Console requests must originate from a loopback host (127.0.0.1 / localhost / ::1)."
+      });
+      return;
+    }
     const url = new URL(req.url ?? "/", "http://127.0.0.1");
     try {
       if (req.method === "POST" && url.pathname === "/api/shutdown") {

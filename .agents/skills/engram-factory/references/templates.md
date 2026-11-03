@@ -14,9 +14,12 @@ execute verbatim.
 
 **Owner view discipline (tasks.md).** The "What this job does (owner view)"
 section is written for the product owner, not for executors: verb first, the
-visible change, no IDs, no file paths, no mechanism vocabulary, one sentence
-per task, readable in under thirty seconds. Task lines then open with the
-same observable change before any file or seam detail.
+visible change, no IDs, no file paths, no mechanism vocabulary, readable in
+under thirty seconds. Plain tasks take one line. TDD tasks take two labeled
+lines — RED (the test that fails today, and why failing is correct) then
+GREEN (the change that makes it pass, in product terms) — so the owner sees
+the proof shape. Task lines then open with the same observable change before
+any file or seam detail.
 
 **Vocabulary discipline.** Use approved terms from the job glossary. One term,
 one meaning. Do not invent synonyms for mechanisms that already have a name.

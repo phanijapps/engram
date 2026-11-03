@@ -21,11 +21,16 @@ constitution_rules_touched: []
 One line per task, product language. The owner reads ONLY this section and
 knows exactly what the job will do — before reading any executor detail.
 Rules: verb first; name the visible change; no IDs, no file paths, no
-mechanism vocabulary; one sentence per task; the section must stay readable
-in under thirty seconds.
+mechanism vocabulary; the section must stay readable in under thirty seconds.
+
+A plain task takes ONE line. A TDD task takes TWO labeled lines — the owner
+sees the proof shape, not just the change:
 
 - TASK-001 — <Plain sentence, e.g. "Record today's passing state before anything is touched.">
-- TASK-002 — <e.g. "Bring the approved colors and spacing into the app.">
+- TASK-002 — RED: <the test that fails today, and why failing is correct>
+  GREEN: <the change that makes it pass, in product terms>
+  (e.g. RED: a test proving the inventory ignores empty stores fails today.
+   GREEN: empty stores show a named empty state; the test passes.)
 - TASK-003 — <e.g. "Rebuild the app frame: sidebar, search bar, tabs, theme toggle.">
 
 ## Phase 1 — Tests first (TDD red)
@@ -81,10 +86,11 @@ output per gate in verification.md.
 
 Owner view:
 
-- TASK-001 — Write the test that proves the gate catches a missing watch path.
-- TASK-002 — Make the gate fail loudly when a watched path disappears.
-- TASK-003 — Re-run every check and record the raw proof.
-- TASK-004 — Nothing to ship beyond the repo (no data or release surface).
+- TASK-001 — RED: a test proving the gate catches a missing watch path fails
+  today (the gate silently skips it — that failure is the point).
+  GREEN: the gate fails loudly naming the path; the test passes.
+- TASK-002 — Re-run every check and record the raw proof.
+- TASK-003 — Nothing to ship beyond the repo (no data or release surface).
 
 1. [ ] Write failing fixture `tools/ci/tests/test_engine_neutrality.py`:
    missing-declared-path must exit 1 naming the path; present-path scans

@@ -51,9 +51,13 @@ Decompose by independently verifiable behavior. Specify dependencies, components
 completion evidence, authorization/negative cases, export/transport and migration
 tasks, and release rehearsal. Cover every AC and NFR. Keep planned tests NOT_RUN.
 Owner view is mandatory: tasks.md opens with "What this job does (owner view)" —
-one plain sentence per task, product language, no IDs, no paths, no mechanism
+plain sentences per task, product language, no IDs, no paths, no mechanism
 vocabulary; the owner must understand the whole job from that section alone.
-Every task line opens with the observable change before any file or seam detail.
+Plain tasks take one line; TDD tasks take two labeled lines (RED: the test
+that fails today and why that is correct; GREEN: the change that makes it
+pass, in product terms) so the owner sees the proof shape, not just the
+change. Every task line opens with the observable change before any file or
+seam detail.
 Use engram recall to check how past task lists verified this shape, and record
 durable decomposition decisions to memory.
 

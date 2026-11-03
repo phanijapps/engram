@@ -50,6 +50,10 @@ Read accepted analysis and plan. Author tasks.md, verification.md and release.md
 Decompose by independently verifiable behavior. Specify dependencies, components,
 completion evidence, authorization/negative cases, export/transport and migration
 tasks, and release rehearsal. Cover every AC and NFR. Keep planned tests NOT_RUN.
+Owner view is mandatory: tasks.md opens with "What this job does (owner view)" —
+one plain sentence per task, product language, no IDs, no paths, no mechanism
+vocabulary; the owner must understand the whole job from that section alone.
+Every task line opens with the observable change before any file or seam detail.
 Use engram recall to check how past task lists verified this shape, and record
 durable decomposition decisions to memory.
 

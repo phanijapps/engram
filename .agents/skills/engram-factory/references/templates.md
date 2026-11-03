@@ -12,6 +12,12 @@ Active voice. Present tense. One idea per sentence. One instruction per step.
 For tasks, steps, rollback, and self-check sections: write imperatives you can
 execute verbatim.
 
+**Owner view discipline (tasks.md).** The "What this job does (owner view)"
+section is written for the product owner, not for executors: verb first, the
+visible change, no IDs, no file paths, no mechanism vocabulary, one sentence
+per task, readable in under thirty seconds. Task lines then open with the
+same observable change before any file or seam detail.
+
 **Vocabulary discipline.** Use approved terms from the job glossary. One term,
 one meaning. Do not invent synonyms for mechanisms that already have a name.
 Modality is fixed vocabulary: MUST / SHOULD / MAY (RFC-2119) for requirements;

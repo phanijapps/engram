@@ -16,6 +16,18 @@ constitution_rules_touched: []
 
 # Tasks: <short observable outcome>
 
+## What this job does (owner view)
+
+One line per task, product language. The owner reads ONLY this section and
+knows exactly what the job will do — before reading any executor detail.
+Rules: verb first; name the visible change; no IDs, no file paths, no
+mechanism vocabulary; one sentence per task; the section must stay readable
+in under thirty seconds.
+
+- TASK-001 — <Plain sentence, e.g. "Record today's passing state before anything is touched.">
+- TASK-002 — <e.g. "Bring the approved colors and spacing into the app.">
+- TASK-003 — <e.g. "Rebuild the app frame: sidebar, search bar, tabs, theme toggle.">
+
 ## Phase 1 — Tests first (TDD red)
 
 Write the failing fixtures BEFORE implementation. Each item names the fixture
@@ -31,8 +43,10 @@ file, the AC it proves, and the expected RED state.
 Make the red fixtures pass. One commit-sized action per item; name files and
 the seam being changed; no scope beyond the spec.
 
-2. [ ] <Imperative implementation action> in `<path/to/source>` — <what
-   changes, one line> (TASK-002, REQ-001, AC-001, GATE-001, STEP-001)
+2. [ ] <Imperative implementation action> in `<path/to/source>` — open the
+line with the observable change (what the product gains), then the file and
+seam; one commit-sized action per item; no scope beyond the spec
+(TASK-002, REQ-001, AC-001, GATE-001, STEP-001)
    - Verify: `GATE-001` now GREEN; all pre-existing gates still GREEN (regression).
 
 ## Phase 3 — Full verification
@@ -64,6 +78,13 @@ output per gate in verification.md.
 - Findings/dispositions live in review and decision artifacts, not here.
 
 ## Worked example — job 011 fail-closed gate (S-tier)
+
+Owner view:
+
+- TASK-001 — Write the test that proves the gate catches a missing watch path.
+- TASK-002 — Make the gate fail loudly when a watched path disappears.
+- TASK-003 — Re-run every check and record the raw proof.
+- TASK-004 — Nothing to ship beyond the repo (no data or release surface).
 
 1. [ ] Write failing fixture `tools/ci/tests/test_engine_neutrality.py`:
    missing-declared-path must exit 1 naming the path; present-path scans

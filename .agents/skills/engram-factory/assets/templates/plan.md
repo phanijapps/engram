@@ -52,54 +52,49 @@ keeps present-path scanning intact. Silently skipping the path is
 rejected because it permits an unscanned engine-bearing surface to ship. No
 `DEC-*` is consumed: the spec determines this gate-only shape.
 
-## High-level architecture (M/L — system context)
-Use a C4-ish context graph to show what is inside the change boundary, external
-actors, and the contract crossing each boundary. This diagram answers the
-ISO-42010 **context/boundary** concern; it is not a runtime sequence. For S,
-omit it unless this is the one diagram needed to make the seam legible.
+## Who this change serves (M/L — stories and boundary)
 
-```mermaid
-flowchart LR
-  Maintainer[Maintainer / CI] -->|runs| Gate[EN-004 gate\ntools/ci/check_engine_neutrality.py]
-  Gate -->|declared paths| Surface[Repository gated surface]
-  Gate -->|exit 1 + named violation| CI[CI result]
-  Fixture[tools/ci/tests/test_engine_neutrality.py] -->|proves fail-closed contract| Gate
-  style Gate fill:#d9eaf7,stroke:#245
-```
+No diagrams. Two structures carry everything a context diagram used to:
 
-For job 011, the gate and its fixture are inside the boundary; repository paths
-are scanned input, and CI consumes only the exit/result contract. `REQ-001`
-changes the missing-path result; `NFR-001` preserves present-path behavior.
+**Stories (BMAD form).** One row per user-visible capability, each tied to
+the REQ it delivers. If a story cannot name a REQ, the work is scope creep;
+if a REQ has no story, ask the owner who it serves.
 
-## Technical architecture (M/L — components and runtime flow)
-Name concrete components and the implementation seam, then add a separate
-control-flow or sequence view for the runtime concern. Do not use a context
-diagram to imply execution order. The component view below owns the
-**structure/responsibility** concern; the sequence owns **failure control flow**.
+| Story | As a… | I want… | so that… | Delivers |
+|---|---|---|---|---|
+| S-1 | maintainer | the neutrality gate to fail loudly when a watched path disappears | no engine-bearing surface ships unscanned | REQ-001 |
+| S-2 | CI runner | a stable exit contract (0 clean / 1 named violation) | pipeline steps stay simple | REQ-001, NFR-001 |
 
-```mermaid
-flowchart TB
-  Scan[scan()\ncheck_engine_neutrality.py] --> Exists{declared path exists?}
-  Exists -->|yes| Patterns[existing prohibited-pattern scan]
-  Exists -->|no| Violations[append named missing-path violation]
-  Patterns --> Result[aggregate violations and exit]
-  Violations --> Result
-```
+**Boundary contract (replaces the C4 picture).** Three columns: what we
+change, what we consume frozen, and the contract that crosses. A cell that
+needs a paragraph becomes a named detail block below.
 
-```mermaid
-sequenceDiagram
-  participant CI as CI runner
-  participant Gate as check_engine_neutrality.py
-  participant FS as declared gated path
-  CI->>Gate: run EN-004
-  Gate->>FS: exists()?
-  FS-->>Gate: missing
-  Gate-->>CI: exit 1; name missing path
-```
+| Inside (we change) | Outside (frozen, consumed) | Contract crossing |
+|---|---|---|
+| `check_engine_neutrality.py` scan behavior | repository declared paths | paths are read-only scan input |
+| the gate's fixture | CI pipeline step | exit 0/1 + named violation on stdout |
 
-In the worked example, collection joins the existing violation aggregation rather
-than adding a second exit path; the fixture invokes the public gate behavior,
-not an implementation-only helper.
+## How it runs (M/L — scenarios)
+
+No sequence diagrams. Each runtime or failure flow becomes a named scenario
+in GIVEN/WHEN/THEN prose (OpenSpec form) — concrete, checkable, and
+diff-friendly. Cover at least: the happy path, one failure path, one
+degraded/empty path. Every scenario names the STEP that implements it.
+
+#### Scenario: declared path present
+- GIVEN the repository declares a gated path that exists
+- WHEN the gate runs
+- THEN patterns scan as today; exit 0 (STEP-001)
+
+#### Scenario: declared path missing
+- GIVEN a declared path does not exist on disk
+- WHEN the gate runs
+- THEN a named missing-path violation joins the aggregate; exit 1 (STEP-001)
+
+#### Scenario: fixture proves both
+- GIVEN the fixture exercises the public gate behavior
+- WHEN run pre-fix, the missing-path case fails for the right reason; WHEN
+  run post-fix, both cases pass (STEP-002)
 
 ## Governed implementation, verification, and rollback (mandatory)
 Order independently reviewable work so later evidence depends on earlier

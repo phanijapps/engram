@@ -22,6 +22,15 @@ makes it pass, in product terms) — so the owner sees the proof shape.
 Executor lines then open with the same observable change before any file or
 seam detail.
 
+**No-diagram discipline (plan.md).** Plans carry no mermaid or box-arrow
+art by default. Structure replaces arrows: BMAD-style story rows (As a… /
+I want… / so that… / Delivers REQ) for who the change serves; a boundary
+contract table (Inside changed / Outside frozen / Contract crossing) for the
+system context; OpenSpec-style GIVEN/WHEN/THEN scenarios for runtime and
+failure flows, each naming its STEP. These render anywhere, diff cleanly,
+and grep. A diagram is permitted only when the owner asks for one, and then
+it supplements — never replaces — the tables and scenarios.
+
 **Execution batching (plan.md).** Implementation steps are grouped into
 builder batches — one agent window per batch (~<=12 tasks), each boundary a
 checkpoint of committed work plus a state note. A plan whose implementation

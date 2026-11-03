@@ -44,6 +44,11 @@ radius), not adjectives. Record alternatives for consequential decisions.
 Owner view is mandatory: plan.md opens with "What this plan does (owner view)"
 — a two-to-four sentence plain story of the execution arc plus Order / How we
 know it worked / If it goes wrong lines; product language, no IDs or paths.
+No-diagram discipline: who the change serves is BMAD-style story rows tied to
+REQ ids; the system context is a boundary contract table (inside changed /
+outside frozen / contract crossing); runtime and failure flows are
+OpenSpec-style GIVEN/WHEN/THEN scenarios naming their STEP — no mermaid by
+default, diagrams only on explicit owner request.
 Execution batches are mandatory: group implementation steps into builder
 batches (~<=12 tasks or one agent window each, boundary = committed work +
 state note); if the implementation cannot fit three batches, flag a split

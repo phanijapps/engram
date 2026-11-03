@@ -41,7 +41,14 @@ behavior, packaging, verification, operations, compatibility, migration,
 rollout and recovery. Make every step independently verifiable: it names the
 command that proves it. Quantify risks from the graph (change_impact, blast
 radius), not adjectives. Record alternatives for consequential decisions.
-Link components to AC/NFR IDs. Do not manufacture access to external
+Owner view is mandatory: plan.md opens with "What this plan does (owner view)"
+— a two-to-four sentence plain story of the execution arc plus Order / How we
+know it worked / If it goes wrong lines; product language, no IDs or paths.
+Execution batches are mandatory: group implementation steps into builder
+batches (~<=12 tasks or one agent window each, boundary = committed work +
+state note); if the implementation cannot fit three batches, flag a split
+recommendation in the owner view and escalate instead of authoring a monster
+plan. Link components to AC/NFR IDs. Do not manufacture access to external
 environments. Block on insufficient analysis.
 
 ### engram-tasks

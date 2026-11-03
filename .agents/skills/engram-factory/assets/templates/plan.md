@@ -20,6 +20,23 @@ Integration: preserve this JSON-per-line frontmatter union and literal REQ/AC/ST
 
 
 # Plan: <short observable outcome>
+
+## What this plan does (owner view)
+
+Two to four plain sentences: how the work will unfold, in what order, and
+why that order wins. Then three plain lines. No IDs, no file paths, no
+mechanism vocabulary. The owner must grasp the whole execution from this
+section alone, in under thirty seconds.
+
+<e.g. "Prove today's behavior first, so nothing changes unnoticed. Then
+change exactly one seam — the gate that watches engine-bearing paths — and
+prove the new behavior with the same kind of test. Nothing else moves.">
+
+- Order: <plain arc, one sentence>
+- How we know it worked: <the observable proof, product terms>
+- If it goes wrong: <rollback in product terms, e.g. "Revert the change;
+  yesterday's behavior returns immediately. No data is touched.">
+
 ## Approach argument (mandatory)
 
 Make the engineering case before listing work: name the chosen seam, explain why
@@ -100,6 +117,20 @@ post-fix fixture does not pass: that invalidates the seam argument rather than
 just a test expectation. Roll back in reverse dependency order; job 011 has no
 persisted state, schema migration, or partial deployment, so reverting the two
 commits restores the prior gate behavior.
+
+### Execution batches (mandatory)
+
+Implementation work is dispatched to the builder in batches — one agent
+window per batch, each batch ending at a task boundary with committed work
+and a one-line state note. Keep each batch at or under about twelve tasks
+(or one agent window of gate runs). If the implementation cannot fit in
+three batches, do NOT author a monster plan: flag a split recommendation
+at the top of the owner view ("this job wants to be N jobs") and escalate
+to the orchestrator.
+
+| Batch | Steps | Why this batch |
+|---|---|---|
+| 1 | STEP-001, STEP-002 | One seam, one proof; S-tier fits a single window. |
 
 ## Acceptance-to-evidence map (mandatory)
 Every `AC-*` needs at least one STEP and a named runnable GATE. State an

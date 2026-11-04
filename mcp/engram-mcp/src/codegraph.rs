@@ -766,6 +766,15 @@ fn try_load_scan_filter(path: &Path) -> Result<ScanFilter, String> {
     Ok(ScanFilter::merge(&cfg))
 }
 
+/// [`try_load_scan_filter`] at the config layer: parse a scan-filter JSON to
+/// its [`ScanFilterConfig`] — the bound-rebuild ladder wants the raw config
+/// (`ingest_registered` merges it itself). Same soft-fail contract.
+pub(crate) fn try_load_scan_config(path: &Path) -> Result<ScanFilterConfig, String> {
+    let json =
+        std::fs::read_to_string(path).map_err(|e| format!("read {}: {e}", path.display()))?;
+    ScanFilterConfig::from_json(&json).map_err(|e| format!("parse {}: {e}", path.display()))
+}
+
 /// Resolve the scan filter via the discovery ladder:
 ///   1. an explicit `scan_config` path arg, else
 ///   2. `<repo>/.engram/scan.json` if it exists, else

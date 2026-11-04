@@ -2701,12 +2701,37 @@ pub fn code_rebuild(app: &App, args: &Value) -> Result<Value, ToolError> {
         .provider
         .code_ingestion()
         .map_err(code_authority_error)?;
+    // Scan-filter ladder (parity with scan_repo): an explicit `scan_config`
+    // arg, else `<registered-locator>/.engram/scan.json`, else the builtin.
+    // Soft-fails to builtin on missing/malformed — a bad config file never
+    // aborts a rebuild. The filter narrows the generation's file set, so a
+    // repository can exclude generated or pathological sources from bound
+    // ingestion exactly as it can from a scan.
+    let locator = block_on(coordinator.store().get_registration(&request.repo))
+        .map_err(code_authority_error)?
+        .map(|registration| registration.locator_id);
+    let filter_config = if let Some(explicit) = args.get("scan_config").and_then(Value::as_str) {
+        let loaded = crate::codegraph::try_load_scan_config(std::path::Path::new(explicit));
+        eprintln!("engram-mcp: code_rebuild scan_config {explicit}: {loaded:?}");
+        loaded.ok()
+    } else if let Some(locator) = locator.as_deref() {
+        let discovered = std::path::Path::new(locator)
+            .join(".engram")
+            .join("scan.json");
+        let loaded = crate::codegraph::try_load_scan_config(&discovered);
+        if loaded.is_ok() {
+            eprintln!("engram-mcp: code_rebuild .engram/scan.json applied: {discovered:?}");
+        }
+        loaded.ok()
+    } else {
+        None
+    };
     let ingested = block_on(coordinator.ingest_registered(
         &system_actor(),
         &app.scope,
         &request.repo,
         request.branch_ref.as_deref(),
-        None,
+        filter_config.as_ref(),
         lanes,
     ))
     .map_err(code_authority_error)?;

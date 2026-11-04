@@ -21,6 +21,11 @@ use crate::noise::is_generic_method;
 use crate::parser::receiver_env::{BindType, FileContext};
 use crate::parser::repo_context::{Canonical, DeclEvidence, RepoContext};
 
+/// Maximum call-chain evaluation depth. Chains this deep lose receiver
+/// typing (sites are still emitted as-written by the walk) — the cap exists
+/// so pathological nesting can never blow the stack or the clock.
+const MAX_EVAL_DEPTH: u32 = 96;
+
 /// One evaluated call site: (line, reference) — the same downstream shape
 /// the extractor has always consumed.
 pub type EvaluatedSite = (usize, String);
@@ -73,7 +78,7 @@ fn walk_calls(
         kind,
         "call_expression" | "method_invocation" | "function_call" | "call"
     ) {
-        evaluate_call(node, source, ext, fc, repo, sites);
+        evaluate_call(node, source, ext, fc, repo, sites, 0);
         // Argument subtrees (including closures) are visited independently —
         // outer chain state never leaks into them.
         let mut cursor = node.walk();
@@ -101,25 +106,45 @@ fn evaluate_call(
     fc: &FileContext,
     repo: &RepoContext,
     sites: &mut Vec<EvaluatedSite>,
-) {
+    depth: u32,
+) -> State {
+    if depth > MAX_EVAL_DEPTH {
+        // Defense-in-depth: pathological nesting must never blow the stack
+        // or the clock. Emit nothing further; the as-written site for this
+        // call was already emitted by the caller's walk.
+        return State::UnknownExpression;
+    }
     let line = node.start_position().row;
     let Some(func) = node
         .child_by_field_name("function")
         .or_else(|| node.child_by_field_name("name"))
         .or_else(|| node.named_child(0))
     else {
-        return;
+        return State::UnknownExpression;
     };
     match func.kind() {
         // Bare call `foo()` — free function; reference as-written.
         "identifier" | "plain_identifier" | "self" => {
             sites.push((line, node_text(func, source).to_owned()));
+            State::UnknownExpression
         }
         // Scoped call `Type::new(...)` / `module::fn(...)` — qualified
         // reference as-written; `Type::new`-style ctors also seed state.
         "scoped_identifier" | "scoped_type_identifier" | "nested_identifier" => {
             let text = node_text(func, source);
             sites.push((line, text.to_owned()));
+            // Terminal state mirrors the former replay: a single-segment
+            // Rust `Type::new`/`Type::default` constructor seeds its type.
+            if ext == "rs"
+                && let Some((owner, method)) = text.rsplit_once("::")
+                && matches!(method, "new" | "default")
+                && !owner.contains("::")
+                && let Some(ty) = terminal(owner)
+            {
+                seed_ctor_state(&ty, fc, repo)
+            } else {
+                State::UnknownExpression
+            }
         }
         // Method call `recv.method(...)` — walk the receiver chain.
         "field_expression"
@@ -152,13 +177,22 @@ fn evaluate_call(
                             receiver = obj;
                         }
                         Some(obj) => {
-                            evaluate_chain(obj, &methods, line, source, ext, fc, repo, sites);
-                            return;
+                            return evaluate_chain(
+                                obj,
+                                &methods,
+                                line,
+                                source,
+                                ext,
+                                fc,
+                                repo,
+                                sites,
+                                depth + 1,
+                            );
                         }
-                        None => return,
+                        None => return State::UnknownExpression,
                     }
                 } else {
-                    return;
+                    return State::UnknownExpression;
                 }
             }
         }
@@ -172,6 +206,7 @@ fn evaluate_call(
             {
                 sites.push((line, text.to_owned()));
             }
+            State::UnknownExpression
         }
     }
 }
@@ -189,8 +224,9 @@ fn evaluate_chain(
     fc: &FileContext,
     repo: &RepoContext,
     sites: &mut Vec<EvaluatedSite>,
-) {
-    let mut state = root_state(root_obj, source, ext, fc, repo, sites);
+    depth: u32,
+) -> State {
+    let mut state = root_state(root_obj, source, ext, fc, repo, sites, depth + 1);
     // FIELD hops in application order (innermost first).
     for hop in methods.iter().skip(1).rev() {
         state = match &state {
@@ -215,11 +251,9 @@ fn evaluate_chain(
                 let anchor = format!("{p}::{method}");
                 if repo.anchor_count(&anchor) > 1 {
                     // Collapsed trait anchor — drop, stop propagating.
-                    return;
+                    return State::UnknownExpression;
                 }
                 sites.push((line, anchor));
-                // Terminal state unused here unless this chain is itself a
-                // receiver (inner_call_state handles that replay).
             }
             State::UnknownVar(v) => {
                 if !is_generic_method(method) {
@@ -228,6 +262,28 @@ fn evaluate_chain(
             }
             State::UnknownExpression => {}
         }
+        // Terminal state of THIS chain — the method's repo return table
+        // transition (the former inner_call_state replay, now computed once
+        // on the same pass that emitted the site).
+        return chain_terminal(&state, method, repo);
+    }
+    state
+}
+
+/// Terminal state of a chain after its final method: a typed receiver
+/// transitions through the repo return table; everything else is an
+/// unknown expression. Extracted verbatim from the former replay path so
+/// behavior is byte-identical.
+fn chain_terminal(state: &State, method: &str, repo: &RepoContext) -> State {
+    match state {
+        State::Typed(p) => {
+            let anchor = format!("{p}::{method}");
+            match repo.return_of(&anchor) {
+                Some(DeclEvidence::Returns(u)) => State::Typed(u.clone()),
+                _ => State::UnknownExpression,
+            }
+        }
+        _ => State::UnknownExpression,
     }
 }
 
@@ -248,7 +304,11 @@ fn root_state(
     fc: &FileContext,
     repo: &RepoContext,
     sites: &mut Vec<EvaluatedSite>,
+    depth: u32,
 ) -> State {
+    if depth > MAX_EVAL_DEPTH {
+        return State::UnknownExpression;
+    }
     match root_obj.kind() {
         "identifier" | "plain_identifier" | "self" => {
             let name = node_text(root_obj, source);
@@ -270,13 +330,12 @@ fn root_state(
                 None => State::UnknownVar(name.to_owned()),
             }
         }
-        // Nested call: a.b().c() — evaluate the inner chain first; its
-        // terminal state seeds this one.
+        // Nested call: a.b().c() — evaluate the inner chain once; the
+        // fused pass emits its sites AND returns the terminal state that
+        // seeds this one (the former evaluate_call + inner_call_state
+        // double-walk was exponential on deep builder chains: 2^N).
         "call_expression" | "method_invocation" => {
-            evaluate_call(root_obj, source, ext, fc, repo, sites);
-            // Recompute the inner chain's terminal state (evaluate_call
-            // emitted its sites; we need its final state — replay).
-            inner_call_state(root_obj, source, ext, fc, repo)
+            evaluate_call(root_obj, source, ext, fc, repo, sites, depth + 1)
         }
         "scoped_identifier" => {
             // `Type::new(...).method()` — constructor root (Rust).
@@ -299,108 +358,6 @@ fn root_state(
                 .map(|t| canonical_state(&t, fc, repo))
                 .unwrap_or(State::UnknownExpression)
         }
-        _ => State::UnknownExpression,
-    }
-}
-
-/// Terminal state of an inner call (replays the chain logic for its last
-/// emitted link without re-emitting).
-fn inner_call_state(
-    node: tree_sitter::Node,
-    source: &[u8],
-    ext: &str,
-    fc: &FileContext,
-    repo: &RepoContext,
-) -> State {
-    let Some(func) = node
-        .child_by_field_name("function")
-        .or_else(|| node.child_by_field_name("name"))
-        .or_else(|| node.named_child(0))
-    else {
-        return State::UnknownExpression;
-    };
-    match func.kind() {
-        "field_expression"
-        | "member_expression"
-        | "dot_index_expression"
-        | "method_index_expression" => {
-            let mut methods: Vec<&str> = Vec::new();
-            let mut receiver = func;
-            loop {
-                if let Some(field) = receiver
-                    .child_by_field_name("field")
-                    .or_else(|| receiver.child_by_field_name("property"))
-                    .or_else(|| receiver.child_by_field_name("method"))
-                {
-                    methods.push(node_text(field, source));
-                    match receiver
-                        .child_by_field_name("object")
-                        .or_else(|| receiver.child_by_field_name("table"))
-                        .or_else(|| receiver.named_child(0))
-                    {
-                        Some(obj)
-                            if matches!(
-                                obj.kind(),
-                                "field_expression"
-                                    | "member_expression"
-                                    | "dot_index_expression"
-                                    | "method_index_expression"
-                            ) =>
-                        {
-                            receiver = obj;
-                        }
-                        Some(obj) => {
-                            // Replay: root state, then field hops, then the
-                            // method's return-table transition.
-                            let mut state = root_state(obj, source, ext, fc, repo, &mut Vec::new());
-                            for hop in methods.iter().skip(1).rev() {
-                                state = match &state {
-                                    State::Typed(p) => {
-                                        let short = p.rsplit("::").next().unwrap_or(p);
-                                        match field_type(fc, repo, short, hop) {
-                                            Some(t) => State::Typed(t),
-                                            None => State::UnknownVar((*hop).to_owned()),
-                                        }
-                                    }
-                                    _ => State::UnknownExpression,
-                                };
-                            }
-                            if let Some(method) = methods.first() {
-                                state = match &state {
-                                    State::Typed(p) => {
-                                        let anchor = format!("{p}::{method}");
-                                        match repo.return_of(&anchor) {
-                                            Some(DeclEvidence::Returns(u)) => {
-                                                State::Typed(u.clone())
-                                            }
-                                            _ => State::UnknownExpression,
-                                        }
-                                    }
-                                    _ => State::UnknownExpression,
-                                };
-                            }
-                            return state;
-                        }
-                        None => return State::UnknownExpression,
-                    }
-                } else {
-                    return State::UnknownExpression;
-                }
-            }
-        }
-        "scoped_identifier" => {
-            let text = node_text(func, source);
-            if ext == "rs"
-                && let Some((owner, method)) = text.rsplit_once("::")
-                && matches!(method, "new" | "default")
-                && !owner.contains("::")
-                && let Some(ty) = terminal(owner)
-            {
-                return seed_ctor_state(&ty, fc, repo);
-            }
-            State::UnknownExpression
-        }
-        "new_expression" => root_state(func, source, ext, fc, repo, &mut Vec::new()),
         _ => State::UnknownExpression,
     }
 }

@@ -205,6 +205,16 @@ impl ScanFilter {
         if segs.iter().any(|s| self.deny_dirs.contains(*s)) {
             return true;
         }
+        // Multi-segment entries ("gateway/src/http") match as sub-paths of
+        // the relative path — a directory prefix, not an any-component
+        // match. Single-segment entries keep the historical any-component
+        // behavior, so "node_modules" still denies at any depth.
+        let normalized = rel_path.replace('\\', "/");
+        if self.deny_dirs.iter().any(|dir| {
+            dir.contains('/') && normalized.starts_with(&format!("{}/", dir.trim_end_matches('/')))
+        }) {
+            return true;
+        }
         let base = segs.last().copied().unwrap_or("");
         if self.deny_names.contains(&base.to_lowercase()) {
             return true;
@@ -294,6 +304,33 @@ mod tests {
         // not denied
         assert!(!f.is_denylisted("src/main.rs"));
         assert!(!f.is_denylisted("docs/readme.md"));
+    }
+
+    #[test]
+    fn multi_segment_deny_dirs_match_as_subpaths_not_components() {
+        // Regression: a multi-segment deny entry used to be compared against
+        // SINGLE path components, so "gateway/src/http" silently denied
+        // nothing. It must deny the directory subtree — and only that
+        // subtree (an unrelated "http" component elsewhere stays eligible).
+        let cfg = ScanFilterConfig::from_json(
+            r#"{ "deny": { "dirs": ["gateway/src/http", "wiki/archive"] } }"#,
+        )
+        .expect("parse");
+        let f = ScanFilter::merge(&cfg);
+        assert!(f.is_denylisted("gateway/src/http/mod.rs"));
+        assert!(f.is_denylisted("gateway/src/http/deep/nested.rs"));
+        assert!(f.is_denylisted("wiki/archive/spec.md"));
+        // Not the same component sequence — stays eligible.
+        assert!(!f.is_denylisted("gateway/src/router.rs"));
+        assert!(!f.is_denylisted("services/http/handler.rs"));
+        assert!(!f.is_denylisted("src/gateway/http.rs"));
+        // Single-segment entries keep any-component semantics.
+        let cfg2 =
+            ScanFilterConfig::from_json(r#"{ "deny": { "dirs": ["fixtures"] } }"#).expect("parse2");
+        let f2 = ScanFilter::merge(&cfg2);
+        assert!(f2.is_denylisted("e2e/fixtures/x.jsonl"));
+        assert!(f2.is_denylisted("stores/tests/fixtures/x.rs"));
+        assert!(!f2.is_denylisted("e2e/main.rs"));
     }
 
     // --- overrides ---

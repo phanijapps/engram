@@ -7,6 +7,13 @@ renderer wraps. Never break a path or a file:line citation across lines;
 grep-ability is a gate-worthy property. Keep lists tight: no blank line between
 items of one list.
 
+**Owner-view lint (enforcement).** `python3 tools/ci/check_owner_view.py
+<plan.md|tasks.md>` runs at every plan/tasks completion for jobs from 015
+on: missing section, executor ids, backticks, file paths, code fences,
+missing plan labels, malformed task lines, unpaired RED/GREEN, and length
+cap each fail the check. A cryptic owner view is a defect, not a style
+preference. Pre-015 artifacts may pass `--legacy` (report-only).
+
 **Sentence discipline (STE-derived, for imperative content).** Short sentences.
 Active voice. Present tense. One idea per sentence. One instruction per step.
 For tasks, steps, rollback, and self-check sections: write imperatives you can

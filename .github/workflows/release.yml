@@ -78,7 +78,7 @@ jobs:
           [ "${{ matrix.target }}" = "win32-x64" ] && BIN=target/release/engram-mcp.exe
           "$BIN" --version
           "$BIN" --help | grep -- --slim
-          python3 scripts/dev/verify_embedding_modes.py --binary "$BIN" --off-only
+          python3 tools/dev/verify_embedding_modes.py --binary "$BIN" --off-only
 
       - name: Stamp platform package
         shell: bash

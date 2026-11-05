@@ -85,7 +85,7 @@ jobs:
         run: |
           BIN=target/release/engram-mcp
           [ "${{ matrix.target }}" = "win32-x64" ] && BIN=target/release/engram-mcp.exe
-          python3 scripts/release/stamp-platform-package.py \
+          python3 tools/release/stamp-platform-package.py \
             "$BIN" \
             "${{ matrix.target }}" \
             "${{ env.VERSION }}"
@@ -153,7 +153,7 @@ jobs:
           path: packed/platform
       - name: Launch actual packed artifacts
         run: |
-          python3 scripts/release/verify-launcher-package.py \
+          python3 tools/release/verify-launcher-package.py \
             --launcher "$(find packed/launcher -name '*.tgz' -print -quit)" \
             --platform-package "$(find packed/platform -name '*.tgz' -print -quit)"
 

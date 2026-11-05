@@ -15,7 +15,7 @@ jobs:
       - name: Install Python dev dependencies
         run: python -m pip install -r requirements-dev.txt
       - name: Validate contracts
-        run: scripts/ci/check-contracts.sh
+        run: python3 tools/ci/check_contracts.py
 
   rust:
     name: Rust
@@ -58,7 +58,7 @@ jobs:
       - name: Install Python dev dependencies
         run: python -m pip install -r requirements-dev.txt
       - name: Check docs
-        run: scripts/ci/check-docs.sh
+        run: python3 tools/ci/check_docs.py
 
   typescript:
     name: TypeScript

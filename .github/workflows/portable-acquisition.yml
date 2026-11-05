@@ -50,7 +50,7 @@ jobs:
           git --version
           ssh -V
       - name: Prepare owned loopback transport fixtures without services or privileges
-        run: "python scripts/ci/prepare-acquisition-fixtures.py"
+        run: "python3 tools/ci/prepare_acquisition_fixtures.py"
       - name: Unit resource, collision, filesystem, deadline and custody regressions
         run: "cargo test -p engram-ingest --lib task_008 -- --test-threads=1"
       - name: TASK-007 focused

@@ -29,7 +29,12 @@ jobs:
         run: tools/ci/check_contracts.py
       - name: Constitution gate (L1 + zero-deviation + registries)
         run: tools/ci/check_constitution.py
-      - name: Rule-class gates (L2: RULE-1/2/3/6)
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Generate authored Engram skills for distribution checks
+        run: node packages/launcher/scripts/generate-skills-payload.cjs
+      - name: "Rule-class gates (L2: RULE-1/2/3/6)"
         run: |
           python3 tools/ci/check_implementation_registry.py
           python3 tools/ci/check_coherent_integration.py

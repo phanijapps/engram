@@ -138,13 +138,17 @@ class WiringTests(unittest.TestCase):
         src = (FACTORY / "scripts" / "factory.py").read_text()
         self.assertIn("--brief-file", src)
         self.assertIn('"brief"', src)
-        self.assertIn("LED-", src, "controller checks ledger row coverage")
+        self.assertIn("handoff.validate", src, "controller uses canonical handoff checks")
+        handoff = (FACTORY / "scripts" / "handoff.py").read_text()
+        self.assertIn("LED-", handoff, "canonical handoff checks ledger row coverage")
         self.assertIn("feature text verbatim", src, "controller checks brief frames the feature")
 
     def test_spec_intent_binds_ledger(self):
         spec = (FACTORY / "assets" / "templates" / "spec.md").read_text()
-        self.assertRegex(spec, r"ledger is BINDING|BINDING")
-        self.assertRegex(spec, r"OPEN.*block|block.*OPEN|\[OPEN\] rows block", spec)
+        self.assertIn("## Decisions and evidence", spec)
+        roles = (FACTORY / "references/agents.md").read_text()
+        self.assertIn("HUMAN-DECIDED", roles)
+        self.assertIn("block on material OPEN", roles)
 
     def test_factory_docs_name_the_seam(self):
         for path, needle in (

@@ -30,10 +30,10 @@ def member(archive, name):
 
 def assert_payload(archive):
     """Packed payload == authored set, hygiene clean (RISK-001 fail-fast)."""
-    authored = sorted(
-        p.name for p in AUTHORED_SKILLS_ROOT.iterdir()
-        if p.is_dir() and (p / "SKILL.md").is_file()
-    )
+    authored = json.loads(subprocess.check_output([
+        "node", str(REPO_ROOT / "packages/launcher/scripts/skill-scope.cjs"),
+        str(AUTHORED_SKILLS_ROOT),
+    ], text=True))
     members = archive.getnames()
     packed = sorted({
         m.split("/")[2] for m in members

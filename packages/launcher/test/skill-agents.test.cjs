@@ -66,25 +66,46 @@ function frontmatter(text) {
   return fm;
 }
 
-/** Extract the contract pointer (backticked path ending in references/agents.md). */
-function contractPointer(text) {
-  const m = text.match(/`([^`]*references\/agents\.md)`/);
-  return m ? m[1] : null;
+/** All mandatory canonical pointers, including QA, must resolve at the installed scope. */
+function contractPointers(text) {
+  return [...text.matchAll(/`([^`]*references\/(?:shared\.md|roles\/[^`]+\.md))`/g)].map((m) => m[1]);
 }
 
-/** Resolve a pointer from the installed agent file; returns null for qa (self-contained). */
-function assertPointerResolves(wrapperText, resolveFrom, role, label) {
-  const ptr = contractPointer(wrapperText);
-  if (role === 'qa') {
-    assert.equal(ptr, null, `${label}: engram-qa wrapper is self-contained (no pointer)`);
-    return;
+function assertPointerResolves(wrapperText, resolveFrom, role, label, skills, scope) {
+  const host = label.split(' ')[0];
+  const dialect = host === 'codex' ? 'codex.yaml' : `${host}.md`;
+  const authored = fs.readFileSync(path.join(FACTORY_AGENTS, `engram-${role}.${dialect}`), 'utf8');
+  const pointerRoot = scope === 'user' ? skills : path.relative(resolveFrom, skills);
+  const expectedBytes = authored.split('.agents/skills/engram-factory/').join(`${pointerRoot.split(path.sep).join('/')}/engram-factory/`);
+  assert.equal(wrapperText, expectedBytes, `${label}: installed wrapper differs beyond pointer rewrite`);
+  assert.match(wrapperText, /bundle-sha256:\s*[a-f0-9]{64}/, `${label}: provenance marker absent`);
+  const pointers = contractPointers(wrapperText);
+  assert.equal(pointers.length, 2, `${label}: exactly shared and role contract pointers required`);
+  const contract = role.endsWith('-reviewer') ? 'reviewer' : role;
+  const expected = ['references/shared.md', `references/roles/${contract}.md`];
+  for (const suffix of expected) {
+    const wanted = path.join(skills, 'engram-factory', suffix);
+    const ptr = pointers.find((p) => p.endsWith(suffix));
+    assert.ok(ptr, `${label}: missing ${suffix}`);
+    if (scope === 'user') assert.ok(path.isAbsolute(ptr), `${label}: user pointer must be absolute`);
+    else assert.ok(!path.isAbsolute(ptr), `${label}: project pointer must be relative`);
+    const resolved = path.isAbsolute(ptr) ? ptr : path.resolve(resolveFrom, ptr);
+    assert.equal(resolved, wanted, `${label}: wrong installed contract target`);
+    assert.ok(fs.statSync(resolved).isFile(), `${label}: contract missing`);
   }
-  assert.ok(ptr, `${label}: contract pointer present`);
-  const resolved = ptr.startsWith('.') ? path.join(resolveFrom, ptr) : ptr;
-  assert.ok(
-    fs.existsSync(resolved),
-    `${label}: pointer does not resolve: ${ptr} (from ${resolveFrom})`,
-  );
+  const pending = expected.map((f) => path.join(skills, 'engram-factory', f));
+  const seen = new Set();
+  while (pending.length) {
+    const file = pending.pop();
+    if (seen.has(file)) continue;
+    seen.add(file);
+    const text = fs.readFileSync(file, 'utf8');
+    for (const match of text.matchAll(/\b((?:references|scripts|assets)\/(?:[A-Za-z0-9_.-]+\/)*[A-Za-z0-9_.-]+\.(?:md|py|json|yaml|cjs))\b/g)) {
+      const referenced = path.join(skills, 'engram-factory', match[1]);
+      assert.ok(fs.statSync(referenced).isFile(), `${label}: transitive reference missing: ${match[1]}`);
+      if (match[1].endsWith('.md')) pending.push(referenced);
+    }
+  }
 }
 
 // Host -> agents dir + skills root, per scope. `agentFileExt` is the
@@ -144,14 +165,10 @@ for (const [host, layout] of Object.entries(HOST_LAYOUT)) {
     const { pkg, home, proj } = sandbox(`${host}-ptr`);
     const res = run(pkg, [host], { cwd: proj, home });
     assert.equal(res.status, 0, `stderr: ${res.stderr}`);
-    const { agents } = layout.user(home, proj);
+    const { agents, skills } = layout.user(home, proj);
     for (const role of ROLES) {
       const text = fs.readFileSync(path.join(agents, `engram-${role}${layout.ext}`), 'utf8');
-      if (role !== 'qa') {
-        const ptr = contractPointer(text);
-        assert.ok(ptr && path.isAbsolute(ptr), `${host}: ${role} pointer must be absolute at user scope`);
-      }
-      assertPointerResolves(text, proj, role, `${host} user ${role}`);
+      assertPointerResolves(text, proj, role, `${host} user ${role}`, skills, 'user');
     }
   });
 
@@ -168,15 +185,7 @@ for (const [host, layout] of Object.entries(HOST_LAYOUT)) {
     );
     for (const role of ROLES) {
       const text = fs.readFileSync(path.join(agents, `engram-${role}${layout.ext}`), 'utf8');
-      if (role !== 'qa') {
-        const ptr = contractPointer(text);
-        assert.equal(
-          ptr,
-          `${projSkillsRel}/engram-factory/references/agents.md`,
-          `${host}: ${role} pointer must be project-relative and resolve`,
-        );
-      }
-      assertPointerResolves(text, proj, role, `${host} project ${role}`);
+      assertPointerResolves(text, proj, role, `${host} project ${role}`, skills, 'project');
     }
   });
 }
@@ -201,14 +210,14 @@ test('DEC-P06 openai.yaml travels with the skill but never installs as an agent'
   }
 });
 
-test('AC-006 sandbox map: builder and qa are workspace-write, the rest read-only', () => {
+test('AC-006 sandbox map: authors and executable QA write, reviewers remain read-only', () => {
   const { pkg, home, proj } = sandbox('sandbox-map');
   const res = run(pkg, ['codex'], { cwd: proj, home });
   assert.equal(res.status, 0, `stderr: ${res.stderr}`);
   const dir = path.join(home, '.codex', 'agents');
   for (const role of ROLES) {
     const text = fs.readFileSync(path.join(dir, `engram-${role}.yaml`), 'utf8');
-    const expected = ['builder', 'qa'].includes(role) ? 'workspace-write' : 'read-only';
+    const expected = ['analyzer', 'planner', 'tasks', 'builder', 'qa'].includes(role) ? 'workspace-write' : 'read-only';
     assert.match(text, new RegExp(`^sandbox_mode: ${expected}$`, 'm'), `${role}: ${expected}`);
   }
 });
@@ -259,8 +268,8 @@ test('FIND-platform-003 cross-skill agent name collision: first skill wins, late
   const { pkg, home, proj } = sandbox('collide');
   // Two fixture skills claiming the same installed agent name.
   for (const [skill, body] of [
-    ['aaa-fixture', '# from aaa-fixture\n'],
-    ['zzz-fixture', '# from zzz-fixture\n'],
+    ['engram-aaa-fixture', '# from engram-aaa-fixture\n'],
+    ['engram-zzz-fixture', '# from engram-zzz-fixture\n'],
   ]) {
     const dir = path.join(pkg, 'skills', skill);
     fs.mkdirSync(path.join(dir, 'agents'), { recursive: true });
@@ -279,20 +288,20 @@ test('FIND-platform-003 cross-skill agent name collision: first skill wins, late
   assert.ok(fs.existsSync(dest), 'colliding agent not delivered at all');
   assert.match(
     fs.readFileSync(dest, 'utf8'),
-    /from aaa-fixture/,
+    /from engram-aaa-fixture/,
     'later skill silently overwrote the first claim',
   );
-  assert.match(res.stderr, /collides with aaa-fixture's — skipped/);
+  assert.match(res.stderr, /collides with engram-aaa-fixture's — skipped/);
 });
 
 test('FIND-security-006 canonical factory dialect wins an engram-<role> name over an earlier-sorting squatter', () => {
   const { pkg, home, proj } = sandbox('squat');
   // The squatter sorts before engram-factory and claims a role dialect name.
-  const squatter = path.join(pkg, 'skills', 'aaa-shadow');
+  const squatter = path.join(pkg, 'skills', 'engram-aaa-shadow');
   fs.mkdirSync(path.join(squatter, 'agents'), { recursive: true });
   fs.writeFileSync(
     path.join(squatter, 'SKILL.md'),
-    '---\nname: aaa-shadow\ndescription: Fixture squatter; trigger never.\n---\n\n# aaa-shadow\n',
+    '---\nname: engram-aaa-shadow\ndescription: Fixture squatter; trigger never.\n---\n\n# engram-aaa-shadow\n',
   );
   fs.writeFileSync(
     path.join(squatter, 'agents', 'engram-qa.pi.md'),
@@ -313,7 +322,7 @@ test('FIND-security-006 canonical factory dialect wins an engram-<role> name ove
   assert.equal(fs.readFileSync(dest, 'utf8'), expected, 'canonical dialect was displaced by the squatter');
   assert.doesNotMatch(res.stdout + res.stderr, /squatter body/, 'squatter file content installed');
   // The displacement is named loudly, both skills in one line.
-  assert.match(res.stderr, /engram-factory agent engram-qa\.md replaces aaa-shadow's — the canonical factory dialect wins/);
+  assert.match(res.stderr, /engram-factory agent engram-qa\.md replaces engram-aaa-shadow's — the canonical factory dialect wins/);
 });
 
 test('FIND-security-008 dest-file symlink at an agent dest is refused, target untouched (R3-P4)', () => {
@@ -378,17 +387,17 @@ test('FIND-security-008 committed relative repo link refused at project scope; o
 
 test('FIND-security-009 mismatched-tag squatter stays, no canonical-wins line (R3-P6)', () => {
   const { pkg, home, proj } = sandbox('sec009-p6');
-  const squatter = path.join(pkg, 'skills', 'aaa-shadow');
+  const squatter = path.join(pkg, 'skills', 'engram-aaa-shadow');
   fs.mkdirSync(path.join(squatter, 'agents'), { recursive: true });
   fs.writeFileSync(
     path.join(squatter, 'SKILL.md'),
-    '---\nname: aaa-shadow\ndescription: Fixture squatter; trigger never.\n---\n\n# aaa-shadow\n',
+    '---\nname: engram-aaa-shadow\ndescription: Fixture squatter; trigger never.\n---\n\n# engram-aaa-shadow\n',
   );
   // Mismatched tag: the file lands at the canonical engram-qa slot but its
-  // frontmatter claims aaa-shadow, so the name-tag gate must leave it.
+  // frontmatter claims engram-aaa-shadow, so the name-tag gate must leave it.
   fs.writeFileSync(
     path.join(squatter, 'agents', 'engram-qa.claude.md'),
-    '---\nname: aaa-shadow\ndescription: Squatter dialect; trigger never.\n---\n\n# squatter body stays\n',
+    '---\nname: engram-aaa-shadow\ndescription: Squatter dialect; trigger never.\n---\n\n# squatter body stays\n',
   );
   const res = run(pkg, ['claude'], { cwd: proj, home });
   assert.equal(res.status, 0, `stderr: ${res.stderr}`);
@@ -399,18 +408,18 @@ test('FIND-security-009 mismatched-tag squatter stays, no canonical-wins line (R
   // The audit line must not claim a replacement the tag gate refused.
   assert.doesNotMatch(
     res.stderr,
-    /replaces aaa-shadow's — the canonical factory dialect wins/,
+    /replaces engram-aaa-shadow's — the canonical factory dialect wins/,
     'false canonical-wins claim printed for a file left untouched',
   );
 });
 
 test('FIND-security-009 masquerade replaced with an accurate wins line naming only what it replaced (R3-P6a)', () => {
   const { pkg, home, proj } = sandbox('sec009-p6a');
-  const squatter = path.join(pkg, 'skills', 'aaa-shadow');
+  const squatter = path.join(pkg, 'skills', 'engram-aaa-shadow');
   fs.mkdirSync(path.join(squatter, 'agents'), { recursive: true });
   fs.writeFileSync(
     path.join(squatter, 'SKILL.md'),
-    '---\nname: aaa-shadow\ndescription: Fixture squatter; trigger never.\n---\n\n# aaa-shadow\n',
+    '---\nname: engram-aaa-shadow\ndescription: Fixture squatter; trigger never.\n---\n\n# engram-aaa-shadow\n',
   );
   // Masquerade at the qa slot (tag claims engram-qa — genuinely replaced)
   // beside a mismatched-tag file at the planner slot (left untouched): the
@@ -422,7 +431,7 @@ test('FIND-security-009 masquerade replaced with an accurate wins line naming on
   );
   fs.writeFileSync(
     path.join(squatter, 'agents', 'engram-planner.claude.md'),
-    '---\nname: aaa-shadow\ndescription: Squatter dialect; trigger never.\n---\n\n# squatter body planner\n',
+    '---\nname: engram-aaa-shadow\ndescription: Squatter dialect; trigger never.\n---\n\n# squatter body planner\n',
   );
   const res = run(pkg, ['claude'], { cwd: proj, home });
   assert.equal(res.status, 0, `stderr: ${res.stderr}`);
@@ -448,10 +457,10 @@ test('FIND-security-009 masquerade replaced with an accurate wins line naming on
     'mismatched-tag planner file was replaced',
   );
   // ...so the wins line names qa only — no replacement claim for planner.
-  assert.match(res.stderr, /engram-factory agent engram-qa\.md replaces aaa-shadow's — the canonical factory dialect wins/);
+  assert.match(res.stderr, /engram-factory agent engram-qa\.md replaces engram-aaa-shadow's — the canonical factory dialect wins/);
   assert.doesNotMatch(
     res.stderr,
-    /engram-factory agent engram-planner\.md replaces aaa-shadow's/,
+    /engram-factory agent engram-planner\.md replaces engram-aaa-shadow's/,
     'wins line claimed the planner file the gate left untouched',
   );
 });

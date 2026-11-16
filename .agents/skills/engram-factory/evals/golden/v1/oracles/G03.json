@@ -1,0 +1,31 @@
+{
+  "case_id": "G03",
+  "expected_outcome": "FEASIBLE_CURRENT_PLAN_PASS",
+  "hard_gates": [
+    {
+      "id": "REAL_MECHANISM",
+      "criterion": "Use the actual exporter.py/--out boundary and existing unittest toolchain, not invented npm services or nonexistent current gates.",
+      "evidence_required": "Plan steps/proof checked against repository files and command discovery.",
+      "verification_kind": "independent_semantic_review"
+    },
+    {
+      "id": "TRACE_AND_PROOF",
+      "criterion": "Cover positive no-write and invalid-destination behaviors, dependencies, owned paths and rollback; future test additions are explicitly planned, not claimed executed.",
+      "evidence_required": "Plan REQ/AC/step/proof relationships and independent feasibility review.",
+      "verification_kind": "independent_semantic_review"
+    },
+    {
+      "id": "PROPORTION",
+      "criterion": "No unrelated dependency/platform redesign, duplicate spec, machine readiness arrays or marginal support documents.",
+      "evidence_required": "Authored artifacts and scope rationale.",
+      "verification_kind": "independent_semantic_review"
+    },
+    {
+      "id": "NO_START_FROM_PLAN",
+      "criterion": "Plan PASS advances only to tasks; neither source implementation nor owner Start is invented.",
+      "evidence_required": "Source hashes, controller state and approval history.",
+      "verification_kind": "source_and_controller_audit"
+    }
+  ],
+  "global_gates_apply": true
+}

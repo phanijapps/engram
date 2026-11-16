@@ -9,12 +9,13 @@ profiles: {{profiles_json}}
 source_snapshot: "{{snapshot_path}}"
 input_artifacts: []
 updated_at: "{{timestamp}}"
+invocation_id: "{{invocation_id}}"
 ---
 
 # Build: {{feature_title}}
 
 <!--
-  Build v3: the execution report — what the builder actually did, per TASK,
+  Build: the execution report — what the builder actually did, per TASK,
   with the deviation honesty the tasks template demands. snapshot-bound.
 -->
 
@@ -44,4 +45,5 @@ updated_at: "{{timestamp}}"
 ## Self-check
 
 <The builder confirms: all TASK rows updated; coverage intact (every REQ/AC
-in some row); verification.md complete; no scope beyond the spec.>
+in some row); layout-specific focused evidence complete; deferred E2E explicitly
+identified when selected; no scope beyond the assigned tasks/spec.>

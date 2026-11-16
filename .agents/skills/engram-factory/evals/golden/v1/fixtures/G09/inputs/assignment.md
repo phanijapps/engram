@@ -1,0 +1,1 @@
+Implement the two independent plugin tasks using two builders only after dependency/ownership/isolation checks, then delegate registry integration to its sole writer after both dependencies complete. The supervisor may not implement source. Focused worker success does not replace final aggregate proof on stable final bytes. Retain all failed runs and source identities.

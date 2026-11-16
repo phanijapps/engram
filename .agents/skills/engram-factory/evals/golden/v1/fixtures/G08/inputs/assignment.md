@@ -1,0 +1,1 @@
+E2E QA only: execute the declared E2E-001 command once against the frozen candidate and assess AC-001/AC-002. Write actual report/raw evidence. No source or test fixes, retry-until-pass, approval or merge. All data are temporary local records.

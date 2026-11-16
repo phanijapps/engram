@@ -1,145 +1,65 @@
-# Template contract
+# Artifact contracts
 
-## Writing rules (v2 — house style, enforced by reviewers and the placeholder gate)
+Use one human-readable source per concern. Keep spec behavior/acceptance in
+spec.md, design/proof in plan.md, execution assignments in tasks/task-NNN.md,
+results in indexed evidence and the round build handoff. Do not repeat accepted
+content, receipt hashes, review transcripts or readiness JSON across documents.
 
-**Line discipline.** One sentence per line. Do not hard-wrap prose — the
-renderer wraps. Never break a path or a file:line citation across lines;
-grep-ability is a gate-worthy property. Keep lists tight: no blank line between
-items of one list.
+## Authoring
 
-**Owner-view lint (enforcement).** `python3 tools/ci/check_owner_view.py
-<plan.md|tasks.md>` runs at every plan/tasks completion for jobs from 015
-on: missing section, executor ids, backticks, file paths, code fences,
-missing plan labels, malformed task lines, unpaired RED/GREEN, and length
-cap each fail the check. A cryptic owner view is a defect, not a style
-preference. Pre-015 artifacts may pass `--legacy` (report-only).
+Spec and plan use assets/templates/spec.md and plan.md with compact-v1 headers.
+Controller preparation derives their machine identity and receipts. Optional
+supporting documents are plain Markdown declared in the plan, at canonical
+context/ paths; split only for a distinct purpose. See spec-readiness.md and
+plan-readiness.md for their table contracts and independent review obligations.
 
-**Sentence discipline (STE-derived, for imperative content).** Short sentences.
-Active voice. Present tense. One idea per sentence. One instruction per step.
-For tasks, steps, rollback, and self-check sections: write imperatives you can
-execute verbatim.
+Each task uses assets/templates/task.md. Give an owner-readable outcome, bounded
+owned files/platform objects, accepted input/REQ/AC/rule references, dependencies,
+precise proof and evidence destinations. A task may cover multiple ACs and an AC
+may require multiple tasks; verify substantive delivery, not only ID presence.
+The candidate manifest groups canonical task paths and dependency edges; the
+controller alone creates the accepted manifest and mutable task index.
 
-**Owner view discipline (plan.md and tasks.md).** The "What this plan
-does" / "What this job does" (owner view) sections are written for the
-product owner, not for executors: verb first, the visible change, no IDs,
-no file paths, no mechanism vocabulary, readable in under thirty seconds.
-Plain tasks take one line; TDD tasks take two labeled lines — RED (the test
-that fails today, and why failing is correct) then GREEN (the change that
-makes it pass, in product terms) — so the owner sees the proof shape.
-Executor lines then open with the same observable change before any file or
-seam detail.
+Build, review, release, decision and rework use their named templates. Common
+metadata uses one JSON value per frontmatter line: identity, job/cycle, role,
+profiles, actual direct input references, status and timezone timestamp. Build
+and later evidence uses the actual snapshot path. A template's schema version
+is specific to that artifact type; do not infer workflow age from the number.
+Use ready only after the artifact meets its contract. Unknown material evidence
+is blocked, not a reasonless N/A or fabricated PASS.
 
-**No-diagram discipline (plan.md).** Plans carry no mermaid or box-arrow
-art by default. Structure replaces arrows: BMAD-style story rows (As a… /
-I want… / so that… / Delivers REQ) for who the change serves; a boundary
-contract table (Inside changed / Outside frozen / Contract crossing) for the
-system context; OpenSpec-style GIVEN/WHEN/THEN scenarios for runtime and
-failure flows, each naming its STEP. These render anywhere, diff cleanly,
-and grep. A diagram is permitted only when the owner asks for one, and then
-it supplements — never replaces — the tables and scenarios.
+Build reports name the actual builder invocation. The canonical round handoff is
+records/operations/build-handoff-cC-rR.md; E2E-enabled build attempts add -aA.
+Task completion evidence stays indexed and immutable. E2E has its own structured
+report and raw evidence per e2e-phase.md. Final reviewer reports live under
+reviews/cycles/cycle-C/round-R/ and the approver decision is reviews/final-review.md.
 
-**Execution batching (plan.md).** Implementation steps are grouped into
-builder batches — one agent window per batch (~<=12 tasks), each boundary a
-checkpoint of committed work plus a state note. A plan whose implementation
-cannot fit three batches carries a split recommendation in its owner view
-instead of a monster step list.
+## Writing
 
-**Vocabulary discipline.** Use approved terms from the job glossary. One term,
-one meaning. Do not invent synonyms for mechanisms that already have a name.
-Modality is fixed vocabulary: MUST / SHOULD / MAY (RFC-2119) for requirements;
-PASS / CHANGES / ERROR for verdicts; NOT_RUN / PASS / FAIL for checks.
+Use clear active sentences, one instruction per imperative step and concrete
+observable outcomes. Owner summaries explain the change, proof and recovery
+without internal bookkeeping. Task summaries use RED/GREEN when that proof shape
+matters. Put mechanisms and paths in executor detail, not duplicated owner lists.
+Use diagrams when they clarify a material boundary/flow or the owner requests one.
 
-**Requirement statements.** Use EARS: `When <trigger> [<precondition>], the
-system shall <response>`. One requirement, one sentence, one id.
+Use stable complete IDs and explicit references. One requirement describes one
+behavior. Define each AC once; reference it elsewhere. Tables contain one idea
+per row. State decisions with actual authority and source evidence. Preserve
+HUMAN-DECIDED intent and delegated bounds; formatting cannot resolve authority.
 
-**Tables.** One idea per row. A cell that needs a paragraph becomes a named
-detail block below the table instead. Never wrap a table row across a cell.
+Record actual commands, exits, environment and raw output. Keep failed runs and
+negative evidence: what was unverified, why, who owns it and the revisit trigger.
+Manual proof needs a reproducible protocol and observation; it has no invented
+shell exit. Planned tests are NOT_RUN. Exceptions require actual owner authority
+and never become PASS by relabeling. Review uses PASS/CHANGES/ERROR; checks use
+PASS/FAIL/NOT_RUN/BLOCKED. Show unknowns rather than guessing measurements.
 
-**Structure discipline.** Declare reader and question. Respect the word budget;
-state a reason when over. Decisions carry authority tags (`[HUMAN-DECIDED]` or
-`[DELEGATED: rationale]`). Negative evidence is mandatory: state what was
-deliberately not verified, with reason, owner, and revisit trigger. Each fact
-lives once — link ids, never restate another artifact's content.
+## Ownership and preservation
 
-## Metadata
-
-Use assets/templates. Preserve YAML frontmatter using **one JSON value per line**,
-a valid YAML subset parsed by the controller without dependencies. Use quoted
-strings, JSON arrays, numbers, booleans, or null. Do not use block scalars, comments,
-aliases, nested YAML, or unquoted values in frontmatter.
-
-All artifacts carry schema_version, artifact_type, job_id, cycle, status,
-author_role, profiles, source_snapshot, input_artifacts, and updated_at. Set status
-to ready only after checking the artifact; use blocked for material missing evidence.
-Use UTC timestamps with timezone. input_artifacts is a JSON array of objects with
-path and sha256, using job-relative paths and controller-returned hashes. Record
-all direct inputs. The controller checks hashes, required dependencies and containment.
-
-source_snapshot is null before build. Afterward use the job-relative snapshot path.
-The recorded environment fingerprint is evidence, not an automatic live drift
-detector. Recheck before acceptance and promotion. Never store secrets or private
-records in evidence; reference sanitized access-controlled records instead.
-
-## Identifiers and traceability
-
-| Prefix | Meaning |
-| --- | --- |
-| REQ-001 | Functional requirement |
-| AC-001 | Observable acceptance criterion |
-| NFR-001 | Measurable quality requirement |
-| RISK-001 | Risk, owner, mitigation and trigger |
-| DEC-001 | Consequential design decision |
-| TASK-001 | Work item with dependencies |
-| TEST-001 | Verification case and execution evidence |
-| FIND-code-001 | Discipline-scoped review finding |
-| EXC-001 | Authorized exception with scope and expiry |
-
-Never silently renumber identifiers already referenced. Record supersession.
-Map requirement -> acceptance -> decision/component -> task -> test -> evidence
--> review -> release step. Reuse identifiers instead of duplicating source text.
-In traceability tables, list each complete identifier explicitly. Do not shorten
-TASK-001 to 001 or compress AC-001, AC-002 and AC-003 into a range. Every criterion
-must remain discoverable through literal search. Receiving agents must inspect the
-actual relationships; identifier presence alone does not prove adequate coverage.
-
-## Readiness
-
-Analysis must declare required_reviewers as an inline JSON array matching its
-applicability table. Include code, security and platform plus every applicable
-specialist. The controller prevents later builds from dropping this accepted set.
-
-Separate observed facts, assumptions, proposals, and unresolved questions. Cite
-repository path and revision, platform object ID and export/version, or official
-documentation with product version and retrieval date. Never invent owners,
-approvals, capabilities, load figures, integrations or execution results.
-
-Replace every placeholder before ready. N/A requires scope evidence and a reason.
-Missing credentials yield NOT_RUN, never PASS. A ready verification plan can contain
-NOT_RUN before build; build completion requires execution outcomes and resolution
-or authorized exception for relevant gaps. Structural validation cannot judge
-substantive correctness; the receiving agent must assess it.
-
-Use organization quality policy. If absent, propose measurable thresholds and
-identify approval dependencies. Do not invent universal SLO, recovery, coverage,
-performance, or regulatory requirements.
-
-## Ownership
-
-| Artifact | Author | Mutation |
-| --- | --- | --- |
-| feature.md | Orchestrator, verbatim input | Immutable |
-| brief.md | engram-frame with the human owner, before the job | Immutable once registered by create; required analysis input while pinned |
-| spec.md | Analyzer | Freeze after acceptance |
-| plan.md | Planner | Freeze after acceptance |
-| tasks.md | Task author, then builder progress | Versioned handoffs |
-| verification.md | Task author, then builder results | Versioned handoffs |
-| release.md | Task author, then builder release details | Versioned handoffs |
-| build.md | Builder | New accepted evidence each round |
-| round-N/review-*.md | Assigned independent reviewer | Immutable after ingestion |
-| decision.md | Approver | Immutable within cycle |
-| rework-N.md | Orchestrator, verbatim instruction | Immutable |
-| source-*.json | Controller | Immutable |
-
-The controller archives accepted bytes under evidence/. Preserve cycle/round
-history. Scope-changing rework repeats analysis, plan and tasks; it is not a minor
-builder fix. Never edit evidence archives to make hashes agree.
+Authors write only their assigned outputs. Controller owns board, receipts,
+accepted archives, manifest/index and state transitions. QA/reviewers write only
+assigned reports/evidence and authorized disposable test output. The builder
+never edits the accepted spec/plan to fit implementation. Scope or contract
+changes follow supervised review and actual owner authority when required.
+Preserve candidate, cycle, failed and superseded evidence; do not repair hashes,
+rewrite an accepted record or infer an approval from a prior conversation.

@@ -1,0 +1,1 @@
+All owner decisions and accepted artifacts in this pack are synthetic fixture inputs. The runner must establish the stated entry state with the actual controller for the version under test. Fixture-seeded history is setup, not observed agent output or independent review. No real project state may be edited.

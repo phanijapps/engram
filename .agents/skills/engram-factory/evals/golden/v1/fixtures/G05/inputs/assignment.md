@@ -1,0 +1,1 @@
+TASK-001 only: reject empty X-Request-ID and retain valid behavior. Allowed source api.py and tests/test_api.py. pagination.py/TASK-002 is available backlog, not assigned. Finish after this task and return focused proof. No whole API redesign, dependencies, service launch or E2E campaign.

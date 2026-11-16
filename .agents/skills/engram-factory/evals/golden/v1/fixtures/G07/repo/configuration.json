@@ -1,0 +1,20 @@
+{
+  "format": "synthetic offline context, not a native ServiceNow import/update set",
+  "table": "x_eval_order",
+  "field": "u_quantity",
+  "scope": "x_eval",
+  "business_rule": {
+    "script": "business_rules/validate_quantity.js",
+    "when": "before",
+    "insert": true,
+    "update": true,
+    "active": true
+  },
+  "acl_rules": [
+    {
+      "table": "x_eval_order",
+      "operation": "write",
+      "role": "x_eval.requester"
+    }
+  ]
+}

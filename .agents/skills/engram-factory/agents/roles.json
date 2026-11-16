@@ -1,0 +1,140 @@
+{
+  "schema_version": 1,
+  "shared": "references/shared.md",
+  "contracts": {
+    "analyzer": "references/roles/analyzer.md",
+    "planner": "references/roles/planner.md",
+    "tasks": "references/roles/tasks.md",
+    "builder": "references/roles/builder.md",
+    "qa": "references/roles/qa.md",
+    "approver": "references/roles/approver.md",
+    "reviewer": "references/roles/reviewer.md"
+  },
+  "host_settings": {
+    "claude": {
+      "tools": [
+        "Read",
+        "Grep",
+        "Glob",
+        "Bash"
+      ]
+    },
+    "copilot": {
+      "tools": [
+        "read_file",
+        "list_directory",
+        "search_code",
+        "run_command"
+      ]
+    },
+    "codex": {
+      "web_search": "disabled",
+      "features": {
+        "shell_tool": true
+      }
+    },
+    "pi": {}
+  },
+  "permission_profiles": {
+    "author": {
+      "sandbox_mode": "workspace-write"
+    },
+    "reviewer": {
+      "sandbox_mode": "read-only"
+    }
+  },
+  "roles": [
+    {
+      "name": "engram-analyzer",
+      "description": "Factory spec author: derives compact behavior and acceptance from the ratified brief and repository evidence, then owns independent review correction.",
+      "contract": "analyzer",
+      "permissions": "author"
+    },
+    {
+      "name": "engram-approver",
+      "description": "Factory independent approver: assesses current review and execution evidence and recommends APPROVE or ESCALATE; owner Finish and merge remain separate.",
+      "contract": "approver",
+      "permissions": "reviewer"
+    },
+    {
+      "name": "engram-backend-reviewer",
+      "description": "Factory REVIEW stage, backend discipline \u2014 backend review of transactions, concurrency, retries, and side effects. Dispatched by the engram-factory orchestrator against a frozen snapshot; also usable directly for an independent backend-lens review of a diff or artifact.",
+      "contract": "reviewer",
+      "permissions": "reviewer",
+      "discipline": "backend"
+    },
+    {
+      "name": "engram-builder",
+      "description": "Factory implementation worker: executes only assigned tasks and owned paths with focused proof, bounded correction and source-ready evidence.",
+      "contract": "builder",
+      "permissions": "author"
+    },
+    {
+      "name": "engram-code-reviewer",
+      "description": "Factory REVIEW stage, code discipline \u2014 code review of logic, tests, and maintainability against a frozen snapshot. Dispatched by the engram-factory orchestrator against a frozen snapshot; also usable directly for an independent code-lens review of a diff or artifact.",
+      "contract": "reviewer",
+      "permissions": "reviewer",
+      "discipline": "code"
+    },
+    {
+      "name": "engram-data-reviewer",
+      "description": "Factory REVIEW stage, data discipline \u2014 data review of schemas, migrations, lineage, and reconciliation. Dispatched by the engram-factory orchestrator against a frozen snapshot; also usable directly for an independent data-lens review of a diff or artifact.",
+      "contract": "reviewer",
+      "permissions": "reviewer",
+      "discipline": "data"
+    },
+    {
+      "name": "engram-operations-reviewer",
+      "description": "Factory REVIEW stage, operations discipline \u2014 operations review of runtime health, runbooks, deployment, and recovery. Dispatched by the engram-factory orchestrator against a frozen snapshot; also usable directly for an independent operations-lens review of a diff or artifact.",
+      "contract": "reviewer",
+      "permissions": "reviewer",
+      "discipline": "operations"
+    },
+    {
+      "name": "engram-planner",
+      "description": "Factory plan author: designs bounded implementation and proof from the accepted spec, then owns independent review correction.",
+      "contract": "planner",
+      "permissions": "author"
+    },
+    {
+      "name": "engram-platform-reviewer",
+      "description": "Factory REVIEW stage, platform discipline \u2014 platform review of API fit, compatibility, packaging, and upgrade paths. Dispatched by the engram-factory orchestrator against a frozen snapshot; also usable directly for an independent platform-lens review of a diff or artifact.",
+      "contract": "reviewer",
+      "permissions": "reviewer",
+      "discipline": "platform"
+    },
+    {
+      "name": "engram-qa",
+      "description": "Factory optional E2E executor: independently runs selected workflows on the exact candidate and records honest scenario evidence without source fixes.",
+      "contract": "qa",
+      "permissions": "author"
+    },
+    {
+      "name": "engram-security-reviewer",
+      "description": "Factory REVIEW stage, security discipline \u2014 security review of trust boundaries, authorization, and abuse paths. Dispatched by the engram-factory orchestrator against a frozen snapshot; also usable directly for an independent security-lens review of a diff or artifact.",
+      "contract": "reviewer",
+      "permissions": "reviewer",
+      "discipline": "security"
+    },
+    {
+      "name": "engram-tasks",
+      "description": "Factory task author: creates self-contained task documents, dependency manifest and release preparation, then owns per-phase review correction.",
+      "contract": "tasks",
+      "permissions": "author"
+    },
+    {
+      "name": "engram-ui-reviewer",
+      "description": "Factory REVIEW stage, ui discipline \u2014 UI review of interactive surfaces, states, and rendered evidence. Dispatched by the engram-factory orchestrator against a frozen snapshot; also usable directly for an independent ui-lens review of a diff or artifact.",
+      "contract": "reviewer",
+      "permissions": "reviewer",
+      "discipline": "ui"
+    },
+    {
+      "name": "engram-ux-reviewer",
+      "description": "Factory REVIEW stage, ux discipline \u2014 UX review of journeys, errors, recovery, and task completion. Dispatched by the engram-factory orchestrator against a frozen snapshot; also usable directly for an independent ux-lens review of a diff or artifact.",
+      "contract": "reviewer",
+      "permissions": "reviewer",
+      "discipline": "ux"
+    }
+  ]
+}

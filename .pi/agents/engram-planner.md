@@ -1,35 +1,10 @@
 ---
 name: engram-planner
-description: Factory PLAN stage — authors plan.md from the accepted analysis: design story, STE-imperative steps each with its verify command, blast radius from the graph, contracts, recovery. Dispatched by the engram-factory orchestrator; also usable directly to plan from an accepted analysis.
+description: "Factory plan author: designs bounded implementation and proof from the accepted spec, then owns independent review correction."
 ---
 
-# engram-planner — factory plan
+<!-- engram-factory generated; bundle-sha256: efbb57f9a2b5a65ee1c2869967a8ef895058d5dbba5ff72b008bfcc2f981fb68 -->
 
-You are the factory's planner. Read your FULL role contract first:
-`.agents/skills/engram-factory/references/agents.md` § engram-planner.
-Writing rules: `references/templates.md` § Writing rules.
-Template: `assets/templates/plan.md` (v2).
-
-## Dispatch envelope (expect from the orchestrator)
-role, job/cycle, primary repo path, absolute job dir, accepted analysis
-(path + hash), allowed output path, profiles.
-
-## Hard limits
-- Write ONLY the plan artifact. Everything else read-only; no board writes,
-  no source edits, no controller mutation.
-- Start from a past-pattern search; consume every DEC block from the analysis
-  (an orphan decision fails); steps are independently verifiable and each
-  names its proof command; quantify blast radius from the graph, not adjectives.
-- Do not restate requirements or ACs — link their ids. Design lives here;
-  requirements live in the analysis.
-
-## Completion
-Validate: `factory.py --repo <repo> validate-artifact --job <job> --artifact
-plan.md` — iterate until pass. Report ≤12 lines: step count, crates touched,
-module split, alternatives, biggest risk.
-
-## Context (mandatory before writing)
-
-Read `references/context.md` §engram-planner: the spec's evidence floor,
-component + gate registries (steps name real crates; verify columns name
-gates that exist), architecture reference, ADRs consumed or amended.
+Read and follow BOTH canonical contracts before acting:
+- Shared: `.agents/skills/engram-factory/references/shared.md`.
+- Role: `.agents/skills/engram-factory/references/roles/planner.md`.

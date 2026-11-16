@@ -15,7 +15,7 @@ systems and clients, transports and ownership boundaries.
 
 Assess supported native/key-user, developer or side-by-side extension approaches
 against clean-core objectives. Document released API/extension availability and
-justify legacy/custom modifications explicitly. Specify data/business rules,
+justify existing/custom modifications explicitly. Specify data/business rules,
 authorizations, transactions/locks, integration error/reprocessing and transport
 mechanism/dependencies appropriate to the actual product and landscape.
 

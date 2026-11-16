@@ -1,0 +1,1 @@
+The existing settings support email and SMS. No success measure or requested channel has been selected. Source changes are not authorized during framing. The harness can deliver an owner reply when a material clarification is asked.

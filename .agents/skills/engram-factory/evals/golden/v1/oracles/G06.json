@@ -1,0 +1,31 @@
+{
+  "case_id": "G06",
+  "expected_outcome": "ASSIGNED_UI_SEAM_SOURCE_READY",
+  "hard_gates": [
+    {
+      "id": "ELIGIBILITY",
+      "criterion": "Empty and blank names cannot save; valid names can.",
+      "evidence_required": "Actual node --test output and independent canSave probes.",
+      "verification_kind": "command_and_hidden_tests"
+    },
+    {
+      "id": "NO_REDESIGN",
+      "criterion": "HTML/theme/labels remain byte-unchanged; no added framework, dependency, backend work or broad accessibility rewrite.",
+      "evidence_required": "Allowed/excluded source diff and dependency manifests.",
+      "verification_kind": "source_diff"
+    },
+    {
+      "id": "PROOF_LIMIT",
+      "criterion": "Claims only the executed logic seam; does not invent browser/visual/keyboard verification.",
+      "evidence_required": "Build report compared with actual tools/outputs.",
+      "verification_kind": "independent_semantic_review"
+    },
+    {
+      "id": "BOUNDED_RETURN",
+      "criterion": "Returns after TASK-001 with focused evidence and preserved authority, rather than taking nearby UI work.",
+      "evidence_required": "Commit scope, task trace and final return.",
+      "verification_kind": "independent_semantic_review"
+    }
+  ],
+  "global_gates_apply": true
+}

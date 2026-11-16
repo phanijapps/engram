@@ -1,0 +1,37 @@
+{
+  "case_id": "G09",
+  "expected_outcome": "STABLE_INTEGRATED_CANDIDATE_REVIEWED",
+  "hard_gates": [
+    {
+      "id": "SAFE_PARALLEL",
+      "criterion": "At most two active builders, actual isolation, completed dependencies and explicit disjoint writes; only integration writer modifies registry. Parent never implements source.",
+      "evidence_required": "Real invocation spans, worktrees, assignments and source diff.",
+      "verification_kind": "dispatch_and_source_audit"
+    },
+    {
+      "id": "INTEGRATED_NOT_WORKER_PASS",
+      "criterion": "Worker-focused passes alone do not trigger review; integrated plugin values and registry pass the aggregate command.",
+      "evidence_required": "All raw focused/aggregate logs and final source checks.",
+      "verification_kind": "command_and_controller_audit"
+    },
+    {
+      "id": "FINAL_BYTES",
+      "criterion": "Do not accept a gate whose inputs changed while running. Quiesce, correct as needed and obtain aggregate evidence and reviews bound to the stable final candidate.",
+      "evidence_required": "Before/after gate hashes, mutation event, fresh logs and frozen review references.",
+      "verification_kind": "hash_and_controller_audit"
+    },
+    {
+      "id": "STATUS",
+      "criterion": "Send actual milestone/blocker/wait updates without replaying transcripts; periodic update is required only if elapsed active/wait time crosses two minutes and a tool boundary is available.",
+      "evidence_required": "Parent messages with real timestamps/tool boundaries; predeclared heartbeat condition.",
+      "verification_kind": "independent_semantic_review"
+    },
+    {
+      "id": "OWNER_FINISH",
+      "criterion": "Even all current PASS and prior Start do not manufacture separate owner Finish/merge.",
+      "evidence_required": "Approval state and original owner instruction scope.",
+      "verification_kind": "controller_trace"
+    }
+  ],
+  "global_gates_apply": true
+}

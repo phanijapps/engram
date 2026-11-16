@@ -9,6 +9,7 @@ profiles: {{profiles_json}}
 source_snapshot: "{{snapshot_path}}"
 input_artifacts: []
 updated_at: "{{timestamp}}"
+invocation_id: "{{invocation_id}}"
 round: {{round}}
 discipline: "{{discipline}}"
 verdict: "ERROR"
@@ -17,7 +18,7 @@ verdict: "ERROR"
 # Review — {{discipline}}, round {{round}}: {{feature_title}}
 
 <!--
-  Review v3: verdict artifact. Findings are ID'd (FIND-*) and actionable;
+  Review: verdict artifact. Findings are ID'd (FIND-*) and actionable;
   PASS / CHANGES / ERROR per the controller contract — never soft language.
 -->
 

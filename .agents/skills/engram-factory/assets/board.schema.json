@@ -1,73 +1,495 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "urn:engram-factory:board:1.0",
+  "$id": "urn:engram-factory:board:2.0",
   "title": "Engram Factory board",
   "type": "object",
   "additionalProperties": false,
-  "required": ["schema_version", "revision", "target", "jobs"],
+  "required": [
+    "schema_version",
+    "revision",
+    "target",
+    "jobs"
+  ],
   "properties": {
-    "schema_version": {"const": "1.0"},
-    "revision": {"type": "integer", "minimum": 0},
-    "target": {"type": "string", "minLength": 1},
-    "jobs": {"type": "array", "items": {"$ref": "#/$defs/job"}}
+    "schema_version": {
+      "const": "2.0"
+    },
+    "revision": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "target": {
+      "type": "string",
+      "minLength": 1
+    },
+    "jobs": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/job"
+      }
+    },
+    "queue_order": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
   },
   "$defs": {
-    "sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+    "sha256": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
     "evidence": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["path", "sha256", "archive"],
+      "required": [
+        "path",
+        "sha256",
+        "archive"
+      ],
       "properties": {
-        "path": {"type": "string", "minLength": 1},
-        "sha256": {"$ref": "#/$defs/sha256"},
-        "archive": {"type": "string", "minLength": 1}
+        "path": {
+          "type": "string",
+          "minLength": 1
+        },
+        "sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "archive": {
+          "type": "string",
+          "minLength": 1
+        }
       }
     },
     "review": {
       "oneOf": [
-        {"type": "object", "additionalProperties": false, "required": ["verdict"], "properties": {"verdict": {"const": "pending"}}},
-        {"type": "object", "additionalProperties": false,
-         "required": ["verdict", "path", "sha256", "archive"],
-         "properties": {
-           "verdict": {"enum": ["PASS", "CHANGES", "ERROR"]},
-           "path": {"type": "string"},
-           "sha256": {"$ref": "#/$defs/sha256"},
-           "archive": {"type": "string"}
-         }}
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "verdict"
+          ],
+          "properties": {
+            "verdict": {
+              "const": "pending"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "verdict",
+            "path",
+            "sha256",
+            "archive",
+            "invocation_id"
+          ],
+          "properties": {
+            "verdict": {
+              "enum": [
+                "PASS",
+                "CHANGES",
+                "ERROR"
+              ]
+            },
+            "path": {
+              "type": "string"
+            },
+            "sha256": {
+              "$ref": "#/$defs/sha256"
+            },
+            "archive": {
+              "type": "string"
+            },
+            "invocation_id": {
+              "type": "string",
+              "minLength": 1
+            }
+          }
+        }
       ]
     },
     "job": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["job_id", "feature", "profiles", "created_at", "updated_at", "stage", "status", "cycle", "round", "target", "branch", "base_sha", "worktree", "snapshot", "required_reviewers", "reviews", "artifacts", "approval", "blocker", "resume_from", "history"],
+      "required": [
+        "job_id",
+        "feature",
+        "profiles",
+        "created_at",
+        "updated_at",
+        "stage",
+        "status",
+        "cycle",
+        "round",
+        "target",
+        "branch",
+        "base_sha",
+        "worktree",
+        "snapshot",
+        "required_reviewers",
+        "reviews",
+        "artifacts",
+        "approval",
+        "blocker",
+        "resume_from",
+        "history",
+        "layout_version",
+        "mode",
+        "priority"
+      ],
       "properties": {
-        "job_id": {"type": "string", "pattern": "^[0-9]{3,}-[a-z0-9]+(?:-[a-z0-9]+)*$"},
-        "feature": {"type": "string", "minLength": 1},
-        "profiles": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"enum": ["full-stack", "servicenow", "salesforce", "sap", "maximo"]}},
-        "created_at": {"type": "string", "format": "date-time"},
-        "updated_at": {"type": "string", "format": "date-time"},
-        "stage": {"enum": ["analyze", "plan", "tasks", "build", "review", "approve", "merge", "merged", "needs-human"]},
-        "status": {"enum": ["running", "blocked", "awaiting-recommendation", "awaiting-approval", "approved", "complete"]},
-        "mode": {"enum": ["full", "light"]},
-        "cycle": {"type": "integer", "minimum": 1},
-        "round": {"type": "integer", "minimum": 0, "maximum": 3},
-        "target": {"type": "string"},
-        "branch": {"type": "string", "pattern": "^factory/"},
-        "base_sha": {"type": "string", "pattern": "^[a-f0-9]{40,64}$"},
-        "worktree": {"type": "string"},
-        "snapshot": {"oneOf": [{"type": "null"}, {"$ref": "#/$defs/evidence"}]},
-        "required_reviewers": {"type": "array", "uniqueItems": true, "items": {"enum": ["code", "security", "platform", "ux", "ui", "backend", "data", "operations"]}},
-        "reviews": {"type": "object", "additionalProperties": {"$ref": "#/$defs/review"}},
-        "artifacts": {"type": "object", "additionalProperties": {"$ref": "#/$defs/evidence"}},
-        "approval": {"oneOf": [
-          {"type": "null"},
-          {"type": "object", "additionalProperties": false,
-           "required": ["actor", "instruction", "at", "snapshot_sha256"],
-           "properties": {"actor": {"type": "string", "minLength": 1}, "instruction": {"type": "string", "minLength": 1}, "at": {"type": "string", "format": "date-time"}, "snapshot_sha256": {"$ref": "#/$defs/sha256"}}}
-        ]},
-        "blocker": {"type": ["object", "null"], "additionalProperties": false, "required": ["code", "reason"], "properties": {"code": {"type": "string"}, "reason": {"type": "string"}}},
-        "resume_from": {"type": ["object", "null"], "additionalProperties": false, "required": ["stage", "status"], "properties": {"stage": {"type": "string"}, "status": {"type": "string"}}},
-        "history": {"type": "array", "items": {"type": "object", "additionalProperties": false, "required": ["at", "action", "detail"], "properties": {"at": {"type": "string", "format": "date-time"}, "action": {"type": "string"}, "detail": {}}}}
+        "job_id": {
+          "type": "string",
+          "pattern": "^[0-9]{3,}-[a-z0-9]+(?:-[a-z0-9]+)*$"
+        },
+        "feature": {
+          "type": "string",
+          "minLength": 1
+        },
+        "profiles": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "enum": [
+              "full-stack",
+              "servicenow",
+              "salesforce",
+              "sap",
+              "maximo"
+            ]
+          }
+        },
+        "created_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updated_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "stage": {
+          "enum": [
+            "analyze",
+            "plan",
+            "tasks",
+            "build",
+            "e2e",
+            "review",
+            "approve",
+            "merge",
+            "merged",
+            "needs-human",
+            "queued",
+            "cancelled",
+            "archived"
+          ]
+        },
+        "status": {
+          "enum": [
+            "running",
+            "blocked",
+            "awaiting-start",
+            "awaiting-recommendation",
+            "awaiting-approval",
+            "approved",
+            "complete",
+            "queued"
+          ]
+        },
+        "mode": {
+          "enum": [
+            "full",
+            "light"
+          ]
+        },
+        "cycle": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "round": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 2
+        },
+        "target": {
+          "type": "string"
+        },
+        "branch": {
+          "type": "string",
+          "pattern": "^factory/"
+        },
+        "base_sha": {
+          "oneOf": [
+            {
+              "type": "string",
+              "pattern": "^[a-f0-9]{40,64}$"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "worktree": {
+          "type": "string"
+        },
+        "snapshot": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/evidence"
+            }
+          ]
+        },
+        "required_reviewers": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "enum": [
+              "code",
+              "security",
+              "platform",
+              "ux",
+              "ui",
+              "backend",
+              "data",
+              "operations"
+            ]
+          }
+        },
+        "reviews": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/review"
+          }
+        },
+        "artifacts": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/evidence"
+          }
+        },
+        "approval": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "actor",
+                "instruction",
+                "at",
+                "snapshot_sha256",
+                "authority",
+                "artifact_hashes",
+                "review_hashes"
+              ],
+              "properties": {
+                "actor": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "instruction": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "at": {
+                  "type": "string",
+                  "format": "date-time"
+                },
+                "snapshot_sha256": {
+                  "$ref": "#/$defs/sha256"
+                },
+                "authority": {
+                  "const": "unverified caller assertion"
+                },
+                "artifact_hashes": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "$ref": "#/$defs/sha256"
+                  }
+                },
+                "review_hashes": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "$ref": "#/$defs/sha256"
+                  }
+                }
+              }
+            }
+          ]
+        },
+        "blocker": {
+          "type": [
+            "object",
+            "null"
+          ],
+          "additionalProperties": false,
+          "required": [
+            "code",
+            "reason"
+          ],
+          "properties": {
+            "code": {
+              "type": "string"
+            },
+            "reason": {
+              "type": "string"
+            }
+          }
+        },
+        "resume_from": {
+          "type": [
+            "object",
+            "null"
+          ],
+          "additionalProperties": false,
+          "required": [
+            "stage",
+            "status"
+          ],
+          "properties": {
+            "stage": {
+              "type": "string"
+            },
+            "status": {
+              "type": "string"
+            }
+          }
+        },
+        "history": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "at",
+              "action",
+              "detail"
+            ],
+            "properties": {
+              "at": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "action": {
+                "type": "string"
+              },
+              "detail": {}
+            }
+          }
+        },
+        "priority": {
+          "type": "integer"
+        },
+        "retired_from": {
+          "type": "object",
+          "required": [
+            "stage",
+            "status"
+          ],
+          "properties": {
+            "stage": {
+              "type": "string"
+            },
+            "status": {
+              "type": "string"
+            }
+          },
+          "additionalProperties": false
+        },
+        "e2e": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "plan",
+            "scenarios",
+            "attempts",
+            "pending",
+            "passed"
+          ],
+          "properties": {
+            "plan": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "path",
+                "sha256"
+              ],
+              "properties": {
+                "path": {
+                  "const": "plan.md"
+                },
+                "sha256": {
+                  "$ref": "#/$defs/sha256"
+                }
+              }
+            },
+            "scenarios": {
+              "type": "array",
+              "minItems": 1,
+              "items": {
+                "type": "object"
+              }
+            },
+            "attempts": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 3
+            },
+            "pending": {
+              "type": [
+                "object",
+                "null"
+              ]
+            },
+            "passed": {
+              "type": [
+                "object",
+                "null"
+              ]
+            }
+          }
+        },
+        "layout_version": {
+          "const": 3
+        },
+        "task_index_sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "build_invocation": {
+          "type": "string",
+          "minLength": 1
+        },
+        "brief_binding": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "brief_id",
+            "revision",
+            "sha256"
+          ],
+          "properties": {
+            "brief_id": {
+              "type": "string",
+              "minLength": 1
+            },
+            "revision": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "sha256": {
+              "$ref": "#/$defs/sha256"
+            }
+          }
+        }
       }
     }
   }

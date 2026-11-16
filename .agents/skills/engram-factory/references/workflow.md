@@ -2,129 +2,82 @@
 
 ## State model
 
-Stage order: analyze -> plan -> tasks -> build -> review -> approve -> merge -> merged.
-Any stage may block at needs-human with resume_from. Stage and status are separate.
-Review PASS is not human approval. All required PASS results lead to
-approve/awaiting-recommendation; APPROVE leads to approve/awaiting-approval;
-human approval leads to merge/approved. Source merge leads to merged/complete.
-Analysis frontmatter pins its required reviewer set. Every build must retain it
-and every specialist added in earlier rounds of that cycle. Removing a reviewer
-requires human rework and a newly accepted analysis, not a shorter CLI list.
-The controller intentionally supports guarded fast-forward source merge only.
-Repositories requiring PRs, server-side checks or another merge policy must use
-that policy through an authorized integration; do not bypass it with local merge.
-Until such an adapter exists, block at the merge boundary and report the limitation.
+queued → analyze → plan → tasks → build/awaiting-start → build/running →
+optional e2e → review → approve → merge → merged.
 
-Round starts at zero. The first accepted build starts review round one. CHANGES
-after round one or two returns to build. Round three CHANGES requires human rework
-or a resolved decision, never an automatic fourth round. ERROR waits for all other
-reviews, then blocks. Its failed reviewer may be rerun on resume; preserve the first
-report and use a distinct attempt filename. Do not overwrite a recorded report.
+Board schema 2.0 and task layout 3 are the supported execution contract. Specs
+and plans are compact-v1. The controller rejects unsupported input formats
+before state mutation. It does not convert records or recover lost authority.
 
-Explicit human rework creates a new cycle, resets round to zero, archives current
-documents, invalidates approval and conservatively repeats analyze/plan/tasks.
-This avoids treating changed acceptance as a small builder fix. Existing source
-changes remain in the worktree for the analyzer to assess. Only one unmerged job
-is allowed; completed worktrees are retained for inspection, not deleted automatically.
+create registers a ratified brief and queued intent. activate captures the clean
+actual target and starts the single execution lease. Queue priority is explicit;
+blocked work releases its lease only after invocation quiescence is established.
+All source changes occur in the assigned worktree. Runtime state is not committed.
 
-## Files and ignored state
+Spec/plan author sessions pin an independent roster before candidate1. Local
+draft checks do not create receipts or spend candidates. Scoped submission checks
+revision, accepted inputs and exact authored bytes, prepares/freezes the candidate
+and records an idempotent request. Request existence is not reviewer execution.
+Actual runtime delegation is required and replay must not duplicate dispatch.
+See spec-session.md and plan-session.md.
 
-All paths below are relative to the primary checkout, not the job worktree.
+Spec and plan each allow at most three candidates per cycle. All required PASS
+receipts must apply to current bytes. CHANGES routes to the author; third CHANGES
+or ERROR exhausts the phase. ERROR is incomplete review, never acceptance.
+Unchanged ERROR recovery may retry only within its bound. Preserve findings,
+actual receipts and invocation evidence. Do not reset counters through resume.
 
-| Path | Purpose |
-| --- | --- |
-| .engram-factory/board.json | Current jobs in creation order, schema version and global revision |
-| .engram-factory/board.lock | Stable advisory lock; never remove during operation |
-| .engram-factory/backlog.md | Optional human-maintained queue of `- [ ] text` lines |
-| .engram-factory/jobs/JOB/feature.md | Verbatim user feature |
-| .engram-factory/jobs/JOB/*.md | Current analysis, plan, tasks, verification, release, build, decision |
-| .engram-factory/jobs/JOB/cycle-C/round-R/review-D.md | Reviewer artifacts |
-| .engram-factory/jobs/JOB/source-*.json | Pinned Git, environment and external package identity |
-| .engram-factory/jobs/JOB/evidence/ | Content-addressed accepted documents/packages |
-| .engram-factory/jobs/JOB/history/ | Previous-cycle working documents |
-| .engram-factory/jobs/JOB/rework-C.md | Verbatim human instruction |
-| .engram-factory/worktrees/JOB/ | Isolated source checkout |
+Task generation produces tasks/task-NNN.md, a candidate manifest under
+records/operations/ and release.md. Supervisor initializes tasks/manifest.json
+and tasks/task.json, runs preflight and freezes/reviews every task phase.
+Reinitialization is a supervised correction of a fully-pending index; preserve
+superseded manifests and reports and review every phase again. Task phases do
+not inherit the spec/plan candidate limit. See tasks-review.md.
 
-init adds a repository-local Git exclude rule and refuses already tracked runtime
-state. It does not alter .gitignore. Ignored files survive ordinary branch changes,
-but are not backups. Arrange organization-approved durable retention separately.
-Do not store production data or secrets here. Avoid `git clean -fdx` on this tree.
+After current phase reviews PASS, task completion enters awaiting-start. Owner
+acceptance and Start bind the exact plan/manifest before implementation. The
+orchestrator records task transitions, actor, dependency order and evidence via
+the controller. A worker result is not a state transition. No task is done solely
+because source changed or an unexecuted command was listed in a report.
 
-`/engram-factory next` takes the first unchecked backlog line verbatim as the
-feature and preserves its text as queue identity. After merge, the orchestrator
-flips exactly that line to `- [x]` with the job ID appended and touches nothing
-else in the human-owned file. Create backlog.md on first use; it is never
-generated by the controller.
+Build snapshot requires completed indexed implementation work, clean committed
+source, unchanged target/base, actual environment fingerprint and applicable
+platform exports. The handoff is records/operations/build-handoff-cC-rR.md (with
+-aA for E2E-enabled attempts). Focused task proof belongs to build; full workflows
+explicitly selected by the reviewed plan belong to E2E.
 
-## Controller examples
+E2E does not consume a final-review round. Separate QA executes the exact scenario
+set and returns records/e2e/report-cC-aA.json. Current all-PASS permits final
+review; FAIL returns bounded corrections/new snapshot; BLOCKED/NOT_RUN preserves
+a blocked candidate. Three reports per cycle include blocked reports. Exhaustion
+requires owner recovery. A source or environment change invalidates applicability;
+old reports remain historical evidence. See e2e-phase.md.
 
-Run from the orchestrator with primary REPO and SKILL_ROOT paths. JOB is a returned
-job ID. All artifact paths are job-relative; feature, environment, instruction and
-export paths are local filesystem paths.
+Final review allows two rounds. Reviewers remain distinct from builder and E2E
+QA, and full-mode discipline invocations differ. CHANGES returns to build only
+when a round remains; selected E2E must run again on corrected bytes. ERROR blocks
+for recovery. Only all current PASS results allow the approver recommendation.
+That recommendation does not grant separate owner Finish/merge authority.
 
-```bash
-python3 "$SKILL_ROOT/scripts/factory.py" --repo "$REPO" create --feature-file /absolute/feature.txt --slug short-kebab-slug [--profiles full-stack] [--brief-file /absolute/brief.md]
-python3 "$SKILL_ROOT/scripts/factory.py" --repo "$REPO" status --job "$JOB"
-python3 "$SKILL_ROOT/scripts/factory.py" --repo "$REPO" complete --job "$JOB" --stage analyze --artifacts spec.md
-python3 "$SKILL_ROOT/scripts/factory.py" --repo "$REPO" complete --job "$JOB" --stage plan --artifacts plan.md
-python3 "$SKILL_ROOT/scripts/factory.py" --repo "$REPO" complete --job "$JOB" --stage tasks --artifacts tasks.md verification.md release.md
-python3 "$SKILL_ROOT/scripts/factory.py" --repo "$REPO" snapshot --job "$JOB" --environment /absolute/environment.json --exports /absolute/package.zip
-python3 "$SKILL_ROOT/scripts/factory.py" --repo "$REPO" complete --job "$JOB" --stage build --snapshot "$SNAPSHOT" --reviewers code,security,platform,backend --artifacts build.md tasks.md verification.md release.md
-python3 "$SKILL_ROOT/scripts/factory.py" --repo "$REPO" review --job "$JOB" --discipline code --artifact cycle-1/round-1/review-code.md
-python3 "$SKILL_ROOT/scripts/factory.py" --repo "$REPO" decision --job "$JOB" --artifact decision.md
-python3 "$SKILL_ROOT/scripts/factory.py" --repo "$REPO" approve --job "$JOB" --actor human-identity --instruction-file /absolute/user-approval.txt
-python3 "$SKILL_ROOT/scripts/factory.py" --repo "$REPO" merge --job "$JOB"
-```
+## Recovery
 
-Do not execute approval examples without an actual approving user instruction.
-Require build report inputs to include analysis, plan, tasks, verification and
-release. Review and decision inputs must include every accepted current artifact;
-decision additionally includes all required review reports. Keep upstream artifact
-hashes from the board. Set current cycle, author, source snapshot and ready status.
+Read integrity, actual Git state, owner records, invocation state and evidence.
+Preserve all assets. Board missing plus remnants is not permission to init.
+recover --board-file previews consistency only; no automatic board adoption is
+supported. Checksums do not authenticate lost owner decisions or missing history.
 
-The environment fingerprint is a sanitized JSON object, for example:
+recover-activation completes only the unchanged controller-recorded activation
+intent under its lease, branch/base, queue, clean-state and evidence checks.
+Other interrupted operations remain inspectable and fail closed. Do not delete
+orphan worktrees/branches or overwrite archives simply to make a retry pass.
 
-```json
-{
-  "environment": "qa-alias",
-  "product": "actual-product-and-edition",
-  "version": "actual-release-and-api",
-  "observed_at": "2026-10-25T00:00:00Z",
-  "baseline": "configuration-export-hash-or-immutable-runtime-version"
-}
-```
+Resume requires the recorded failure to be resolved, current evidence and source
+to match, and invocations to be quiescent when required. It does not reset limits,
+change scope or grant approval. Explicit owner rework preserves prior-cycle
+records, starts a new cycle and repeats acceptance stages. Changed acceptance is
+not a small builder fix. Source integration uses the approved worktree and review
+path; no force reset/push or edited hash can substitute for that evidence.
 
-For hybrid jobs include a `systems` array with per-system identities. Never use
-example values as real evidence. Platform profiles require at least one exported
-package file; the reviewer verifies that every affected artifact is actually covered.
-
-## Recovery procedure
-
-1. Read board, job history, Git status, worktree list and actual invocation state.
-2. Check current evidence hashes and archive copies. Do not edit hashes to match drift.
-3. If output exists but was not accepted, validate it and complete the pending stage.
-4. For review ERROR, repair access/tooling, preserve the failed report and resume
-   with an explicit reason. Rerun only ERROR reviewers against unchanged evidence.
-5. For exhausted rounds or an escalated decision, require explicit human rework;
-   generic resume cannot reset the bound or waive a gate.
-6. If target advanced, block; request/perform already-authorized integration in the
-   job worktree, then start a human-authorized rework cycle. Before its first review,
-   use refresh-base after the new target is an ancestor of clean committed source.
-7. If Git merge succeeded before board update, rerun merge. It recognizes target
-   equal to approved head, verifies evidence, and records completion without remerging.
-
-Board replacement is atomic; Git/worktree creation and multi-document rework are
-not one filesystem transaction. If interrupted before board commit, inspect orphan
-paths and branch refs; preserve evidence and reconcile them before retrying. For a
-partial rework, restore previous working documents from history/evidence to match
-the board, then rerun the explicit rework instruction. Never delete user changes,
-force reset, force push, invent completed stages, or edit board.json by hand.
-
-## Enforcement boundary
-
-The controller validates source/evidence identities, stage transitions, roles,
-required input references, mandatory reviewers, round bounds and approval recording.
-It cannot prove that written claims are true, that tests were executed, that a
-human identity is authenticated, or that live platform state matches an export.
-Independent reviews and organization CI/access controls must establish those facts.
-Treat schema or artifact validation as structural checks, not certification.
+The controller's merge implementation is guarded fast-forward only. Repository
+PR/CI/server policies still apply; unsupported merge integrations must stop at
+that boundary. Source merge never authorizes platform deployment.

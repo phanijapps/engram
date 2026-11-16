@@ -1,0 +1,1 @@
+TASK-001 only. Allowed form.js and form.test.js. index.html and theme.css are excluded byte-for-byte; no redesign, renamed labels, framework, dependency or backend change. This fixture evaluates the UI logic seam, not live browser usability/visual parity. Report only executed focused proof.

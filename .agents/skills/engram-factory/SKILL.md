@@ -1,341 +1,194 @@
 ---
 name: engram-factory
-description: Run the software factory through analysis, planning, tasks, implementation, specialist reviews, approval and merge. Use for /engram-factory feature, /engram-factory next, /engram-factory status, /engram-factory resume job-id, /engram-factory approve job-id or /engram-factory rework job-id note. Support full-stack applications and platforms including ServiceNow, Salesforce, SAP and Maximo.
+description: Run the software factory through framing, specification, planning, tasks, implementation, optional E2E, independent review, owner approval and merge. Use for /engram-factory feature, next, status, resume, approve or rework. Support full-stack applications and platforms including ServiceNow, Salesforce, SAP and Maximo.
 ---
 
 # Engram Factory
 
-You are the orchestrator. Run the loop below and spawn every agent.
-
-You are the only writer of `.engram-factory/board.json`.
-Use `scripts/factory.py` for all board changes.
-
-Never author code, analysis, plans, reviews or approval recommendations
-yourself. Agents do that work. One narrow exception: pre-job intent capture —
-when framing with engram-frame, you record the owner's words into the brief;
-you never decide them. Validate their outputs, advance the job
-and keep the board current.
-
-Capture human instructions verbatim. Do not invent decisions.
-
-## Factory Loop
-
-    FEATURE
-       |
-       v
-    ANALYZE --> PLAN --> TASKS --> BUILD <----------------------------+
-                                    |                                |
-                                    v                                |
-                         SPAWN APPLICABLE REVIEWERS                  |
-                                    |                                |
-                                    v                                |
-                         WAIT FOR EVERY REVIEWER                     |
-                                    |                                |
-                    +---------------+---------------+                |
-                    |               |               |                |
-                 ALL PASS        CHANGES          ERROR              |
-                    |               |               |                |
-                    v               v               v                |
-                 APPROVER     ROUNDS REMAIN?    NEEDS HUMAN           |
-                    |           |        |                           |
-             +------+------+   YES       NO                          |
-             |             |    |        |                           |
-          APPROVE       ESCALATE |        v                           |
-             |             |    |    NEEDS HUMAN                     |
-             v             v    |                                    |
-       HUMAN APPROVAL  NEEDS HUMAN +--> RESUME BUILDER ----------------+
-             |
-             v
-       VALIDATE SOURCE
-             |
-             v
-        MERGE TO MAIN
-
-    HUMAN REWORK --> NEW CYCLE --> ANALYZE
-
-MAX_REVIEW_ROUNDS = 3.
-
-The first build starts review round 1. Allow at most two review-driven
-rebuilds. After round 3 requests changes, escalate to the human.
-
-Explicit human rework starts a new cycle. Preserve previous evidence.
-
-## Agents
-
-| Stage | Agent | Writes or edits |
-| --- | --- | --- |
-| Analyze | engram-analyzer | analysis.md |
-| Plan | engram-planner | plan.md |
-| Tasks | engram-tasks | tasks.md, verification.md, release.md |
-| Build | engram-builder | Source, tests, configuration exports, task progress, build.md |
-| Review | engram-code-reviewer<br>engram-security-reviewer<br>engram-platform-reviewer<br>engram-ux-reviewer<br>engram-ui-reviewer<br>engram-backend-reviewer<br>engram-data-reviewer<br>engram-operations-reviewer | review-code.md<br>review-security.md<br>review-platform.md<br>review-ux.md<br>review-ui.md<br>review-backend.md<br>review-data.md<br>review-operations.md |
-| Approve | engram-approver | decision.md |
-
-Use `references/agents.md` for role contracts and dispatch instructions.
-Use `references/agent-team.md` for the two team shapes: Full Team and
-light mode (red-forman as the single review author).
-Dispatch the review stage by the job's recorded `mode`. Full mode — the
-default — spawns one specialist reviewer per required discipline. In
-light mode, spawn ONE red-forman invocation which authors every required
-`review-<discipline>.md`; the reviewer set, evidence freeze and rubric are
-identical in both modes.
-Keep builder, reviewers and approver in separate agent invocations.
-
-Always require code, security and platform reviews. Add UX, UI, backend,
-data and operations reviews according to the accepted analysis.
-
-Use `references/reviews.md` for applicability and verdict rules.
-
-## Files
-
-All paths are relative to the primary repository checkout.
-
-    .engram-factory/
-    |-- board.json
-    |-- board.lock
-    |-- backlog.md
-    |-- jobs/
-    |   `-- <job-id>/
-    |       |-- feature.md
-    |       |-- brief.md
-    |       |-- spec.md
-    |       |-- plan.md
-    |       |-- tasks.md
-    |       |-- verification.md
-    |       |-- release.md
-    |       |-- build.md
-    |       |-- decision.md
-    |       |-- rework-<cycle>.md
-    |       |-- source-*.json
-    |       |-- cycle-<n>/
-    |       |   `-- round-<n>/
-    |       |       `-- review-<discipline>.md
-    |       |-- evidence/
-    |       |-- history/
-    |       |-- runs/                        # ALL orchestration receipts (OR-004)
-    |       |   `-- <batch-or-dispatch-id>/  # dispatch results, batch outputs, rerun/
-    |       |                                # recovery churn — NEVER at top level
-    `-- worktrees/
-        `-- <job-id>/
-
-Keep `.engram-factory/` ignored and outside source commits.
-Build on `factory/<job-id>` in the assigned worktree.
-
-Use templates from `assets/templates/`.
-Use `references/templates.md` for metadata, writing and traceability rules.
-
-## Constitution compliance (adopted 2026-10-31)
-
-The SDD pipeline is governed by `constitution/` (see `constitution/00-INDEX.md`).
-Artifacts are checked by `tools/ci/check_job_artifacts.py` (advisory until
-2026-11-28, then blocking for post-adoption jobs):
-
-- **Frontmatter (v2 templates)**: `schema_version: 2`, `artifact`, `job_id`,
-  `status`, `size_tier` on brief/analysis/plan/tasks. `spec.md` carries
-  `artifact: spec`.
-- **ID discipline**: requirements are `REQ-*` in the spec (canonical behavior
-  source); plan steps are `STEP-*` referencing ≥1 REQ; tasks are `TASK-*`
-  referencing STEP + REQ IDs. Restate nothing — reference by ID. The REQ×task
-  coverage matrix MUST be total.
-- **No stubs in ratified artifacts**: no TBD/TODO/FIXME once `status` leaves
-  `draft` (PC-002).
-- **Ratification-before-build**: `build.md` is only valid once the brief's
-  `status: ratified` (RULE-4 ordering).
-- **Job layout**: job-dir top level holds ONLY the canonical artifact set
-  above; dispatch results, batch receipts, recovery and rerun files go under
-  `runs/<id>/` (OR-004). Historical job 010 is grandfathered (DW-3).
-
-### Size tiers (scales ceremony — the noise fix)
-
-Set `size_tier` in the brief frontmatter; it flows to every downstream
-artifact. R = required, O = optional-as-needed, X = omit-unless-touched:
-
-| Artifact | S — localized, reversible, one surface | M — several paths or one boundary | L — cross-store/cross-surface |
-|---|---|---|---|
-| Brief | R: ask, problem/symptom, outcome, MoSCoW, ledger, scope, tier. X: constraints table unless real. | same | same |
-| Spec | R: intent trace, evidence, REQ/AC/gate tables, out-list, risks/reviewers. O: terms/environment. X: story prose. | same + O: terms | same |
-| Plan | R: approach, steps table, verification map, rollback. O: contracts/blast-radius when public surfaces change. | R: contracts + blast radius | R: all |
-| Tasks | R: task list, ordering, coverage matrix, gate inventory. X: delivery applicability when no row would be "yes". | O: delivery | R: delivery |
-
-Evidence budget: S jobs target ≤ 60 lines per artifact; exceeding it needs a
-one-line justification in the artifact.
-
-## Board
-
-Use `assets/board.schema.json`.
-
-- `stage`: analyze, plan, tasks, build, review, approve, merge,
-  merged or needs-human.
-- `status`: execution or waiting condition within the stage.
-- `cycle`: current approval cycle, starting at 1.
-- `round`: current review round, starting at 0 before the first review.
-- `mode`: the job's team shape, `full` or `light`; absent means `full`.
-- `required_reviewers`: accepted reviewer set for the cycle.
-- `reviews`: current round only; each verdict is pending, PASS,
-  CHANGES or ERROR.
-- `snapshot`: exact source and package identity under review.
-- `approval`: human approval bound to the current snapshot.
-
-Preserve earlier rounds in their folders and accepted evidence archives.
-Keep jobs in creation order. Never silently reset counters or approvals.
-
-## Preconditions
-
-Before starting a job:
-
-1. Confirm the repository and target branch.
-2. Confirm the primary working tree is clean.
-3. Confirm no other job is active.
-4. Confirm real agent delegation is available (`references/runtimes.md`).
-5. Read repository instructions and applicable organization policies.
-6. Select the relevant full-stack or platform profiles.
-
-Before resuming:
-
-1. Read the board and persisted artifacts.
-2. Inspect the recorded worktree, branch and agent invocation state.
-3. Check whether the interrupted action already completed.
-4. Continue the first incomplete action.
-
-Do not require a clean tree merely to display status.
-
-## /engram-factory <feature>
-
-1. **Create the job.** Preserve the feature text verbatim.
-   If an engram-frame brief exists, pass it at creation
-   (`create --brief-file <brief>`): the controller registers it as an
-   immutable artifact and a REQUIRED analysis input; analysis honors its
-   decision ledger.
-   Record the team mode: `create --mode <full-or-light>` is the owner pin
-   (default `full`); the analyzer's frontmatter `mode` recommendation is
-   applied at analyze completion unless a pin refuses it — the refusal is
-   recorded as a `mode-refused` history event, and a human rework note
-   supersedes any pin.
-2. **Create the worktree.** Use branch `factory/<job-id>`.
-3. **Analyze.** Spawn engram-analyzer with the feature and relevant profiles.
-4. **Validate analysis.** Require actionable acceptance criteria, constraints,
-   platform inventory and reviewer applicability.
-5. **Plan.** Spawn engram-planner with the accepted analysis.
-6. **Validate plan.** Require design, contracts, verification, packaging
-   and recovery approach.
-7. **Create tasks.** Spawn engram-tasks with accepted analysis and plan.
-8. **Validate tasks.** Require explicit requirement-to-task-to-test mappings.
-9. **Build.** Spawn engram-builder in the assigned worktree.
-10. **Run Build Check.**
-
-Advance the board only after each handoff passes validation.
-
-## Build Check
-
-1. Wait for the builder to finish.
-2. Check task completion and actual verification evidence.
-3. Require a clean, committed job worktree.
-4. Require exports for platform changes held outside Git.
-5. Capture a source snapshot containing Git revisions, package hashes
-   and the recorded environment fingerprint.
-6. Validate build.md, tasks.md, verification.md and release.md.
-7. Start the next review round.
-
-Never record an unexecuted check as PASS.
-
-## Review
-
-1. Freeze the source snapshot and accepted input hashes.
-2. Spawn reviews by the recorded mode against the same evidence: full mode
-   spawns every required specialist reviewer; light mode spawns ONE
-   red-forman invocation authoring every required `review-<discipline>.md`
-   under the same rubric.
-3. Wait for every required reviewer.
-4. Validate and record each report.
-5. Resolve the round:
-
-   - **All PASS:** spawn engram-approver.
-   - **Any ERROR:** move to needs-human.
-   - **Any CHANGES, rounds remain:** resume the builder with all findings.
-   - **Any CHANGES, rounds exhausted:** move to needs-human.
-
-Never drop a reviewer required by the accepted analysis.
-After rebuilding, create a new snapshot and repeat all required reviews.
-
-## Approval
-
-1. Spawn engram-approver with the current snapshot, verification evidence,
-   release plan and every required PASS report.
-2. Validate decision.md.
-3. If ESCALATE, move to needs-human and report the unresolved issues.
-4. If APPROVE, present the exact result and wait for human approval.
-
-The approver recommends approval. The human authorizes the merge.
-
-## /engram-factory approve <job-id>
-
-1. Confirm the job is awaiting human approval.
-2. Record the actual approving instruction and actor.
-3. Verify that source, packages and accepted evidence remain unchanged.
-4. Verify that the target branch still matches the reviewed base.
-5. Merge the exact approved commit using repository policy.
-6. Record merged only after Git confirms success.
-
-Source merge does not authorize platform deployment.
-
-## /engram-factory rework <job-id> <note>
-
-Rework is accepted only at a decision boundary: approve, merge or
-needs-human. A job mid-loop must block first.
-
-1. Capture the note verbatim.
-2. Archive the current cycle's artifacts.
-3. Invalidate previous approval.
-4. Start a new cycle with round 0.
-5. Return to analysis and revalidate scope, plan and tasks.
-6. Continue the factory loop.
-
-Do not discard existing source changes or previous review evidence.
-
-## /engram-factory next
-
-1. Read `.engram-factory/backlog.md`.
-2. Select the first unchecked item.
-3. Preserve its text and queue identity.
-4. Run it through the factory.
-5. Mark it complete only after merge.
-
-## /engram-factory status [job-id]
-
-Report stage, status, cycle, round, mode, review outcomes, blockers
-and the next permitted action.
-
-Do not change state.
-
-## /engram-factory resume <job-id>
-
-Read `references/workflow.md` and recover from persisted evidence.
-
-Never treat resume as approval, a waiver or permission to reset
-the review-round limit.
-
-## Platform Applications
-
-Load only the applicable profiles:
-
-- `references/full-stack.md`
-- `references/servicenow.md`
-- `references/salesforce.md`
-- `references/sap.md`
-- `references/maximo.md`
-
-Combine profiles for hybrid applications.
-
-Require actual product, edition, version, environment and export evidence.
-Verify platform claims against vendor-authoritative sources (`references/sources.md`).
-Track code, metadata, configuration, permissions and business data separately.
-
-Do not assume that Git contains the complete platform state or that one
-transport mechanism covers every changed artifact.
-
-## Completion
-
-Report delivered behavior, acceptance coverage, executed checks,
-review outcomes, approved source identity, merge result and remaining risks.
-
-State platform promotion separately as performed or not performed.
+One workflow: brief → spec → plan → tasks → owner acceptance/Start → build →
+optional E2E → independent review → approval recommendation → owner Finish/merge.
+
+The controller supports the current board schema 2.0, task layout 3 and compact-v1
+spec/plan. Unsupported boards, jobs, source formats and obsolete handoff interfaces
+fail before mutation. Preserve historical files;
+do not convert records, replace boards or infer lost approval. A format number
+belongs to its own contract: current build/review/release artifacts and snapshots
+have their own versions, distinct from spec/plan and board versions.
+
+## Orchestrator responsibilities
+
+Spawn each phase author. For spec/plan sessions and frozen task-phase candidates,
+the author launches the required independent reviewers through native nested
+delegation when available, waits and corrects findings. Supervisor dispatch is
+the fallback. Never dispatch the same request twice. You alone invoke controller
+mutations and accept stages, except scoped author spec-submit/plan-submit.
+
+Do not write implementation, authored analysis/design or substitute reviews.
+Capture pre-job owner intent verbatim with engram-frame. Do not invent decisions.
+Continue authorized work through the next permitted step; routine findings go to
+the responsible author, not back to the owner to design. Escalate consequential
+choices outside delegated authority with a concrete recommendation.
+
+Require compact progress messages per references/shared.md. Relay meaningful
+milestones/blockers to the owner. Updates are advisory; persisted current evidence
+controls advancement. Report actual timing/tool/token data only when supplied with
+provenance; unavailable measurements remain unknown.
+
+Run scripts/factory.py with --repo pointing to the primary checkout. Source work
+belongs in the job worktree. Use the controller for state changes; never edit
+board.json, accepted archives or task state directly. The controller manages local
+state, not remote agents, authentication, sandboxing or platform deployment.
+Actor/invocation/owner strings are caller assertions, not authenticated identity.
+
+## Required context and rules
+
+Read AGENTS.md and the constitution packs owning the change. Establish their
+actual revision and authority in the target repository. Retrieved/draft text is
+background evidence, never owner approval or ratified law. Pass scoped rule IDs,
+source paths/hashes and proof obligations to every author and reviewer.
+
+An unknown rule/context/authority is distinct from an assessed N/A with reason.
+Resolve material unknowns before readiness. Use targeted recall for a specific
+uncertainty and actual current source; reuse revision-bound results while valid.
+See references/context.md and references/shared.md for bounded dispatch packets.
+
+## Run the workflow
+
+1. **Frame.** Run engram-frame in the main owner channel. Register the ratified
+   brief and binding decision ledger. HUMAN-DECIDED rows remain unchanged;
+   DELEGATED decisions stay within their boundaries; material OPEN rows block.
+2. **Register and activate.** create requires the brief and registers queued
+   intent without source capture. activate captures the actual clean target,
+   acquires the single execution lease and creates the job worktree. Select the
+   highest-priority eligible job. Inspect integrity before recovery; do not adopt
+   remnant branches/worktrees or delete assets to retry.
+3. **Spec.** Open spec-session-open before the first candidate with the author
+   and fixed independent roster. Spawn engram-analyzer. It uses spec-context,
+   receipt-free spec-check and guarded spec-submit. Submission prepares and freezes
+   exact inputs and returns a durable request, not evidence a reviewer ran.
+   Author launches reviewers when supported; supervisor ingests actual reports.
+   See references/spec-readiness.md and references/spec-session.md.
+4. **Accept spec.** Require actionable behavior, canonical REQ/AC links, scope,
+   rule applicability and evidence. All required independent reviews must PASS
+   the current frozen candidate before complete --stage analyze.
+5. **Plan.** Open plan-session-open and spawn engram-planner with accepted inputs.
+   The author uses plan-context/check/submit, investigates source, chooses a
+   feasible design within delegated scope and corrects independent findings.
+   See references/plan-readiness.md and references/plan-session.md.
+6. **Accept plan.** Verify mechanisms, boundaries, dependency/ownership scope,
+   runnable proof and rollback. Keep design inline; separate supports need a
+   distinct purpose and declaration. Accepted spec/support bytes are pinned.
+   Optional E2E is selected here, before owner Start; see references/e2e-phase.md.
+7. **Tasks.** Spawn engram-tasks. It authors canonical task documents, a candidate
+   manifest and ready release metadata. Supervisor initializes the index and
+   freezes each phase. Author runs available read-only preflight, launches
+   separate reviewers, waits and corrects CHANGES. Supervisor records reports.
+   A revised shared manifest supersedes every phase candidate: re-review all
+   phases. See references/tasks-review.md. Do not falsely complete deferred E2E.
+8. **Start.** After every current phase PASS, accept tasks to build/awaiting-start.
+   Record actual owner acceptance and Start for the exact accepted plan through
+   start-build. An agent recommendation, recalled instruction or stage PASS is
+   not that authority. Do not request authority again when already established.
+9. **Build.** Dispatch engram-builder with explicit assigned tasks, allowed writes,
+   completed dependencies, proof commands and a completion/stop condition.
+   Supervisor owns task-transition records and verifies evidence before advancing.
+   Work only the assigned scope; stop on two consecutive failed verifications.
+   A broken accepted command goes back as a proposed correction, never an edit
+   to the accepted plan. Focused build proof remains required.
+10. **Optional E2E.** A selected plan routes accepted build/snapshot evidence into
+    E2E. Spawn separate engram-qa for the declared scenarios and disposable
+    environment. Supervisor ingests its structured report. PASS on every current
+    scenario permits final review; FAIL produces bounded corrections; missing
+    access/unrun work stays blocked. Preserve all attempts and candidate bindings.
+11. **Final review.** Freeze the final candidate and run all required independent
+    reviewers against it. Wait for every report. Rebuilds invalidate affected
+    evidence and require fresh E2E when selected. Apply references/reviews.md.
+12. **Owner Finish/merge.** Spawn engram-approver only after required PASS evidence.
+    Validate its exact-candidate recommendation. Record actual separate owner
+    Finish/merge authority through the controller. Respect the repository's merge
+    policy; a local fast-forward implementation cannot bypass required PR/CI gates.
+
+## Structural checks and evidence
+
+Run read-only preflight --job ID --stage spec|plan|tasks before review dispatch.
+It checks metadata, references and completion prerequisites without creating
+receipts/locks or mutating the board. Structural PASS is not semantic acceptance.
+Fix deterministic errors before spending reviewer invocations. spec-check and
+plan-check are receipt-free local draft checks; preparation produces controller
+receipts bound to actual source/input bytes. Authors never maintain parallel
+readiness JSON or manually edit receipts.
+
+Before snapshot require a clean committed job worktree, current target/base,
+completed indexed implementation tasks with evidence, and any required platform
+exports. The environment fingerprint must describe what was actually used.
+The build handoff is records/operations/build-handoff-cC-rR.md, or -aA.md for
+E2E-selected attempts. Final reviews, decision and approval consume that exact
+snapshot and current applicable evidence. Changed source invalidates prior proof.
+
+Each task must deliver bounded behavior with inputs/dependencies, explicit owned
+files or platform objects, completion conditions, precise checks and evidence
+destinations. Map each AC to delivery and verification; ID presence or a catch-all
+battery is insufficient. Planned checks remain NOT_RUN until executed. Unit,
+component, contract and focused integration proof belong to build. Only Proof
+cells explicitly marked E2E: E2E-NNN defer full workflow execution.
+
+## Review limits and correction
+
+Required pre-build roster includes Red Forman and distinct author/reviewer
+invocations. Pin the roster before submission; do not choose/drop reviewers to
+obtain PASS. Spec and plan each allow three candidates per cycle including the
+initial candidate. Third CHANGES/ERROR requires owner recovery with findings
+preserved. ERROR is incomplete review, never PASS. An unchanged ERROR retry uses
+existing resume rules and cannot create a fourth candidate. Task phases use their
+own reviewed manifests; do not import the spec/plan cap or reset evidence silently.
+
+Final independent review allows two rounds. CHANGES returns the complete findings
+to the builder only when a round remains; exhaustion blocks. E2E separately allows
+three recorded reports per cycle, including blocked/unrun reports. Rework requires
+an actual owner instruction and preserves prior-cycle evidence. Resume never
+resets counters or grants missing approval. Ask the owner only where authority or
+unavailable evidence genuinely requires it.
+
+A requested review-only task still needs a separate reviewer invocation. Attribute
+its actual result and preserve disagreement. If dispatch fails, label any local
+inspection preliminary, leave the review pending and report the failed dispatch.
+Never invent a reviewer, a completed run or a substitute verdict.
+
+## Bounded concurrency
+
+Independent reviewers may run concurrently on one frozen candidate. For builders,
+use at most two only after checking completed dependencies, explicit disjoint
+write sets including shared/generated output, runtime isolation and a single
+integration writer. Unknown ownership or isolation means serial execution.
+This is orchestration policy; do not claim automatic controller enforcement.
+Integrate in dependency order and run aggregate validation on stable final bytes.
+Worker PASS alone does not establish integrated success.
+
+## Profiles and roles
+
+Choose relevant profiles: full-stack, servicenow, salesforce, sap, maximo.
+Read the matching references/<profile>.md and verify product/release/tooling at
+source; do not assume access, credentials or live mutation permission. Export
+platform changes into recorded evidence before review. Source merge does not
+authorize deployment. See references/sources.md for authoritative source guidance.
+
+Roles ship as generated thin wrappers in agents/ for Claude, Codex, Copilot and
+Pi. They read references/shared.md and one contract in references/roles/. The
+role directory is references/agents.md. Edit canonical sources and agents/roles.json;
+follow references/agent-maintenance.md to regenerate, check and refresh installed
+copies. Preserve recorded instruction digests at safe invocation checkpoints. Full mode uses separate applicable
+specialist reviewers. Light mode uses a separate red-forman invocation to author
+every required discipline report; no required report, rubric or gate disappears.
+Owner-pinned mode is binding; autonomous routing cannot silently downgrade it.
+
+## Recovery
+
+Run integrity and inspect actual source, board, invocation and evidence state.
+Preserve original records, branches, worktrees, archives and approval evidence.
+A checksum does not authenticate lost history or authorize board replacement.
+recover is preview-only. Never force-reset, replace hashes to match drift, infer
+approval or treat timeout as invocation quiescence. Recover interrupted activation
+only through its exact recorded intent under existing checks. Explicit rework
+starts a new cycle; failed/partial operations remain inspectable and fail closed.
+Unsupported historical formats require separate owner-directed reconciliation,
+not a compatibility execution path in this skill. See references/workflow.md.

@@ -1,144 +1,20 @@
-# Agent contracts
+# Agent contract directory
 
-Pi native agent definitions for these roles live in `.pi/agents/engram-*.md`;
-they point here as the authoritative contract — keep both in sync when a role
-changes. Hosts without native agents dispatch these contracts as dispatch
-envelopes.
+Every generated wrapper reads references/shared.md and exactly one role contract.
+Shared rules are authored once; the files below contain only role responsibilities.
 
-## Dispatch envelope
+| Role | Contract |
+| --- | --- |
+| engram-analyzer | references/roles/analyzer.md |
+| engram-planner | references/roles/planner.md |
+| engram-tasks | references/roles/tasks.md |
+| engram-builder | references/roles/builder.md |
+| engram-qa | references/roles/qa.md |
+| engram-approver | references/roles/approver.md |
+| engram-*-reviewer | references/roles/reviewer.md plus assigned discipline |
 
-Supply role, feature, job/cycle/round, primary repo and worktree paths, absolute job
-directory, profiles, input paths and hashes, exact allowed output paths, completion
-criteria, source snapshot, and repository instructions. Load only relevant material.
-Forbid worker board mutation, controller mutation, merging, promotion, widening
-permissions, secret exposure, and fabricated results. Read-only status/validation
-commands are permitted. Record invocation IDs in handoff notes.
-
-## Role prompts
-
-### engram-analyzer
-
-Read feature, repository evidence, instructions and selected profiles. Honor a
-registered brief before anything else: preserve its HUMAN-DECIDED rows
-verbatim, decide DELEGATED choices only inside their stated boundaries, and
-block on material OPEN rows instead of converting them. Mine
-the engram index first — past patterns, past failures, invariants, blast
-radius (recall + code-graph queries) — before judging anything new. Author
-spec.md. Establish users, behavior, scope, requirements, quality, inventory,
-permissions, integrations/data impacts, review applicability, risks and open
-decisions. Triage before routing: classify severity and workload shape, don't
-fix. Label findings as evidence-backed or assumed. Identify actual product,
-edition, version and deployment model. Separate facts from assumptions. Block
-on material unknowns instead of guessing.
-
-### engram-planner
-
-Read accepted analysis. Start every plan with a past-pattern search — recall
-how this repository solved the same shape before; a plan that ignores
-precedent is planning amnesia. Author plan.md with boundaries, interaction/data
-contracts, execution context, native configuration versus code, failure
-behavior, packaging, verification, operations, compatibility, migration,
-rollout and recovery. Make every step independently verifiable: it names the
-command that proves it. Quantify risks from the graph (change_impact, blast
-radius), not adjectives. Record alternatives for consequential decisions.
-Owner view is mandatory: plan.md opens with "What this plan does (owner view)"
-— a two-to-four sentence plain story of the execution arc plus Order / How we
-know it worked / If it goes wrong lines; product language, no IDs or paths.
-No-diagram discipline: who the change serves is BMAD-style story rows tied to
-REQ ids; the system context is a boundary contract table (inside changed /
-outside frozen / contract crossing); runtime and failure flows are
-OpenSpec-style GIVEN/WHEN/THEN scenarios naming their STEP — no mermaid by
-default, diagrams only on explicit owner request.
-Execution batches are mandatory: group implementation steps into builder
-batches (~<=12 tasks or one agent window each, boundary = committed work +
-state note); if the implementation cannot fit three batches, flag a split
-recommendation in the owner view and escalate instead of authoring a monster
-plan. Link components to AC/NFR IDs. Do not manufacture access to external
-environments. Block on insufficient analysis.
-
-### engram-tasks
-
-Read accepted analysis and plan. Author tasks.md, verification.md and release.md.
-Decompose by independently verifiable behavior. Specify dependencies, components,
-completion evidence, authorization/negative cases, export/transport and migration
-tasks, and release rehearsal. Cover every AC and NFR. Keep planned tests NOT_RUN.
-Owner view is mandatory: tasks.md opens with "What this job does (owner view)" —
-plain sentences per task, product language, no IDs, no paths, no mechanism
-vocabulary; the owner must understand the whole job from that section alone.
-Plain tasks take one line; TDD tasks take two labeled lines (RED: the test
-that fails today and why that is correct; GREEN: the change that makes it
-pass, in product terms) so the owner sees the proof shape, not just the
-change. Every task line opens with the observable change before any file or
-seam detail.
-Use engram recall to check how past task lists verified this shape, and record
-durable decomposition decisions to memory.
-
-### engram-builder
-
-Read accepted inputs and complete finding set or human note. Work the plan's
-steps in order; verify each step with the plan's own verification command —
-if the command was wrong, fix the plan and say so. Self-review every diff
-against the plan's findings and risks. Two consecutive failed verifications
-on one step → stop and report. Every fix ships its regression guard. Modify
-code, tests, configuration/metadata exports and owned progress artifacts only.
-Use assigned worktree and branch. Source work does not authorize live platform
-writes. Require explicit scope for any org, instance, SAP client or Maximo
-environment mutation. Make narrow commits without runtime state. Record exact
-check procedure, context, result, run ID and evidence. Reconcile packages with
-their source of truth. Finish with clean committed source, build.md and
-finding-resolution matrix. Do not mark unexecuted tests passed. Preserve
-accepted artifacts and earlier review rounds. Use engram recall before each
-step for past patterns and past failures, and record verified outcomes to
-memory during the run.
-
-### Specialist reviewers
-
-Use separate invocations per discipline. Inspect the actual delta, accepted
-evidence and relevant existing behavior against the same snapshot. Remain read-only
-except assigned report. Do not coordinate verdicts with builder. Give reproducible
-findings with severity, impact, evidence and checkable resolution. Recheck prior
-findings. Select PASS, CHANGES or ERROR; ERROR means incomplete review, CHANGES means
-implementation changes required. Do not pass based on another reviewer's verdict.
-Ground findings in engram recall of past patterns and prior review failures,
-and record confirmed defects to memory for future runs.
-
-### engram-qa
-
-Execute acceptance evidence independently. Run the real gates and the real
-commands behind every recorded PASS; verify behavior against real stores and
-servers, not synthetic fixtures only. Audit negative evidence: every omitted
-check carries a reason, owner and revisit trigger, or it is a FAIL. Issue
-per-AC PASS/FAIL verdicts traced to commands you personally ran. Use engram
-recall to surface prior failures and past acceptance patterns before judging,
-and record QA outcomes to memory. Write only your report; never fix what you
-find.
-
-### engram-approver
-
-Use a separate invocation. Read all required PASS reports, traceability, execution
-results, release/recovery evidence, exceptions and source snapshot. Author
-decision.md with APPROVE or ESCALATE. Reconcile contradictory evidence and require
-human ownership of risk exceptions and organization sign-offs. APPROVE recommends
-source merge; it does not authorize deployment or impersonate a human decision.
-Weigh engram recall of this repository's history and prior review failures as
-evidence, and record the decision rationale to memory.
-
-### red-forman
-
-Use this agent as a light weight reviewer for simple jobs. Instead of spinning parallel
-review agents, spawn red-forman with review tasks and the agent will take care of it.
-Factory light mode duty: red-forman is the sole review author for the round. Fill EVERY
-scaffolded review-<discipline>.md — one file per required discipline, never merged. Apply
-references/reviews.md identically to a specialist: PASS/CHANGES/ERROR verdict vocabulary,
-the severity gates, and the prior-findings recheck from round 2. Write nothing but the
-review files. Ground findings in engram recall of past patterns and prior review failures,
-and record confirmed defects to memory for future runs.
-
-## Handoffs
-
-Check readiness, input hashes, ownership, sections, traceability and source identity,
-then assess substance. Retry interrupted work only after checking existing output.
-Resume a builder when supported; otherwise reconstruct its context from persisted
-artifacts and findings, never from an assumed hidden session. Consult engram
-recall for the job's earlier rounds before resuming, and store handoff outcomes
-to memory.
+Review lenses/rubrics live once in references/reviews.md. Phase-specific state and
+correction protocols live in their phase references, not duplicated wrapper bodies.
+Agent names, descriptions, discipline and host permissions are authored in
+agents/roles.json. scripts/generate_agents.py generates four dialects and Pi
+mirrors. See references/agent-maintenance.md for generation/check/install updates.

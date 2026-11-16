@@ -9,13 +9,14 @@ profiles: {{profiles_json}}
 source_snapshot: "{{snapshot_path}}"
 input_artifacts: []
 updated_at: "{{timestamp}}"
+invocation_id: "{{invocation_id}}"
 recommendation: "ESCALATE"
 ---
 
 # Decision: {{feature_title}}
 
 <!--
-  Decision v3: the human gate artifact — answer-first, one screen. The owner
+  Decision: the human gate artifact — answer-first, one screen. The owner
   reads this ONCE and either authorizes or rejects; every claim links its
   evidence. recommendation: APPROVE|ESCALATE per the controller contract.
 -->

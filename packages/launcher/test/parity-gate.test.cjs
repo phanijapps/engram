@@ -52,6 +52,7 @@ test('FIND-platform-005 running from an installed position prints one honest lin
   const scripts = path.join(root, 'package', 'scripts');
   fs.mkdirSync(scripts, { recursive: true });
   fs.copyFileSync(CHECKER, path.join(scripts, 'check-skills-parity.cjs'));
+  fs.copyFileSync(path.join(LAUNCHER, 'scripts/skill-scope.cjs'), path.join(scripts, 'skill-scope.cjs'));
   const res = spawnSync('node', [path.join(scripts, 'check-skills-parity.cjs')], {
     encoding: 'utf8',
     timeout: 60000,

@@ -22,6 +22,7 @@
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
+const { distributedSkillDirs } = require('./scripts/skill-scope.cjs');
 
 const LAUNCHER_DIR = __dirname;
 const TAG = 'engram (engram-mcp installer)';
@@ -228,7 +229,7 @@ function copySkillAgents(destDir, dialect, pointerRoot, remove, written) {
   if (!src) return; // copySkills already reported the missing source
   assertRealDest(destDir); // FIND-security-005: agents dest roots refuse links, remove included
   const claimedBy = new Map(); // destName -> owning skill (FIND-platform-003)
-  for (const skill of deriveShippedSkills(src)) {
+  for (const skill of distributedSkillDirs(src)) {
     const agentsSrc = path.join(src, skill, 'agents');
     if (!fs.existsSync(agentsSrc)) continue;
     const rel = `.agents/skills/${skill}/`;
@@ -349,22 +350,12 @@ function writeTomlSection(file, section, body) {
   fs.writeFileSync(file, text);
 }
 
-// Skills this installer ships are auto-derived: every top-level directory
-// under the source containing SKILL.md ships (DEC-002), so newly authored
-// skills flow to delivery with no installer change. Retired names below are
+// The same Engram distribution boundary applies to packaged and dev sources.
+// New authored Engram skills flow to delivery without installer changes. Retired names below are
 // removed from existing installations — but only directories that still
 // carry our SKILL.md (a user's replacement with different frontmatter is
 // left untouched).
 const RETIRED_SKILLS = ['engram-learn', 'engram-search', 'engram-plan', 'engram-implement'];
-
-/** Every top-level source directory with a SKILL.md ships (DEC-002). */
-function deriveShippedSkills(src) {
-  return fs
-    .readdirSync(src, { withFileTypes: true })
-    .filter((d) => d.isDirectory() && fs.existsSync(path.join(src, d.name, 'SKILL.md')))
-    .map((d) => d.name)
-    .sort();
-}
 
 /** True when `to/SKILL.md` carries our name tag for `skill`. */
 function skillDirIsOurs(to, skill) {
@@ -397,12 +388,12 @@ function copySkills(destRoot, written, remove = false) {
   if (remove) {
     // --remove undoes exactly what this installer owns: delivered skills and
     // retired names alike, each name-tagged; foreign content stays (REQ-006).
-    for (const skill of [...deriveShippedSkills(src), ...RETIRED_SKILLS]) {
+    for (const skill of [...distributedSkillDirs(src), ...RETIRED_SKILLS]) {
       removeIfOurs(path.join(destRoot, skill), skill, written, 'removed');
     }
     return;
   }
-  for (const skill of deriveShippedSkills(src)) {
+  for (const skill of distributedSkillDirs(src)) {
     const from = path.join(src, skill);
     const to = path.join(destRoot, skill);
     if (!fs.existsSync(path.join(from, 'SKILL.md'))) continue;

@@ -1,0 +1,1 @@
+The harness materializes the complete role bundle and launcher from the version under test here before timing. Their source bytes/digest are recorded as subject inputs, not copied from the golden oracle. This fixture contains no secret expected body.

@@ -27,6 +27,7 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 const { spawnSync } = require('node:child_process');
+const { distributedSkillDirs } = require('../scripts/skill-scope.cjs');
 
 const SKILLS_ROOT = path.join(__dirname, '..', '..', '..', '.agents', 'skills');
 // Skill classes (DEC-P05): knowledge skills keep the full structural rule
@@ -39,11 +40,7 @@ const KNOWLEDGE_SKILLS = [
 ];
 // Derived from the authored source — the same derivation the installer and
 // the payload generator use. No third list lives here (DEC-002).
-const AUTHORED_SKILLS = fs
-  .readdirSync(SKILLS_ROOT, { withFileTypes: true })
-  .filter((d) => d.isDirectory() && fs.existsSync(path.join(SKILLS_ROOT, d.name, 'SKILL.md')))
-  .map((d) => d.name)
-  .sort();
+const AUTHORED_SKILLS = distributedSkillDirs(SKILLS_ROOT);
 const WORKFLOW_SKILLS = AUTHORED_SKILLS.filter((s) => !KNOWLEDGE_SKILLS.includes(s)).sort();
 const REQUIRED_SECTIONS = [
   /## Contract/,
@@ -131,6 +128,7 @@ test('expected set derives from the authored source, knowledge skills all ship',
     AUTHORED_SKILLS,
     fs
       .readdirSync(SKILLS_ROOT, { withFileTypes: true })
+      .filter((d) => d.name.startsWith('engram-') || d.name === 'outcome-reporting')
       .filter((d) => d.isDirectory() && fs.existsSync(path.join(SKILLS_ROOT, d.name, 'SKILL.md')))
       .map((d) => d.name)
       .sort(),
@@ -139,26 +137,18 @@ test('expected set derives from the authored source, knowledge skills all ship',
   for (const skill of KNOWLEDGE_SKILLS) {
     assert.ok(AUTHORED_SKILLS.includes(skill), `knowledge skill ${skill} missing from the authored set`);
   }
-  // The workflow class is exactly the authored set minus knowledge — today
-  // engram-bound, engram-constitution, engram-domain, engram-factory,
-  // engram-frame, engram-visualize, outcome-reporting (DEC-005; engram-domain
-  // joined with the standard-ontology-packs job; engram-bound joined with
-  // job-010's branch-bound indexing merge; engram-constitution and
-  // engram-visualize joined with the constitution/site jobs and never carried
-  // the knowledge-class structural sections, so they are workflow-class —
-  // drift fixed with job 012's GATE-F repair).
-  assert.deepEqual(
-    WORKFLOW_SKILLS,
-    [
-      'engram-bound',
-      'engram-constitution',
-      'engram-domain',
-      'engram-factory',
-      'engram-frame',
-      'engram-visualize',
-      'outcome-reporting',
-    ].sort(),
-  );
+  // Required historical workflow skills remain a floor; new authored skills
+  // join the derived workflow class without a second exhaustive catalogue.
+  const REQUIRED_WORKFLOW = [
+    'engram-bound', 'engram-constitution', 'engram-domain', 'engram-factory',
+    'engram-frame', 'engram-visualize', 'outcome-reporting',
+  ];
+  for (const skill of REQUIRED_WORKFLOW) {
+    assert.ok(WORKFLOW_SKILLS.includes(skill), `required workflow skill ${skill} missing`);
+  }
+  assert.ok(WORKFLOW_SKILLS.every((s) => !KNOWLEDGE_SKILLS.includes(s)), 'skill classes overlap');
+  assert.deepEqual([...KNOWLEDGE_SKILLS, ...WORKFLOW_SKILLS].sort(), AUTHORED_SKILLS,
+    'knowledge and workflow classes must partition the authored source');
 });
 
 for (const skill of KNOWLEDGE_SKILLS) {
@@ -340,32 +330,25 @@ test('index references carry the REA process + memorization catalog', () => {
 });
 
 // ------------------------------------------------- factory skill payload (job 002)
-test('AC-011 factory contract: every role section instructs engram recall/memory', () => {
-  const contract = fs.readFileSync(
-    path.join(SKILLS_ROOT, 'engram-factory', 'references', 'agents.md'),
-    'utf8',
-  );
-  const sections = contract.split('\n### ').slice(1);
-  const required = [
-    'engram-analyzer',
-    'engram-planner',
-    'engram-tasks',
-    'engram-builder',
-    'Specialist reviewers',
-    'engram-qa',
-    'engram-approver',
-  ];
-  const names = sections.map((s) => s.split('\n')[0]);
-  for (const r of required) {
-    assert.ok(names.includes(r), `contract section '${r}' missing`);
+test('AC-011 shared recall guidance and declared role contracts are reachable from every generated role', () => {
+  const factory = path.join(SKILLS_ROOT, 'engram-factory');
+  const manifest = JSON.parse(fs.readFileSync(path.join(factory, 'agents/roles.json'), 'utf8'));
+  const shared = fs.readFileSync(path.join(factory, manifest.shared), 'utf8');
+  assert.match(shared, /recall|memory/, 'shared contract lacks recall/memory guidance');
+  const reached = new Set();
+  for (const role of manifest.roles) {
+    const contract = manifest.contracts[role.contract];
+    assert.ok(contract, `${role.name}: undeclared role contract`);
+    const wrapper = fs.readFileSync(path.join(factory, 'agents', `${role.name}.pi.md`), 'utf8');
+    const pointers = [...wrapper.matchAll(/`(\.agents\/skills\/engram-factory\/references\/[^`]+\.md)`/g)]
+      .map((m) => m[1].replace('.agents/skills/engram-factory/', ''));
+    assert.deepEqual(pointers.sort(), [manifest.shared, contract].sort(),
+      `${role.name}: generated role must reach shared guidance and its declared contract`);
+    assert.ok(fs.statSync(path.join(factory, contract)).isFile(), `${role.name}: contract does not resolve`);
+    reached.add(contract);
   }
-  for (const section of sections) {
-    assert.match(
-      section,
-      /recall|memory/,
-      `section '${section.split('\n')[0]}' lacks engram recall/memory guidance`,
-    );
-  }
+  assert.deepEqual([...reached].sort(), [...new Set(Object.values(manifest.contracts))].sort(),
+    'every declared canonical role contract must be used by the generated roster');
 });
 
 test('DEC-P06 factory skill ships the four-dialect specialist payload', () => {

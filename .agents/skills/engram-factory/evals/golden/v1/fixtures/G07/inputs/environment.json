@@ -1,0 +1,11 @@
+{
+  "product": "ServiceNow business-rule fixture",
+  "release": null,
+  "instance_url": null,
+  "credentials": null,
+  "application_scope": "x_eval",
+  "live_write_authority": false,
+  "local_javascript_syntax_available": true,
+  "local_stub_checks_available": true,
+  "live_e2e_available": false
+}

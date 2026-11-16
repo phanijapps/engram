@@ -33,11 +33,8 @@ function symlinksUnder(dir) {
   walk(dir, '');
   return out;
 }
-const AUTHORED_SKILLS = fs
-  .readdirSync(AUTHORED, { withFileTypes: true })
-  .filter((d) => d.isDirectory() && fs.existsSync(path.join(AUTHORED, d.name, 'SKILL.md')))
-  .map((d) => d.name)
-  .sort();
+const { distributedSkillDirs } = require('../scripts/skill-scope.cjs');
+const AUTHORED_SKILLS = distributedSkillDirs(AUTHORED);
 
 /** A private launcher copy staged like a dev checkout (launcher + authored
  *  tree at the ../../ position the generator resolves), so parallel test
@@ -214,4 +211,25 @@ test('RISK-001 stale payload aborts: verify-launcher-package.py asserts the payl
   );
   assert.notEqual(verify.status, 0, 'verifier must fail on an empty payload');
   assert.match(verify.stderr, /packed skill set != authored set/, `unexpected failure: ${verify.stderr}`);
+});
+
+test('only Engram skills enter the tarball; local skills and stale payload stay out', () => {
+  const { pkg, tmpRoot } = launcherCopy('engram-only');
+  const source = path.join(tmpRoot, '.agents', 'skills');
+  for (const name of ['better-interface', 'unrelated-local-probe']) {
+    const dir = path.join(source, name);
+    fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(path.join(dir, 'SKILL.md'), `---\nname: ${name}\n---\nlocal only\n`);
+    const stale = path.join(pkg, 'skills', name);
+    fs.mkdirSync(stale, { recursive: true });
+    fs.writeFileSync(path.join(stale, 'SKILL.md'), 'stale payload');
+  }
+  const { members } = packDir(pkg);
+  assert.ok(!members.some((m) => /package\/skills\/(?:better-interface|unrelated-local-probe)\//.test(m)));
+  assert.ok(members.includes('package/skills/engram-factory/SKILL.md'));
+  assert.ok(members.includes('package/skills/outcome-reporting/SKILL.md'));
+  for (const name of ['better-interface', 'unrelated-local-probe']) {
+    assert.match(fs.readFileSync(path.join(source, name, 'SKILL.md'), 'utf8'), /local only/);
+    assert.ok(!fs.existsSync(path.join(pkg, 'skills', name)));
+  }
 });

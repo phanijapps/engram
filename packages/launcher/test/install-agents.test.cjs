@@ -21,11 +21,8 @@ const path = require('node:path');
 const LAUNCHER = path.join(__dirname, '..');
 const REPO = path.join(LAUNCHER, '..', '..');
 const AUTHORED = path.join(REPO, '.agents', 'skills');
-const AUTHORED_SKILLS = fs
-  .readdirSync(AUTHORED, { withFileTypes: true })
-  .filter((d) => d.isDirectory() && fs.existsSync(path.join(AUTHORED, d.name, 'SKILL.md')))
-  .map((d) => d.name)
-  .sort();
+const { distributedSkillDirs } = require('../scripts/skill-scope.cjs');
+const AUTHORED_SKILLS = distributedSkillDirs(AUTHORED);
 assert.ok(AUTHORED_SKILLS.length >= 6, `authored set too small: ${AUTHORED_SKILLS}`);
 
 /** Copy the launcher without its generated payload and tests (parallel
@@ -146,17 +143,17 @@ test('AC-001 unknown host exits non-zero with usage', () => {
 // ------------------------------------------------- AC-002 fixture skill flow
 test('AC-002 a fixture skill added to the source ships with no installer change', () => {
   const { pkg, home, proj } = sandbox('fixture');
-  const fixture = path.join(pkg, 'skills', 'fixture-probe');
+  const fixture = path.join(pkg, 'skills', 'engram-fixture-probe');
   fs.mkdirSync(fixture, { recursive: true });
   fs.writeFileSync(
     path.join(fixture, 'SKILL.md'),
-    '---\nname: fixture-probe\ndescription: Fixture skill proving auto-derived delivery; trigger on install rerun.\n---\n\n# fixture-probe\n\nFixture body.\n',
+    '---\nname: engram-fixture-probe\ndescription: Fixture skill proving auto-derived delivery; trigger on install rerun.\n---\n\n# engram-fixture-probe\n\nFixture body.\n',
   );
   const before = sha(path.join(pkg, 'agent-install.js'));
   const res = run(pkg, ['pi'], { cwd: proj, home });
   assert.equal(res.status, 0, `stderr: ${res.stderr}`);
   assert.ok(
-    fs.existsSync(path.join(home, '.pi', 'agent', 'skills', 'fixture-probe', 'SKILL.md')),
+    fs.existsSync(path.join(home, '.pi', 'agent', 'skills', 'engram-fixture-probe', 'SKILL.md')),
     'fixture skill not delivered',
   );
   assert.equal(sha(path.join(pkg, 'agent-install.js')), before, 'installer file changed');
@@ -543,4 +540,33 @@ test('FIND-security-007 ≡ FIND-code-006 dev-fallback copy never delivers symli
     'link entry present under any spelling',
   );
   assert.match(res.stdout, /dev-link is a symlink — not shipped/, 'refusal must be loud');
+});
+
+test('dev fallback installs only Engram skills and preserves unrelated local entries on remove', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'engram-only-dev-'));
+  const pkg = path.join(root, 'packages', 'launcher');
+  copyLauncher(pkg);
+  const home = path.join(root, 'home');
+  const proj = path.join(root, 'proj');
+  fs.mkdirSync(home);
+  fs.mkdirSync(proj);
+  const source = path.join(root, '.agents', 'skills');
+  fs.mkdirSync(source, { recursive: true });
+  fs.cpSync(AUTHORED, source, { recursive: true });
+  const local = 'unrelated-local-probe';
+  const marker = `---\nname: ${local}\n---\nforeign skill\n`;
+  fs.mkdirSync(path.join(source, local));
+  fs.writeFileSync(path.join(source, local, 'SKILL.md'), marker);
+  const destination = path.join(home, '.claude', 'skills');
+  const first = run(pkg, ['claude'], { cwd: proj, home });
+  assert.equal(first.status, 0, first.stderr);
+  assert.ok(!fs.existsSync(path.join(destination, local)));
+  assert.ok(!fs.existsSync(path.join(destination, 'better-interface')));
+  assert.ok(fs.existsSync(path.join(destination, 'engram-factory', 'SKILL.md')));
+  fs.mkdirSync(path.join(destination, local));
+  fs.writeFileSync(path.join(destination, local, 'SKILL.md'), marker);
+  const removed = run(pkg, ['claude', '--remove'], { cwd: proj, home });
+  assert.equal(removed.status, 0, removed.stderr);
+  assert.equal(fs.readFileSync(path.join(destination, local, 'SKILL.md'), 'utf8'), marker);
+  assert.equal(fs.readFileSync(path.join(source, local, 'SKILL.md'), 'utf8'), marker);
 });

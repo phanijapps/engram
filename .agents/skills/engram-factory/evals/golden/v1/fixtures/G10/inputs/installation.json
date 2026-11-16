@@ -1,0 +1,6 @@
+{
+  "target": "disposable installation created by harness",
+  "running_invocation": "separately supplied fixture invocation pinned to D0",
+  "permitted": "edit isolated shared.md, run actual generation/prepack/check and refresh disposable install",
+  "forbidden": "real HOME/project installations, editing wrappers instead of canonical source, auto-upgrading the pinned invocation, accepting owner Finish"
+}

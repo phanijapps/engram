@@ -105,11 +105,13 @@ engram-mcp install --agent claude
 ```
 
 Adds skills, hooks, review workflows, and the factory specialist subagents.
-The skill set is derived from the package's authored tree at build time —
-currently eight: `engram-index`, `engram-know`, `engram-mem`,
-`engram-distill`, `engram-bound` (branch-bound index lifecycle),
-`outcome-reporting`, plus the software-factory pair `engram-factory` and
-`engram-frame`. New skills flow to delivery with no installer change;
+The skill payload is generated from the authored `.agents/skills` tree at
+build time. Only `engram-*` skills and Engram's `outcome-reporting` companion
+ship; unrelated local skills such as `better-*` remain local. Generation,
+parity checks and conformance tests share `scripts/skill-scope.cjs` for this
+boundary. Every selected skill's full folder is copied, including the factory
+eval dataset. The installer reads this packaged payload, not the developer's
+local skills directory. New Engram skills flow to delivery with no installer change;
 retired skills from older installs are removed automatically unless you
 replaced them. Uninstall with `engram-mcp install --agent <host> --remove`
 — removal is name-tagged, so files you replaced or added yourself are left

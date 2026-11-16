@@ -10,7 +10,7 @@ Repo-side published-surface reconciliation. Fails when:
     does not exist on disk (declared == shipped).
 Network publication checks (npm/crates.io state) are deliberately out of
 scope for blocking CI (declared in the distributions registry, run scheduled).
-Exit 1 on violation. Stdlib only.
+Exit 1 on violation. Uses the launcher's Node skill selection policy.
 """
 import json
 import subprocess
@@ -35,7 +35,14 @@ def skill_dirs(base: Path) -> set[str]:
 
 
 def main() -> int:
-    authored = skill_dirs(ROOT / ".agents/skills")
+    try:
+        authored = set(json.loads(subprocess.check_output([
+            "node", str(ROOT / "packages/launcher/scripts/skill-scope.cjs"),
+            str(ROOT / ".agents/skills"),
+        ], text=True)))
+    except (OSError, subprocess.CalledProcessError, ValueError) as error:
+        print(f"distribution-drift: cannot determine authored Engram skill set: {error}", file=sys.stderr)
+        return 1
     installed = skill_dirs(ROOT / "packages/launcher/skills")
 
     only_authored = authored - installed

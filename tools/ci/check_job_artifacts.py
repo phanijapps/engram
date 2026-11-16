@@ -44,6 +44,17 @@ for job_dir in sorted(Path(".engram-factory/jobs").glob("[0-9]*-*")):
             findings.append(f"{jid}/{name}: no frontmatter (pre-adoption format, DW-5 advisory)")
         else:
             fm = text.split("---", 2)[1] if text.count("---") >= 2 else ""
+            if name in {"spec.md", "plan.md"} and re.search(r'^(?:spec|plan)_format:\s*"compact-v1"\s*$', fm, re.M):
+                try:
+                    import importlib.util
+                    module_path = ROOT / ".agents/skills/engram-factory/scripts/factory.py"
+                    module_spec = importlib.util.spec_from_file_location("artifact_factory", module_path)
+                    module = importlib.util.module_from_spec(module_spec)
+                    module_spec.loader.exec_module(module)
+                    resolved, _ = module.metadata(job_dir / name)
+                    fm = "\n".join(key + ": " + json.dumps(value) for key, value in resolved.items())
+                except (ValueError, OSError, KeyError, TypeError, json.JSONDecodeError) as exc:
+                    findings.append(f"{jid}/{name}: invalid compact artifact: {exc}")
             for key in ("schema_version", "artifact", "job_id", "status", "size_tier"):
                 if not re.search(rf"^{key}:", fm, re.M):
                     findings.append(f"{jid}/{name}: frontmatter missing key `{key}`")
@@ -59,7 +70,7 @@ for job_dir in sorted(Path(".engram-factory/jobs").glob("[0-9]*-*")):
                     rail_ids = set()
                     for rail in Path("docs/constitution").rglob("*.md"):
                         for line in rail.read_text(errors="replace").splitlines():
-                            for rid in re.findall(r"\b([A-Z]{2}-\d{3})\b", line):
+                            for rid in re.findall(r"\b((?:[A-Z]{2,}-\d{3}|RULE-\d+))\b", line):
                                 rail_ids.add(rid)
                     for rid in rules:
                         if rid not in rail_ids:

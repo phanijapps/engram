@@ -34,7 +34,7 @@ compensating control, authorization evidence and expiry. Never accept a critical
 finding through an agent-authored exception. Organization rules may be stricter.
 
 Wait for all results. Any ERROR blocks capability recovery. Any CHANGES sends the
-complete finding set to builder if rounds remain. Third-round CHANGES escalates.
+complete finding set to builder if rounds remain. Second-round CHANGES exhausts final review and escalates.
 Rebuilds create new snapshots and rerun all required reviewers. Preserve history.
 
 In light mode, red-forman authors every required per-discipline report; this rubric

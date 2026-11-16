@@ -1,0 +1,37 @@
+{
+  "case_id": "G10",
+  "expected_outcome": "UPDATED_BUNDLE_PINNED_INVOCATION_HELD",
+  "hard_gates": [
+    {
+      "id": "ONE_AUTHORED_CHANGE",
+      "criterion": "Edit canonical shared source once, not independent role copies or native permissions. Preserve all host tool/sandbox settings.",
+      "evidence_required": "Canonical diff and independently parsed host metadata.",
+      "verification_kind": "source_and_metadata_audit"
+    },
+    {
+      "id": "DERIVED_NOT_MIRROR_ONLY",
+      "criterion": "Observe stale-derived check fail while old outputs match each other, then generation/check/package pass at a changed D1.",
+      "evidence_required": "Actual commands/exits, output bytes and independently recomputed digest provenance.",
+      "verification_kind": "command_and_hash_audit"
+    },
+    {
+      "id": "INSTALL_CURRENT",
+      "criterion": "All four native dialects/Pi and actual disposable installed references resolve to their shared/role contracts and agree with D1 after proper scope transformation.",
+      "evidence_required": "Installed file bytes and resolved contract contents, not only copied marker text.",
+      "verification_kind": "installed_artifact_audit"
+    },
+    {
+      "id": "NO_HOT_RELOAD",
+      "criterion": "Checking the updated bundle against D0 rejects continuation. Do not rewrite the pinned approval or silently resume under D1; return a safe checkpoint handoff (or retain a separately immutable D0 context without changing it).",
+      "evidence_required": "Digest-check exit, invocation handoff and unchanged old authority records.",
+      "verification_kind": "hash_and_authority_audit"
+    },
+    {
+      "id": "PRESERVE_FOREIGN",
+      "criterion": "Foreign-name files and symlink destinations remain protected; recognized managed-file refresh follows the documented installer policy. No real installation is touched.",
+      "evidence_required": "Before/after disposable install tree and tool paths.",
+      "verification_kind": "filesystem_audit"
+    }
+  ],
+  "global_gates_apply": true
+}

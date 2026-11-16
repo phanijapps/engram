@@ -75,7 +75,28 @@ Every question is easy to answer:
 
 ## Workflow
 
-### 1. Classify the ambiguity
+### 1. Ground scope, then classify ambiguity
+
+For existing multi-surface UI work, inspect current source at an identified
+revision before proposing scope: navigation, destinations, meaningful subviews,
+settings, entry points and workflows. Classify source-grounded capabilities as
+user-facing, shared support, infrastructure, conditional or excluded; endpoints
+do not automatically become screens. Inspect the named reference's layout and
+settings with source revision, screenshots where available, observed versus
+inferred findings and explicit unavailable/live-inspection gaps. Never claim
+visual parity from source or a historical screenshot alone.
+
+Present an owner-reviewable strike-list: actors/jobs, screens/subviews,
+representative journeys, live versus illustrative actions, themes, wide/narrow
+review contexts and exclusions. Retain explicit owner requirements verbatim;
+separate optional design suggestions. Ask only material unresolved choices.
+Existing clear intent permits zero extra clarifiers but still requires evidence
+inventory and meaningful coverage. Vague intent requires focused outcome/scope
+questions grounded in that inventory. No fixed number of questions substitutes
+for coverage; small localized work stays small. Inventory may be retained in the
+brief or linked evidence; one canonical functional spec follows registration.
+
+### 1a. Classify the ambiguity
 
 Fast path when the request names a problem, a checkable outcome, a boundary,
 and its decision owner. Full path when any is missing — signals: "better /
@@ -142,7 +163,11 @@ rows = not ready; stop.
 The brief's ask becomes the feature file. Give the orchestrator both paths:
 `factory.py create --feature-file <ask> --brief-file <brief>`. The controller
 registers the brief as an immutable, REQUIRED analysis input; analysis honors
-its ledger. The interview is over; the factory asks questions now, not you.
+its ledger. The factory analyzer must reconcile capability → screen/subview → actor/job →
+journey → states → REQ/AC → evidence before ready, per the factory readiness
+contract. Unresolved in-scope omissions block readiness. Discovery can return
+focused questions to the owner through the orchestrator; do not treat a ratified
+high-level brief as proof that every screen has been specified.
 
 ## When it fails
 
@@ -158,8 +183,8 @@ its ledger. The interview is over; the factory asks questions now, not you.
 - Blank-page questions ("what do you want?") — you MUST offer grounded options instead.
 - Solutioning in the brief — including an owner's own mechanism recorded as
   intent instead of translated to behavior or parked as a suggestion.
-- Owner-fixed constraints without an external source — internal preferences
-  MUST be recorded as suggestions or delegations, never as constraints.
+- Downgrading an explicit owner-fixed constraint to a suggestion merely because
+  it is an internal preference. Capture its owner authority and exact words.
 - Recording DELEGATED on hesitation, or downgrading an OPEN row without a
   verbatim owner-approved deferral in the row.
 - A technical owner turning the brief into a design doc: if a statement names

@@ -2,11 +2,14 @@
 /**
  * Skills parity check (job 002, REQ-007 / AC-005 / DEC-P01 / RISK-003):
  * a deterministic check that fails loudly on any delivered-vs-authored
- * drift. Three assertions:
+ * drift. Checks:
  *
+ *   0. canonical generation — declared factory roles require a read-only
+ *      canonical generator check, even if all generated copies agree.
  *   1. payload parity — when the generated payload (packages/launcher/skills)
  *      exists, its skill set, hygiene, and every file byte must equal the
- *      authored tree (.agents/skills). When the payload has not been
+ *      authored Engram distribution set (.agents/skills, skill-scope.cjs).
+ *      Local unrelated skills must not appear in the payload. When it has not been
  *      generated (prepack not run — it is gitignored output), the payload
  *      assertions are honestly skipped, not faked.
  *   2. wrapper parity — every committed .pi/agents/engram-*.md must be
@@ -25,6 +28,8 @@
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
+const { spawnSync } = require('node:child_process');
+const { distributedSkillDirs, isEngramSkill } = require('./skill-scope.cjs');
 
 const REPO = path.resolve(__dirname, '..', '..', '..');
 const DEFAULTS = {
@@ -32,15 +37,6 @@ const DEFAULTS = {
   payload: path.join(__dirname, '..', 'skills'),
   piAgents: path.join(REPO, '.pi', 'agents'),
 };
-
-/** Directories with a SKILL.md — the same derivation the installer uses. */
-function skillDirs(root) {
-  return fs
-    .readdirSync(root, { withFileTypes: true })
-    .filter((d) => d.isDirectory() && fs.existsSync(path.join(root, d.name, 'SKILL.md')))
-    .map((d) => d.name)
-    .sort();
-}
 
 const isHygiene = (p) => path.basename(p) === '__pycache__' || p.endsWith('.pyc');
 
@@ -87,7 +83,24 @@ function filesUnder(dir, { skipHygiene = false } = {}) {
 /** Run all parity assertions against explicit roots; returns error list. */
 function checkParity({ source, payload, piAgents }) {
   const errors = [];
-  const authored = skillDirs(source);
+  for (const entry of fs.readdirSync(source, { withFileTypes: true })) {
+    if (entry.isSymbolicLink() && isEngramSkill(entry.name)) {
+      errors.push(`authored tree contains symlink (not shippable): ${entry.name}`);
+    }
+  }
+  const authored = distributedSkillDirs(source);
+  const factory = path.join(source, 'engram-factory');
+  const manifest = path.join(factory, 'agents', 'roles.json');
+  const canonicalDeclared = fs.existsSync(manifest);
+  if (canonicalDeclared) {
+    const result = spawnSync('python3', [path.join(factory, 'scripts', 'generate_agents.py'),
+      '--skill-root', factory, '--repo-root', path.resolve(source, '..', '..'), '--check'],
+    { encoding: 'utf8', timeout: 60000, env: { ...process.env, PYTHONDONTWRITEBYTECODE: '1' } });
+    if (result.error || result.status !== 0) {
+      errors.push(`canonical agents generation check failed: ${result.error || result.stderr || result.stdout}`.trim());
+    }
+  }
+
 
   // --- 1. payload parity (when the generated payload exists) ---
   if (fs.existsSync(payload)) {
@@ -138,8 +151,10 @@ function checkParity({ source, payload, piAgents }) {
   // --- 1b. authored-tree symlink rejection (FIND-security-003) ---
   // The generator drops symlinks, so an authored link would silently vanish
   // from delivery — flag it here and force the author to resolve it.
-  for (const link of symlinksUnder(source)) {
-    errors.push(`authored tree contains symlink (not shippable): ${link}`);
+  for (const skill of authored) {
+    for (const link of symlinksUnder(path.join(source, skill))) {
+      errors.push(`authored tree contains symlink (not shippable): ${skill}/${link}`);
+    }
   }
 
   // --- 2. wrapper parity (DEC-P01) ---
@@ -173,7 +188,7 @@ function checkParity({ source, payload, piAgents }) {
     }
   }
 
-  return { errors, authored, payloadPresent: fs.existsSync(payload), piDialects };
+  return { errors, authored, payloadPresent: fs.existsSync(payload), piDialects, canonicalDeclared };
 }
 
 function main() {
@@ -238,7 +253,7 @@ function main() {
     process.exit(1);
   }
 
-  const { errors, authored, payloadPresent, piDialects } = checkParity(DEFAULTS);
+  const { errors, authored, payloadPresent, piDialects, canonicalDeclared } = checkParity(DEFAULTS);
   if (errors.length > 0) {
     console.error(`skills parity: FAIL (${errors.length} difference(s))`);
     for (const e of errors) console.error(`  - ${e}`);
@@ -248,8 +263,9 @@ function main() {
     ? `payload present: ${authored.length}/${authored.length} skills byte-identical, hygiene clean`
     : 'payload not generated (prepack not run) — payload assertions skipped honestly';
   console.log(
-    `skills parity: OK (authored ${authored.length} skills; ${payloadLine}; ${piDialects.length} pi wrappers byte-identical)`,
+    `skills parity: OK (authored ${authored.length} skills; ${payloadLine}; ${piDialects.length} pi wrappers byte-identical; canonical agents ${canonicalDeclared ? 'verified' : 'not declared — generation check skipped'})`,
   );
 }
 
-main();
+if (require.main === module) main();
+module.exports = { checkParity };

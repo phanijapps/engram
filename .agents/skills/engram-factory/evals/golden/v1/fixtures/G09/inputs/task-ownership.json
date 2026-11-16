@@ -1,0 +1,36 @@
+{
+  "tasks": [
+    {
+      "id": "TASK-001",
+      "owns": [
+        "plugin_a.py",
+        "test_a.py"
+      ],
+      "depends_on": [],
+      "proof": "python3 -m unittest test_a -v"
+    },
+    {
+      "id": "TASK-002",
+      "owns": [
+        "plugin_b.py",
+        "test_b.py"
+      ],
+      "depends_on": [],
+      "proof": "python3 -m unittest test_b -v"
+    },
+    {
+      "id": "TASK-003",
+      "owns": [
+        "registry.json"
+      ],
+      "depends_on": [
+        "TASK-001",
+        "TASK-002"
+      ],
+      "proof": "python3 check_all.py"
+    }
+  ],
+  "max_builders": 2,
+  "integration_writer": "separate assigned builder for TASK-003 after dependencies",
+  "never_parent_source_edits": true
+}

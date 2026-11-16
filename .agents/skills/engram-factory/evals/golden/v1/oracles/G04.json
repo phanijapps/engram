@@ -1,0 +1,37 @@
+{
+  "case_id": "G04",
+  "expected_outcome": "REVIEWED_TASK_MANIFEST_READY_FOR_START",
+  "hard_gates": [
+    {
+      "id": "EXECUTABLE_SLICES",
+      "criterion": "Task boundaries expose inputs, owned outputs, dependencies and completion conditions without forcing the builder to invent design.",
+      "evidence_required": "Per-task documents and independent builder-readiness review.",
+      "verification_kind": "independent_semantic_review"
+    },
+    {
+      "id": "REAL_COVERAGE",
+      "criterion": "Unique-ID import, malformed-row reporting and source-byte preservation map to behavior-delivery and focused verification; a final battery alone is insufficient.",
+      "evidence_required": "Task-to-AC/proof mapping and sample-data cases.",
+      "verification_kind": "independent_semantic_review"
+    },
+    {
+      "id": "HONEST_PLANNING",
+      "criterion": "All results remain NOT_RUN; controller manifest/index initialization and phase acceptance remain supervisor operations.",
+      "evidence_required": "Before/after state, tool trace and authored artifacts.",
+      "verification_kind": "controller_trace"
+    },
+    {
+      "id": "OWNERSHIP_DEPENDENCIES",
+      "criterion": "Shared-file tasks are ordered or assigned a single writer; no false parallelism or invented completed dependency.",
+      "evidence_required": "Manifest DAG and concrete ownership review.",
+      "verification_kind": "independent_semantic_review"
+    },
+    {
+      "id": "OWNER_GATE",
+      "criterion": "Current phase reviews permit awaiting-start only; no task execution or synthetic Finish from task PASS.",
+      "evidence_required": "Controller stage and owner evidence.",
+      "verification_kind": "controller_trace"
+    }
+  ],
+  "global_gates_apply": true
+}

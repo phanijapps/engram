@@ -4,12 +4,23 @@ pub mod config;
 #[cfg(feature = "embedded")]
 mod embedded;
 pub mod error;
+mod graph;
+mod identity;
+pub mod inventory;
+mod knowledge;
+mod memory;
 pub mod ownership;
+pub mod receipts;
+mod records;
 mod runtime;
 mod schema;
 #[cfg(feature = "service")]
 mod service;
+pub mod session;
+pub mod source_ledger;
+pub mod transaction;
 mod transport;
+mod vocabulary;
 
 use codec::Partition;
 use error::{Error, Result};
@@ -22,11 +33,18 @@ use transport::Transport;
 #[derive(Clone)]
 pub struct HelixStore {
     inner: Arc<StoreInner>,
+    session: Option<Arc<session::SessionState>>,
+    reentrant: bool,
+    step_id: Option<String>,
 }
 struct StoreInner {
     transport: Arc<dyn Transport>,
     partition: Partition,
     lease: Option<ScopeLease>,
+    reservation: std::sync::atomic::AtomicBool,
+    cleanup_only: std::sync::atomic::AtomicBool,
+    uncertain_receipts:
+        std::sync::Mutex<std::collections::BTreeMap<String, receipts::PendingReceipt>>,
 }
 impl HelixStore {
     #[cfg(feature = "embedded")]
@@ -70,7 +88,13 @@ impl HelixStore {
                     transport,
                     partition,
                     lease,
+                    reservation: std::sync::atomic::AtomicBool::new(false),
+                    cleanup_only: std::sync::atomic::AtomicBool::new(false),
+                    uncertain_receipts: std::sync::Mutex::new(std::collections::BTreeMap::new()),
                 }),
+                session: None,
+                reentrant: false,
+                step_id: None,
             }),
             Err(error) => {
                 if transport.close().is_err() {
@@ -83,6 +107,12 @@ impl HelixStore {
         }
     }
     pub fn put_sentinel(&self, public_id: &str, payload: &str) -> Result<()> {
+        if self.session.is_some() {
+            return Err(Error::InvalidConfig(
+                "sentinel writes cannot join domain sessions",
+            ));
+        }
+        let _session = self.scope_session()?;
         let lease = self.inner.lease.as_ref().ok_or(Error::ReadOnly)?;
         schema::write_payload(
             self.inner.transport.as_ref(),
@@ -94,6 +124,7 @@ impl HelixStore {
         )
     }
     pub fn get_sentinel(&self, public_id: &str) -> Result<Option<String>> {
+        self.admit_logical_work()?;
         schema::read_payload(
             self.inner.transport.as_ref(),
             &self.inner.partition,
@@ -104,6 +135,7 @@ impl HelixStore {
     /// Reconcile an uncertain sentinel write using its persisted exact operation receipt.
     /// Successful reconciliation permits cleanup only, never implicit logical replay.
     pub fn reconcile_sentinel(&self, public_id: &str, operation_id: &str) -> Result<()> {
+        self.admit_logical_work()?;
         schema::reconcile_sentinel(
             self.inner.transport.as_ref(),
             &self.inner.partition,

@@ -652,32 +652,6 @@ impl SqlKnowledgeStore {
     }
 }
 
-/// Caps the number of relationships `validate_graph` scans, so advisory
-/// validation over an oversized graph stays bounded.
-pub(crate) const VALIDATE_RELATIONSHIP_LIMIT: usize = 5_000;
-
-/// Builds the advisory provenance stamped on every validation finding. Validation
-/// is deterministic and carries no input evidence, so a fixed system actor is used.
-pub(crate) fn validation_provenance(
-    ontology_id: &OntologyId,
-    now: chrono::DateTime<Utc>,
-) -> Provenance {
-    Provenance {
-        source: format!("ontology:{ontology_id}"),
-        actor: Actor {
-            id: Id::from("engram-ontology-validator"),
-            kind: ActorKind::System,
-            display_name: Some("Ontology validator".to_owned()),
-            metadata: None,
-        },
-        observed_at: now,
-        evidence: Vec::new(),
-        derivations: Vec::new(),
-        confidence: Some(1.0),
-        method: Some("ontology_validation".to_owned()),
-    }
-}
-
 /// Loads the `KnowledgeSource` for a given `source_id` (used by document and
 /// chunk visibility resolution).
 fn source_by_id(

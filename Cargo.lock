@@ -1828,10 +1828,15 @@ dependencies = [
 name = "engram-store-helixdb"
 version = "0.1.0"
 dependencies = [
+ "async-trait",
+ "chrono",
  "engram-domain",
+ "engram-knowledge",
+ "engram-memory",
  "engram-runtime",
  "foyer",
  "fs2",
+ "futures",
  "helix-db",
  "libc",
  "reqwest 0.13.4",

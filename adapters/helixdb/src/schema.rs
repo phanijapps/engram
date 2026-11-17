@@ -92,7 +92,13 @@ pub(crate) fn write_payload(
         .guard()
         .var_as(
             "existing",
-            g().n_with_label_where(label, SourcePredicate::eq("key", key.clone())),
+            g().n_with_label_where(
+                label,
+                SourcePredicate::and(vec![
+                    SourcePredicate::eq("key", key.clone()),
+                    SourcePredicate::eq("partition", partition.discriminator()?),
+                ]),
+            ),
         )
         .var_as_if(
             "updated",
@@ -143,7 +149,18 @@ pub(crate) fn ensure_index(
     label: &str,
     lease: Option<&ScopeLease>,
 ) -> Result<()> {
-    let spec = IndexSpec::node_unique_equality(label, "key");
+    ensure_spec(
+        transport,
+        IndexSpec::node_unique_equality(label, "key"),
+        lease,
+    )
+}
+
+fn ensure_spec(
+    transport: &dyn Transport,
+    spec: IndexSpec,
+    lease: Option<&ScopeLease>,
+) -> Result<()> {
     let batch = match lease {
         Some(lease) => lease.guard().var_as_if(
             "index",
@@ -209,6 +226,58 @@ pub(crate) fn initialize(
 ) -> Result<()> {
     ensure_index(transport, MARKER_LABEL, Some(lease))?;
     ensure_index(transport, SENTINEL_LABEL, Some(lease))?;
+    for family in crate::records::FAMILIES {
+        ensure_index(transport, family, Some(lease))?;
+        for field in ["partition", "public_id", "logical_store"] {
+            ensure_spec(
+                transport,
+                IndexSpec::node_equality(*family, field),
+                Some(lease),
+            )?;
+        }
+    }
+    for (family, fields) in [
+        (crate::records::GRAPH, vec!["stableSourceKey"]),
+        (crate::records::ENTITY, vec!["graphId", "_identity_key"]),
+        (
+            crate::records::RELATIONSHIP,
+            vec!["graphId", "subject_id", "object_id", "_relationship_key"],
+        ),
+        (crate::records::ENDPOINT, vec!["entity_id"]),
+        (crate::records::DOCUMENT, vec!["sourceId"]),
+        (crate::records::CHUNK, vec!["documentId", "sourceId"]),
+        (crate::records::EVENT, vec!["memoryId"]),
+        (
+            crate::records::LEDGER,
+            vec!["source_id", "batch_key", "record_id"],
+        ),
+        (crate::records::UNRESOLVED, vec!["graphId", "status"]),
+        (crate::records::CLASS, vec!["ontologyId"]),
+        (crate::records::PROPERTY, vec!["ontologyId"]),
+        (crate::records::AXIOM, vec!["ontologyId"]),
+        (crate::records::CONCEPT, vec!["schemeId"]),
+    ] {
+        for field in fields {
+            ensure_spec(
+                transport,
+                IndexSpec::node_equality(family, field),
+                Some(lease),
+            )?;
+        }
+    }
+    for field in [
+        "partition",
+        "relationship_id",
+        "graphId",
+        "subject_id",
+        "object_id",
+    ] {
+        ensure_spec(
+            transport,
+            IndexSpec::edge_equality(crate::records::EDGE, field),
+            Some(lease),
+        )?;
+    }
     if !check_marker(transport, partition)? {
         write_payload(
             transport,

@@ -7,13 +7,15 @@
 use async_trait::async_trait;
 use chrono::Utc;
 use engram_domain::*;
-use engram_knowledge::OntologyRepository;
+use engram_knowledge::{
+    OntologyRepository,
+    ontology_validation::{VALIDATE_RELATIONSHIP_LIMIT, validate_visible_graph},
+};
 use engram_runtime::CoreResult;
 use rusqlite::OptionalExtension;
 
 use crate::knowledge::{
     schema::json_error, schema::sql_error, scope::scope_allows, service::SqlKnowledgeStore,
-    service::VALIDATE_RELATIONSHIP_LIMIT, service::validation_provenance,
 };
 
 #[async_trait]
@@ -156,24 +158,20 @@ impl OntologyRepository for SqlKnowledgeStore {
             return Ok(Vec::new());
         }
 
-        // Declared vocabulary = property labels + URIs (lowercased).
-        let mut declared: std::collections::HashSet<String> = std::collections::HashSet::new();
         let mut property_statement = connection
             .prepare("SELECT record_json FROM ontology_properties WHERE ontology_id = ?1")
             .map_err(sql_error)?;
-        let property_rows = property_statement
+        let properties = property_statement
             .query_map(rusqlite::params![ontology_id.to_string()], |row| {
                 row.get::<_, String>(0)
             })
-            .map_err(sql_error)?;
-        for row in property_rows {
-            let json = row.map_err(sql_error)?;
-            let property = serde_json::from_str::<OntologyProperty>(&json).map_err(json_error)?;
-            declared.insert(property.label.to_lowercase());
-            declared.insert(property.uri.to_lowercase());
-        }
+            .map_err(sql_error)?
+            .map(|row| {
+                serde_json::from_str::<OntologyProperty>(&row.map_err(sql_error)?)
+                    .map_err(json_error)
+            })
+            .collect::<CoreResult<Vec<_>>>()?;
         drop(property_statement);
-
         let now = Utc::now();
         // Bound the scan so an oversized graph cannot make advisory validation
         // unbounded: read LIMIT+1 rows, and if that many come back, report
@@ -199,51 +197,20 @@ impl OntologyRepository for SqlKnowledgeStore {
         drop(relationship_statement);
         let truncated = relationship_rows.len() > VALIDATE_RELATIONSHIP_LIMIT;
 
-        let mut findings = Vec::new();
-        for json in relationship_rows
+        let relationships = relationship_rows
             .into_iter()
             .take(VALIDATE_RELATIONSHIP_LIMIT)
-        {
-            let relationship =
-                serde_json::from_str::<KnowledgeRelationship>(&json).map_err(json_error)?;
-            if !scope_allows(&relationship.scope, scope) {
-                continue;
-            }
-            if declared.contains(&relationship.predicate.to_lowercase()) {
-                continue;
-            }
-            findings.push(OntologyValidationFinding {
-                id: format!("finding-{ontology_id}-{}", relationship.id),
-                ontology_id: ontology_id.clone(),
-                severity: OntologyValidationSeverity::Warning,
-                code: "undeclared_predicate".to_owned(),
-                message: format!(
-                    "relationship predicate `{}` is not declared by ontology `{ontology_id}`",
-                    relationship.predicate
-                ),
-                target: Some(relationship.subject.clone()),
-                axiom_id: None,
-                provenance: validation_provenance(ontology_id, now),
-                detected_at: now,
-            });
-        }
-        if truncated {
-            findings.push(OntologyValidationFinding {
-                id: format!("finding-{ontology_id}-truncated"),
-                ontology_id: ontology_id.clone(),
-                severity: OntologyValidationSeverity::Info,
-                code: "validation_truncated".to_owned(),
-                message: format!(
-                    "graph has more than {limit} relationships; validation truncated",
-                    limit = VALIDATE_RELATIONSHIP_LIMIT
-                ),
-                target: None,
-                axiom_id: None,
-                provenance: validation_provenance(ontology_id, now),
-                detected_at: now,
-            });
-        }
-        findings.sort_by(|left, right| left.id.cmp(&right.id));
-        Ok(findings)
+            .map(|json| serde_json::from_str::<KnowledgeRelationship>(&json).map_err(json_error))
+            .collect::<CoreResult<Vec<_>>>()?
+            .into_iter()
+            .filter(|r| scope_allows(&r.scope, scope))
+            .collect::<Vec<_>>();
+        Ok(validate_visible_graph(
+            ontology_id,
+            &properties,
+            &relationships,
+            truncated,
+            now,
+        ))
     }
 }

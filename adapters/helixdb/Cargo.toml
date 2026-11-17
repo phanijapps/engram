@@ -6,6 +6,10 @@ license.workspace = true
 rust-version.workspace = true
 
 [dependencies]
+engram-memory = { path = "../../core/memory", version = "0.1.0" }
+engram-knowledge = { path = "../../core/knowledge", version = "0.1.0" }
+async-trait.workspace = true
+chrono.workspace = true
 thiserror.workspace = true
 fs2 = "0.4"
 engram-domain = { path = "../../core/domain", version = "0.1.0" }
@@ -21,6 +25,7 @@ tokio = { workspace = true, features = ["sync", "time"], optional = true }
 reqwest = { version = "0.13.3", default-features = false, features = ["blocking", "json", "rustls"], optional = true }
 
 [dev-dependencies]
+futures.workspace = true
 tempfile = "3"
 
 [features]

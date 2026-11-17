@@ -29,7 +29,27 @@ pub(crate) const LEDGER: &str = "EngramSourceLedgerV1";
 pub(crate) const ENDPOINT: &str = "EngramEndpointV1";
 pub(crate) const RECEIPT: &str = "EngramReceiptV1";
 pub(crate) const EDGE: &str = "EngramDirectedV1";
+pub(crate) const BELIEF: &str = "EngramBeliefV1";
+pub(crate) const CONTRADICTION: &str = "EngramContradictionV1";
+pub(crate) const HIERARCHY_NODE: &str = "EngramHierarchyNodeV1";
+pub(crate) const HIERARCHY_RELATION: &str = "EngramHierarchyRelationV1";
+pub(crate) const PROCEDURE: &str = "EngramProcedureV1";
+pub(crate) const PROPOSAL: &str = "EngramProposalV1";
+pub(crate) const OUTCOME: &str = "EngramOutcomeV1";
+pub(crate) const CHANGE: &str = "EngramChangeV1";
+pub(crate) const CHANGE_STATE: &str = "EngramChangeStateV1";
+pub(crate) const CHECKPOINT: &str = "EngramCheckpointV1";
 pub(crate) const FAMILIES: &[&str] = &[
+    BELIEF,
+    CONTRADICTION,
+    HIERARCHY_NODE,
+    HIERARCHY_RELATION,
+    PROCEDURE,
+    PROPOSAL,
+    OUTCOME,
+    CHANGE,
+    CHANGE_STATE,
+    CHECKPOINT,
     MEMORY,
     EVENT,
     SOURCE,
@@ -76,7 +96,33 @@ pub(crate) fn id(value: &Value) -> Result<&str> {
         .ok_or(Error::InvalidConfig("record identity required"))
 }
 
+fn map_domain_error(error: Error) -> engram_runtime::CoreError {
+    match error {
+        Error::Contention => engram_runtime::CoreError::Conflict {
+            reason: "Helix writer contention before effects".into(),
+        },
+        error => core(error),
+    }
+}
 impl HelixStore {
+    pub(crate) fn domain_atomic<T>(
+        &self,
+        work: impl FnOnce(&HelixStore) -> engram_runtime::CoreResult<T>,
+    ) -> engram_runtime::CoreResult<T> {
+        let mut domain_error = None;
+        let result = self.atomic(|store| match work(store) {
+            Ok(value) => Ok(value),
+            Err(error) => {
+                domain_error = Some(error);
+                Err(Error::InvalidConfig("domain operation rejected"))
+            }
+        });
+        match domain_error {
+            Some(error) => Err(error),
+            None => result.map_err(map_domain_error),
+        }
+    }
+
     pub(crate) fn check_scope(&self, scope: &engram_domain::Scope) -> Result<()> {
         if &self.inner.partition.scope != scope {
             return Err(Error::InvalidConfig(
@@ -245,7 +291,15 @@ impl HelixStore {
         public_id: &str,
         payload: Option<Value>,
     ) -> Result<()> {
-        if !FAMILIES.contains(&family) || public_id.is_empty() {
+        if (!FAMILIES.contains(&family)
+            && !self
+                .inner
+                .partition
+                .embedding_space
+                .as_ref()
+                .is_some_and(|space| crate::vector::family(space) == family))
+            || public_id.is_empty()
+        {
             return Err(Error::InvalidConfig(
                 "unknown family or empty record identity",
             ));
@@ -340,12 +394,30 @@ pub(crate) fn properties(
         let input = match val {
             Value::String(s) => Some(PropertyInput::from(s.clone())),
             Value::Bool(b) => Some(PropertyInput::from(*b)),
-            Value::Number(n) => n.as_i64().map(PropertyInput::from),
+            Value::Number(n) => n
+                .as_i64()
+                .map(PropertyInput::from)
+                .or_else(|| n.as_f64().map(PropertyInput::from)),
             _ => None,
         };
         if let Some(input) = input {
             fields.insert(key.clone(), input);
         }
+    }
+    if let Some(values) = v.get("embedding").and_then(Value::as_array) {
+        let vector = values
+            .iter()
+            .map(|v| {
+                v.as_f64()
+                    .filter(|n| n.is_finite())
+                    .map(|n| n as f32)
+                    .ok_or(Error::InvalidConfig("invalid vector"))
+            })
+            .collect::<Result<Vec<_>>>()?;
+        fields.insert("embedding".into(), PropertyInput::from(vector));
+    }
+    if let Some(text) = crate::retrieval::text_projection(family, v) {
+        fields.insert("retrieval_text".into(), text.into());
     }
     for name in ["stableSourceKey", "path", "repositoryId", "generationId"] {
         if let Some(v) = v
@@ -415,4 +487,39 @@ pub(crate) fn properties(
         serde_json::to_string(v).map_err(|_| Error::Storage)?.into(),
     );
     Ok(fields.into_iter().collect())
+}
+
+#[cfg(test)]
+mod domain_error_tests {
+    use super::*;
+    #[test]
+    fn only_proven_contention_is_conflict() {
+        assert!(matches!(
+            map_domain_error(Error::Contention),
+            engram_runtime::CoreError::Conflict { .. }
+        ));
+        for error in [
+            Error::Storage,
+            Error::IncompatibleSchema,
+            Error::OutcomeUnknown {
+                operation_id: "uncertain-operation".into(),
+            },
+            Error::CleanupAfterFailure {
+                cause: Box::new(Error::OutcomeUnknown {
+                    operation_id: "uncertain-operation".into(),
+                }),
+            },
+        ] {
+            let original = error.to_string();
+            let mapped = map_domain_error(error);
+            assert!(!matches!(
+                mapped,
+                engram_runtime::CoreError::Conflict { .. }
+            ));
+            assert!(
+                mapped.to_string().contains(&original),
+                "I/O/schema/cleanup/unknown cause and operation identity preserved"
+            );
+        }
+    }
 }

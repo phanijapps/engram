@@ -1,17 +1,25 @@
 //! Pinned Helix storage primitives. Domain port adapters are composed separately.
+pub mod beliefs;
+pub mod changes;
 pub mod codec;
 pub mod config;
 #[cfg(feature = "embedded")]
 mod embedded;
 pub mod error;
 mod graph;
+pub mod hierarchy;
 mod identity;
 pub mod inventory;
 mod knowledge;
+pub mod maintenance;
 mod memory;
+pub mod outcomes;
 pub mod ownership;
+pub mod procedures;
+pub mod proposals;
 pub mod receipts;
 mod records;
+pub mod retrieval;
 mod runtime;
 mod schema;
 #[cfg(feature = "service")]
@@ -21,6 +29,8 @@ pub mod source_ledger;
 pub mod transaction;
 mod transport;
 mod vocabulary;
+
+pub mod vector;
 
 use codec::Partition;
 use error::{Error, Result};
@@ -50,6 +60,9 @@ impl HelixStore {
     #[cfg(feature = "embedded")]
     pub fn open_embedded(config: config::EmbeddedConfig, partition: Partition) -> Result<Self> {
         partition.discriminator()?;
+        if let Some(space) = &partition.embedding_space {
+            vector::validate_config(space)?;
+        }
         let read_only = config.read_only;
         let transport = Arc::new(embedded::Embedded::open(config, partition.clone())?);
         Self::finish_open(transport, partition, read_only)
@@ -57,6 +70,9 @@ impl HelixStore {
     #[cfg(feature = "service")]
     pub fn open_service(config: config::ServiceConfig, partition: Partition) -> Result<Self> {
         partition.discriminator()?;
+        if let Some(space) = &partition.embedding_space {
+            vector::validate_config(space)?;
+        }
         let read_only = config.read_only;
         let transport = Arc::new(service::Service::open(config)?);
         Self::finish_open(transport, partition, read_only)

@@ -39,6 +39,7 @@ pub use graph::KnowledgeGraphRepository;
 pub use identity::EntityIdentityRepository;
 pub use ingest::{Chunker, IngestionService, SourceReader};
 pub use maintenance::GraphMaintenanceRepository;
+pub use maintenance::composition as maintenance_composition;
 /// Pure candidate detection over pre-fetched graph data — the cross-crate utility
 /// the SQLite adapter (T4/T5) composes inside its async `detect_candidates`.
 pub use maintenance::detect_candidates;

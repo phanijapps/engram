@@ -6,6 +6,11 @@ license.workspace = true
 rust-version.workspace = true
 
 [dependencies]
+engram-belief = { path = "../../core/belief", version = "0.1.0" }
+engram-hierarchy = { path = "../../core/hierarchy", version = "0.1.0" }
+engram-procedures = { path = "../../core/procedures", version = "0.1.0" }
+engram-proposals = { path = "../../core/proposals", version = "0.1.0" }
+engram-retrieval = { path = "../../core/retrieval", version = "0.1.0" }
 engram-memory = { path = "../../core/memory", version = "0.1.0" }
 engram-knowledge = { path = "../../core/knowledge", version = "0.1.0" }
 async-trait.workspace = true

@@ -156,7 +156,7 @@ pub(crate) fn ensure_index(
     )
 }
 
-fn ensure_spec(
+pub(crate) fn ensure_spec(
     transport: &dyn Transport,
     spec: IndexSpec,
     lease: Option<&ScopeLease>,
@@ -226,6 +226,30 @@ pub(crate) fn initialize(
 ) -> Result<()> {
     ensure_index(transport, MARKER_LABEL, Some(lease))?;
     ensure_index(transport, SENTINEL_LABEL, Some(lease))?;
+    if let Some(space) = &partition.embedding_space {
+        crate::vector::validate_config(space)?;
+        let family = crate::vector::family(space);
+        ensure_index(transport, &family, Some(lease))?;
+        for field in ["partition", "public_id"] {
+            ensure_spec(
+                transport,
+                IndexSpec::node_equality(&family, field),
+                Some(lease),
+            )?;
+        }
+        ensure_spec(
+            transport,
+            IndexSpec::node_vector(
+                &family,
+                "embedding",
+                std::num::NonZeroUsize::new(space.dimensions as usize)
+                    .ok_or(Error::InvalidConfig("zero vector dimensions"))?,
+                VectorDistanceMetric::Cosine,
+                Some("partition"),
+            ),
+            Some(lease),
+        )?;
+    }
     for family in crate::records::FAMILIES {
         ensure_index(transport, family, Some(lease))?;
         for field in ["partition", "public_id", "logical_store"] {
@@ -234,6 +258,25 @@ pub(crate) fn initialize(
                 IndexSpec::node_equality(*family, field),
                 Some(lease),
             )?;
+        }
+    }
+    for family in crate::retrieval::TEXT_FAMILIES {
+        ensure_spec(
+            transport,
+            IndexSpec::node_text(*family, "retrieval_text", Some("partition")),
+            Some(lease),
+        )?;
+    }
+    for (family, fields) in [
+        (
+            crate::records::BELIEF,
+            vec!["validFrom", "validUntil", "createdAt"],
+        ),
+        (crate::records::CHANGE, vec!["seq"]),
+        (crate::records::OUTCOME, vec!["occurredAt"]),
+    ] {
+        for field in fields {
+            ensure_spec(transport, IndexSpec::node_range(family, field), Some(lease))?;
         }
     }
     for (family, fields) in [

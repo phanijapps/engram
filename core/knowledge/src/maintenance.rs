@@ -10,6 +10,8 @@
 //! dependent (ADR-0022). The default is non-mutating — every mutating path
 //! requires an explicit [`ApplyMode::Apply`].
 
+pub mod composition;
+
 use std::collections::HashSet;
 
 use async_trait::async_trait;

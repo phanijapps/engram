@@ -65,9 +65,11 @@ impl StorageStep {
         let state = self.store.session.as_ref().ok_or(Error::Storage)?;
         let mut pending = state.pending.lock().map_err(|_| Error::Storage)?;
         let step = pending
-            .as_ref()
+            .as_mut()
             .filter(|step| step.id == self.id)
             .ok_or(Error::Contention)?;
+        let explicit_mutation_count = step.mutations.len();
+        crate::changes::augment(&self.store, &mut step.mutations)?;
         let operation_id = uuid::Uuid::new_v4().to_string();
         let lease = self.store.inner.lease.as_ref().ok_or(Error::ReadOnly)?;
         let partition = self.store.inner.partition.discriminator()?;
@@ -182,7 +184,15 @@ impl StorageStep {
                 );
             }
         }
-        let receipt = crate::receipts::receipt(&self.store, &operation_id, &step.mutations)?;
+        let mut receipt = crate::receipts::receipt(&self.store, &operation_id, &step.mutations)?;
+        // The fingerprint still covers every physical effect; preserve caller staging count.
+        receipt["mutation_count"] = explicit_mutation_count.into();
+        receipt["auxiliary_mutation_count"] = step
+            .mutations
+            .len()
+            .checked_sub(explicit_mutation_count)
+            .ok_or(Error::Storage)?
+            .into();
         batch = batch
             .var_as_if(
                 "receipt",

@@ -22,11 +22,14 @@ pub struct Fixture {
 }
 impl Fixture {
     pub fn new(mode: Mode) -> Self {
+        Self::with_space(mode, None)
+    }
+    pub fn with_space(mode: Mode, embedding_space: Option<EmbeddingSpace>) -> Self {
         let temporary = tempfile::tempdir().unwrap();
         let partition = Partition {
             logical_store: format!("task004-{}", uuid::Uuid::new_v4()),
             scope: scope(),
-            embedding_space: None,
+            embedding_space,
         };
         let store = Self::open(mode, &temporary, &partition, false);
         Self {

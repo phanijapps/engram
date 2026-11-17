@@ -144,3 +144,43 @@ fn configured_local_models_do_not_reuse_legacy_mislabeled_spaces() {
     );
     assert_ne!(config.embedding_space(), legacy);
 }
+
+#[test]
+fn strict_storage_service_rejects_before_credentials_and_network() {
+    use engram_integration::storage_network_policy::{StorageAccess, with_storage_access};
+    use std::cell::Cell;
+    let credentials = Cell::new(0);
+    let network = Cell::new(0);
+    let result = with_storage_access(StorageAccess::ConfiguredService, false, || {
+        credentials.set(credentials.get() + 1);
+        network.set(network.get() + 1);
+        Ok(())
+    });
+    assert!(result.is_err());
+    assert_eq!((credentials.get(), network.get()), (0, 0));
+    assert!(with_storage_access(StorageAccess::LocalDisk, false, || Ok(())).is_ok());
+    // Positive control is governed by today's strict rule: vectors are enabled.
+    assert!(
+        with_storage_access(StorageAccess::ConfiguredService, true, || {
+            credentials.set(credentials.get() + 1);
+            network.set(network.get() + 1);
+            Ok(())
+        })
+        .is_ok()
+    );
+    assert_eq!((credentials.get(), network.get()), (1, 1));
+}
+
+#[test]
+fn disabled_invalid_model_configuration_returns_before_validation() {
+    let config = EmbeddingProviderConfig {
+        model: String::new(),
+        provider_type: "invalid-provider".into(),
+        dimensions: 8193,
+        ..Default::default()
+    };
+    let prepared = engram_integration::prepare_embedding(&config, false).unwrap();
+    assert!(prepared.provider.is_none());
+    assert_eq!(prepared.config, config);
+    assert!(engram_integration::prepare_embedding(&config, true).is_err());
+}

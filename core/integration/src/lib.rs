@@ -68,6 +68,7 @@ pub mod recall;
 pub mod scope_inventory;
 #[cfg(feature = "sqlite")]
 pub mod sqlite;
+pub mod storage_network_policy;
 
 pub use batch::{
     ALL_STEPS, BatchIngest, BatchIngestRequest, BatchOutcome, BatchStatus, BatchStep, StepOutcome,

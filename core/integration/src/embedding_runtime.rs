@@ -14,6 +14,16 @@ pub fn prepare_embedding(
     config: &EmbeddingProviderConfig,
     enabled: bool,
 ) -> CoreResult<PreparedEmbedding> {
+    prepare_embedding_with(config, enabled, prepare_enabled)
+}
+
+fn prepare_embedding_with(
+    config: &EmbeddingProviderConfig,
+    enabled: bool,
+    resolve_and_initialize: impl FnOnce(
+        &mut EmbeddingProviderConfig,
+    ) -> CoreResult<Option<Arc<dyn EmbeddingProvider>>>,
+) -> CoreResult<PreparedEmbedding> {
     let mut config = config.clone();
     if !enabled {
         return Ok(PreparedEmbedding {
@@ -21,6 +31,13 @@ pub fn prepare_embedding(
             provider: None,
         });
     }
+    let provider = resolve_and_initialize(&mut config)?;
+    Ok(PreparedEmbedding { config, provider })
+}
+
+fn prepare_enabled(
+    config: &mut EmbeddingProviderConfig,
+) -> CoreResult<Option<Arc<dyn EmbeddingProvider>>> {
     config
         .validate()
         .map_err(|reason| CoreError::InvalidRequest { reason })?;
@@ -28,17 +45,14 @@ pub fn prepare_embedding(
         config.dimensions = EmbeddingProviderConfig::default().dimensions;
     }
     if config.provider_type == "none" {
-        return Ok(PreparedEmbedding {
-            config,
-            provider: None,
-        });
+        return Ok(None);
     }
     let provider: Option<Arc<dyn EmbeddingProvider>> = match config.provider_type.as_str() {
         "fastembed" => {
             #[cfg(feature = "fastembed")]
             {
-                crate::FastEmbedEmbeddingProvider::resolve_config(&mut config)?;
-                match crate::FastEmbedEmbeddingProvider::from_config(&config) {
+                crate::FastEmbedEmbeddingProvider::resolve_config(config)?;
+                match crate::FastEmbedEmbeddingProvider::from_config(config) {
                     Ok(provider) => Some(Arc::new(provider)),
                     Err(error) => {
                         // Keep availability degradation, but never substitute a different model.
@@ -66,7 +80,7 @@ pub fn prepare_embedding(
                 if config.provider_type == "ollama" && config.options.endpoint.is_none() {
                     config.options.endpoint = Some("http://localhost:11434".into());
                 }
-                let provider = crate::http_embedding::ConfiguredHttpEmbedding::new(&config)?;
+                let provider = crate::http_embedding::ConfiguredHttpEmbedding::new(config)?;
                 config.dimensions = provider.dimensions();
                 Some(Arc::new(provider))
             }
@@ -83,7 +97,7 @@ pub fn prepare_embedding(
             ));
         }
     };
-    Ok(PreparedEmbedding { config, provider })
+    Ok(provider)
 }
 
 fn invalid(reason: &str) -> CoreError {
@@ -120,4 +134,39 @@ pub(crate) fn validate_output(
         }
     }
     Ok(values)
+}
+
+#[cfg(test)]
+mod disabled_model_tests {
+    use super::*;
+    use std::cell::Cell;
+
+    #[test]
+    fn disabled_returns_before_validation_resolver_or_initializer() {
+        let config = EmbeddingProviderConfig {
+            model: String::new(),
+            dimensions: 8193,
+            ..Default::default()
+        };
+        let calls = Cell::new(0);
+        let result = prepare_embedding_with(&config, false, |_| {
+            calls.set(calls.get() + 1);
+            panic!("disabled vectors reached model resolver/initializer")
+        })
+        .unwrap();
+        assert_eq!(calls.get(), 0);
+        assert!(result.provider.is_none());
+        assert_eq!(result.config, config);
+    }
+
+    #[test]
+    fn enabled_positive_control_reaches_model_resolver_initializer_probe() {
+        let calls = Cell::new(0);
+        let result = prepare_embedding_with(&EmbeddingProviderConfig::default(), true, |_| {
+            calls.set(calls.get() + 1);
+            Err(invalid("model resolver/initializer probe invoked"))
+        });
+        assert_eq!(calls.get(), 1);
+        assert!(result.is_err());
+    }
 }

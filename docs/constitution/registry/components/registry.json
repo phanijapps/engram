@@ -114,6 +114,12 @@
       "name": "engram-embedding-http"
     },
     {
+      "path": "adapters/embedding/fastembed",
+      "kind": "crate",
+      "role": "adapter",
+      "name": "engram-embedding-fastembed"
+    },
+    {
       "path": "adapters/ingest",
       "kind": "crate",
       "role": "adapter",

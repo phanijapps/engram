@@ -18,6 +18,7 @@ members = [
     "core/integration",
     "core/graph-analytics",
     "adapters/embedding/http",
+    "adapters/embedding/fastembed",
     "adapters/ingest",
     "adapters/integration",
     "adapters/retrieval/tantivy-lexical",

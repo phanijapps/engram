@@ -1,0 +1,10 @@
+[package]
+name = "engram-embedding-fastembed"
+version = "0.1.0"
+license = "MIT"
+edition.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+engram-runtime = { path = "../../../core/runtime", version = "0.1.0" }
+fastembed = "5.17.2"

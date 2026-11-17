@@ -53,6 +53,7 @@ engram-ingest = { path = "../../adapters/ingest", version = "0.1.0", optional = 
 chrono.workspace = true
 futures = { workspace = true, optional = true }
 
+engram-embedding-fastembed = { path = "../../adapters/embedding/fastembed", version = "0.1.0", optional = true }
 engram-embedding-http = { path = "../../adapters/embedding/http", version = "0.1.0", optional = true }
 
 [dev-dependencies]
@@ -76,10 +77,8 @@ default = []
 # pgvector recipe enables it explicitly); the gate only keeps bare
 # dependency-only builds of this crate honest.
 code-lanes = ["dep:engram-ingest"]
-# Optional FastEmbed-backed SQLite vector query provider. Implies `sqlite` (to
-# bring in the vector store) and forwards to that crate's fastembed-provider
-# feature.
-fastembed = ["sqlite", "engram-store-sqlite/fastembed"]
+# Provider-neutral optional model inference.
+fastembed = ["dep:engram-embedding-fastembed", "engram-store-sqlite?/fastembed"]
 ollama = ["dep:reqwest"]
 http-embeddings = ["dep:engram-embedding-http"]
 # The SQLite backend: constructs every file-backed store + the Sql* port impls

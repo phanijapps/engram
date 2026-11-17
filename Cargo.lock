@@ -1059,6 +1059,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "engram-embedding-fastembed"
+version = "0.1.0"
+dependencies = [
+ "engram-runtime",
+ "fastembed",
+]
+
+[[package]]
 name = "engram-embedding-http"
 version = "0.1.0"
 dependencies = [
@@ -1139,6 +1147,7 @@ dependencies = [
  "engram-consolidation",
  "engram-decay",
  "engram-domain",
+ "engram-embedding-fastembed",
  "engram-embedding-http",
  "engram-eval",
  "engram-graph-analytics",
@@ -1455,6 +1464,7 @@ dependencies = [
  "chrono",
  "engram-belief",
  "engram-domain",
+ "engram-embedding-fastembed",
  "engram-eval",
  "engram-hierarchy",
  "engram-knowledge",

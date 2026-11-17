@@ -104,4 +104,6 @@ pub use scope_inventory::{
     UNSET_LABEL, dimension_label, partition_matches, sort_summaries, validate_recent_limit,
 };
 #[cfg(feature = "fastembed")]
-pub use sqlite::fastembed_embedding::FastEmbedEmbeddingProvider;
+mod fastembed_embedding;
+#[cfg(feature = "fastembed")]
+pub use fastembed_embedding::FastEmbedEmbeddingProvider;

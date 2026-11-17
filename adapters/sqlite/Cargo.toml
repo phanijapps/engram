@@ -25,9 +25,10 @@ engram-proposals = { path = "../../core/proposals", version = "0.1.0" }
 sha2.workspace = true
 # Vector cell — folded in from engram-store-vector (T5):
 sqlite-vec.workspace = true
-fastembed = { version = "5.17.2", optional = true }
+engram-embedding-fastembed = { path = "../embedding/fastembed", version = "0.1.0", optional = true }
 
 [dev-dependencies]
+fastembed = "5.17.2"
 engram-eval = { path = "../../core/eval", version = "0.1.0" }
 futures.workspace = true
 tempfile = "3"
@@ -37,5 +38,5 @@ default = []
 # `fastembed` is the public alias used by forwarders (core/integration,
 # bindings/node); the folded vector code cfg-gates on `fastembed-provider`.
 fastembed = ["fastembed-provider"]
-fastembed-provider = ["dep:fastembed"]
+fastembed-provider = ["dep:engram-embedding-fastembed"]
 fastembed-tests = ["fastembed-provider"]

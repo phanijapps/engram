@@ -1,6 +1,10 @@
 //! Pinned Helix storage primitives. Domain port adapters are composed separately.
 pub mod beliefs;
 pub mod changes;
+pub mod code_binding;
+mod code_generation;
+mod code_leases;
+mod code_retirement;
 pub mod codec;
 pub mod config;
 #[cfg(feature = "embedded")]
@@ -163,3 +167,10 @@ impl HelixStore {
         self.inner.transport.close()
     }
 }
+
+#[cfg(all(test, any(feature = "embedded", feature = "service")))]
+#[path = "../tests/support/data_fixture.rs"]
+mod test_data_fixture;
+
+#[cfg(test)]
+extern crate self as engram_store_helixdb;

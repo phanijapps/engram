@@ -8,7 +8,16 @@ use crate::{
 use helix_db::dsl::prelude::*;
 use serde_json::Value;
 use std::collections::BTreeMap;
+#[derive(Clone, serde::Serialize)]
+pub(crate) struct Fence {
+    pub(crate) family: String,
+    pub(crate) predicate: SourcePredicate,
+    pub(crate) minimum: usize,
+    pub(crate) empty: bool,
+    pub(crate) reason: &'static str,
+}
 pub(crate) struct StepState {
+    pub(crate) fences: Vec<Fence>,
     pub(crate) id: String,
     pub(crate) mutations: BTreeMap<(String, String), Option<Value>>,
 }
@@ -48,6 +57,7 @@ impl HelixStore {
         *pending = Some(StepState {
             id: id.clone(),
             mutations: BTreeMap::new(),
+            fences: Vec::new(),
         });
         let mut store = self.clone();
         store.step_id = Some(id.clone());
@@ -74,6 +84,30 @@ impl StorageStep {
         let lease = self.store.inner.lease.as_ref().ok_or(Error::ReadOnly)?;
         let partition = self.store.inner.partition.discriminator()?;
         let mut batch = lease.guard();
+        let mut mutation_guard = "owner".to_owned();
+        let mut checks = Vec::new();
+        for (i, fence) in step.fences.iter().enumerate() {
+            let check = format!("check{i}");
+            let next = format!("fence{i}");
+            batch = batch.var_as(
+                &check,
+                g().n_with_label_where(
+                    &fence.family,
+                    SourcePredicate::and(vec![
+                        SourcePredicate::eq("partition", partition.clone()),
+                        fence.predicate.clone(),
+                    ]),
+                ),
+            );
+            let condition = if fence.empty {
+                BatchCondition::VarEmpty(check.clone())
+            } else {
+                BatchCondition::VarMinSize(check.clone(), fence.minimum)
+            };
+            batch = batch.var_as_if(&next, condition, g().n(NodeRef::var(&mutation_guard)));
+            checks.push(check);
+            mutation_guard = next;
+        }
         for (i, ((family, id), payload)) in step.mutations.iter().enumerate() {
             let existing = format!("existing{i}");
             let removed = format!("removed{i}");
@@ -93,14 +127,14 @@ impl StorageStep {
             );
             batch = batch.var_as_if(
                 &removed,
-                BatchCondition::VarMinSize("owner".into(), 1),
+                BatchCondition::VarMinSize(mutation_guard.clone(), 1),
                 g().n(NodeRef::var(&existing)).drop(),
             );
             if family == RELATIONSHIP {
                 let old = format!("oldedge{i}");
                 batch = batch.var_as_if(
                     &old,
-                    BatchCondition::VarMinSize("owner".into(), 1),
+                    BatchCondition::VarMinSize(mutation_guard.clone(), 1),
                     g().e_with_label_where(
                         EDGE,
                         SourcePredicate::and(vec![
@@ -114,7 +148,7 @@ impl StorageStep {
             if let Some(payload) = payload {
                 batch = batch.var_as_if(
                     &created,
-                    BatchCondition::VarMinSize("owner".into(), 1),
+                    BatchCondition::VarMinSize(mutation_guard.clone(), 1),
                     g().add_n(
                         family,
                         records::properties(&self.store, family, id, payload)?,
@@ -151,7 +185,7 @@ impl StorageStep {
                 }
                 batch = batch.var_as_if(
                     &format!("edge{i}"),
-                    BatchCondition::VarMinSize("owner".into(), 1),
+                    BatchCondition::VarMinSize(mutation_guard.clone(), 1),
                     g().n(NodeRef::var(&from)).add_e(
                         EDGE,
                         NodeRef::var(&to),
@@ -184,7 +218,8 @@ impl StorageStep {
                 );
             }
         }
-        let mut receipt = crate::receipts::receipt(&self.store, &operation_id, &step.mutations)?;
+        let mut receipt =
+            crate::receipts::receipt(&self.store, &operation_id, &step.mutations, &step.fences)?;
         // The fingerprint still covers every physical effect; preserve caller staging count.
         receipt["mutation_count"] = explicit_mutation_count.into();
         receipt["auxiliary_mutation_count"] = step
@@ -196,14 +231,26 @@ impl StorageStep {
         batch = batch
             .var_as_if(
                 "receipt",
-                BatchCondition::VarMinSize("owner".into(), 1),
+                BatchCondition::VarMinSize(mutation_guard.clone(), 1),
                 g().add_n(
                     records::RECEIPT,
                     records::properties(&self.store, records::RECEIPT, &operation_id, &receipt)?,
                 )
                 .value_map(Some(vec!["public_id", "partition", "payload"])),
             )
-            .returning(["owner", "receipt"]);
+            .returning(
+                [
+                    {
+                        let mut names = vec!["owner".to_owned(), "receipt".to_owned()];
+                        if mutation_guard != "owner" {
+                            names.push(mutation_guard.clone());
+                        }
+                        names
+                    },
+                    checks.clone(),
+                ]
+                .concat(),
+            );
         let operation = Operation::with_id(QueryRequest::write(batch), operation_id.clone())?;
         self.store
             .inner
@@ -247,6 +294,35 @@ impl StorageStep {
             }
         };
         let rows = response.get("receipt").and_then(Value::as_array);
+        if response
+            .get("owner")
+            .and_then(Value::as_array)
+            .is_some_and(|v| v.len() == 1)
+            && rows.is_some_and(Vec::is_empty)
+            && response
+                .get(&mutation_guard)
+                .and_then(Value::as_array)
+                .is_some_and(Vec::is_empty)
+        {
+            for (fence, name) in step.fences.iter().zip(checks.iter()) {
+                if let Some(values) = response.get(name).and_then(Value::as_array) {
+                    let matched = if fence.empty {
+                        values.is_empty()
+                    } else {
+                        values.len() >= fence.minimum
+                    };
+                    if !matched {
+                        self.store
+                            .inner
+                            .uncertain_receipts
+                            .lock()
+                            .map_err(|_| Error::Storage)?
+                            .remove(&operation_id);
+                        return Err(Error::FenceRejected(fence.reason));
+                    }
+                }
+            }
+        }
         let owners = response.get("owner").and_then(Value::as_array);
         if owners.is_some_and(Vec::is_empty) && rows.is_some_and(Vec::is_empty) {
             self.store
@@ -258,7 +334,11 @@ impl StorageStep {
             return Err(Error::Contention);
         }
         let valid = rows.is_some_and(|rows| {
-            owners.is_some_and(|owners| owners.len() == 1)
+            response
+                .get(&mutation_guard)
+                .and_then(Value::as_array)
+                .is_some_and(|v| v.len() == 1)
+                && owners.is_some_and(|owners| owners.len() == 1)
                 && rows.len() == 1
                 && rows[0].get("public_id").and_then(Value::as_str) == Some(operation_id.as_str())
                 && rows[0].get("partition").and_then(Value::as_str) == Some(partition.as_str())
@@ -562,5 +642,168 @@ mod structural_response_controls {
     #[test]
     fn actual_service_abandoned_active_call_cannot_contaminate_replacement() {
         lifecycle_race(true)
+    }
+}
+
+#[cfg(all(test, feature = "embedded"))]
+mod native_error_diagnostic {
+    use super::*;
+    use engram_domain::{
+        Actor, ActorKind, EntityKind, EvidenceRef, EvidenceTargetType, KnowledgeEntity, Provenance,
+        Scope,
+    };
+    use engram_knowledge::KnowledgeRepository;
+    use futures::executor::block_on;
+    use serde_json::json;
+    use std::panic::{AssertUnwindSafe, catch_unwind};
+    fn panic_text(payload: Box<dyn std::any::Any + Send>) -> String {
+        if let Some(s) = payload.downcast_ref::<String>() {
+            s.clone()
+        } else if let Some(s) = payload.downcast_ref::<&str>() {
+            (*s).to_owned()
+        } else {
+            "non-string panic payload".into()
+        }
+    }
+    fn report(root: &std::path::Path, value: &Value) {
+        match serde_json::to_vec_pretty(value) {
+            Ok(bytes) => {
+                if let Err(error) = std::fs::write(root.join("diagnostic.json"), bytes) {
+                    println!("NATIVE_DIAGNOSTIC_REPORT_WRITE_ERROR {error}");
+                }
+            }
+            Err(error) => println!("NATIVE_DIAGNOSTIC_REPORT_ENCODING_ERROR {error}"),
+        }
+        println!("NATIVE_DIAGNOSTIC {value}");
+    }
+    #[test]
+    #[ignore = "one authorized disposable native diagnostic child; retained data required"]
+    fn fresh_public_entity_native_phases() {
+        let root = std::path::PathBuf::from(
+            std::env::var("HELIX_NATIVE_DIAGNOSTIC_ROOT")
+                .expect("explicit retained diagnostic root"),
+        );
+        assert!(!root.exists(), "fresh retained directory required");
+        let scope = Scope {
+            tenant: "tenant".into(),
+            subject: None,
+            workspace: Some("workspace".into()),
+            session: None,
+            environment: Some("test".into()),
+        };
+        let partition = crate::codec::Partition {
+            logical_store: format!("native-diagnostic-{}", uuid::Uuid::new_v4()),
+            scope: scope.clone(),
+            embedding_space: None,
+        };
+        let timestamp: chrono::DateTime<chrono::Utc> = "2026-11-17T00:00:00Z".parse().unwrap();
+        let id = format!("diagnostic-{}", uuid::Uuid::new_v4());
+        let entity = KnowledgeEntity {
+            id: id.clone().into(),
+            graph_id: Some("graph".into()),
+            kind: EntityKind::Concept,
+            name: id,
+            aliases: vec![],
+            scope: scope.clone(),
+            source_refs: vec![EvidenceRef {
+                target_type: EvidenceTargetType::Source,
+                target_id: Some("other-source".into()),
+                uri: None,
+                quote: None,
+                location: None,
+            }],
+            concept_refs: vec![],
+            ontology_class_refs: vec![],
+            provenance: Provenance {
+                source: "fixture".into(),
+                actor: Actor {
+                    id: "actor".into(),
+                    kind: ActorKind::Agent,
+                    display_name: None,
+                    metadata: None,
+                },
+                observed_at: timestamp,
+                evidence: vec![],
+                derivations: vec![],
+                confidence: None,
+                method: None,
+            },
+            created_at: timestamp,
+            updated_at: None,
+            valid_from: None,
+            valid_until: None,
+            archived_at: None,
+            metadata: None,
+        };
+        let discriminator = partition.discriminator().unwrap();
+        assert_eq!(entity.scope, partition.scope);
+        assert_eq!(
+            serde_json::from_value::<KnowledgeEntity>(serde_json::to_value(&entity).unwrap())
+                .unwrap(),
+            entity
+        );
+        assert_eq!(
+            serde_json::from_value::<Scope>(serde_json::to_value(&scope).unwrap()).unwrap(),
+            scope
+        );
+        std::fs::create_dir_all(&root).unwrap();
+        let mut value = json!({"kind":"investigation_only_not_provider_verification","partition_discriminator":discriminator,"logical_store":partition.logical_store,"scope":scope,"fixture_validated_before_engine":true,"original_operation_replayed":false,"retained_data":true});
+        let opened = catch_unwind(AssertUnwindSafe(|| {
+            HelixStore::open_embedded(
+                crate::config::EmbeddedConfig {
+                    trusted_root: root.clone(),
+                    path: root.join("store"),
+                    read_only: false,
+                    queue_capacity: 8,
+                },
+                partition,
+            )
+        }));
+        let store = match opened {
+            Ok(Ok(store)) => std::mem::ManuallyDrop::new(store),
+            Ok(Err(error)) => {
+                value["open_error"] = json!(format!("{error:?}"));
+                value["native_close"] = json!("NOT_ATTEMPTED_NO_HANDLE");
+                report(&root, &value);
+                panic!("positive native fixture open failed; custody reported");
+            }
+            Err(panic) => {
+                value["open_panic"] = json!(panic_text(panic));
+                value["native_close"] = json!("NOT_ATTEMPTED_NO_HANDLE");
+                report(&root, &value);
+                panic!("positive native fixture open failed; custody reported");
+            }
+        };
+        let written = catch_unwind(AssertUnwindSafe(|| {
+            crate::embedded::begin_native_diagnostic();
+            block_on(store.put_entity(entity))
+        }));
+        value["public_result"] = match written {
+            Ok(Ok(_)) => json!("success"),
+            Ok(Err(error)) => json!({"error":format!("{error:?}")}),
+            Err(panic) => json!({"panic":panic_text(panic)}),
+        };
+        value["native_phases"] =
+            match catch_unwind(AssertUnwindSafe(crate::embedded::finish_native_diagnostic)) {
+                Ok(phases) => json!(phases),
+                Err(panic) => json!({"capture_panic":panic_text(panic)}),
+            };
+        // Independent close attempt is mandatory even when the single public write panics.
+        value["native_close"] = match catch_unwind(AssertUnwindSafe(|| store.close())) {
+            Ok(result) => json!(format!("{result:?}")),
+            Err(panic) => json!({"close_panic":panic_text(panic)}),
+        };
+        value["store_drop"] = json!("intentionally_suppressed_retained_data");
+        report(&root, &value);
+        assert_eq!(
+            value["public_result"],
+            json!("success"),
+            "fresh ordinary write must succeed; custody reported"
+        );
+        assert_eq!(
+            value["native_close"],
+            json!("Ok(())"),
+            "native close must succeed; custody reported"
+        );
     }
 }

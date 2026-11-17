@@ -53,3 +53,5 @@ pub use taxonomy::TaxonomyRepository;
 pub use taxonomy_validation::validate_taxonomy_proposal;
 
 pub mod ontology_validation;
+
+pub mod code_storage_policy;

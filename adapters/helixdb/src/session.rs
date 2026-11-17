@@ -98,8 +98,8 @@ impl HelixStore {
             .lock()
             .map_err(|_| Error::Storage)?
             .as_ref()
-            .map(|step| (step.id.clone(), step.mutations.clone()));
-        if let Some((id, snapshot)) = snapshot {
+            .map(|step| (step.id.clone(), step.mutations.clone(), step.fences.clone()));
+        if let Some((id, snapshot, fences)) = snapshot {
             if store
                 .step_id
                 .as_ref()
@@ -122,6 +122,7 @@ impl HelixStore {
                     .filter(|step| step.id == id)
                     .ok_or(Error::Contention)?;
                 current.mutations = snapshot;
+                current.fences = fences;
             }
             return result;
         }

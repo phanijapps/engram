@@ -321,6 +321,31 @@ pub(crate) fn initialize(
             Some(lease),
         )?;
     }
+    for family in [
+        crate::records::CODE_BINDING,
+        crate::records::CODE_ATTEMPT,
+        crate::records::CODE_LINEAGE,
+        crate::records::CODE_SOURCE,
+        crate::records::CODE_LEASE,
+        crate::records::CODE_LEASE_COVERAGE,
+    ] {
+        for field in [
+            "repoId",
+            "generationId",
+            "epoch_key",
+            "expires_ms",
+            "expires_secs",
+            "expires_nanos",
+            "leaseId",
+            "retired",
+        ] {
+            ensure_spec(
+                transport,
+                IndexSpec::node_equality(family, field),
+                Some(lease),
+            )?;
+        }
+    }
     if !check_marker(transport, partition)? {
         write_payload(
             transport,

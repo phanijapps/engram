@@ -10,6 +10,39 @@ use helix_db::{HelixDB, HelixDbSource};
 use serde_json::Value;
 use std::sync::Arc;
 
+#[cfg(test)]
+mod native_diagnostic {
+    use std::sync::{
+        Mutex,
+        atomic::{AtomicBool, Ordering},
+    };
+    static ENABLED: AtomicBool = AtomicBool::new(false);
+    static PHASES: Mutex<Vec<serde_json::Value>> = Mutex::new(Vec::new());
+    pub(super) fn record(id: &str, phase: &str, error: Option<String>) {
+        if !ENABLED.load(Ordering::Acquire) {
+            return;
+        }
+        if let Ok(mut phases) = PHASES.lock() {
+            if phases.len() < 24 {
+                phases.push(serde_json::json!({"operation_id":id,"phase":phase,
+                    "native_error":error.map(|s| s.chars().take(512).collect::<String>())}));
+            }
+        }
+    }
+    pub(crate) fn begin() {
+        PHASES.lock().unwrap().clear();
+        ENABLED.store(true, Ordering::Release);
+    }
+    pub(crate) fn finish() -> Vec<serde_json::Value> {
+        ENABLED.store(false, Ordering::Release);
+        std::mem::take(&mut *PHASES.lock().unwrap())
+    }
+}
+#[cfg(test)]
+pub(crate) use native_diagnostic::{
+    begin as begin_native_diagnostic, finish as finish_native_diagnostic,
+};
+
 pub(crate) struct Embedded {
     owner: Arc<RuntimeOwner>,
 }
@@ -169,10 +202,14 @@ impl LocalEngine {
     }
     fn query_current(&mut self, operation: &Operation) -> Result<Value> {
         let db = self.db.as_ref().ok_or(Error::CleanupUnconfirmed)?;
+        #[cfg(test)]
+        native_diagnostic::record(&operation.id, "query_begin", None);
         let bytes = self
             .runtime
             .block_on(db.query_json(&operation.bytes))
             .map_err(|error| {
+                #[cfg(test)]
+                native_diagnostic::record(&operation.id, "query_error", Some(format!("{error:?}")));
                 if error.is_index_backpressure() {
                     Error::Backpressure
                 } else if error.is_transaction_conflict() {
@@ -181,12 +218,33 @@ impl LocalEngine {
                     operation.unknown()
                 }
             })?;
+        #[cfg(test)]
+        native_diagnostic::record(&operation.id, "query_ok", None);
         if operation.write {
-            self.runtime
-                .block_on(db.flush_writer())
-                .map_err(|_| operation.unknown())?;
+            #[cfg(test)]
+            native_diagnostic::record(&operation.id, "flush_begin", None);
+            self.runtime.block_on(db.flush_writer()).map_err(|error| {
+                #[cfg(test)]
+                native_diagnostic::record(&operation.id, "flush_error", Some(format!("{error:?}")));
+                let _ = error;
+                operation.unknown()
+            })?;
+            #[cfg(test)]
+            native_diagnostic::record(&operation.id, "flush_ok", None);
         }
-        serde_json::from_slice(&bytes).map_err(|_| operation.unknown())
+        #[cfg(test)]
+        native_diagnostic::record(&operation.id, "parse_begin", None);
+        serde_json::from_slice(&bytes)
+            .map_err(|error| {
+                #[cfg(test)]
+                native_diagnostic::record(&operation.id, "parse_error", Some(format!("{error:?}")));
+                let _ = error;
+                operation.unknown()
+            })
+            .inspect(|_| {
+                #[cfg(test)]
+                native_diagnostic::record(&operation.id, "parse_ok", None);
+            })
     }
 }
 

@@ -39,7 +39,39 @@ pub(crate) const OUTCOME: &str = "EngramOutcomeV1";
 pub(crate) const CHANGE: &str = "EngramChangeV1";
 pub(crate) const CHANGE_STATE: &str = "EngramChangeStateV1";
 pub(crate) const CHECKPOINT: &str = "EngramCheckpointV1";
+pub(crate) const CODE_REGISTRATION: &str = "EngramCodeRegistrationV1";
+pub(crate) const CODE_BINDING: &str = "EngramCodeBindingV1";
+pub(crate) const CODE_GENERATION: &str = "EngramCodeGenerationV1";
+pub(crate) const CODE_ATTEMPT: &str = "EngramCodeAttemptV1";
+pub(crate) const CODE_LINEAGE: &str = "EngramCodeLineageV1";
+pub(crate) const CODE_SOURCE: &str = "EngramCodeSourceDescriptorV1";
+pub(crate) const CODE_STAGE_RECEIPT: &str = "EngramCodeStageReceiptV1";
+pub(crate) const CODE_SCOPE: &str = "EngramCodeScopeEpochV1";
+pub(crate) const CODE_LEASE: &str = "EngramCodeReadLeaseV1";
+pub(crate) const CODE_LEASE_TOMBSTONE: &str = "EngramCodeLeaseTombstoneV1";
+pub(crate) const CODE_RESET: &str = "EngramCodeResetJournalV1";
+pub(crate) const CODE_RESET_PROGRESS: &str = "EngramCodeResetProgressV1";
+pub(crate) const CODE_GENERATION_OWNER: &str = "EngramCodeGenerationOwnerV1";
+pub(crate) const CODE_OBSERVATION: &str = "EngramCodeObservationV1";
+pub(crate) const CODE_LEASE_COVERAGE: &str = "EngramCodeLeaseCoverageV1";
+pub(crate) const CODE_FENCE: &str = "EngramCodeMutationFenceV1";
 pub(crate) const FAMILIES: &[&str] = &[
+    CODE_GENERATION_OWNER,
+    CODE_OBSERVATION,
+    CODE_LEASE_COVERAGE,
+    CODE_REGISTRATION,
+    CODE_BINDING,
+    CODE_GENERATION,
+    CODE_ATTEMPT,
+    CODE_LINEAGE,
+    CODE_SOURCE,
+    CODE_STAGE_RECEIPT,
+    CODE_SCOPE,
+    CODE_LEASE,
+    CODE_LEASE_TOMBSTONE,
+    CODE_RESET,
+    CODE_RESET_PROGRESS,
+    CODE_FENCE,
     BELIEF,
     CONTRADICTION,
     HIERARCHY_NODE,
@@ -71,6 +103,11 @@ pub(crate) const FAMILIES: &[&str] = &[
     RECEIPT,
 ];
 pub(crate) fn core(error: Error) -> engram_runtime::CoreError {
+    if let Error::FenceRejected(reason) = error {
+        return engram_runtime::CoreError::Conflict {
+            reason: reason.into(),
+        };
+    }
     engram_runtime::CoreError::Adapter {
         adapter: "helixdb".into(),
         message: error.to_string(),
@@ -131,6 +168,33 @@ impl HelixStore {
         }
         Ok(())
     }
+    pub(crate) fn checked_payload(&self, family: &str, row: &Value) -> Result<Value> {
+        let partition = self.inner.partition.discriminator()?;
+        let public_id = row
+            .get("public_id")
+            .and_then(Value::as_str)
+            .ok_or(Error::IncompatibleSchema)?;
+        if row.get("partition").and_then(Value::as_str) != Some(partition.as_str())
+            || row.get("key").and_then(Value::as_str)
+                != Some(self.inner.partition.record_key(family, public_id)?.as_str())
+        {
+            return Err(Error::IncompatibleSchema);
+        }
+        let payload: Value = serde_json::from_str(
+            row.get("payload")
+                .and_then(Value::as_str)
+                .ok_or(Error::IncompatibleSchema)?,
+        )
+        .map_err(|_| Error::IncompatibleSchema)?;
+        if id(&payload)? != public_id {
+            return Err(Error::IncompatibleSchema);
+        }
+        if let Some(scope) = payload.get("scope") {
+            self.check_scope(&decode(scope.clone())?)?;
+        }
+        self.validate_code_payload(family, &payload, Some(row))?;
+        Ok(payload)
+    }
     pub(crate) fn visible_scope(&self, scope: &engram_domain::Scope) -> bool {
         &self.inner.partition.scope == scope
     }
@@ -188,29 +252,9 @@ impl HelixStore {
         let response = self.inner.transport.execute(&Operation::new(request)?)?;
         let mut records = BTreeMap::new();
         for row in schema::rows(&response, "rows")? {
-            if row.get("partition").and_then(Value::as_str) != Some(partition.as_str()) {
-                return Err(Error::IncompatibleSchema);
-            }
-            let public_id = row
-                .get("public_id")
-                .and_then(Value::as_str)
-                .ok_or(Error::IncompatibleSchema)?;
-            if row.get("key").and_then(Value::as_str)
-                != Some(self.inner.partition.record_key(family, public_id)?.as_str())
-            {
-                return Err(Error::IncompatibleSchema);
-            }
-            let payload: Value = serde_json::from_str(
-                row.get("payload")
-                    .and_then(Value::as_str)
-                    .ok_or(Error::IncompatibleSchema)?,
-            )
-            .map_err(|_| Error::IncompatibleSchema)?;
-            if let Some(scope) = payload.get("scope") {
-                self.check_scope(&decode(scope.clone())?)?;
-            }
-            if id(&payload)? != public_id || records.insert(public_id.to_owned(), payload).is_some()
-            {
+            let payload = self.checked_payload(family, row)?;
+            let public_id = id(&payload)?.to_owned();
+            if records.insert(public_id, payload).is_some() {
                 return Err(Error::IncompatibleSchema);
             }
         }
@@ -226,6 +270,7 @@ impl HelixStore {
                                 projected(v, name) == Some(expected.to_owned())
                             }) =>
                         {
+                            self.validate_code_payload(family, v, None)?;
                             records.insert(public_id.clone(), v.clone());
                         }
                         _ => {
@@ -313,6 +358,7 @@ impl HelixStore {
             if let Some(scope) = v.get("scope") {
                 self.check_scope(&decode(scope.clone())?)?;
             }
+            self.validate_code_payload(family, v, None)?;
         }
         let state = self.session.as_ref().ok_or(Error::Contention)?;
         #[cfg(test)]

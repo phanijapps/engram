@@ -1,5 +1,7 @@
 #[derive(Debug, Clone, thiserror::Error)]
 pub enum Error {
+    #[error("{0}")]
+    FenceRejected(&'static str),
     #[error("invalid Helix configuration: {0}")]
     InvalidConfig(&'static str),
     #[error("Helix writer contention")]

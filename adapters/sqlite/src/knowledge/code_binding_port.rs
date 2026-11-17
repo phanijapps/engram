@@ -4,7 +4,7 @@ use async_trait::async_trait;
 use engram_domain::*;
 use engram_knowledge::*;
 use rusqlite::{OptionalExtension, params};
-use sha2::{Digest, Sha256};
+
 use std::{
     path::Path,
     sync::{Mutex, MutexGuard},
@@ -101,12 +101,6 @@ fn target_lineage_of_row(
 }
 fn json<T: serde::Serialize>(value: &T) -> CoreResult<String> {
     serde_json::to_string(value).map_err(|_| storage_error())
-}
-fn sha256_hex(bytes: &[u8]) -> String {
-    Sha256::digest(bytes)
-        .iter()
-        .map(|byte| format!("{byte:02x}"))
-        .collect()
 }
 impl SqlCodeBindingRepository {
     pub fn open(path: impl AsRef<Path>) -> CoreResult<Self> {
@@ -723,118 +717,17 @@ impl CodeBindingRepository for SqlCodeBindingRepository {
             .transpose()
     }
     async fn preview_reset(&self, scope: &Scope, repo_id: &RepoId) -> CoreResult<CodeResetPreview> {
-        let binding = self
-            .get_binding(scope, repo_id)
-            .await?
-            .ok_or_else(|| error(CodeBindingError::BindingRequired))?;
-        let mut targets = Vec::new();
-        let mut ambiguity = Vec::new();
-        for entry in self.target_lineage(scope).await? {
-            if entry.repo_id != repo_id.0 || entry.retired {
-                continue;
-            }
-            let Some(generation) = self
-                .get_generation(scope, repo_id, &entry.generation_id)
-                .await?
-            else {
-                ambiguity.push(AmbiguousOwnership {
-                    record_id: entry.record_id,
-                    reason: "missing durable generation association".into(),
-                });
-                continue;
-            };
-            if entry.source_path.is_empty() {
-                ambiguity.push(AmbiguousOwnership {
-                    record_id: entry.record_id,
-                    reason: "record-level code ownership cannot be proven".into(),
-                });
-                continue;
-            }
-            let lineage = CodeLineage {
-                repo_id: repo_id.clone(),
-                generation_id: entry.generation_id,
-                source_path: entry.source_path,
-                contributors: entry.contributors,
-                span: entry.span,
-            };
-            let material = serde_json::to_vec(&(
-                entry.record_id.clone(),
-                &lineage,
-                &generation.snapshot_digest,
-                binding.version,
-                binding.epoch,
-            ))
-            .map_err(|_| storage_error())?;
-            let fingerprint = sha256_hex(&material);
-            targets.push(CodeResetTarget {
-                record_id: entry.record_id,
-                store_id: "sqlite-knowledge".into(),
-                fingerprint,
-                lineage,
-                snapshot_ref: generation.snapshot_digest,
-                scan_metadata_keys: vec!["bindingVersion".into(), "codeEpoch".into()],
-                binding_version: binding.version,
-                code_epoch: binding.epoch,
-            });
-        }
-        if !ambiguity.is_empty() {
-            return Err(CoreError::InvalidRequest {
-                reason: format!(
-                    "AmbiguousOwnership: {}",
-                    ambiguity
-                        .iter()
-                        .map(|item| item.record_id.as_str())
-                        .collect::<Vec<_>>()
-                        .join(",")
-                ),
-            });
-        }
-        if targets.is_empty() {
-            return Err(error(CodeBindingError::InvalidResetPreview));
-        }
-        targets.sort_by(|left, right| left.record_id.cmp(&right.record_id));
-        let target_ids = targets
-            .iter()
-            .map(|target| target.record_id.clone())
-            .collect();
-        // Preservation inventory belongs to the recipe coordinator, which owns the
-        // knowledge-store read boundary; this binding cell owns targets only.
-        let preservation_inventory = engram_domain::PreservationInventory::default();
-        let preservation_digests = vec![preservation_inventory.digest.clone()];
-        let mut preview = CodeResetPreview {
-            binding: binding.clone(),
-            preview_hash: String::new(),
-            target_ids,
-            targets,
-            ambiguity,
-            preservation_digests,
-            preservation_inventory,
-            binding_versions: vec![(repo_id.clone(), binding.version)],
-            code_epoch: binding.epoch,
-        };
-        preview.preview_hash = preview.content_hash().map_err(error)?;
-        Ok(preview)
+        engram_knowledge::code_storage_policy::preview_reset(
+            self,
+            scope,
+            repo_id,
+            "sqlite-knowledge",
+        )
+        .await
     }
-    async fn journal_reset(&self, mut journal: CodeResetJournal) -> CoreResult<CodeResetJournal> {
-        if journal.has_reserved_progress() {
-            return Err(CoreError::InvalidRequest {
-                reason: "ResetProgressSupplied: journal creation accepts no store-owned progress"
-                    .into(),
-            });
-        }
-        journal.checkpoints.clear();
-        journal.validate().map_err(error)?;
-        let current = self
-            .preview_reset(
-                &journal.preview.binding.scope,
-                &journal.preview.binding.repo_id,
-            )
-            .await?;
-        if current.targets != journal.preview.targets {
-            return Err(CoreError::Conflict {
-                reason: "ResetPreviewMismatch: preview or store state changed".into(),
-            });
-        }
+    async fn journal_reset(&self, journal: CodeResetJournal) -> CoreResult<CodeResetJournal> {
+        let journal =
+            engram_knowledge::code_storage_policy::prepare_reset_journal(self, journal).await?;
         self.lock()?
             .put_reset_journal(&journal, "authorized")
             .map_err(error)?;
@@ -1001,11 +894,7 @@ impl engram_knowledge::CodeEligibilityGate for SqlCodeBindingRepository {
         requested_target_ids: &[String],
         limit: usize,
     ) -> CoreResult<engram_knowledge::ConstrainedCodeQuery> {
-        if limit == 0 {
-            return Err(CoreError::InvalidRequest {
-                reason: "authorized code query requires a nonzero budget".into(),
-            });
-        }
+        engram_knowledge::code_storage_policy::query_budget(limit)?;
         let mut store = self.lock()?;
         let eligibility = {
             let tx = store
@@ -1017,16 +906,12 @@ impl engram_knowledge::CodeEligibilityGate for SqlCodeBindingRepository {
             eligibility
         };
         if eligibility.generations.is_empty() {
-            // No published binding in scope: explicit ids are foreign, and a
-            // wildcard has nothing eligible to widen to.
-            if requested_target_ids.is_empty() {
-                return Ok(engram_knowledge::ConstrainedCodeQuery {
-                    eligibility,
-                    target_ids: Vec::new(),
-                    limit,
-                });
-            }
-            return Err(foreign_target(requested_target_ids));
+            return engram_knowledge::code_storage_policy::constrain_query(
+                eligibility,
+                requested_target_ids,
+                &[],
+                limit,
+            );
         }
         let target_ids = if requested_target_ids.is_empty() {
             // Wildcard: every lineage target of a published generation in
@@ -1083,7 +968,9 @@ impl engram_knowledge::CodeEligibilityGate for SqlCodeBindingRepository {
                     match found {
                         Some(record_id) => authorized.push(record_id),
                         None => {
-                            return Err(foreign_target(std::slice::from_ref(id)));
+                            return Err(engram_knowledge::code_storage_policy::foreign_target(
+                                std::slice::from_ref(id),
+                            ));
                         }
                     }
                 }
@@ -1091,11 +978,12 @@ impl engram_knowledge::CodeEligibilityGate for SqlCodeBindingRepository {
             tx.commit().map_err(|_| storage_error())?;
             authorized
         };
-        Ok(engram_knowledge::ConstrainedCodeQuery {
+        engram_knowledge::code_storage_policy::constrain_query(
             eligibility,
-            target_ids,
+            requested_target_ids,
+            &target_ids,
             limit,
-        })
+        )
     }
 
     async fn authorize_maintenance(
@@ -1103,25 +991,11 @@ impl engram_knowledge::CodeEligibilityGate for SqlCodeBindingRepository {
         scope: &Scope,
         requested_target_ids: &[String],
     ) -> CoreResult<Vec<String>> {
-        if requested_target_ids.is_empty() {
-            return Err(CoreError::InvalidRequest {
-                reason: "maintenance authorization requires explicit target ids".into(),
-            });
-        }
+        engram_knowledge::code_storage_policy::explicit_maintenance(requested_target_ids)?;
         let query = self
             .authorize_query(scope, requested_target_ids, requested_target_ids.len())
             .await?;
         Ok(query.target_ids)
-    }
-}
-
-/// Typed denial for a foreign/unpublished/unknown code target id.
-fn foreign_target(ids: &[String]) -> CoreError {
-    CoreError::InvalidRequest {
-        reason: format!(
-            "BindingRequired: code target ids are foreign or unpublished in this scope: {}",
-            ids.join(", ")
-        ),
     }
 }
 

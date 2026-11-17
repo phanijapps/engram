@@ -18,10 +18,11 @@ pub(crate) fn receipt(
     store: &HelixStore,
     id: &str,
     mutations: &BTreeMap<(String, String), Option<Value>>,
+    fences: &[crate::transaction::Fence],
 ) -> Result<Value> {
     let lease = store.inner.lease.as_ref().ok_or(Error::ReadOnly)?;
-    let bytes =
-        serde_json::to_vec(&mutations.iter().collect::<Vec<_>>()).map_err(|_| Error::Storage)?;
+    let bytes = serde_json::to_vec(&(mutations.iter().collect::<Vec<_>>(), fences))
+        .map_err(|_| Error::Storage)?;
     let digest = Sha256::digest(bytes)
         .iter()
         .map(|b| format!("{b:02x}"))

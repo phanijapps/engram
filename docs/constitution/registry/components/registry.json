@@ -304,6 +304,12 @@
       "kind": "dir",
       "role": "prototype",
       "name": "scratch prototypes (pnpm-workspace member; not shipped)"
+    },
+    {
+      "path": "adapters/helixdb",
+      "kind": "crate",
+      "role": "adapter",
+      "name": "engram-store-helixdb"
     }
   ]
 }

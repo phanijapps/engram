@@ -1,0 +1,32 @@
+[package]
+name = "engram-store-helixdb"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+thiserror.workspace = true
+fs2 = "0.4"
+engram-domain = { path = "../../core/domain", version = "0.1.0" }
+engram-runtime = { path = "../../core/runtime", version = "0.1.0" }
+serde = { workspace = true, features = ["derive"] }
+serde_json.workspace = true
+sha2.workspace = true
+uuid = { version = "1", features = ["v4"] }
+helix-db = { git = "https://github.com/HelixDB/helix-db.git", rev = "2690416a40177b480014b8b5397426efbd1dc7b8", default-features = false }
+# Preserve the reviewed Rust 1.88 embedded closure, including matching foyer subcrates.
+foyer = { version = "=0.22.3", optional = true, default-features = false }
+tokio = { workspace = true, features = ["sync", "time"], optional = true }
+reqwest = { version = "0.13.3", default-features = false, features = ["blocking", "json", "rustls"], optional = true }
+
+[dev-dependencies]
+tempfile = "3"
+
+[features]
+default = []
+service = ["dep:reqwest"]
+embedded = ["helix-db/embedded", "dep:foyer", "dep:tokio"]
+
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"

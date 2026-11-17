@@ -28,6 +28,7 @@ members = [
     "adapters/retrieval/community-summary",
     "adapters/consolidation/decay",
     "adapters/sqlite",
+    "adapters/helixdb",
     "adapters/pgvector",
     "bindings/node",
     "examples/rust-integration",

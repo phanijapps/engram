@@ -59,3 +59,5 @@ pub trait PolicyAuthorizer: Send + Sync {
     /// Checks whether `requester` may apply the requested deletion behavior.
     fn can_forget(&self, requester: &Requester, scope: &Scope, policy: &Policy) -> CoreResult<()>;
 }
+
+pub mod storage_network_policy;

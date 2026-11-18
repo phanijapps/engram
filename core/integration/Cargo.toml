@@ -76,14 +76,16 @@ default = []
 # surface enables it (sqlite recipes via the `sqlite` feature below; the
 # pgvector recipe enables it explicitly); the gate only keeps bare
 # dependency-only builds of this crate honest.
-code-lanes = ["dep:engram-ingest"]
+code-lanes = ["dep:engram-ingest", "composition"]
 # Provider-neutral optional model inference.
 fastembed = ["dep:engram-embedding-fastembed", "engram-store-sqlite?/fastembed"]
 ollama = ["dep:reqwest"]
 http-embeddings = ["dep:engram-embedding-http"]
 # The SQLite backend: constructs every file-backed store + the Sql* port impls
 # under src/sqlite/, and makes EngramProvider::open return a wired provider.
+composition = ["dep:engram-store-lexical", "dep:engram-store-associative-graph", "dep:engram-store-community-summary", "dep:engram-reflection", "dep:engram-eval", "dep:engram-decay", "dep:engram-rerank-mmr", "dep:futures"]
 sqlite = [
+    "composition",
     "dep:engram-store-sqlite",
     "dep:engram-store-lexical",
     "dep:engram-store-associative-graph",

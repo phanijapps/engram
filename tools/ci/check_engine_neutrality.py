@@ -44,6 +44,18 @@ GATED_PATHS = [
     "core/integration/src/knowledge_query.rs",
     "core/integration/src/lexical_feed.rs",
     "core/integration/src/scope_inventory.rs",
+    "core/integration/src/storage_composition.rs",
+    "core/integration/src/batch_runtime.rs",
+    "core/integration/src/batch_supersession.rs",
+    "core/integration/src/provenance_composition.rs",
+    "core/integration/src/archive_composition.rs",
+    "core/integration/src/migration_validation.rs",
+    "core/integration/src/observability_composition.rs",
+    "core/integration/src/recall_composition.rs",
+    "core/integration/src/recall_lanes.rs",
+    "core/integration/src/community_composition.rs",
+    "core/integration/src/consolidation_composition.rs",
+
     "core/packs/src",
     "mcp/engram-mcp/src",
 ]

@@ -200,11 +200,9 @@ pub fn open(config: &EngramConfig) -> CoreResult<EngramProvider> {
         engram_integration::code_binding::RepositoryEligibilitySource::new(reset_bindings.clone()),
     );
 
-    // Unified recall: composes memory.retrieve + beliefs + the vector lane
-    // (PS2) via RRF. Lexical (tsvector) is a documented gap on this engine.
-    // Bound-code eligibility stays unwired here until the recipe wires the
-    // binding repository (TASK-019 owns backends/* wiring); the constrained
-    // lane itself is implemented + proven in recall.rs.
+    // PG supplies its vector and graph lanes to the shared governed recall
+    // composer. Facts use the canonical MemoryService; omissions and one final
+    // budget are preserved. Lexical (tsvector) remains an explicit engine gap.
     let recall = Arc::new(PgUnifiedRecall {
         memory: memory.clone(),
         beliefs: beliefs.clone(),

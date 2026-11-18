@@ -52,7 +52,7 @@ pub struct CapabilityReport {
     /// Vector index operations with embedding-space validation.
     pub vectors: CapabilityState,
 
-    /// Schema-version migration (dry-run and apply modes).
+    /// Archive dry-run validation; restore/apply returns explicit unsupported.
     pub migration: CapabilityState,
 
     /// Hybrid lexical + vector search composition.
@@ -75,7 +75,7 @@ pub struct CapabilityReport {
     /// Unified recall across facts, graph, beliefs, episodes, and taxonomy.
     pub unified_recall: CapabilityState,
 
-    /// Semantic-state export / import + backend-to-backend movement.
+    /// Existing v1 export and dry-run validation; restore/apply is unsupported.
     pub export_import: CapabilityState,
 
     /// Backend-neutral maintenance (compact, reindex, dedup, vacuum).

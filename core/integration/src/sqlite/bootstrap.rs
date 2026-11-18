@@ -665,8 +665,8 @@ pub(crate) fn bootstrap_sqlite(config: &EngramConfig) -> CoreResult<EngramProvid
         reason: CapabilityReason::UnsupportedStoreFamily,
     };
 
-    // Migration: the fingerprint contract is verified by the check, and a real
-    // SqlMigrationService handle is attached.
+    // Migration: attach canonical nonmutating dry-run validation. Apply is
+    // explicitly unsupported for every manifest.
     let migration_state = if conformance::migration_ok() {
         let svc = SqlMigrationService::new(config.embedding_provider.dimensions);
         migration = Some(Arc::new(svc));
@@ -677,8 +677,8 @@ pub(crate) fn bootstrap_sqlite(config: &EngramConfig) -> CoreResult<EngramProvid
 
     // export_import (S5): construct SqlExportImport from the wired file-backed
     // memory + knowledge stores. Gated on the check passing AND the migration
-    // handle being wired (export + import are both needed for backend-to-backend
-    // scope movement). Composes the concrete stores; belief + hierarchy attached
+    // validation handle being wired. The handle provides v1 export and dry-run;
+    // applying an archive is unsupported. Belief + hierarchy are attached
     // optionally so the export covers those families when wired.
     if conformance::export_import_ok()
         && migration.is_some()

@@ -8,9 +8,7 @@
 //! 1. Export from a seeded scope → `ImportData` with the correct record types
 //!    and counts (knowledge sources/documents/chunks/entities/relationships +
 //!    memory).
-//! 2. Round-trip: export → `MigrationService::dry_run_import` →
-//!    `apply_import` → Ok, with the validation row counts matching the export
-//!    (parity through the validation-only migration pipeline).
+//! 2. Export → dry-run preserves counts; apply explicitly rejects unsupported restore.
 //! 3. Scope isolation: a second tenant's records do not leak into another
 //!    scope's export.
 //! 4. Empty scope → empty `ImportData`.
@@ -400,7 +398,7 @@ fn export_reads_seeded_scope_with_correct_counts() {
 }
 
 #[test]
-fn export_round_trips_through_migration_service() {
+fn export_validates_through_migration_service_without_claiming_restore() {
     let (exporter, _knowledge, _memory, _belief, _hierarchy) = seeded_exporter();
     let scope_a = scope("tenant-a");
     let data = block_on(exporter.export(&scope_a)).expect("export");
@@ -421,13 +419,57 @@ fn export_round_trips_through_migration_service() {
     // Scope translation succeeds (every record carries a non-empty tenant).
     assert_eq!(report.scope_translation.failed_count, 0);
 
-    // apply_import with a fresh manifest succeeds (parity through the
-    // validation-only migration pipeline).
+    // A fresh manifest validates but cannot claim a restore was performed.
     let manifest = MigrationManifest {
         validation_report: report,
         import_data: data,
     };
-    migration.apply_import(&manifest).expect("apply");
+    let before =
+        serde_json::to_value(block_on(exporter.export(&scope_a)).expect("state before apply"))
+            .unwrap();
+    let mut stale = manifest.clone();
+    stale.validation_report.manifest_fingerprint = "stale fingerprint".into();
+    let mut invalid = manifest.clone();
+    invalid.import_data.memories[0].scope.clear();
+    invalid
+        .import_data
+        .vectors
+        .push(engram_integration::VectorImportRecord {
+            target_id: "invalid-vector".into(),
+            target_type: "chunk".into(),
+            embedding: vec![0.1],
+            embedding_space: "invalid".into(),
+            model: "none".into(),
+            content_hash: "hash".into(),
+        });
+    invalid.validation_report = migration
+        .dry_run_import(&invalid.import_data)
+        .expect("invalid input diagnostics");
+    assert_eq!(invalid.validation_report.scope_translation.failed_count, 1);
+    assert!(
+        !invalid
+            .validation_report
+            .embedding_space_validation
+            .is_valid
+    );
+    for (class, candidate) in [
+        ("fresh valid", manifest),
+        ("stale", stale),
+        ("invalid", invalid),
+    ] {
+        assert!(
+            matches!(
+                migration.apply_import(&candidate),
+                Err(engram_runtime::CoreError::CapabilityUnsupported { .. })
+            ),
+            "{class} apply must be unsupported"
+        );
+        let after = serde_json::to_value(
+            block_on(exporter.export(&scope_a)).expect("state after rejected apply"),
+        )
+        .unwrap();
+        assert_eq!(before, after, "{class} apply changed target state");
+    }
 }
 
 #[test]

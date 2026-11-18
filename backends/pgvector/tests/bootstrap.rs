@@ -480,6 +480,18 @@ fn pg_recipe_recall_fuses_vector_lane() {
     let passage = embedder.embed_passage(&chunk.text).expect("embed passage");
     block_on(vectors.insert(&chunk.id, &space, passage)).expect("vector insert");
 
+    // The facts lane's policy omission must survive PG's shared composition.
+    let expired_memory: MemoryRecord = serde_json::from_value(serde_json::json!({
+        "id": format!("pg-expired-fact-{suffix}"), "kind": "observation",
+        "content": {"text": "recursive number sequence computation"},
+        "scope": scope,
+        "provenance": chunk.provenance,
+        "policy": {"visibility":"workspace", "retention":"durable", "allowedUses":["retrieval"], "expiresAt":"2000-01-01T00:00:00Z"},
+        "status":"active", "createdAt":"2000-01-01T00:00:00Z"
+    })).expect("expired facts fixture");
+    let memory = provider.require_memory().expect("memory handle");
+    block_on(memory.put_memory(expired_memory.clone())).expect("put expired memory");
+
     // Recall: the query shares semantics ("recursive number sequence") with
     // the chunk but no exact tokens — only the vector lane can find it.
     let recall = provider.require_recall().expect("recall handle");
@@ -523,6 +535,29 @@ fn pg_recipe_recall_fuses_vector_lane() {
         "vector lane must not fail: {:?}",
         payload.source_failures
     );
+
+    assert!(
+        payload
+            .omitted
+            .iter()
+            .any(|omitted| omitted.target_id == expired_memory.id.to_string()
+                && omitted.reason == OmittedReason::Expired),
+        "PG composition must retain the facts lane's policy omissions"
+    );
+    block_on(memory.forget(ForgetRequest {
+        target_type: ForgetTargetType::Memory,
+        target_id: expired_memory.id.to_string(),
+        scope: scope.clone(),
+        mode: DeleteMode::Delete,
+        reason: Some("fixture cleanup".into()),
+        requester: Requester {
+            actor: chunk.provenance.actor.clone(),
+            roles: vec![],
+            permissions: vec![],
+            on_behalf_of: None,
+        },
+    }))
+    .expect("delete expired fixture memory");
 
     // Cleanup.
     block_on(vectors.delete_target(&chunk.id)).expect("vector delete");

@@ -19,18 +19,13 @@
 #![allow(dead_code)]
 use std::sync::Arc;
 
-use engram_belief::{BeliefQuery, BeliefRepository};
 use engram_domain::{
-    ContextPayload, RetrievalRequest, RetrievalResult, RetrievalScore, RetrievalSourceFailure,
-    RetrievalTargetType, SourceFailureSeverity,
+    ContextPayload, RetrievalRequest, RetrievalResult, RetrievalScore, RetrievalTargetType,
 };
 use engram_integration::{EmbeddingProvider, KnowledgeQuery, UnifiedRecall};
 use engram_knowledge::KnowledgeRepository as _;
 use engram_memory::MemoryService;
-use engram_retrieval::{
-    CodeEligibilityResolver, ReciprocalRankFusion, RetrievalCompositionInput, VectorIndex as _,
-    compose_context, resolve_view,
-};
+use engram_retrieval::{CodeEligibilityResolver, VectorIndex as _, resolve_view};
 use engram_runtime::{CoreError, CoreResult};
 use engram_store_pgvector::{PgBeliefStore, PgKnowledgeStore, PgMemoryService, PgVectorIndex};
 
@@ -94,6 +89,7 @@ mod tests {
 }
 
 /// Composes the Postgres facts + beliefs + vector lanes into one fused recall.
+#[derive(Clone)]
 pub(crate) struct PgUnifiedRecall {
     pub(crate) memory: Arc<PgMemoryService>,
     pub(crate) beliefs: Arc<PgBeliefStore>,
@@ -245,204 +241,41 @@ impl PgUnifiedRecall {
     }
 }
 
+/// PG contributes its existing bounded vector lane; all fusion/policy orchestration
+/// delegates to the one provider-neutral recall composer.
+struct PgVectorLane(PgUnifiedRecall);
+#[async_trait::async_trait]
+impl engram_retrieval::RetrievalIndex for PgVectorLane {
+    async fn retrieve_candidates(
+        &self,
+        request: &RetrievalRequest,
+    ) -> CoreResult<Vec<RetrievalResult>> {
+        self.0.vector_lane(request).await
+    }
+}
 #[async_trait::async_trait]
 impl UnifiedRecall for PgUnifiedRecall {
     async fn recall(&self, request: RetrievalRequest) -> CoreResult<ContextPayload> {
-        let now = chrono::Utc::now();
-        let mut candidates: Vec<RetrievalResult> = Vec::new();
-        let mut source_failures: Vec<RetrievalSourceFailure> = Vec::new();
-        let lane = |name: &'static str, err: CoreError| RetrievalSourceFailure {
-            source: name.to_owned(),
-            mode: None,
-            severity: SourceFailureSeverity::Warning,
-            reason: err.to_string(),
-            message: None,
-            degraded: true,
-        };
-
-        // Facts lane: memory.retrieve. A failure degrades, never errors.
-        match self.memory.retrieve(request.clone()).await {
-            Ok(payload) => {
-                candidates.extend(payload.items);
-                source_failures.extend(payload.source_failures);
-            }
-            Err(e) => source_failures.push(lane("facts", e)),
+        let mut lanes: Vec<Arc<dyn engram_retrieval::RetrievalIndex>> =
+            vec![Arc::new(PgVectorLane(self.clone()))];
+        let mut names = vec!["vector".to_owned()];
+        if let Some(graph) = &self.graph_lane {
+            lanes.push(graph.clone());
+            names.push("graph".to_owned());
         }
-
-        // Beliefs lane: 0-or-1 live belief for the query subject.
-        let bq = BeliefQuery::live_subject(request.scope.clone(), request.query.clone(), now);
-        match self.beliefs.get_belief(bq).await {
-            Ok(Some(belief)) => {
-                candidates.push(RetrievalResult {
-                    id: format!("result-{}", belief.id),
-                    target_type: RetrievalTargetType::Belief,
-                    target_id: belief.id.to_string(),
-                    content: belief.content,
-                    score: RetrievalScore {
-                        total: belief.confidence,
-                        relevance: Some(belief.confidence),
-                        recency: None,
-                        confidence: Some(belief.confidence),
-                        cue_match: None,
-                        hierarchical_fit: None,
-                        policy_fit: Some(1.0),
-                    },
-                    provenance: belief.provenance,
-                    policy: belief.policy,
-                    explanation: None,
-                    fusion_trace: None,
-                    metadata: belief.metadata,
-                });
-            }
-            Ok(None) => {}
-            Err(e) => source_failures.push(lane("belief", e)),
+        let mut shared = engram_integration::recall_composition::SharedUnifiedRecall::new(
+            self.memory.clone(),
+            lanes,
+            self.beliefs.clone(),
+        )
+        .with_lane_names(names);
+        if let Some(eligibility) = &self.code_eligibility {
+            shared = shared.with_code_eligibility(eligibility.clone());
         }
-
-        // Vector lane (PS2): embed → pgvector → chunks.
-        match self.vector_lane(&request).await {
-            Ok(vector_results) => candidates.extend(vector_results),
-            Err(e) => source_failures.push(lane("vector", e)),
+        if let Some(evidence) = &self.candidate_evidence {
+            shared = shared.with_candidate_evidence(evidence.clone());
         }
-
-        // Graph lane: entity + chunk candidates over the knowledge port.
-        if let Some(graph_lane) = &self.graph_lane {
-            match graph_lane.retrieve_candidates(&request).await {
-                Ok(graph_results) => candidates.extend(graph_results),
-                Err(e) => source_failures.push(lane("graph", e)),
-            }
-        }
-
-        // Post-lane guard (task_013): authority resolution is itself a
-        // degradable source.  A failed authority read must not abort ordinary
-        // memory/belief recall, but it must deny code-capable chunk/entity
-        // candidates rather than silently widening the page.
-        let mut authority_failed = false;
-        let code_view = match &self.code_eligibility {
-            Some(resolver) => {
-                let requested = request
-                    .filters
-                    .as_ref()
-                    .and_then(|filters| filters.code_index_keys.as_deref());
-                match resolve_view(resolver.as_ref(), &request.scope, requested).await {
-                    Ok(view) => Some(view),
-                    Err(error) => {
-                        source_failures.push(lane("code_eligibility", error));
-                        authority_failed = true;
-                        None
-                    }
-                }
-            }
-            None => None,
-        };
-        if let Some(view) = &code_view {
-            // Corrective r4 (canonical 6c): with canonical evidence
-            // configured, a SUCCESSFUL view validates every candidate's
-            // canonical CODE DEPENDENCIES against that view — derived
-            // memories/beliefs built from stale code deny, positively
-            // authorized independent ordinary records keep flowing, Unknown
-            // fails closed.
-            //
-            // Work package A3 (r5): acceptance requires `complete` — a fully
-            // validated dependency set; the aggregate-only trait default can
-            // never pass. A code-dependent acceptance additionally requires
-            // a NONEMPTY code set (never a vacuous `.all` over a
-            // default-empty vector), and a MISSING evidence resolver is not
-            // derived-record independence: without it the guard fails closed
-            // identically to the authority-failure branch (identical
-            // semantics to the SQLite recipe).
-            if let Some(evidence) = &self.candidate_evidence {
-                let mut allowed = Vec::with_capacity(candidates.len());
-                for candidate in candidates {
-                    match evidence
-                        .classify_with_dependencies(&candidate, &request)
-                        .await
-                    {
-                        Ok(classification) => {
-                            let dependency_eligible = classification.complete
-                                && !classification.code_dependencies.is_empty()
-                                && classification
-                                    .code_dependencies
-                                    .iter()
-                                    .all(|dependency| view.allows(dependency.as_str(), true));
-                            if classification.complete
-                                && (classification.evidence
-                                    == engram_retrieval::CandidateEvidence::Ordinary
-                                    || (classification.evidence
-                                        == engram_retrieval::CandidateEvidence::CodeDependent
-                                        && dependency_eligible))
-                            {
-                                allowed.push(candidate);
-                            }
-                        }
-                        Err(error) => source_failures.push(lane("candidate_evidence", error)),
-                    }
-                }
-                candidates = allowed;
-            } else {
-                // Missing evidence resolver ≠ derived-record independence
-                // (A3): own-id lineage cannot prove a memory/belief free of
-                // stale code dependencies, so every candidate fails closed
-                // while code bindings exist and the denial is surfaced.
-                source_failures.push(lane(
-                    "candidate_evidence",
-                    CoreError::Adapter {
-                        adapter: "candidate-evidence".to_string(),
-                        message: "evidence resolver not configured; candidates fail \
-                                 closed while code bindings exist"
-                            .to_string(),
-                    },
-                ));
-                candidates.clear();
-            }
-        } else if authority_failed {
-            // Corrective r3 (finding 6) + review r5 (finding 6): degrade
-            // through CANONICAL EVIDENCE with the SAME completeness contract
-            // as the successful-view path — `classify_with_dependencies`,
-            // accepting ONLY complete, positively ordinary evidence. An
-            // aggregate-only resolver cannot pass (its classification is
-            // explicitly incomplete). Without an evidence resolver the
-            // recipe fails closed entirely (corrective r4, canonical 6c).
-            match &self.candidate_evidence {
-                Some(evidence) => {
-                    let mut allowed = Vec::with_capacity(candidates.len());
-                    for candidate in candidates {
-                        match evidence
-                            .classify_with_dependencies(&candidate, &request)
-                            .await
-                        {
-                            Ok(classification) => {
-                                if classification.complete
-                                    && classification.evidence
-                                        == engram_retrieval::CandidateEvidence::Ordinary
-                                {
-                                    allowed.push(candidate)
-                                }
-                            }
-                            Err(error) => source_failures.push(lane("candidate_evidence", error)),
-                        }
-                    }
-                    candidates = allowed;
-                }
-                // Corrective r4 (canonical 6c): without canonical evidence
-                // NO category is exempt — Memory/Belief included. Positive
-                // ordinary evidence cannot be established while the code
-                // authority is unavailable, so every code-capable candidate
-                // denies (the composed payload then carries only facts-lane
-                // degradation already filtered above and the surfaced
-                // failures explain the emptiness).
-                None => candidates.clear(),
-            }
-        }
-
-        compose_context(RetrievalCompositionInput {
-            request: &request,
-            fusion: &ReciprocalRankFusion::default(),
-            reranker: None,
-            candidates,
-            omitted: vec![],
-            source_failures,
-            created_at: now,
-        })
+        shared.recall(request).await
     }
 }
 

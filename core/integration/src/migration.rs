@@ -474,17 +474,8 @@ pub trait MigrationService: Send + Sync {
     /// Returns `CoreError::Adapter` if validation fails.
     fn dry_run_import(&self, import_data: &ImportData) -> CoreResult<ValidationReport>;
 
-    /// Applies the import with manifest fingerprint validation.
-    ///
-    /// This method validates the manifest fingerprint against the dry-run
-    /// report and applies the import if the fingerprint matches. Returns an
-    /// error if the manifest is stale (fingerprint mismatch).
-    ///
-    /// # Errors
-    ///
-    /// Returns `CoreError::InvalidRequest` if the manifest fingerprint is stale.
-    /// Returns `CoreError::MigrationPending` if migrations need to be applied first.
-    /// Returns `CoreError::Adapter` if the import fails.
+    /// Returns CapabilityUnsupported for every manifest before any target write.
+    /// Export and nonmutating dry-run remain available; restore/apply is not implemented.
     fn apply_import(&self, manifest: &MigrationManifest) -> CoreResult<()>;
 
     /// Returns the schema version of the target database.

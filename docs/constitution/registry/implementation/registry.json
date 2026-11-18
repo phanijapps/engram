@@ -15,8 +15,16 @@
       "plane": "core",
       "ssot_module": "core/memory",
       "transport_wrappers": [
-        {"module": "adapters/sqlite/src/memory/engine.rs", "transport": "rust", "must_import": "engram-memory"},
-        {"module": "adapters/helixdb/src/memory.rs", "transport": "rust", "must_import": "engram-memory"}
+        {
+          "module": "adapters/sqlite/src/memory/engine.rs",
+          "transport": "rust",
+          "must_import": "engram-memory"
+        },
+        {
+          "module": "adapters/helixdb/src/memory.rs",
+          "transport": "rust",
+          "must_import": "engram-memory"
+        }
       ]
     },
     {
@@ -108,6 +116,48 @@
       "name": "On-top codegraph queries (RFC-0012: dead-code, blast-radius, dependency-path)",
       "plane": "on-top",
       "ssot_module": "codegraph/queries"
+    },
+    {
+      "concept_id": "integration.batch",
+      "name": "Shared semantic batches and source supersession",
+      "plane": "core",
+      "ssot_module": "core/integration/src/batch_runtime.rs"
+    },
+    {
+      "concept_id": "integration.provenance",
+      "name": "Shared provenance/evidence composition",
+      "plane": "core",
+      "ssot_module": "core/integration/src/provenance_composition.rs"
+    },
+    {
+      "concept_id": "integration.archive",
+      "name": "Shared v1 archive export",
+      "plane": "core",
+      "ssot_module": "core/integration/src/archive_composition.rs"
+    },
+    {
+      "concept_id": "integration.archive_validation",
+      "name": "Shared archive dry-run and unsupported apply",
+      "plane": "core",
+      "ssot_module": "core/integration/src/migration_validation.rs"
+    },
+    {
+      "concept_id": "integration.observability",
+      "name": "Shared diagnostics composition",
+      "plane": "core",
+      "ssot_module": "core/integration/src/observability_composition.rs"
+    },
+    {
+      "concept_id": "integration.recall",
+      "name": "Shared provider-free recall orchestration",
+      "plane": "core",
+      "ssot_module": "core/integration/src/recall_composition.rs"
+    },
+    {
+      "concept_id": "integration.community",
+      "name": "Shared eligibility-filtered community algorithms",
+      "plane": "core",
+      "ssot_module": "core/integration/src/community_composition.rs"
     }
   ]
 }

@@ -82,34 +82,8 @@ fn persisted_archived_at(
 #[async_trait]
 impl KnowledgeRepository for SqlKnowledgeStore {
     async fn put_source(&self, source: KnowledgeSource) -> CoreResult<KnowledgeSource> {
-        let json = serde_json::to_string(&source).map_err(crate::knowledge::schema::json_error)?;
-        let connection = self.lock()?;
-        connection
-            .execute(
-                r#"
-                INSERT INTO knowledge_sources
-                    (id, tenant, subject, workspace, session, environment, record_json)
-                VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)
-                ON CONFLICT(id) DO UPDATE SET
-                    tenant = excluded.tenant,
-                    subject = excluded.subject,
-                    workspace = excluded.workspace,
-                    session = excluded.session,
-                    environment = excluded.environment,
-                    record_json = excluded.record_json
-                "#,
-                rusqlite::params![
-                    source.id.to_string(),
-                    source.scope.tenant,
-                    source.scope.subject,
-                    source.scope.workspace,
-                    source.scope.session,
-                    source.scope.environment,
-                    json
-                ],
-            )
-            .map_err(sql_error)?;
-        Ok(source)
+        let expected = source.scope.clone();
+        self.put_source_in_scope(&expected, source).await
     }
 
     async fn get_source(
@@ -130,51 +104,21 @@ impl KnowledgeRepository for SqlKnowledgeStore {
     }
 
     async fn put_document(&self, document: SourceDocument) -> CoreResult<SourceDocument> {
-        let json =
-            serde_json::to_string(&document).map_err(crate::knowledge::schema::json_error)?;
-        let connection = self.lock()?;
-        connection
-            .execute(
-                r#"
-                INSERT INTO knowledge_documents (id, source_id, record_json)
-                VALUES (?1, ?2, ?3)
-                ON CONFLICT(id) DO UPDATE SET
-                    source_id = excluded.source_id,
-                    record_json = excluded.record_json
-                "#,
-                rusqlite::params![
-                    document.id.to_string(),
-                    document.source_id.to_string(),
-                    json
-                ],
-            )
-            .map_err(sql_error)?;
-        Ok(document)
+        let expected = self
+            .get_source_by_id(&document.source_id)
+            .await?
+            .ok_or_else(ownership_error)?
+            .scope;
+        self.put_document_in_scope(&expected, document).await
     }
 
     async fn put_chunk(&self, chunk: KnowledgeChunk) -> CoreResult<KnowledgeChunk> {
-        let json = serde_json::to_string(&chunk).map_err(crate::knowledge::schema::json_error)?;
-        let connection = self.lock()?;
-        connection
-            .execute(
-                r#"
-                INSERT INTO knowledge_chunks
-                    (id, document_id, source_id, record_json)
-                VALUES (?1, ?2, ?3, ?4)
-                ON CONFLICT(id) DO UPDATE SET
-                    document_id = excluded.document_id,
-                    source_id = excluded.source_id,
-                    record_json = excluded.record_json
-                "#,
-                rusqlite::params![
-                    chunk.id.to_string(),
-                    chunk.document_id.to_string(),
-                    chunk.source_id.to_string(),
-                    json
-                ],
-            )
-            .map_err(sql_error)?;
-        Ok(chunk)
+        let expected = self
+            .get_source_by_id(&chunk.source_id)
+            .await?
+            .ok_or_else(ownership_error)?
+            .scope;
+        self.put_chunk_in_scope(&expected, chunk).await
     }
 
     async fn get_chunk(&self, id: &ChunkId, scope: &Scope) -> CoreResult<Option<KnowledgeChunk>> {
@@ -312,158 +256,17 @@ impl KnowledgeRepository for SqlKnowledgeStore {
     }
 
     async fn put_entity(&self, entity: KnowledgeEntity) -> CoreResult<KnowledgeEntity> {
-        let connection = self.lock()?;
-        let graph_id = entity
-            .graph_id
-            .as_ref()
-            .map(ToString::to_string)
-            .unwrap_or_default();
-        // Preserve a prior maintenance archive across re-put (ingestion passes
-        // archived_at = None); keep the column and record_json in lockstep.
-        let preserved =
-            persisted_archived_at(&connection, "knowledge_entities", &entity.id.to_string())?;
-        let mut stored = entity;
-        if let Some(ts) = preserved {
-            stored.archived_at = Some(ts);
-        }
-        // Temporal discrimination (whats-changed-temporal-flat): re-ingest
-        // re-derives every symbol in a changed file, and a wholesale
-        // validFrom re-stamp made `recent` uniformly score the whole repo.
-        // When the incoming entity is semantically identical to the stored
-        // one, keep the stored validFrom — the stamp moves only on a real
-        // change (kind, graph, source-refs, or metadata).
-        stored.valid_from =
-            match persisted_semantically_identical(&connection, &stored.id.to_string(), &stored)? {
-                Some(prior_valid_from) => Some(prior_valid_from),
-                None => stored.valid_from,
-            };
-        // Prior content read BEFORE the write (change-log no-op detection).
-        let prior_json = stored_json(&connection, "knowledge_entities", &stored.id.to_string())?;
-        let json = serde_json::to_string(&stored).map_err(crate::knowledge::schema::json_error)?;
-        connection
-            .execute(
-                r#"
-                INSERT INTO knowledge_entities
-                    (id, graph_id, tenant, subject, workspace, session, environment, record_json, archived_at)
-                VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)
-                ON CONFLICT(id) DO UPDATE SET
-                    graph_id = excluded.graph_id,
-                    tenant = excluded.tenant,
-                    subject = excluded.subject,
-                    workspace = excluded.workspace,
-                    session = excluded.session,
-                    environment = excluded.environment,
-                    record_json = excluded.record_json,
-                    archived_at = excluded.archived_at
-                "#,
-                rusqlite::params![
-                    stored.id.to_string(),
-                    graph_id,
-                    stored.scope.tenant,
-                    stored.scope.subject,
-                    stored.scope.workspace,
-                    stored.scope.session,
-                    stored.scope.environment,
-                    json,
-                    stored.archived_at.map(|t| t.to_rfc3339())
-                ],
-            )
-            .map_err(sql_error)?;
-        // Change log (slice 3): upsert event only when the row content
-        // actually changed — identical re-puts log nothing (no-op rule).
-        let new_json =
-            serde_json::to_string(&stored).map_err(crate::knowledge::schema::json_error)?;
-        if prior_json.as_deref() != Some(new_json.as_str()) {
-            append_change_locked(
-                &connection,
-                &stored.scope,
-                stored.graph_id.as_ref().map(ToString::to_string).as_deref(),
-                engram_domain::KnowledgeChangeTarget::Entity,
-                &stored.id.to_string(),
-                engram_domain::KnowledgeChangeOp::Upsert,
-            )?;
-        }
-        Ok(stored)
+        let expected = entity.scope.clone();
+        self.put_entity_in_scope(&expected, entity).await
     }
 
     async fn put_relationship(
         &self,
         relationship: KnowledgeRelationship,
     ) -> CoreResult<KnowledgeRelationship> {
-        let connection = self.lock()?;
-        let graph_id = relationship
-            .graph_id
-            .as_ref()
-            .map(ToString::to_string)
-            .unwrap_or_default();
-        let subject_id = relationship
-            .subject
-            .id
-            .as_ref()
-            .map(ToString::to_string)
-            .unwrap_or_default();
-        // Preserve a prior maintenance archive across re-put.
-        let preserved = persisted_archived_at(
-            &connection,
-            "knowledge_relationships",
-            &relationship.id.to_string(),
-        )?;
-        let mut stored = relationship;
-        if let Some(ts) = preserved {
-            stored.archived_at = Some(ts);
-        }
-        // Prior content read BEFORE the write (change-log no-op detection).
-        let prior_json = stored_json(
-            &connection,
-            "knowledge_relationships",
-            &stored.id.to_string(),
-        )?;
-        let json = serde_json::to_string(&stored).map_err(crate::knowledge::schema::json_error)?;
-        connection
-            .execute(
-                r#"
-                INSERT INTO knowledge_relationships
-                    (id, graph_id, subject_id, tenant, subject, workspace, session, environment, record_json, archived_at)
-                VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)
-                ON CONFLICT(id) DO UPDATE SET
-                    graph_id = excluded.graph_id,
-                    subject_id = excluded.subject_id,
-                    tenant = excluded.tenant,
-                    subject = excluded.subject,
-                    workspace = excluded.workspace,
-                    session = excluded.session,
-                    environment = excluded.environment,
-                    record_json = excluded.record_json,
-                    archived_at = excluded.archived_at
-                "#,
-                rusqlite::params![
-                    stored.id.to_string(),
-                    graph_id,
-                    subject_id,
-                    stored.scope.tenant,
-                    stored.scope.subject,
-                    stored.scope.workspace,
-                    stored.scope.session,
-                    stored.scope.environment,
-                    json,
-                    stored.archived_at.map(|t| t.to_rfc3339())
-                ],
-            )
-            .map_err(sql_error)?;
-        // Change log: upsert event only on content change (no-op rule).
-        let new_json =
-            serde_json::to_string(&stored).map_err(crate::knowledge::schema::json_error)?;
-        if prior_json.as_deref() != Some(new_json.as_str()) {
-            append_change_locked(
-                &connection,
-                &stored.scope,
-                stored.graph_id.as_ref().map(ToString::to_string).as_deref(),
-                engram_domain::KnowledgeChangeTarget::Relationship,
-                &stored.id.to_string(),
-                engram_domain::KnowledgeChangeOp::Upsert,
-            )?;
-        }
-        Ok(stored)
+        let expected = relationship.scope.clone();
+        self.put_relationship_in_scope(&expected, relationship)
+            .await
     }
 
     async fn get_entity(
@@ -767,4 +570,368 @@ fn has_source_ref(refs: &[EvidenceRef], source_id: &str) -> bool {
     refs.iter().any(|r| {
         r.target_type == EvidenceTargetType::Source && r.target_id.as_deref() == Some(source_id)
     })
+}
+
+fn ownership_error() -> CoreError {
+    CoreError::Conflict {
+        reason: "knowledge scope or parent ownership mismatch".into(),
+    }
+}
+fn require_scope(expected: &Scope, actual: &Scope) -> CoreResult<()> {
+    if expected == actual {
+        Ok(())
+    } else {
+        Err(ownership_error())
+    }
+}
+fn require_existing_scope(
+    conn: &Connection,
+    table: &str,
+    id: &str,
+    expected: &Scope,
+) -> CoreResult<()> {
+    if let Some(raw) = stored_json(conn, table, id)? {
+        let row: serde_json::Value = serde_json::from_str(&raw).map_err(|_| ownership_error())?;
+        let scope: Scope =
+            serde_json::from_value(row.get("scope").cloned().ok_or_else(ownership_error)?)
+                .map_err(|_| ownership_error())?;
+        require_scope(expected, &scope)?;
+    }
+    Ok(())
+}
+fn require_source_scope(conn: &Connection, id: &SourceId, expected: &Scope) -> CoreResult<()> {
+    let raw =
+        stored_json(conn, "knowledge_sources", &id.to_string())?.ok_or_else(ownership_error)?;
+    let source: KnowledgeSource = serde_json::from_str(&raw).map_err(|_| ownership_error())?;
+    require_scope(expected, &source.scope)
+}
+fn require_document_parent(
+    conn: &Connection,
+    id: &DocumentId,
+    source: &SourceId,
+    expected: &Scope,
+) -> CoreResult<()> {
+    let raw =
+        stored_json(conn, "knowledge_documents", &id.to_string())?.ok_or_else(ownership_error)?;
+    let document: SourceDocument = serde_json::from_str(&raw).map_err(|_| ownership_error())?;
+    if &document.source_id != source {
+        return Err(ownership_error());
+    }
+    require_source_scope(conn, &document.source_id, expected)
+}
+fn require_existing_child_scope(
+    conn: &Connection,
+    table: &str,
+    id: &str,
+    expected: &Scope,
+) -> CoreResult<()> {
+    if let Some(raw) = stored_json(conn, table, id)? {
+        if table == "knowledge_documents" {
+            let row: SourceDocument = serde_json::from_str(&raw).map_err(|_| ownership_error())?;
+            require_source_scope(conn, &row.source_id, expected)?;
+        } else {
+            let row: KnowledgeChunk = serde_json::from_str(&raw).map_err(|_| ownership_error())?;
+            require_source_scope(conn, &row.source_id, expected)?;
+            // The old document may already have acknowledged a same-scope source
+            // reassociation. Prove its current owner, rather than requiring its
+            // obsolete association to equal the old chunk's source. Incoming
+            // document/source consistency is checked separately before the write.
+            let document_raw =
+                stored_json(conn, "knowledge_documents", &row.document_id.to_string())?
+                    .ok_or_else(ownership_error)?;
+            let document: SourceDocument =
+                serde_json::from_str(&document_raw).map_err(|_| ownership_error())?;
+            require_source_scope(conn, &document.source_id, expected)?;
+        }
+    }
+    Ok(())
+}
+impl SqlKnowledgeStore {
+    /// Scope and existing ownership are validated under the same lock as the write.
+    pub async fn put_source_in_scope(
+        &self,
+        expected: &Scope,
+        source: KnowledgeSource,
+    ) -> CoreResult<KnowledgeSource> {
+        let json = serde_json::to_string(&source).map_err(crate::knowledge::schema::json_error)?;
+        let connection = self.lock()?;
+        require_scope(expected, &source.scope)?;
+        require_existing_scope(
+            &connection,
+            "knowledge_sources",
+            &source.id.to_string(),
+            expected,
+        )?;
+        connection
+            .execute(
+                r#"
+                INSERT INTO knowledge_sources
+                    (id, tenant, subject, workspace, session, environment, record_json)
+                VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)
+                ON CONFLICT(id) DO UPDATE SET
+                    tenant = excluded.tenant,
+                    subject = excluded.subject,
+                    workspace = excluded.workspace,
+                    session = excluded.session,
+                    environment = excluded.environment,
+                    record_json = excluded.record_json
+                "#,
+                rusqlite::params![
+                    source.id.to_string(),
+                    source.scope.tenant,
+                    source.scope.subject,
+                    source.scope.workspace,
+                    source.scope.session,
+                    source.scope.environment,
+                    json
+                ],
+            )
+            .map_err(sql_error)?;
+        Ok(source)
+    }
+    /// Scope and existing ownership are validated under the same lock as the write.
+    pub async fn put_document_in_scope(
+        &self,
+        expected: &Scope,
+        document: SourceDocument,
+    ) -> CoreResult<SourceDocument> {
+        let json =
+            serde_json::to_string(&document).map_err(crate::knowledge::schema::json_error)?;
+        let connection = self.lock()?;
+        require_source_scope(&connection, &document.source_id, expected)?;
+        require_existing_child_scope(
+            &connection,
+            "knowledge_documents",
+            &document.id.to_string(),
+            expected,
+        )?;
+        connection
+            .execute(
+                r#"
+                INSERT INTO knowledge_documents (id, source_id, record_json)
+                VALUES (?1, ?2, ?3)
+                ON CONFLICT(id) DO UPDATE SET
+                    source_id = excluded.source_id,
+                    record_json = excluded.record_json
+                "#,
+                rusqlite::params![
+                    document.id.to_string(),
+                    document.source_id.to_string(),
+                    json
+                ],
+            )
+            .map_err(sql_error)?;
+        Ok(document)
+    }
+    /// Scope and existing ownership are validated under the same lock as the write.
+    pub async fn put_chunk_in_scope(
+        &self,
+        expected: &Scope,
+        chunk: KnowledgeChunk,
+    ) -> CoreResult<KnowledgeChunk> {
+        let json = serde_json::to_string(&chunk).map_err(crate::knowledge::schema::json_error)?;
+        let connection = self.lock()?;
+        require_source_scope(&connection, &chunk.source_id, expected)?;
+        require_existing_child_scope(
+            &connection,
+            "knowledge_chunks",
+            &chunk.id.to_string(),
+            expected,
+        )?;
+        require_document_parent(&connection, &chunk.document_id, &chunk.source_id, expected)?;
+        connection
+            .execute(
+                r#"
+                INSERT INTO knowledge_chunks
+                    (id, document_id, source_id, record_json)
+                VALUES (?1, ?2, ?3, ?4)
+                ON CONFLICT(id) DO UPDATE SET
+                    document_id = excluded.document_id,
+                    source_id = excluded.source_id,
+                    record_json = excluded.record_json
+                "#,
+                rusqlite::params![
+                    chunk.id.to_string(),
+                    chunk.document_id.to_string(),
+                    chunk.source_id.to_string(),
+                    json
+                ],
+            )
+            .map_err(sql_error)?;
+        Ok(chunk)
+    }
+    /// Scope and existing ownership are validated under the same lock as the write.
+    pub async fn put_entity_in_scope(
+        &self,
+        expected: &Scope,
+        entity: KnowledgeEntity,
+    ) -> CoreResult<KnowledgeEntity> {
+        let connection = self.lock()?;
+        require_scope(expected, &entity.scope)?;
+        require_existing_scope(
+            &connection,
+            "knowledge_entities",
+            &entity.id.to_string(),
+            expected,
+        )?;
+        let graph_id = entity
+            .graph_id
+            .as_ref()
+            .map(ToString::to_string)
+            .unwrap_or_default();
+        // Preserve a prior maintenance archive across re-put (ingestion passes
+        // archived_at = None); keep the column and record_json in lockstep.
+        let preserved =
+            persisted_archived_at(&connection, "knowledge_entities", &entity.id.to_string())?;
+        let mut stored = entity;
+        if let Some(ts) = preserved {
+            stored.archived_at = Some(ts);
+        }
+        // Temporal discrimination (whats-changed-temporal-flat): re-ingest
+        // re-derives every symbol in a changed file, and a wholesale
+        // validFrom re-stamp made `recent` uniformly score the whole repo.
+        // When the incoming entity is semantically identical to the stored
+        // one, keep the stored validFrom — the stamp moves only on a real
+        // change (kind, graph, source-refs, or metadata).
+        stored.valid_from =
+            match persisted_semantically_identical(&connection, &stored.id.to_string(), &stored)? {
+                Some(prior_valid_from) => Some(prior_valid_from),
+                None => stored.valid_from,
+            };
+        // Prior content read BEFORE the write (change-log no-op detection).
+        let prior_json = stored_json(&connection, "knowledge_entities", &stored.id.to_string())?;
+        let json = serde_json::to_string(&stored).map_err(crate::knowledge::schema::json_error)?;
+        connection
+            .execute(
+                r#"
+                INSERT INTO knowledge_entities
+                    (id, graph_id, tenant, subject, workspace, session, environment, record_json, archived_at)
+                VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)
+                ON CONFLICT(id) DO UPDATE SET
+                    graph_id = excluded.graph_id,
+                    tenant = excluded.tenant,
+                    subject = excluded.subject,
+                    workspace = excluded.workspace,
+                    session = excluded.session,
+                    environment = excluded.environment,
+                    record_json = excluded.record_json,
+                    archived_at = excluded.archived_at
+                "#,
+                rusqlite::params![
+                    stored.id.to_string(),
+                    graph_id,
+                    stored.scope.tenant,
+                    stored.scope.subject,
+                    stored.scope.workspace,
+                    stored.scope.session,
+                    stored.scope.environment,
+                    json,
+                    stored.archived_at.map(|t| t.to_rfc3339())
+                ],
+            )
+            .map_err(sql_error)?;
+        // Change log (slice 3): upsert event only when the row content
+        // actually changed — identical re-puts log nothing (no-op rule).
+        let new_json =
+            serde_json::to_string(&stored).map_err(crate::knowledge::schema::json_error)?;
+        if prior_json.as_deref() != Some(new_json.as_str()) {
+            append_change_locked(
+                &connection,
+                &stored.scope,
+                stored.graph_id.as_ref().map(ToString::to_string).as_deref(),
+                engram_domain::KnowledgeChangeTarget::Entity,
+                &stored.id.to_string(),
+                engram_domain::KnowledgeChangeOp::Upsert,
+            )?;
+        }
+        Ok(stored)
+    }
+    /// Scope and existing ownership are validated under the same lock as the write.
+    pub async fn put_relationship_in_scope(
+        &self,
+        expected: &Scope,
+        relationship: KnowledgeRelationship,
+    ) -> CoreResult<KnowledgeRelationship> {
+        let connection = self.lock()?;
+        require_scope(expected, &relationship.scope)?;
+        require_existing_scope(
+            &connection,
+            "knowledge_relationships",
+            &relationship.id.to_string(),
+            expected,
+        )?;
+        let graph_id = relationship
+            .graph_id
+            .as_ref()
+            .map(ToString::to_string)
+            .unwrap_or_default();
+        let subject_id = relationship
+            .subject
+            .id
+            .as_ref()
+            .map(ToString::to_string)
+            .unwrap_or_default();
+        // Preserve a prior maintenance archive across re-put.
+        let preserved = persisted_archived_at(
+            &connection,
+            "knowledge_relationships",
+            &relationship.id.to_string(),
+        )?;
+        let mut stored = relationship;
+        if let Some(ts) = preserved {
+            stored.archived_at = Some(ts);
+        }
+        // Prior content read BEFORE the write (change-log no-op detection).
+        let prior_json = stored_json(
+            &connection,
+            "knowledge_relationships",
+            &stored.id.to_string(),
+        )?;
+        let json = serde_json::to_string(&stored).map_err(crate::knowledge::schema::json_error)?;
+        connection
+            .execute(
+                r#"
+                INSERT INTO knowledge_relationships
+                    (id, graph_id, subject_id, tenant, subject, workspace, session, environment, record_json, archived_at)
+                VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)
+                ON CONFLICT(id) DO UPDATE SET
+                    graph_id = excluded.graph_id,
+                    subject_id = excluded.subject_id,
+                    tenant = excluded.tenant,
+                    subject = excluded.subject,
+                    workspace = excluded.workspace,
+                    session = excluded.session,
+                    environment = excluded.environment,
+                    record_json = excluded.record_json,
+                    archived_at = excluded.archived_at
+                "#,
+                rusqlite::params![
+                    stored.id.to_string(),
+                    graph_id,
+                    subject_id,
+                    stored.scope.tenant,
+                    stored.scope.subject,
+                    stored.scope.workspace,
+                    stored.scope.session,
+                    stored.scope.environment,
+                    json,
+                    stored.archived_at.map(|t| t.to_rfc3339())
+                ],
+            )
+            .map_err(sql_error)?;
+        // Change log: upsert event only on content change (no-op rule).
+        let new_json =
+            serde_json::to_string(&stored).map_err(crate::knowledge::schema::json_error)?;
+        if prior_json.as_deref() != Some(new_json.as_str()) {
+            append_change_locked(
+                &connection,
+                &stored.scope,
+                stored.graph_id.as_ref().map(ToString::to_string).as_deref(),
+                engram_domain::KnowledgeChangeTarget::Relationship,
+                &stored.id.to_string(),
+                engram_domain::KnowledgeChangeOp::Upsert,
+            )?;
+        }
+        Ok(stored)
+    }
 }

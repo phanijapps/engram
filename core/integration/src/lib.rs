@@ -39,6 +39,8 @@
 //! ```
 
 pub mod batch;
+pub mod batch_runtime;
+pub mod batch_supersession;
 pub mod candidate_evidence;
 pub mod capability;
 pub mod code_binding;
@@ -53,21 +55,33 @@ pub use embedding_runtime::{PreparedEmbedding, prepare_embedding};
 #[cfg(feature = "http-embeddings")]
 mod http_embedding;
 pub use embedding_config::{EmbeddingOptions, EmbeddingOverrides};
+pub mod archive_composition;
+pub mod community_composition;
+#[cfg(feature = "composition")]
+pub mod consolidation_composition;
 pub mod derived_lifecycle;
 pub mod export_import;
 pub mod hierarchy_build;
 pub mod knowledge_query;
 pub mod lexical_feed;
 pub mod migration;
+pub mod migration_validation;
 pub mod observability;
+pub mod observability_composition;
 #[cfg(feature = "ollama")]
 pub mod ollama_provider;
 mod provenance;
+pub mod provenance_composition;
 pub mod provider;
 pub mod recall;
+#[cfg(feature = "composition")]
+pub mod recall_composition;
+#[cfg(feature = "composition")]
+pub mod recall_lanes;
 pub mod scope_inventory;
 #[cfg(feature = "sqlite")]
 pub mod sqlite;
+pub mod storage_composition;
 pub mod storage_network_policy;
 
 pub use batch::{

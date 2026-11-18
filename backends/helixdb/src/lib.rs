@@ -70,8 +70,11 @@ fn compose_prepared(
     prepared: engram_integration::PreparedEmbedding,
 ) -> CoreResult<EngramProvider> {
     let (storage, retained, lexical_path) = composition_paths(config)?;
-    std::fs::create_dir_all(&storage).map_err(|_| local_error())?;
-    std::fs::create_dir_all(&lexical_path).map_err(|_| local_error())?;
+    let read_only = store.composition_read_only();
+    if !read_only {
+        std::fs::create_dir_all(&storage).map_err(|_| local_error())?;
+        std::fs::create_dir_all(&lexical_path).map_err(|_| local_error())?;
+    }
     let scope = store.composition_scope().clone();
     let native = Arc::new(store.clone());
     let knowledge = Arc::new(KnowledgePorts::new(store.clone()));
@@ -83,7 +86,12 @@ fn compose_prepared(
         engram_integration::code_binding::RepositoryEligibilitySource::new(bindings.clone()),
     );
     let lexical = Arc::new(
-        engram_store_lexical::LexicalIndex::open(&lexical_path).map_err(|_| local_error())?,
+        if read_only {
+            engram_store_lexical::LexicalIndex::open_read_only(&lexical_path)
+        } else {
+            engram_store_lexical::LexicalIndex::open(&lexical_path)
+        }
+        .map_err(|_| local_error())?,
     );
     let feed: Arc<dyn engram_integration::LexicalFeed> = Arc::new(LexicalFeed(lexical.clone()));
     let read: Arc<dyn CompositionRead> = knowledge.clone();

@@ -1,13 +1,11 @@
 //! Integration facade exposed to Node through N-API.
 //!
 //! This module bridges the Rust integration contract
-//! (`engram_conformance::bootstrap_provider`) to TypeScript as a JSON-in /
+//! (the selected provider factory) to TypeScript as a JSON-in /
 //! JSON-out function, without changing the existing per-family engine surface.
 //! TypeScript callers pass a serialized [`EngramConfig`] and receive a
 //! capability report plus schema/adapter versions.
 
-use engram_conformance::bootstrap_provider;
-use engram_integration::EngramConfig;
 use napi::bindgen_prelude::*;
 use napi_derive::napi;
 
@@ -33,9 +31,8 @@ pub struct IntegrationBootstrapResult {
 ///
 /// The config JSON must match the v1 `EngramConfig` shape (storage_path,
 /// trusted_root, scope_mapping_strategy, embedding_provider, migration_mode,
-/// capability_policy). The provider is constructed, every capability family's
-/// conformance fixture is run, and handles are attached only where the fixture
-/// passes.
+/// capability_policy). The selected canonical recipe constructs the provider and reports its actual
+/// capabilities. Bootstrap never runs conformance fixtures or writes seed data.
 ///
 /// Returns the capability report and diagnostic versions. The provider itself
 /// is not currently held across the boundary (each call constructs one); this
@@ -45,13 +42,8 @@ pub struct IntegrationBootstrapResult {
 #[allow(dead_code)] // N-API entry point: consumed from JavaScript, so it has no Rust call site.
 #[napi(js_name = "bootstrapIntegrationProvider")]
 pub fn bootstrap_integration_provider(config_json: String) -> Result<IntegrationBootstrapResult> {
-    let config: EngramConfig = serde_json::from_str(&config_json).map_err(|e| {
-        to_napi_error(engram_runtime::CoreError::InvalidRequest {
-            reason: format!("invalid integration config json: {e}"),
-        })
-    })?;
-
-    let provider = bootstrap_provider(&config).map_err(to_napi_error)?;
+    let value: serde_json::Value = crate::decode(&config_json)?;
+    let provider = crate::provider::open_config(value)?;
 
     let report = provider.capabilities();
     let capabilities_json = serde_json::to_string(report).map_err(|e| {

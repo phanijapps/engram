@@ -11,35 +11,35 @@
 //!
 //! [`EngramProvider`]: engram_integration::EngramProvider
 
-mod app;
-mod belief;
-mod bootstrap;
-mod changes;
-mod codegraph;
-mod config;
-mod dependencies;
-mod embedding_config;
-mod fetch_content;
-mod graph;
-mod hierarchy;
-mod maintenance;
-mod oneshot;
-mod ontology;
-mod outcomes;
-mod ownership;
-mod pack;
+pub(crate) mod app;
+pub(crate) mod belief;
+pub(crate) mod bootstrap;
+pub(crate) mod changes;
+pub(crate) mod codegraph;
+pub(crate) mod config;
+pub(crate) mod dependencies;
+pub(crate) mod embedding_config;
+pub(crate) mod fetch_content;
+pub(crate) mod graph;
+pub(crate) mod hierarchy;
+pub(crate) mod maintenance;
+pub(crate) mod oneshot;
+pub(crate) mod ontology;
+pub(crate) mod outcomes;
+pub(crate) mod ownership;
+pub(crate) mod pack;
 #[cfg(test)]
-mod pack_tests;
-mod predict;
-mod procedures;
-mod proposals;
-mod protocol;
-mod protocols;
-mod registry;
-mod scan_roots;
-mod scope;
-mod server;
-mod tools;
+pub(crate) mod pack_tests;
+pub(crate) mod predict;
+pub(crate) mod procedures;
+pub(crate) mod proposals;
+pub(crate) mod protocol;
+pub(crate) mod protocols;
+pub(crate) mod registry;
+pub(crate) mod scan_roots;
+pub(crate) mod scope;
+pub(crate) mod server;
+pub(crate) mod tools;
 
 use app::App;
 use registry::{ToolError, ToolRecord, ToolRegistry};
@@ -152,7 +152,7 @@ FULL CONTRACT
 "#;
 
 #[cfg(test)]
-mod version_tests {
+pub(crate) mod version_tests {
     use super::*;
 
     /// Drift mitigation (spec cli-help-version): every flag the parser
@@ -192,13 +192,22 @@ mod version_tests {
 }
 
 fn main() {
-    let argv: Vec<String> = std::env::args().skip(1).collect();
+    #[allow(unused_mut)]
+    let mut argv: Vec<String> = std::env::args().skip(1).collect();
+    #[cfg(feature = "test-controls")]
+    if let Err(message) = oneshot::initialize_fixture(&mut argv) {
+        eprintln!("engram-mcp: {message}");
+        std::process::exit(2);
+    }
 
     // One-shot subcommands (RFC-0022): `engram-mcp recall|status …` run a
     // single query against the store and exit — no MCP server loop. Used by
     // the recall-on-submit and stale-index hooks.
     if oneshot::is_oneshot(&argv) {
-        std::process::exit(oneshot::run(&argv));
+        let exit = oneshot::run(&argv);
+        #[cfg(feature = "test-controls")]
+        oneshot::finish_fixture();
+        std::process::exit(exit);
     }
 
     // Pack one-shot subcommands (plan S7): `engram-mcp pack list|install|widen|status`
@@ -235,7 +244,11 @@ fn main() {
         std::process::exit(2);
     });
 
-    let provider = bootstrap::open_provider(&config).unwrap_or_else(|message| {
+    #[cfg(feature = "test-controls")]
+    let opened = oneshot::fixture_provider(&config, true);
+    #[cfg(not(feature = "test-controls"))]
+    let opened = bootstrap::open_provider(&config);
+    let provider = opened.unwrap_or_else(|message| {
         eprintln!("engram-mcp: {message}");
         std::process::exit(1);
     });
@@ -294,6 +307,8 @@ fn main() {
     let mut registry: ToolRegistry<App> = ToolRegistry::new();
     register_all(&mut registry, &config.tool_profile);
     server::run(registry, &app);
+    #[cfg(feature = "test-controls")]
+    oneshot::finish_fixture();
 }
 
 /// Tool profiles — restrict which MCP tools are registered to reduce agent
@@ -1740,7 +1755,7 @@ fn consolidated_hierarchy(app: &App, args: &Value) -> Result<Value, ToolError> {
 }
 
 #[cfg(test)]
-mod parity_tests {
+pub(crate) mod parity_tests {
     use super::*;
 
     /// Cross-server tool-list parity (engram-code spec, ADR-0022): the
@@ -1780,7 +1795,7 @@ mod parity_tests {
 /// DEFAULT profile actually exposes every tool the code-intel surface
 /// needs — including the ones added after the profile list was written.
 #[cfg(test)]
-mod default_profile_tests {
+pub(crate) mod default_profile_tests {
     use super::DEFAULT_TOOLS;
 
     #[test]

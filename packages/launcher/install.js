@@ -134,11 +134,24 @@ function install(args) {
   let storage = STORAGE_DEFAULT;
   let project = "default";
   const modeArgs = [];
+  const selected = new Map();
+  const options = {
+    '--backend': 'ENGRAM_BACKEND', '--helix-mode': 'ENGRAM_HELIX_MODE',
+    '--helix-store': 'ENGRAM_HELIX_STORE', '--helix-endpoint': 'ENGRAM_HELIX_ENDPOINT',
+    '--helix-credential-env': 'ENGRAM_HELIX_CREDENTIAL_ENV', '--helix-path': 'ENGRAM_HELIX_PATH',
+    '--trusted-root': 'ENGRAM_TRUSTED_ROOT', '--org': 'ENGRAM_ORG',
+    '--domain': 'ENGRAM_DOMAIN', '--subdomain': 'ENGRAM_SUBDOMAIN',
+    '--embedding-provider': 'ENGRAM_EMBEDDING_PROVIDER',
+  };
+  function invalid(message) {
+    process.stderr.write(`engram-mcp install: ${message}\n`);
+    process.exit(1);
+  }
   for (let i = 0; i < args.length; i++) {
     const flag = args[i];
     if (["--slim", "--no-vector", "--vector"].includes(flag)) {
       modeArgs.push(flag);
-    } else if (["--client", "--storage", "--project"].includes(flag)) {
+    } else if (["--client", "--storage", "--project", ...Object.keys(options)].includes(flag)) {
       const value = args[++i];
       if (!value || value.startsWith("--")) {
         process.stderr.write(`engram-mcp install: ${flag} requires a value\n`);
@@ -146,9 +159,15 @@ function install(args) {
       }
       if (flag === "--client") clientId = value;
       else if (flag === "--storage") storage = value;
-      else project = value;
+      else if (flag === "--project") project = value;
+      else {
+        if (['--backend', '--helix-mode'].includes(flag) && selected.has(flag) && selected.get(flag) !== value)
+          invalid('conflicting selection declarations');
+        selected.set(flag, value);
+        modeArgs.push(flag, value);
+      }
     } else {
-      process.stderr.write(`engram-mcp install: unknown argument ${flag}\n`);
+      process.stderr.write(`engram-mcp install: unsupported argument; credential values must stay in the runtime environment\n`);
       process.exit(1);
     }
   }
@@ -159,6 +178,43 @@ function install(args) {
         `Usage: engram-mcp install --client <id> [--storage <path>] [--project <name>] [--slim]\n`
     );
     process.exit(1);
+  }
+  if (!modeArgs.some(arg => ['--slim','--no-vector','--vector'].includes(arg)) && process.env.ENGRAM_ENABLE_VECTOR) {
+    const choice = process.env.ENGRAM_ENABLE_VECTOR;
+    if (['true','1'].includes(choice)) modeArgs.push('--vector');
+    else if (['false','0'].includes(choice)) modeArgs.push('--no-vector');
+    else invalid('invalid vector selection');
+  }
+  const backend = selected.get('--backend') || process.env.ENGRAM_BACKEND || 'sqlite';
+  if (!['sqlite', 'pgvector', 'pg', 'postgres', 'helixdb'].includes(backend)) invalid('invalid backend selection');
+  if (backend !== 'helixdb' && [...selected.keys()].some(flag => flag.startsWith('--helix-')))
+    invalid('Helix settings conflict with selected backend');
+  for (const [flag, env] of Object.entries(options)) {
+    if (flag.startsWith('--helix-') && backend !== 'helixdb') continue;
+    if (!selected.has(flag) && process.env[env]) {
+      selected.set(flag, process.env[env]); modeArgs.push(flag, process.env[env]);
+    }
+  }
+  if (backend === 'helixdb') {
+    const mode = selected.get('--helix-mode');
+    if (!['service', 'embedded'].includes(mode)) invalid('Helix requires an explicit service or embedded mode');
+    if (!selected.get('--helix-store')) invalid('Helix requires a logical store');
+    if (mode === 'service' && (!selected.get('--helix-endpoint') || !selected.get('--helix-credential-env')))
+      invalid('Helix service requires an endpoint and credential environment reference');
+    if (selected.has('--helix-credential-env') && !/^[A-Za-z_][A-Za-z0-9_]*$/.test(selected.get('--helix-credential-env')))
+      invalid('invalid credential environment reference');
+    if (selected.has('--helix-endpoint')) {
+      try {
+        const url = new URL(selected.get('--helix-endpoint'));
+        // Exact origin serialization also rejects empty '?' and '#' delimiters,
+        // which URL.search/hash expose as empty strings.
+        if (!['http:', 'https:'].includes(url.protocol) || !url.hostname ||
+            url.username || url.password || url.href !== `${url.origin}/`) throw new Error('unsafe');
+      } catch { invalid('endpoint must be an HTTP(S) origin without credentials, path, query or fragment'); }
+    }
+    if (mode === 'embedded' && (selected.has('--helix-endpoint') || selected.has('--helix-credential-env')))
+      invalid('service settings conflict with embedded mode');
+    if (mode === 'service' && selected.has('--helix-path')) invalid('embedded path conflicts with service mode');
   }
   const client = CLIENTS[clientId];
   const file = client.file(cwd, home);
@@ -180,8 +236,8 @@ function install(args) {
   process.stdout.write(
     `engram-mcp: registered 'engram' for ${client.label}\n` +
       `  file:    ${file}\n` +
-      `  command: ${command} ${argsForHost.join(" ")}\n` +
-      `  storage: ${storage}  (SQLite store is created on first run)\n`
+      `  command: ${command} (selected configuration saved)\n` +
+      `  storage: ${storage}  (selected store is opened on first run)\n`
   );
 }
 

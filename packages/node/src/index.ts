@@ -102,3 +102,9 @@ export {
   createNativeEmbeddingProviderTransport,
   type NativeEmbeddingProviderTransport,
 } from "./embedding-provider.js";
+
+/** Serialized factory selection; domain operation fields remain contract-owned. */
+export type NativeStorageProvider = "sqlite" | "pgvector" | "helixdb";
+export type NativeHelixMode = "service" | "embedded";
+
+export type { NativeOntologyApiBinding, NativeTaxonomyApiBinding } from "./binding.js";

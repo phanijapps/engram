@@ -47,6 +47,8 @@ test(
     const npmEnv = {
       ...process.env,
       HOME: home,
+      npm_config_cache: path.join(tmpRoot, 'npm-cache'),
+      npm_config_userconfig: path.join(tmpRoot, 'npmrc'),
       npm_config_audit: 'false',
       npm_config_fund: 'false',
       npm_config_update_notifier: 'false',
@@ -56,7 +58,7 @@ test(
     const pack = spawnSync(
       'npm',
       ['pack', '--json', '--pack-destination', packDir],
-      { cwd: pkg, encoding: 'utf8', timeout: 120000 },
+      { cwd: pkg, encoding: 'utf8', timeout: 120000, env: npmEnv },
     );
     assert.equal(pack.status, 0, `npm pack failed: ${pack.stderr}`);
     const jsonStart = pack.stdout.indexOf('[\n');
@@ -66,6 +68,11 @@ test(
     // 2. Fresh project dir with no prior state; install the tarball.
     const proj = path.join(tmpRoot, 'proj');
     fs.mkdirSync(proj);
+    // TMPDIR may live under a workspace. Anchor npm in this owned project
+    // so it cannot discover and resolve the ancestor repository's graph.
+    fs.writeFileSync(path.join(proj, 'package.json'), JSON.stringify({
+      name: 'engram-task005-install-rehearsal', version: '0.0.0', private: true,
+    }) + '\n');
     const install = spawnSync(
       'npm',
       ['install', tarball, '--omit=optional', '--no-audit', '--no-fund', '--loglevel=error'],
@@ -107,3 +114,23 @@ test(
     assert.equal(factory.status, 0, `factory.py --help failed: ${factory.stderr}`);
   },
 );
+
+
+test('copied launcher registers selected embedded configuration without loading a binary', () => {
+  const dir=fs.mkdtempSync(path.join(os.tmpdir(),'engram-installed-selection-'));
+  try {
+    const pkg=path.join(dir,'launcher'); fs.mkdirSync(pkg);
+    for(const file of ['bin.js','install.js','package.json']) fs.copyFileSync(path.join(LAUNCHER,file),path.join(pkg,file));
+    const result=spawnSync(process.execPath,[path.join(pkg,'bin.js'),'install','--backend','helixdb',
+      '--client','claude','--helix-mode','embedded','--helix-store','installed-owned',
+      '--helix-path',path.join(dir,'native'),'--trusted-root',dir,'--storage',path.join(dir,'cache'),
+      '--org','installed-tenant','--domain','installed-domain','--subdomain','installed-sub','--no-vector'],
+      {cwd:dir,encoding:'utf8',env:{...process.env,ENGRAM_MCP_BIN:path.join(dir,'must-not-open')}});
+    assert.equal(result.status,0,result.stderr);
+    const args=JSON.parse(fs.readFileSync(path.join(dir,'.mcp.json'),'utf8')).mcpServers.engram.args;
+    for(const [flag,value] of [['--backend','helixdb'],['--helix-mode','embedded'],['--helix-store','installed-owned'],
+      ['--org','installed-tenant'],['--subdomain','installed-sub']]) assert.equal(args[args.indexOf(flag)+1],value);
+    assert.ok(args.includes('--no-vector'));
+    assert.ok(!fs.existsSync(path.join(dir,'native')));
+  } finally {fs.rmSync(dir,{recursive:true,force:true});}
+});

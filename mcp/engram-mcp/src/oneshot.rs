@@ -128,7 +128,7 @@ fn run_recall(argv: &[String]) -> i32 {
         return 2;
     };
 
-    let config = match config::McpConfig::from_args(&rest) {
+    let mut config = match config::McpConfig::from_args(&rest) {
         Ok(c) => c,
         Err(message) => {
             if json_out {
@@ -138,7 +138,10 @@ fn run_recall(argv: &[String]) -> i32 {
             return 2;
         }
     };
-    let provider = match bootstrap::open_provider(&config) {
+    if let Some(helix) = config.helixdb.as_mut() {
+        helix.read_only = true;
+    }
+    let provider = match open_provider(&config) {
         Ok(p) => p,
         Err(message) => {
             return if json_out {
@@ -168,7 +171,7 @@ fn run_recall(argv: &[String]) -> i32 {
         Ok(r) => r.clone(),
         Err(e) => {
             return if json_out {
-                fail_open_json("recall", &e.to_string())
+                fail_open_json("recall", &e.to_redacted().to_string())
             } else {
                 eprintln!("engram-mcp recall: recall capability unavailable: {e}");
                 1
@@ -203,7 +206,7 @@ fn run_recall(argv: &[String]) -> i32 {
         Ok(p) => p,
         Err(e) => {
             return if json_out {
-                fail_open_json("recall", &e.to_string())
+                fail_open_json("recall", &e.to_redacted().to_string())
             } else {
                 eprintln!("engram-mcp recall: retrieval failed: {e}");
                 1
@@ -288,7 +291,7 @@ fn run_status(argv: &[String]) -> i32 {
             _ => rest.push(arg.clone()),
         }
     }
-    let config = match config::McpConfig::from_args(&rest) {
+    let mut config = match config::McpConfig::from_args(&rest) {
         Ok(c) => c,
         Err(message) => {
             if json_out {
@@ -298,7 +301,10 @@ fn run_status(argv: &[String]) -> i32 {
             return 2;
         }
     };
-    let provider = match bootstrap::open_provider(&config) {
+    if let Some(helix) = config.helixdb.as_mut() {
+        helix.read_only = true;
+    }
+    let provider = match open_provider(&config) {
         Ok(p) => p,
         Err(message) => {
             return if json_out {
@@ -407,9 +413,14 @@ fn run_status(argv: &[String]) -> i32 {
 }
 
 /// Builds the shared one-shot [`App`] from the passthrough config args.
-fn one_shot_app(rest: &[String]) -> Result<(App, config::McpConfig), String> {
-    let config = config::McpConfig::from_args(rest)?;
-    let provider = bootstrap::open_provider(&config)?;
+fn one_shot_app(rest: &[String], read_only: bool) -> Result<(App, config::McpConfig), String> {
+    let mut config = config::McpConfig::from_args(rest)?;
+    if read_only {
+        if let Some(helix) = config.helixdb.as_mut() {
+            helix.read_only = true;
+        }
+    }
+    let provider = open_provider(&config)?;
     let app = App {
         provider,
         scope: scope::resolve_scope(
@@ -476,7 +487,7 @@ fn run_code(argv: &[String]) -> i32 {
         );
         return 2;
     };
-    let (app, _config) = match one_shot_app(&rest) {
+    let (app, _config) = match one_shot_app(&rest, false) {
         Ok(pair) => pair,
         Err(message) => {
             eprintln!("engram-mcp code: {message}");
@@ -593,7 +604,7 @@ fn run_fetch_content(argv: &[String]) -> i32 {
     let Some(path) = path else {
         return fail_open_json("fetch-content", "--path <path> is required");
     };
-    let (app, _) = match one_shot_app(&rest) {
+    let (app, _) = match one_shot_app(&rest, true) {
         Ok(app) => app,
         Err(error) => return fail_open_json("fetch-content", &error),
     };
@@ -641,7 +652,7 @@ fn run_symbol_context(argv: &[String]) -> i32 {
     let Some(symbol) = symbol else {
         return fail_open_json("symbol-context", "--symbol <name> is required");
     };
-    let (app, _) = match one_shot_app(&rest) {
+    let (app, _) = match one_shot_app(&rest, true) {
         Ok(app) => app,
         Err(error) => return fail_open_json("symbol-context", &error),
     };
@@ -684,7 +695,7 @@ fn run_backfill_embeddings(argv: &[String]) -> i32 {
             _ => rest.push(arg.clone()),
         }
     }
-    let (app, _config) = match one_shot_app(&rest) {
+    let (app, _config) = match one_shot_app(&rest, false) {
         Ok(pair) => pair,
         Err(message) => {
             eprintln!("engram-mcp backfill-embeddings: {message}");
@@ -912,4 +923,102 @@ mod tests {
         };
         assert_eq!(raw_seg, "raw 3.25@lexical");
     }
+}
+
+/// Reader one-shots and stdio use the same canonical opener. Fixture declarations
+/// are reachable only in the explicitly instrumented artifact profile.
+fn open_provider(config: &config::McpConfig) -> Result<engram_integration::EngramProvider, String> {
+    #[cfg(feature = "test-controls")]
+    {
+        return fixture_provider(config, false);
+    }
+    #[cfg(not(feature = "test-controls"))]
+    bootstrap::open_provider(config)
+}
+
+#[cfg(feature = "test-controls")]
+thread_local! {
+    static FIXTURE: std::cell::RefCell<Option<Value>> = const { std::cell::RefCell::new(None) };
+    static FIXTURE_RECORDERS: std::cell::RefCell<Vec<Box<dyn Fn()>>> = const { std::cell::RefCell::new(Vec::new()) };
+}
+
+/// Private instrumented-artifact protocol; absent from normal builds/flags.
+#[cfg(feature = "test-controls")]
+pub(crate) fn initialize_fixture(argv: &mut Vec<String>) -> Result<(), String> {
+    if argv.first().map(String::as_str) != Some("__fixture") {
+        return Ok(());
+    }
+    let file = argv.get(1).ok_or("fixture declaration required")?;
+    let data = std::fs::read_to_string(file).map_err(|_| "fixture declaration unavailable")?;
+    let declaration: Value =
+        serde_json::from_str(&data).map_err(|_| "invalid fixture declaration")?;
+    FIXTURE.with(|f| *f.borrow_mut() = Some(declaration));
+    argv.drain(..2);
+    Ok(())
+}
+
+#[cfg(feature = "test-controls")]
+pub(crate) fn fixture_provider(
+    config: &config::McpConfig,
+    stdio: bool,
+) -> Result<engram_integration::EngramProvider, String> {
+    use engram_backend_provider::test_controls::{FixtureHost, FixtureIdentity};
+    let declaration = FIXTURE.with(|f| f.borrow().clone());
+    let Some(f) = declaration else {
+        return bootstrap::open_provider(config);
+    };
+    let field = |name: &str| {
+        f.get(name)
+            .and_then(Value::as_str)
+            .ok_or("fixture identity required")
+    };
+    let expected_host = if stdio { "mcp-stdio" } else { "mcp-oneshot" };
+    if field("host")? != expected_host {
+        return Err("fixture host mismatch".into());
+    }
+    let owned_root = std::path::PathBuf::from(field("ownedRoot")?);
+    let identity = FixtureIdentity::new(
+        field("invocation")?,
+        if stdio {
+            FixtureHost::McpStdio
+        } else {
+            FixtureHost::McpOneshot
+        },
+        field("sourceRoot")?.into(),
+        field("sourceRevision")?.into(),
+        field("artifactSha256")?.into(),
+        owned_root.clone(),
+    )
+    .map_err(|e| e.to_redacted().to_string())?;
+    let opened = bootstrap::open_instrumented_provider(config, identity)?;
+    let control = opened.control;
+    if let Some(n) = f.get("loseAckAfter").and_then(Value::as_u64) {
+        control.lose_mutation_ack_after(n as usize);
+    }
+    if f.get("definiteFailure").and_then(Value::as_bool) == Some(true) {
+        control.reject_next_mutation_definitely();
+    }
+    let binding = json!({"backend":opened.binding.backend,"mode":opened.binding.mode,"store":opened.binding.logical_store,"scope":opened.binding.scope,"host":expected_host});
+    // Recorder declarations do not attest source/artifact hashes by themselves.
+    FIXTURE_RECORDERS.with(|recorders| recorders.borrow_mut().push(Box::new(move || {
+        let snapshot = control.snapshot();
+        let record = json!({"binding":binding,"allSends":snapshot.all_sends,"reconciliationReads":snapshot.reconciliation_reads,"mutationAttempts":snapshot.mutation_attempts,"landedCommits":snapshot.landed_commits});
+        let output = owned_root.join("mcp-fixture-observation.json");
+        if let Ok(mut file) = std::fs::OpenOptions::new().write(true).create_new(true).open(output) {
+            use std::io::Write;
+            let _ = writeln!(file, "{}", record);
+        }
+    })));
+    Ok(opened.provider)
+}
+#[cfg(feature = "test-controls")]
+pub(crate) fn finish_fixture() {
+    FIXTURE_RECORDERS.with(|recorders| {
+        for record in recorders.borrow_mut().drain(..) {
+            record();
+        }
+    });
+    FIXTURE.with(|f| {
+        f.borrow_mut().take();
+    });
 }

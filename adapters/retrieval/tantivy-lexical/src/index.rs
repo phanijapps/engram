@@ -54,9 +54,9 @@ const TANTIVY_META: &str = "meta.json";
 /// Tantivy handle, schema, and tokenizer live here; ingest feeding lands in T4b
 /// and retrieval-candidate shaping in [`crate::retrieval`].
 pub struct LexicalIndex {
-    index: Index,
-    writer: Mutex<IndexWriter>,
-    reader: IndexReader,
+    index: Option<Index>,
+    writer: Option<Mutex<IndexWriter>>,
+    reader: Option<IndexReader>,
     text_field: Field,
     target_id_field: Field,
     eligibility_field: Field,
@@ -105,13 +105,67 @@ impl LexicalIndex {
             .reload_policy(ReloadPolicy::OnCommitWithDelay)
             .try_into()?;
         Ok(Self {
+            index: Some(index),
+            writer: Some(Mutex::new(writer)),
+            reader: Some(reader),
+            text_field,
+            target_id_field,
+            eligibility_field,
+        })
+    }
+
+    /// Opens an existing derived index without acquiring an IndexWriter or
+    /// creating/rebuilding any path. Missing/incompatible secondary state is
+    /// unavailable: reads return an error, allowing canonical recall to expose
+    /// source_failures while unrelated canonical archive reads remain usable.
+    pub fn open_read_only(directory: &Path) -> tantivy::Result<Self> {
+        let (schema, text_field, target_id_field, eligibility_field) = Self::build_schema();
+        let opened = (|| -> tantivy::Result<(Index, IndexReader)> {
+            let index = Index::open_in_dir(directory)?;
+            if index.schema() != schema {
+                return Err(tantivy::TantivyError::InvalidArgument(
+                    "incompatible read-only lexical schema".into(),
+                ));
+            }
+            let reader = index
+                .reader_builder()
+                .reload_policy(ReloadPolicy::OnCommitWithDelay)
+                .try_into()?;
+            Ok((index, reader))
+        })();
+        let (index, reader) = match opened {
+            Ok((index, reader)) => (Some(index), Some(reader)),
+            Err(_) => (None, None),
+        };
+        Ok(Self {
             index,
-            writer: Mutex::new(writer),
+            writer: None,
             reader,
             text_field,
             target_id_field,
             eligibility_field,
         })
+    }
+
+    fn index(&self) -> tantivy::Result<&Index> {
+        self.index.as_ref().ok_or_else(|| {
+            tantivy::TantivyError::InvalidArgument("read-only lexical index unavailable".into())
+        })
+    }
+    fn reader(&self) -> tantivy::Result<&IndexReader> {
+        self.reader.as_ref().ok_or_else(|| {
+            tantivy::TantivyError::InvalidArgument("read-only lexical index unavailable".into())
+        })
+    }
+    fn writer(&self) -> tantivy::Result<std::sync::MutexGuard<'_, IndexWriter>> {
+        Ok(self
+            .writer
+            .as_ref()
+            .ok_or_else(|| {
+                tantivy::TantivyError::InvalidArgument("read-only lexical mutation denied".into())
+            })?
+            .lock()
+            .expect("lexical writer lock poisoned"))
     }
 
     /// Creates an in-RAM lexical index for tests and ephemeral use.
@@ -249,7 +303,7 @@ impl LexicalIndex {
             ));
         }
         let normalized = normalize_identifier_text(text);
-        let mut writer = self.writer.lock().expect("lexical writer lock poisoned");
+        let mut writer = self.writer()?;
         self.delete_contributor_doc(&mut writer, target_id, contributor_key)?;
         writer.add_document(doc!(
             self.target_id_field => target_id,
@@ -316,7 +370,7 @@ impl LexicalIndex {
         &self,
         entries: &[(String, String, String)],
     ) -> tantivy::Result<()> {
-        let mut writer = self.writer.lock().expect("lexical writer lock poisoned");
+        let mut writer = self.writer()?;
         for (target_id, text, contributor_key) in entries {
             if contributor_key.trim().is_empty() {
                 return Err(tantivy::TantivyError::InvalidArgument(
@@ -337,7 +391,7 @@ impl LexicalIndex {
 
     /// Removes every contributor document for `target_id`, if present.
     pub fn delete(&self, target_id: &str) -> tantivy::Result<()> {
-        let mut writer = self.writer.lock().expect("lexical writer lock poisoned");
+        let mut writer = self.writer()?;
         writer.delete_term(Term::from_field_text(self.target_id_field, target_id));
         writer.commit()?;
         Ok(())
@@ -352,23 +406,28 @@ impl LexicalIndex {
     /// surviving tokens. The deletion commits atomically: after it returns,
     /// a reopened warm index can no longer serve the retired tokens.
     pub fn retire_contributor(&self, contributor_key: &str) -> tantivy::Result<usize> {
+        if self.writer.is_none() {
+            return Err(tantivy::TantivyError::InvalidArgument(
+                "read-only lexical mutation denied".into(),
+            ));
+        }
         use tantivy::{collector::Count, query::TermQuery};
         if contributor_key.trim().is_empty() {
             return Err(tantivy::TantivyError::InvalidArgument(
                 "lexical contributor key must not be empty".to_owned(),
             ));
         }
-        self.reader.reload()?;
+        self.reader()?.reload()?;
         let term = Term::from_field_text(self.eligibility_field, contributor_key);
         let retired = self
-            .reader
+            .reader()?
             .searcher()
             .search(
                 &TermQuery::new(term.clone(), tantivy::schema::IndexRecordOption::Basic),
                 &Count,
             )
             .unwrap_or(0);
-        let mut writer = self.writer.lock().expect("lexical writer lock poisoned");
+        let mut writer = self.writer()?;
         writer.delete_term(term);
         writer.commit()?;
         Ok(retired)
@@ -386,7 +445,7 @@ impl LexicalIndex {
                 "lexical target and contributor keys must not be empty".to_owned(),
             ));
         }
-        self.reader.reload()?;
+        self.reader()?.reload()?;
         let target = Term::from_field_text(self.target_id_field, target_id);
         let contributor = Term::from_field_text(self.eligibility_field, contributor_key);
         let query = BooleanQuery::new(vec![
@@ -406,11 +465,11 @@ impl LexicalIndex {
             ),
         ]);
         let retired = self
-            .reader
+            .reader()?
             .searcher()
             .search(&query, &tantivy::collector::Count)
             .unwrap_or(0);
-        let mut writer = self.writer.lock().expect("lexical writer lock poisoned");
+        let mut writer = self.writer()?;
         writer.delete_query(Box::new(query))?;
         writer.commit()?;
         Ok(retired)
@@ -488,6 +547,7 @@ impl LexicalIndex {
     ) -> tantivy::Result<Vec<(String, f32)>> {
         use std::collections::BTreeSet;
         use tantivy::query::{BooleanQuery, TermSetQuery};
+        self.reader()?;
         if target_ids.is_empty() || allowed_contributors.is_empty() {
             return Ok(Vec::new());
         }
@@ -495,9 +555,9 @@ impl LexicalIndex {
             return Ok(Vec::new());
         }
         let normalized = normalize_identifier_text(query);
-        self.reader.reload()?;
-        let searcher = self.reader.searcher();
-        let parser = QueryParser::for_index(&self.index, vec![self.text_field]);
+        self.reader()?.reload()?;
+        let searcher = self.reader()?.searcher();
+        let parser = QueryParser::for_index(self.index()?, vec![self.text_field]);
         let parsed = parser.parse_query(&normalized)?;
         let target_terms: BTreeSet<Term> = target_ids
             .iter()
@@ -546,13 +606,14 @@ impl LexicalIndex {
     ) -> tantivy::Result<Vec<(String, f32)>> {
         use std::collections::BTreeSet;
         use tantivy::query::{BooleanQuery, TermSetQuery};
+        self.reader()?;
         if limit == 0 {
             return Ok(Vec::new());
         }
         let normalized = normalize_identifier_text(query);
-        self.reader.reload()?;
-        let searcher = self.reader.searcher();
-        let query_parser = QueryParser::for_index(&self.index, vec![self.text_field]);
+        self.reader()?.reload()?;
+        let searcher = self.reader()?.searcher();
+        let query_parser = QueryParser::for_index(self.index()?, vec![self.text_field]);
         let parsed = query_parser.parse_query(&normalized)?;
         let boxed: Box<dyn tantivy::query::Query> = match allowed_keys {
             Some(keys) => {
@@ -860,5 +921,35 @@ mod tests {
         // And the marker is current again (a third open is a plain reuse).
         let (_, rebuilt_again) = LexicalIndex::open_with_compat(&lexical_dir).expect("open");
         assert!(!rebuilt_again);
+    }
+}
+
+#[cfg(test)]
+mod readonly_ownership_tests {
+    use super::*;
+    #[test]
+    fn readonly_overlaps_writer_refreshes_eligible_commits_and_denies_mutation() {
+        let root = tempfile::tempdir().unwrap();
+        let writer = LexicalIndex::open(root.path()).unwrap();
+        writer.upsert("first", "lexical sentinel").unwrap();
+        let reader = LexicalIndex::open_read_only(root.path()).unwrap();
+        assert_eq!(reader.search("sentinel", 10).unwrap()[0].0, "first");
+        writer.upsert("second", "freshness sentinel").unwrap();
+        assert_eq!(reader.search("freshness", 10).unwrap()[0].0, "second");
+        assert!(reader.upsert("denied", "mutation").is_err());
+        assert!(reader.delete("first").is_err());
+        assert!(reader.retire_contributor(DOC_CONTRIBUTOR_KEY).is_err());
+        drop(reader);
+        writer.upsert("third", "writer survives").unwrap();
+        assert_eq!(writer.search("survives", 10).unwrap()[0].0, "third");
+    }
+    #[test]
+    fn readonly_missing_index_never_creates_or_reports_empty_success() {
+        let root = tempfile::tempdir().unwrap();
+        let missing = root.path().join("absent-derived-index");
+        let reader = LexicalIndex::open_read_only(&missing).unwrap();
+        assert!(reader.search("needle", 10).is_err());
+        assert!(reader.upsert("denied", "mutation").is_err());
+        assert!(!missing.exists());
     }
 }

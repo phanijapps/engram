@@ -56,6 +56,85 @@ use std::sync::Arc;
 
 use crate::{decode, encode, id_field, scope_field, to_napi_error};
 
+/// Shared native construction and bootstrap path; host translation only.
+pub(crate) fn open_config(value: serde_json::Value) -> Result<EngramProvider> {
+    let scope: Option<Scope> = value
+        .get("scope")
+        .cloned()
+        .map(serde_json::from_value)
+        .transpose()
+        .map_err(|_| Error::from_reason("invalid provider launch scope"))?;
+    let launch_scopes: Option<Vec<Scope>> = value
+        .get("codeAuthority")
+        .and_then(|v| v.get("launchScopes"))
+        .cloned()
+        .map(serde_json::from_value)
+        .transpose()
+        .map_err(|_| Error::from_reason("invalid code authority scopes"))?;
+    let config: EngramConfig =
+        serde_json::from_value(value).map_err(|_| Error::from_reason("invalid provider config"))?;
+    let selected = engram_backend_provider::validate_selection(&config).map_err(to_napi_error)?;
+    if selected == engram_backend_provider::StorageProvider::Helixdb
+        && scope.as_ref().is_none_or(|s| s.tenant.is_empty())
+    {
+        return Err(Error::from_reason(
+            "Helix provider requires an explicit full launch scope",
+        ));
+    }
+    let partition_scope = scope.clone().unwrap_or(Scope {
+        tenant: "default".into(),
+        subject: None,
+        workspace: None,
+        session: None,
+        environment: None,
+    });
+    let provider =
+        engram_backend_provider::open(&config, &partition_scope, Arc::new(NativePolicy(scope)))
+            .map_err(to_napi_error)?;
+    match launch_scopes {
+        Some(scopes) => provider
+            .with_code_authorizer(Arc::new(
+                engram_integration::code_binding::ScopeSetAuthorizer::new(scopes),
+            ))
+            .map_err(to_napi_error),
+        None => Ok(provider),
+    }
+}
+struct NativePolicy(Option<Scope>);
+impl NativePolicy {
+    fn check(&self, scope: &Scope) -> CoreResult<()> {
+        if self
+            .0
+            .as_ref()
+            .is_none_or(|launch| engram_memory::scope::scope_allows(scope, launch))
+        {
+            Ok(())
+        } else {
+            Err(CoreError::PolicyDenied {
+                reason: "request scope is outside the native launch scope".into(),
+            })
+        }
+    }
+}
+impl engram_runtime::PolicyAuthorizer for NativePolicy {
+    fn can_write(&self, _: &engram_domain::Requester, s: &Scope, _: &Policy) -> CoreResult<()> {
+        self.check(s)
+    }
+    fn can_retrieve(&self, _: &engram_domain::Requester, s: &Scope, _: &Policy) -> CoreResult<()> {
+        self.check(s)
+    }
+    fn can_forget(&self, _: &engram_domain::Requester, s: &Scope, _: &Policy) -> CoreResult<()> {
+        self.check(s)
+    }
+}
+impl NativeProvider {
+    fn inner(&self) -> Result<&EngramProvider> {
+        self.inner
+            .as_ref()
+            .ok_or_else(|| Error::from_reason("provider is closed"))
+    }
+}
+
 // ---------------------------------------------------------------------------
 // NativeProvider — constructor + capability gateway
 // ---------------------------------------------------------------------------
@@ -69,7 +148,9 @@ use crate::{decode, encode, id_field, scope_field, to_napi_error};
 /// when that capability family is not wired by the active backend.
 #[napi]
 pub struct NativeProvider {
-    inner: EngramProvider,
+    inner: Option<EngramProvider>,
+    #[cfg(feature = "test-controls")]
+    fixture_control: Option<Arc<dyn Fn(String) -> Result<String> + Send + Sync>>,
 }
 
 #[derive(Deserialize)]
@@ -147,79 +228,46 @@ impl NativeProvider {
     /// `CapabilityUnsupported` when no backend feature is enabled.
     #[napi(constructor)]
     pub fn new(config_json: String) -> Result<Self> {
-        // The config JSON may carry a `codeAuthority` object (review r6
-        // finding 1): the HOST's explicit code-operation policy. `launchScopes`
-        // lists the scopes whose code operations this process may perform;
-        // absent `codeAuthority`, the recipe default (deny-by-default
-        // `RecipeDefaultAuthorizer`) stays in force — every code operation
-        // denies with the typed `CodeAuthorizationRequired` envelope.
         let value: serde_json::Value = decode(&config_json)?;
-        let launch_scopes: Option<Vec<Scope>> = value
-            .get("codeAuthority")
-            .and_then(|authority| authority.get("launchScopes"))
-            .cloned()
-            .map(serde_json::from_value)
-            .transpose()
-            .map_err(|error| {
-                to_napi_error(engram_runtime::CoreError::InvalidRequest {
-                    reason: format!(
-                        "InvalidRequest: codeAuthority.launchScopes is malformed: {error}"
-                    ),
-                })
-            })?;
-        let config: EngramConfig =
-            serde_json::from_value(value).map_err(|error| Error::from_reason(error.to_string()))?;
-        // pgvector configs route to the backends/pgvector recipe (the SDK facade's
-        // open() is engine-neutral and sqlite-default). When this binding is built
-        // without the `pgvector` feature, surface a clear error instead of a silent
-        // sqlite open.
-        let provider = if config.pgvector_connection_string.is_some() {
-            #[cfg(feature = "pgvector")]
-            {
-                engram_backend_pgvector::open(&config).map_err(to_napi_error)?
-            }
-            #[cfg(not(feature = "pgvector"))]
-            {
-                return Err(to_napi_error(engram_runtime::CoreError::InvalidRequest {
-                    reason: "pgvector config requires the `pgvector` feature on @engram/node; \
-                             rebuild with --features pgvector"
-                        .to_owned(),
-                }));
-            }
-        } else {
-            EngramProvider::open(&config).map_err(to_napi_error)?
-        };
-        // Host policy injection (review r6 finding 1): an explicit
-        // `codeAuthority.launchScopes` config replaces the deny-by-default
-        // recipe authorizer with the launch-scope policy — the native twin of
-        // the MCP server's launch-scope injection.
-        let provider = match launch_scopes {
-            Some(scopes) => provider
-                .with_code_authorizer(std::sync::Arc::new(
-                    engram_integration::code_binding::ScopeSetAuthorizer::new(scopes),
-                ))
-                .map_err(to_napi_error)?,
-            None => provider,
-        };
-        Ok(Self { inner: provider })
+        Ok(Self {
+            inner: Some(open_config(value)?),
+            #[cfg(feature = "test-controls")]
+            fixture_control: None,
+        })
     }
 
-    /// Opens a provider from a profile file path (e.g. `semantic-engine.toml`).
-    ///
-    /// Profile files reject the Postgres backend, so this always opens sqlite;
-    /// a pgvector provider is reachable only through [`Self::new`] with a config
-    /// carrying `pgvector_connection_string`.
+    /// Opens a profile with an optional exact launch scope for scoped backends.
     #[napi(js_name = "fromProfileFile")]
-    pub fn from_profile_file(path: String) -> Result<Self> {
-        let config = EngramConfig::from_profile_file(&path).map_err(Error::from_reason)?;
-        let provider = EngramProvider::open(&config).map_err(to_napi_error)?;
-        Ok(Self { inner: provider })
+    pub fn from_profile_file(path: String, scope_json: Option<String>) -> Result<Self> {
+        let config = EngramConfig::from_profile_file(&path)
+            .map_err(|_| Error::from_reason("invalid provider profile"))?;
+        let mut value = serde_json::to_value(config)
+            .map_err(|_| Error::from_reason("invalid provider config"))?;
+        if let Some(scope) = scope_json {
+            value["scope"] = decode(&scope)?;
+        }
+        Ok(Self {
+            inner: Some(open_config(value)?),
+            #[cfg(feature = "test-controls")]
+            fixture_control: None,
+        })
+    }
+
+    /// Releases this owner's capability references. Existing cloned handles retain
+    /// their resources until their own final release; close is idempotent.
+    #[napi]
+    pub fn close(&mut self) {
+        self.inner.take();
+        #[cfg(feature = "test-controls")]
+        {
+            self.fixture_control.take();
+        }
     }
 
     /// Returns the capability report (19 keys) as a JSON string.
     #[napi(js_name = "capabilitiesJson")]
     pub fn capabilities_json(&self) -> Result<String> {
-        encode(self.inner.capabilities())
+        encode(self.inner()?.capabilities())
     }
 
     // ---- require_*: one per handle proxy. Each clones the Arc<dyn Trait>
@@ -229,8 +277,14 @@ impl NativeProvider {
     /// Returns a memory API handle, or throws if memory is not wired.
     #[napi(js_name = "requireMemoryApi")]
     pub fn require_memory_api(&self) -> Result<NativeMemoryApi> {
-        let handle = self.inner.require_memory().map_err(to_napi_error)?.clone();
-        Ok(NativeMemoryApi { handle })
+        let handle = self
+            .inner()?
+            .require_memory()
+            .map_err(to_napi_error)?
+            .clone();
+        Ok(NativeMemoryApi {
+            handle: Some(handle),
+        })
     }
 
     /// Returns a graph API handle (entity/relationship reads + neighbors), or
@@ -240,12 +294,19 @@ impl NativeProvider {
     #[napi(js_name = "requireGraphApi")]
     pub fn require_graph_api(&self) -> Result<NativeGraphApi> {
         let knowledge = self
-            .inner
+            .inner()?
             .require_knowledge()
             .map_err(to_napi_error)?
             .clone();
-        let graph = self.inner.require_graph().map_err(to_napi_error)?.clone();
-        Ok(NativeGraphApi { knowledge, graph })
+        let graph = self
+            .inner()?
+            .require_graph()
+            .map_err(to_napi_error)?
+            .clone();
+        Ok(NativeGraphApi {
+            knowledge: Some(knowledge),
+            graph: Some(graph),
+        })
     }
 
     /// Returns a graph-maintenance handle (reversible plan/apply graph repair),
@@ -253,22 +314,26 @@ impl NativeProvider {
     #[napi(js_name = "requireGraphMaintenanceApi")]
     pub fn require_graph_maintenance_api(&self) -> Result<NativeGraphMaintenanceApi> {
         let handle = self
-            .inner
+            .inner()?
             .require_graph_maintenance()
             .map_err(to_napi_error)?
             .clone();
-        Ok(NativeGraphMaintenanceApi { handle })
+        Ok(NativeGraphMaintenanceApi {
+            handle: Some(handle),
+        })
     }
 
     /// Returns a provenance / evidence handle, or throws if not wired.
     #[napi(js_name = "requireProvenanceApi")]
     pub fn require_provenance_api(&self) -> Result<NativeProvenanceApi> {
         let handle = self
-            .inner
+            .inner()?
             .require_provenance()
             .map_err(to_napi_error)?
             .clone();
-        Ok(NativeProvenanceApi { handle })
+        Ok(NativeProvenanceApi {
+            handle: Some(handle),
+        })
     }
 
     /// Returns a scope-inventory handle (distinct-partition enumeration +
@@ -276,25 +341,39 @@ impl NativeProvider {
     #[napi(js_name = "requireScopeInventoryApi")]
     pub fn require_scope_inventory_api(&self) -> Result<NativeScopeInventoryApi> {
         let handle = self
-            .inner
+            .inner()?
             .require_scope_inventory()
             .map_err(to_napi_error)?
             .clone();
-        Ok(NativeScopeInventoryApi { handle })
+        Ok(NativeScopeInventoryApi {
+            handle: Some(handle),
+        })
     }
 
     /// Returns a batch-ingest handle, or throws if not wired.
     #[napi(js_name = "requireBatchApi")]
     pub fn require_batch_api(&self) -> Result<NativeBatchApi> {
-        let handle = self.inner.require_batch().map_err(to_napi_error)?.clone();
-        Ok(NativeBatchApi { handle })
+        let handle = self
+            .inner()?
+            .require_batch()
+            .map_err(to_napi_error)?
+            .clone();
+        Ok(NativeBatchApi {
+            handle: Some(handle),
+        })
     }
 
     /// Returns a unified-recall handle, or throws if not wired.
     #[napi(js_name = "requireRecallApi")]
     pub fn require_recall_api(&self) -> Result<NativeRecallApi> {
-        let handle = self.inner.require_recall().map_err(to_napi_error)?.clone();
-        Ok(NativeRecallApi { handle })
+        let handle = self
+            .inner()?
+            .require_recall()
+            .map_err(to_napi_error)?
+            .clone();
+        Ok(NativeRecallApi {
+            handle: Some(handle),
+        })
     }
 
     /// Returns a consolidation handle, or throws if not wired.
@@ -302,7 +381,7 @@ impl NativeProvider {
     pub fn consolidate_json(&self, request_json: String) -> Result<String> {
         let request: ConsolidationRequest = decode(&request_json)?;
         let handle = self
-            .inner
+            .inner()?
             .require_consolidation()
             .map_err(to_napi_error)?
             .clone();
@@ -316,8 +395,8 @@ impl NativeProvider {
     #[napi(js_name = "fileDependenciesJson")]
     pub fn file_dependencies_json(&self, request_json: String) -> Result<String> {
         let request: Scope = decode(&request_json)?;
-        let deps =
-            block_on(self.inner.code_graph_file_dependencies(&request)).map_err(to_napi_error)?;
+        let deps = block_on(self.inner()?.code_graph_file_dependencies(&request))
+            .map_err(to_napi_error)?;
         encode(&deps)
     }
 
@@ -339,7 +418,7 @@ impl NativeProvider {
             include_code_artifacts: Option<bool>,
         }
         let request: ExploreRequest = decode(&request_json)?;
-        let nodes = block_on(self.inner.code_graph_explore_with_artifacts(
+        let nodes = block_on(self.inner()?.code_graph_explore_with_artifacts(
             &request.scope,
             &request.query,
             request.depth,
@@ -366,7 +445,7 @@ impl NativeProvider {
     #[napi(js_name = "scanRepositoryJson")]
     pub fn scan_repository_json(&self, request_json: String) -> Result<String> {
         let request: ScanRepoRequest = decode(&request_json)?;
-        let outcome = scan_via_provider(&self.inner, &request).map_err(to_napi_error)?;
+        let outcome = scan_via_provider(self.inner()?, &request).map_err(to_napi_error)?;
         encode(&outcome)
     }
 
@@ -380,7 +459,11 @@ impl NativeProvider {
     #[napi(js_name = "codeBindJson")]
     pub fn code_bind_json(&self, request_json: String) -> Result<String> {
         let request: CodeBindRequest = decode(&request_json)?;
-        let coordinator = self.inner.code_bindings().map_err(to_napi_error)?.clone();
+        let coordinator = self
+            .inner()?
+            .code_bindings()
+            .map_err(to_napi_error)?
+            .clone();
         let binding = futures::executor::block_on(coordinator.bind(
             &system_code_actor(),
             &request.scope,
@@ -398,7 +481,11 @@ impl NativeProvider {
     #[napi(js_name = "codeStatusJson")]
     pub fn code_status_json(&self, request_json: String) -> Result<String> {
         let request: CodeStatusRequest = decode(&request_json)?;
-        let coordinator = self.inner.code_bindings().map_err(to_napi_error)?.clone();
+        let coordinator = self
+            .inner()?
+            .code_bindings()
+            .map_err(to_napi_error)?
+            .clone();
         let status = futures::executor::block_on(coordinator.status(
             &system_code_actor(),
             &request.scope,
@@ -428,7 +515,11 @@ impl NativeProvider {
                 }));
             }
         };
-        let coordinator = self.inner.code_bindings().map_err(to_napi_error)?.clone();
+        let coordinator = self
+            .inner()?
+            .code_bindings()
+            .map_err(to_napi_error)?
+            .clone();
         let registration = futures::executor::block_on(coordinator.register(
             &system_code_actor(),
             &request.scope,
@@ -451,7 +542,11 @@ impl NativeProvider {
     #[napi(js_name = "codeRefreshJson")]
     pub fn code_refresh_json(&self, request_json: String) -> Result<String> {
         let request: CodeStatusRequest = decode(&request_json)?;
-        let coordinator = self.inner.code_bindings().map_err(to_napi_error)?.clone();
+        let coordinator = self
+            .inner()?
+            .code_bindings()
+            .map_err(to_napi_error)?
+            .clone();
         let observation = futures::executor::block_on(coordinator.refresh_from_registration(
             &system_code_actor(),
             &request.scope,
@@ -466,12 +561,12 @@ impl NativeProvider {
     pub fn code_fetch_json(&self, request_json: String) -> Result<String> {
         let request: CodeFetchRequest = decode(&request_json)?;
         let query = self
-            .inner
+            .inner()?
             .require_knowledge_query()
             .map_err(to_napi_error)?;
         let chunks = block_on(query.list_chunks(&request.scope)).map_err(to_napi_error)?;
         let candidates = exact_read_candidates(&chunks, &request.path);
-        let outcome = block_on(self.inner.code_fetch_exact_participants(
+        let outcome = block_on(self.inner()?.code_fetch_exact_participants(
             &system_code_actor(),
             &request.scope,
             &request.path,
@@ -517,7 +612,11 @@ impl NativeProvider {
     #[napi(js_name = "codeResetPreviewJson")]
     pub fn code_reset_preview_json(&self, request_json: String) -> Result<String> {
         let request: CodeResetPreviewRequest = decode(&request_json)?;
-        let coordinator = self.inner.code_bindings().map_err(to_napi_error)?.clone();
+        let coordinator = self
+            .inner()?
+            .code_bindings()
+            .map_err(to_napi_error)?
+            .clone();
         let preview = futures::executor::block_on(coordinator.preview_reset(
             &system_code_actor(),
             &request.scope,
@@ -531,7 +630,11 @@ impl NativeProvider {
     #[napi(js_name = "codeResetApplyJson")]
     pub fn code_reset_apply_json(&self, request_json: String) -> Result<String> {
         let request: CodeResetApplyRequest = decode(&request_json)?;
-        let coordinator = self.inner.code_bindings().map_err(to_napi_error)?.clone();
+        let coordinator = self
+            .inner()?
+            .code_bindings()
+            .map_err(to_napi_error)?
+            .clone();
         let journal = futures::executor::block_on(coordinator.journal_reset(
             &system_code_actor(),
             request.journal,
@@ -548,7 +651,11 @@ impl NativeProvider {
     #[napi(js_name = "codeResetResumeJson")]
     pub fn code_reset_resume_json(&self, request_json: String) -> Result<String> {
         let request: CodeResetResumeRequest = decode(&request_json)?;
-        let coordinator = self.inner.code_bindings().map_err(to_napi_error)?.clone();
+        let coordinator = self
+            .inner()?
+            .code_bindings()
+            .map_err(to_napi_error)?
+            .clone();
         let resumed = futures::executor::block_on(
             coordinator.apply_reset(&system_code_actor(), request.journal),
         )
@@ -565,7 +672,7 @@ impl NativeProvider {
     pub fn backfill_embeddings_json(&self, request_json: String) -> Result<String> {
         let scope: Scope = decode(&request_json)?;
         let _ = scope;
-        let _embedding = self.inner.require_embedding_provider().map_err(|_| {
+        let _embedding = self.inner()?.require_embedding_provider().map_err(|_| {
             to_napi_error(CoreError::CapabilityUnsupported {
                 capability: "embedding-backfill".into(),
                 reason: "reindex: no embedding provider wired. Run without --slim/--no-vector and check embedding setup. If the space changed, use the documented vector-only rebuild. Backlog not assessed.".into(),
@@ -581,22 +688,26 @@ impl NativeProvider {
     #[napi(js_name = "requireExportImportApi")]
     pub fn require_export_import_api(&self) -> Result<NativeExportImportApi> {
         let handle = self
-            .inner
+            .inner()?
             .require_export_import()
             .map_err(to_napi_error)?
             .clone();
-        Ok(NativeExportImportApi { handle })
+        Ok(NativeExportImportApi {
+            handle: Some(handle),
+        })
     }
 
     /// Returns an observability / diagnostics handle, or throws if not wired.
     #[napi(js_name = "requireObservabilityApi")]
     pub fn require_observability_api(&self) -> Result<NativeObservabilityApi> {
         let handle = self
-            .inner
+            .inner()?
             .require_observability()
             .map_err(to_napi_error)?
             .clone();
-        Ok(NativeObservabilityApi { handle })
+        Ok(NativeObservabilityApi {
+            handle: Some(handle),
+        })
     }
 
     /// Returns a knowledge-query handle (engine-neutral entity/relationship
@@ -606,11 +717,13 @@ impl NativeProvider {
     #[napi(js_name = "requireKnowledgeQueryApi")]
     pub fn require_knowledge_query_api(&self) -> Result<NativeKnowledgeQueryApi> {
         let handle = self
-            .inner
+            .inner()?
             .require_knowledge_query()
             .map_err(to_napi_error)?
             .clone();
-        Ok(NativeKnowledgeQueryApi { handle })
+        Ok(NativeKnowledgeQueryApi {
+            handle: Some(handle),
+        })
     }
 
     /// Returns a community-query handle (Louvain + meta-edges + member index),
@@ -618,7 +731,7 @@ impl NativeProvider {
     #[napi(js_name = "requireCommunityQueryApi")]
     pub fn require_community_query_api(&self) -> Result<NativeCommunityQueryApi> {
         let handle = self
-            .inner
+            .inner()?
             .community_query()
             .ok_or_else(|| {
                 to_napi_error(engram_runtime::CoreError::CapabilityUnsupported {
@@ -627,14 +740,22 @@ impl NativeProvider {
                 })
             })?
             .clone();
-        Ok(NativeCommunityQueryApi { handle })
+        Ok(NativeCommunityQueryApi {
+            handle: Some(handle),
+        })
     }
 
     /// Returns a belief handle, or throws if not wired.
     #[napi(js_name = "requireBeliefsApi")]
     pub fn require_beliefs_api(&self) -> Result<NativeBeliefsApi> {
-        let handle = self.inner.require_beliefs().map_err(to_napi_error)?.clone();
-        Ok(NativeBeliefsApi { handle })
+        let handle = self
+            .inner()?
+            .require_beliefs()
+            .map_err(to_napi_error)?
+            .clone();
+        Ok(NativeBeliefsApi {
+            handle: Some(handle),
+        })
     }
 
     /// Returns a hierarchy handle, or throws if not wired. When the provider
@@ -644,13 +765,13 @@ impl NativeProvider {
     #[napi(js_name = "requireHierarchyApi")]
     pub fn require_hierarchy_api(&self) -> Result<NativeHierarchyApi> {
         let handle = self
-            .inner
+            .inner()?
             .require_hierarchy()
             .map_err(to_napi_error)?
             .clone();
-        let knowledge_query = self.inner.knowledge_query().cloned();
+        let knowledge_query = self.inner()?.knowledge_query().cloned();
         Ok(NativeHierarchyApi {
-            handle,
+            handle: Some(handle),
             knowledge_query,
         })
     }
@@ -659,22 +780,26 @@ impl NativeProvider {
     #[napi(js_name = "requireLexicalFeedApi")]
     pub fn require_lexical_feed_api(&self) -> Result<NativeLexicalFeedApi> {
         let handle = self
-            .inner
+            .inner()?
             .require_lexical_feed()
             .map_err(to_napi_error)?
             .clone();
-        Ok(NativeLexicalFeedApi { handle })
+        Ok(NativeLexicalFeedApi {
+            handle: Some(handle),
+        })
     }
 
     /// Returns a procedures handle (replayable runbooks), or throws if not wired.
     #[napi(js_name = "requireProceduresApi")]
     pub fn require_procedures_api(&self) -> Result<NativeProceduresApi> {
         let handle = self
-            .inner
+            .inner()?
             .require_procedures()
             .map_err(to_napi_error)?
             .clone();
-        Ok(NativeProceduresApi { handle })
+        Ok(NativeProceduresApi {
+            handle: Some(handle),
+        })
     }
 
     /// Returns an operator proposal queue handle (inert pending writes),
@@ -682,22 +807,26 @@ impl NativeProvider {
     #[napi(js_name = "requireProposalsApi")]
     pub fn require_proposals_api(&self) -> Result<NativeProposalsApi> {
         let handle = self
-            .inner
+            .inner()?
             .require_proposals()
             .map_err(to_napi_error)?
             .clone();
-        Ok(NativeProposalsApi { handle })
+        Ok(NativeProposalsApi {
+            handle: Some(handle),
+        })
     }
 
     /// Returns the attributed outcome ledger (F2), or throws if not wired.
     #[napi(js_name = "requireOutcomesApi")]
     pub fn require_outcomes_api(&self) -> Result<NativeOutcomesApi> {
         let handle = self
-            .inner
+            .inner()?
             .require_outcomes()
             .map_err(to_napi_error)?
             .clone();
-        Ok(NativeOutcomesApi { handle })
+        Ok(NativeOutcomesApi {
+            handle: Some(handle),
+        })
     }
 
     /// Returns the knowledge change-log handle (resumable invalidation
@@ -705,84 +834,104 @@ impl NativeProvider {
     #[napi(js_name = "requireChangeLogApi")]
     pub fn require_change_log_api(&self) -> Result<NativeChangeLogApi> {
         let handle = self
-            .inner
+            .inner()?
             .require_change_log()
             .map_err(to_napi_error)?
             .clone();
-        Ok(NativeChangeLogApi { handle })
+        Ok(NativeChangeLogApi {
+            handle: Some(handle),
+        })
     }
 
     /// Returns the scan-checkpoint handle, or throws if not wired.
     #[napi(js_name = "requireCheckpointsApi")]
     pub fn require_checkpoints_api(&self) -> Result<NativeCheckpointsApi> {
         let handle = self
-            .inner
+            .inner()?
             .require_checkpoints()
             .map_err(to_napi_error)?
             .clone();
-        Ok(NativeCheckpointsApi { handle })
+        Ok(NativeCheckpointsApi {
+            handle: Some(handle),
+        })
     }
 
     /// Returns an ontology handle, or throws if not wired.
     #[napi(js_name = "requireOntologyApi")]
     pub fn require_ontology_api(&self) -> Result<NativeOntologyApi> {
         let handle = self
-            .inner
+            .inner()?
             .require_ontology()
             .map_err(to_napi_error)?
             .clone();
-        Ok(NativeOntologyApi { handle })
+        Ok(NativeOntologyApi {
+            handle: Some(handle),
+        })
     }
 
     /// Returns a taxonomy handle, or throws if not wired.
     #[napi(js_name = "requireTaxonomyApi")]
     pub fn require_taxonomy_api(&self) -> Result<NativeTaxonomyApi> {
         let handle = self
-            .inner
+            .inner()?
             .require_taxonomy()
             .map_err(to_napi_error)?
             .clone();
-        Ok(NativeTaxonomyApi { handle })
+        Ok(NativeTaxonomyApi {
+            handle: Some(handle),
+        })
     }
 
     /// Returns a retrieval handle, or throws if not wired.
     #[napi(js_name = "requireRetrievalApi")]
     pub fn require_retrieval_api(&self) -> Result<NativeRetrievalApi> {
         let handle = self
-            .inner
+            .inner()?
             .require_retrieval()
             .map_err(to_napi_error)?
             .clone();
-        Ok(NativeRetrievalApi { handle })
+        Ok(NativeRetrievalApi {
+            handle: Some(handle),
+        })
     }
 
     /// Returns a vectors handle, or throws if not wired.
     #[napi(js_name = "requireVectorsApi")]
     pub fn require_vectors_api(&self) -> Result<NativeVectorsApi> {
-        let handle = self.inner.require_vectors().map_err(to_napi_error)?.clone();
-        Ok(NativeVectorsApi { handle })
+        let handle = self
+            .inner()?
+            .require_vectors()
+            .map_err(to_napi_error)?
+            .clone();
+        Ok(NativeVectorsApi {
+            handle: Some(handle),
+        })
     }
 
     /// Returns a migration handle, or throws if not wired.
     #[napi(js_name = "requireMigrationApi")]
     pub fn require_migration_api(&self) -> Result<NativeMigrationApi> {
         let handle = self
-            .inner
+            .inner()?
             .require_migration()
             .map_err(to_napi_error)?
             .clone();
-        Ok(NativeMigrationApi { handle })
+        Ok(NativeMigrationApi {
+            handle: Some(handle),
+        })
     }
 
     /// Returns an embedding-provider handle, or throws if not wired.
     #[napi(js_name = "requireEmbeddingProviderApi")]
     pub fn require_embedding_provider_api(&self) -> Result<NativeEmbeddingProviderApi> {
         let handle = self
-            .inner
+            .inner()?
             .require_embedding_provider()
             .map_err(to_napi_error)?
             .clone();
-        Ok(NativeEmbeddingProviderApi { handle })
+        Ok(NativeEmbeddingProviderApi {
+            handle: Some(handle),
+        })
     }
 }
 
@@ -794,18 +943,31 @@ impl NativeProvider {
 /// core memory operations as JSON-in / JSON-out methods.
 #[napi]
 pub struct NativeMemoryApi {
-    handle: Arc<dyn MemoryService>,
+    handle: Option<Arc<dyn MemoryService>>,
+}
+
+impl NativeMemoryApi {
+    fn handle(&self) -> Result<&Arc<dyn MemoryService>> {
+        self.handle
+            .as_ref()
+            .ok_or_else(|| Error::from_reason("memory handle is closed"))
+    }
 }
 
 #[napi]
 impl NativeMemoryApi {
+    #[napi]
+    pub fn close(&mut self) {
+        self.handle.take();
+    }
+
     /// Retrieves policy-checked context. Takes a `RetrievalRequest` JSON,
     /// returns a `ContextPayload` JSON.
     #[napi(js_name = "searchJson")]
     pub fn search_json(&self, request_json: String) -> Result<String> {
         let request: RetrievalRequest = decode(&request_json)?;
         let result: ContextPayload =
-            block_on(self.handle.retrieve(request)).map_err(to_napi_error)?;
+            block_on(self.handle()?.retrieve(request)).map_err(to_napi_error)?;
         encode(&result)
     }
 
@@ -815,7 +977,7 @@ impl NativeMemoryApi {
     pub fn write_json(&self, request_json: String) -> Result<String> {
         let request: WriteMemoryRequest = decode(&request_json)?;
         let result: WriteMemoryResponse =
-            block_on(self.handle.write_memory(request)).map_err(to_napi_error)?;
+            block_on(self.handle()?.write_memory(request)).map_err(to_napi_error)?;
         encode(&result)
     }
 
@@ -824,7 +986,8 @@ impl NativeMemoryApi {
     #[napi(js_name = "forgetJson")]
     pub fn forget_json(&self, request_json: String) -> Result<String> {
         let request: ForgetRequest = decode(&request_json)?;
-        let result: ForgetResult = block_on(self.handle.forget(request)).map_err(to_napi_error)?;
+        let result: ForgetResult =
+            block_on(self.handle()?.forget(request)).map_err(to_napi_error)?;
         encode(&result)
     }
 
@@ -842,7 +1005,7 @@ impl NativeMemoryApi {
             .and_then(|v| v.as_str())
             .map(|s| engram_domain::Cursor::new(s.to_owned()));
         let limit = value.get("limit").and_then(|v| v.as_u64()).unwrap_or(100) as usize;
-        let page: Page<MemoryRecord> = block_on(self.handle.list_memories_paged(
+        let page: Page<MemoryRecord> = block_on(self.handle()?.list_memories_paged(
             &scope,
             after.as_ref(),
             limit,
@@ -865,12 +1028,30 @@ impl NativeMemoryApi {
 /// offers the trait-level reads/writes plus traversal.
 #[napi]
 pub struct NativeGraphApi {
-    knowledge: Arc<dyn KnowledgeRepository>,
-    graph: Arc<dyn KnowledgeGraphRepository>,
+    knowledge: Option<Arc<dyn KnowledgeRepository>>,
+    graph: Option<Arc<dyn KnowledgeGraphRepository>>,
 }
 
+impl NativeGraphApi {
+    fn knowledge(&self) -> Result<&Arc<dyn KnowledgeRepository>> {
+        self.knowledge
+            .as_ref()
+            .ok_or_else(|| Error::from_reason("native capability handle is closed"))
+    }
+    fn graph(&self) -> Result<&Arc<dyn KnowledgeGraphRepository>> {
+        self.graph
+            .as_ref()
+            .ok_or_else(|| Error::from_reason("native capability handle is closed"))
+    }
+}
 #[napi]
 impl NativeGraphApi {
+    #[napi]
+    pub fn close(&mut self) {
+        self.knowledge.take();
+        self.graph.take();
+    }
+
     /// Looks up an entity by ID inside a scope. Takes `{ id, scope }` JSON,
     /// returns the `KnowledgeEntity` JSON or `null`.
     #[napi(js_name = "getEntityJson")]
@@ -878,7 +1059,7 @@ impl NativeGraphApi {
         let value = decode::<serde_json::Value>(&request_json)?;
         let id: Id = id_field(&value, "id")?;
         let scope = scope_field(&value)?;
-        let result = block_on(self.knowledge.get_entity(&id, &scope)).map_err(to_napi_error)?;
+        let result = block_on(self.knowledge()?.get_entity(&id, &scope)).map_err(to_napi_error)?;
         encode(&result)
     }
 
@@ -887,7 +1068,7 @@ impl NativeGraphApi {
     #[napi(js_name = "putEntityJson")]
     pub fn put_entity_json(&self, entity_json: String) -> Result<String> {
         let entity: KnowledgeEntity = decode(&entity_json)?;
-        let result = block_on(self.knowledge.put_entity(entity)).map_err(to_napi_error)?;
+        let result = block_on(self.knowledge()?.put_entity(entity)).map_err(to_napi_error)?;
         encode(&result)
     }
 
@@ -897,7 +1078,7 @@ impl NativeGraphApi {
     pub fn put_relationship_json(&self, relationship_json: String) -> Result<String> {
         let relationship: KnowledgeRelationship = decode(&relationship_json)?;
         let result =
-            block_on(self.knowledge.put_relationship(relationship)).map_err(to_napi_error)?;
+            block_on(self.knowledge()?.put_relationship(relationship)).map_err(to_napi_error)?;
         encode(&result)
     }
 
@@ -914,7 +1095,7 @@ impl NativeGraphApi {
             .get("limit")
             .and_then(|v| v.as_u64())
             .map(|n| n as u32);
-        let result = block_on(self.graph.neighbors(&graph_id, &node_id, &scope, limit))
+        let result = block_on(self.graph()?.neighbors(&graph_id, &node_id, &scope, limit))
             .map_err(to_napi_error)?;
         encode(&result)
     }
@@ -930,17 +1111,29 @@ impl NativeGraphApi {
 /// `apply_plan` with `ApplyMode::Apply`; `Preview` stages without committing.
 #[napi]
 pub struct NativeGraphMaintenanceApi {
-    handle: Arc<dyn GraphMaintenanceRepository>,
+    handle: Option<Arc<dyn GraphMaintenanceRepository>>,
 }
 
+impl NativeGraphMaintenanceApi {
+    fn handle(&self) -> Result<&Arc<dyn GraphMaintenanceRepository>> {
+        self.handle
+            .as_ref()
+            .ok_or_else(|| Error::from_reason("native capability handle is closed"))
+    }
+}
 #[napi]
 impl NativeGraphMaintenanceApi {
+    #[napi]
+    pub fn close(&mut self) {
+        self.handle.take();
+    }
+
     /// Build a dry-run plan (fills before/after previews; never mutates). Takes a
     /// `MaintenancePlanRequest` JSON, returns the `MaintenancePlan` JSON.
     #[napi(js_name = "buildPlanJson")]
     pub fn build_plan_json(&self, request_json: String) -> Result<String> {
         let request: MaintenancePlanRequest = decode(&request_json)?;
-        let result = block_on(self.handle.build_plan(request)).map_err(to_napi_error)?;
+        let result = block_on(self.handle()?.build_plan(request)).map_err(to_napi_error)?;
         encode(&result)
     }
 
@@ -963,7 +1156,7 @@ impl NativeGraphMaintenanceApi {
                 .ok_or_else(|| Error::from_reason("missing 'mode' field"))?,
         )
         .map_err(|e| Error::from_reason(format!("invalid mode: {e}")))?;
-        let result = block_on(self.handle.apply_plan(&plan, mode)).map_err(to_napi_error)?;
+        let result = block_on(self.handle()?.apply_plan(&plan, mode)).map_err(to_napi_error)?;
         encode(&result)
     }
 
@@ -983,7 +1176,7 @@ impl NativeGraphMaintenanceApi {
         )
         .map_err(|e| Error::from_reason(format!("invalid policy: {e}")))?;
         let result = block_on(
-            self.handle
+            self.handle()?
                 .detect_candidates(&scope, graph_id.as_ref(), &policy),
         )
         .map_err(to_napi_error)?;
@@ -997,8 +1190,8 @@ impl NativeGraphMaintenanceApi {
         let value = decode::<serde_json::Value>(&request_json)?;
         let scope = scope_field(&value)?;
         let graph_id = value.get("graphId").and_then(|v| v.as_str()).map(Id::from);
-        let result =
-            block_on(self.handle.graph_health(&scope, graph_id.as_ref())).map_err(to_napi_error)?;
+        let result = block_on(self.handle()?.graph_health(&scope, graph_id.as_ref()))
+            .map_err(to_napi_error)?;
         encode(&result)
     }
 }
@@ -1012,11 +1205,23 @@ impl NativeGraphMaintenanceApi {
 /// JSON-in / JSON-out methods.
 #[napi]
 pub struct NativeProvenanceApi {
-    handle: Arc<dyn ProvenanceQuery>,
+    handle: Option<Arc<dyn ProvenanceQuery>>,
 }
 
+impl NativeProvenanceApi {
+    fn handle(&self) -> Result<&Arc<dyn ProvenanceQuery>> {
+        self.handle
+            .as_ref()
+            .ok_or_else(|| Error::from_reason("native capability handle is closed"))
+    }
+}
 #[napi]
 impl NativeProvenanceApi {
+    #[napi]
+    pub fn close(&mut self) {
+        self.handle.take();
+    }
+
     /// Provenance carried by a record. Takes `{ target, id, scope }` JSON
     /// (`target` is an `EvidenceTargetType` like `"entity"` / `"relationship"` /
     /// `"source"`), returns the `Provenance` JSON or `null`.
@@ -1024,7 +1229,7 @@ impl NativeProvenanceApi {
     pub fn provenance_for_json(&self, request_json: String) -> Result<String> {
         let (target, id, scope) = decode_target_query(&request_json)?;
         let result: Option<Provenance> =
-            block_on(self.handle.provenance_for(target, &id, &scope)).map_err(to_napi_error)?;
+            block_on(self.handle()?.provenance_for(target, &id, &scope)).map_err(to_napi_error)?;
         encode(&result)
     }
 
@@ -1034,7 +1239,7 @@ impl NativeProvenanceApi {
     pub fn evidence_for_json(&self, request_json: String) -> Result<String> {
         let (target, id, scope) = decode_target_query(&request_json)?;
         let result: Vec<EvidenceRef> =
-            block_on(self.handle.evidence_for(target, &id, &scope)).map_err(to_napi_error)?;
+            block_on(self.handle()?.evidence_for(target, &id, &scope)).map_err(to_napi_error)?;
         encode(&result)
     }
 
@@ -1058,7 +1263,7 @@ impl NativeProvenanceApi {
             .map_err(|e| Error::from_reason(format!("invalid evidence: {e}")))?;
         let scope = scope_field(&value)?;
         let result: Provenance = block_on(
-            self.handle
+            self.handle()?
                 .attach_evidence(target, &target_id, evidence, &scope),
         )
         .map_err(to_napi_error)?;
@@ -1075,7 +1280,7 @@ impl NativeProvenanceApi {
 /// construction: the port has no write operations.
 #[napi]
 pub struct NativeScopeInventoryApi {
-    handle: Arc<dyn ScopeInventory>,
+    handle: Option<Arc<dyn ScopeInventory>>,
 }
 
 /// Request shape shared by the partition-listing methods: the exact partition
@@ -1095,14 +1300,26 @@ struct PartitionRecentRequest {
     limit: Option<usize>,
 }
 
+impl NativeScopeInventoryApi {
+    fn handle(&self) -> Result<&Arc<dyn ScopeInventory>> {
+        self.handle
+            .as_ref()
+            .ok_or_else(|| Error::from_reason("native capability handle is closed"))
+    }
+}
 #[napi]
 impl NativeScopeInventoryApi {
+    #[napi]
+    pub fn close(&mut self) {
+        self.handle.take();
+    }
+
     /// Every distinct partition with per-kind counts, in canonical partition
     /// order. Takes `{}` (no arguments beyond the JSON envelope), returns
     /// `[PartitionSummary, …]`.
     #[napi(js_name = "inventoryJson")]
     pub fn inventory_json(&self) -> Result<String> {
-        let rows = block_on(self.handle.inventory()).map_err(to_napi_error)?;
+        let rows = block_on(self.handle()?.inventory()).map_err(to_napi_error)?;
         encode(&rows)
     }
 
@@ -1112,7 +1329,7 @@ impl NativeScopeInventoryApi {
     pub fn partition_memories_json(&self, request_json: String) -> Result<String> {
         let request: PartitionListingRequest = decode(&request_json)?;
         let page = request.page.unwrap_or_default();
-        let result = block_on(self.handle.partition_memories(&request.partition, page))
+        let result = block_on(self.handle()?.partition_memories(&request.partition, page))
             .map_err(to_napi_error)?;
         encode(&result)
     }
@@ -1123,7 +1340,7 @@ impl NativeScopeInventoryApi {
     pub fn partition_entities_json(&self, request_json: String) -> Result<String> {
         let request: PartitionListingRequest = decode(&request_json)?;
         let page = request.page.unwrap_or_default();
-        let result = block_on(self.handle.partition_entities(&request.partition, page))
+        let result = block_on(self.handle()?.partition_entities(&request.partition, page))
             .map_err(to_napi_error)?;
         encode(&result)
     }
@@ -1135,7 +1352,7 @@ impl NativeScopeInventoryApi {
         let request: PartitionListingRequest = decode(&request_json)?;
         let page = request.page.unwrap_or_default();
         let result = block_on(
-            self.handle
+            self.handle()?
                 .partition_relationships(&request.partition, page),
         )
         .map_err(to_napi_error)?;
@@ -1149,7 +1366,7 @@ impl NativeScopeInventoryApi {
         let request: PartitionRecentRequest = decode(&request_json)?;
         let limit = request.limit.unwrap_or(50);
         let result = block_on(
-            self.handle
+            self.handle()?
                 .partition_recent_memories(&request.partition, limit),
         )
         .map_err(to_napi_error)?;
@@ -1191,17 +1408,30 @@ fn decode_target(value: &serde_json::Value) -> Result<EvidenceTargetType> {
 /// (`BatchOutcomeJson`) that stringifies each step's error.
 #[napi]
 pub struct NativeBatchApi {
-    handle: Arc<dyn BatchIngest>,
+    handle: Option<Arc<dyn BatchIngest>>,
 }
 
+impl NativeBatchApi {
+    fn handle(&self) -> Result<&Arc<dyn BatchIngest>> {
+        self.handle
+            .as_ref()
+            .ok_or_else(|| Error::from_reason("native capability handle is closed"))
+    }
+}
 #[napi]
 impl NativeBatchApi {
+    #[napi]
+    pub fn close(&mut self) {
+        self.handle.take();
+    }
+
     /// Ingests a semantic batch best-effort. Takes a `BatchIngestRequest` JSON,
     /// returns a per-step outcome JSON (`{ guarantee, status, steps: […] }`).
     #[napi(js_name = "ingestJson")]
     pub fn ingest_json(&self, request_json: String) -> Result<String> {
         let request: BatchIngestRequest = decode(&request_json)?;
-        let outcome: BatchOutcome = block_on(self.handle.ingest(request)).map_err(to_napi_error)?;
+        let outcome: BatchOutcome =
+            block_on(self.handle()?.ingest(request)).map_err(to_napi_error)?;
         // Project into a serializable shape (CoreError → string).
         let projected = BatchOutcomeJson::from(&outcome);
         encode(&projected)
@@ -1211,7 +1441,7 @@ impl NativeBatchApi {
     /// string (`"BestEffort"` for the SQLite backend).
     #[napi(js_name = "transactionGuarantee")]
     pub fn transaction_guarantee(&self) -> Result<String> {
-        let guarantee: TransactionGuarantee = self.handle.transaction_guarantee();
+        let guarantee: TransactionGuarantee = self.handle()?.transaction_guarantee();
         encode(&guarantee)
     }
 }
@@ -1247,7 +1477,7 @@ impl<'a> BatchOutcomeJson<'a> {
             .map(|s| StepOutcomeJson {
                 step: &s.step,
                 status: &s.status,
-                error: s.error.as_ref().map(|e| e.to_string()),
+                error: s.error.as_ref().map(|e| e.to_redacted().to_string()),
                 supersession: s.supersession.as_ref(),
             })
             .collect();
@@ -1267,11 +1497,23 @@ impl<'a> BatchOutcomeJson<'a> {
 /// the one-query-fused-across-lanes recall as JSON-in / JSON-out.
 #[napi]
 pub struct NativeRecallApi {
-    handle: Arc<dyn UnifiedRecall>,
+    handle: Option<Arc<dyn UnifiedRecall>>,
 }
 
+impl NativeRecallApi {
+    fn handle(&self) -> Result<&Arc<dyn UnifiedRecall>> {
+        self.handle
+            .as_ref()
+            .ok_or_else(|| Error::from_reason("native capability handle is closed"))
+    }
+}
 #[napi]
 impl NativeRecallApi {
+    #[napi]
+    pub fn close(&mut self) {
+        self.handle.take();
+    }
+
     /// Fans a query across the v1 lanes (facts, graph, vector, lexical,
     /// beliefs) and fuses them into one `ContextPayload`. Takes a
     /// `RetrievalRequest` JSON, returns a `ContextPayload` JSON.
@@ -1279,7 +1521,7 @@ impl NativeRecallApi {
     pub fn recall_json(&self, request_json: String) -> Result<String> {
         let request: RetrievalRequest = decode(&request_json)?;
         let result: ContextPayload =
-            block_on(self.handle.recall(request)).map_err(to_napi_error)?;
+            block_on(self.handle()?.recall(request)).map_err(to_napi_error)?;
         encode(&result)
     }
 }
@@ -1292,18 +1534,30 @@ impl NativeRecallApi {
 /// export half (import stays on `MigrationService`).
 #[napi]
 pub struct NativeExportImportApi {
-    handle: Arc<dyn ExportImport>,
+    handle: Option<Arc<dyn ExportImport>>,
 }
 
+impl NativeExportImportApi {
+    fn handle(&self) -> Result<&Arc<dyn ExportImport>> {
+        self.handle
+            .as_ref()
+            .ok_or_else(|| Error::from_reason("native capability handle is closed"))
+    }
+}
 #[napi]
 impl NativeExportImportApi {
+    #[napi]
+    pub fn close(&mut self) {
+        self.handle.take();
+    }
+
     /// Exports the semantic state visible to a scope into one `ImportData`
     /// payload. Takes a `Scope` JSON, returns an `ImportData` JSON ready for
     /// `MigrationService::dry_run_import`.
     #[napi(js_name = "exportJson")]
     pub fn export_json(&self, scope_json: String) -> Result<String> {
         let scope: Scope = decode(&scope_json)?;
-        let result = block_on(self.handle.export(&scope)).map_err(to_napi_error)?;
+        let result = block_on(self.handle()?.export(&scope)).map_err(to_napi_error)?;
         encode(&result)
     }
 }
@@ -1316,17 +1570,29 @@ impl NativeExportImportApi {
 /// and exposes the one-call diagnostic read as JSON-in / JSON-out.
 #[napi]
 pub struct NativeObservabilityApi {
-    handle: Arc<dyn Observability>,
+    handle: Option<Arc<dyn Observability>>,
 }
 
+impl NativeObservabilityApi {
+    fn handle(&self) -> Result<&Arc<dyn Observability>> {
+        self.handle
+            .as_ref()
+            .ok_or_else(|| Error::from_reason("native capability handle is closed"))
+    }
+}
 #[napi]
 impl NativeObservabilityApi {
+    #[napi]
+    pub fn close(&mut self) {
+        self.handle.take();
+    }
+
     /// Returns a point-in-time diagnostic snapshot of this provider as a
     /// `DiagnosticsSnapshot` JSON (capability report, record counts, embedding
     /// config, schema/adapter versions).
     #[napi(js_name = "diagnosticsJson")]
     pub fn diagnostics_json(&self) -> Result<String> {
-        let result = block_on(self.handle.diagnostics()).map_err(to_napi_error)?;
+        let result = block_on(self.handle()?.diagnostics()).map_err(to_napi_error)?;
         encode(&result)
     }
 }
@@ -1341,17 +1607,29 @@ impl NativeObservabilityApi {
 /// `graph_*` / `codegraph_*` tools).
 #[napi]
 pub struct NativeKnowledgeQueryApi {
-    handle: Arc<dyn KnowledgeQuery>,
+    handle: Option<Arc<dyn KnowledgeQuery>>,
 }
 
+impl NativeKnowledgeQueryApi {
+    fn handle(&self) -> Result<&Arc<dyn KnowledgeQuery>> {
+        self.handle
+            .as_ref()
+            .ok_or_else(|| Error::from_reason("native capability handle is closed"))
+    }
+}
 #[napi]
 impl NativeKnowledgeQueryApi {
+    #[napi]
+    pub fn close(&mut self) {
+        self.handle.take();
+    }
+
     /// Lists entities in a scope. Takes a `Scope` JSON, returns
     /// `[KnowledgeEntity, …]` JSON.
     #[napi(js_name = "listEntitiesJson")]
     pub fn list_entities_json(&self, scope_json: String) -> Result<String> {
         let scope: Scope = decode(&scope_json)?;
-        let result = block_on(self.handle.list_entities(&scope)).map_err(to_napi_error)?;
+        let result = block_on(self.handle()?.list_entities(&scope)).map_err(to_napi_error)?;
         encode(&result)
     }
 
@@ -1360,7 +1638,7 @@ impl NativeKnowledgeQueryApi {
     #[napi(js_name = "listRelationshipsJson")]
     pub fn list_relationships_json(&self, scope_json: String) -> Result<String> {
         let scope: Scope = decode(&scope_json)?;
-        let result = block_on(self.handle.list_relationships(&scope)).map_err(to_napi_error)?;
+        let result = block_on(self.handle()?.list_relationships(&scope)).map_err(to_napi_error)?;
         encode(&result)
     }
 
@@ -1368,7 +1646,7 @@ impl NativeKnowledgeQueryApi {
     #[napi(js_name = "listGraphsJson")]
     pub fn list_graphs_json(&self, scope_json: String) -> Result<String> {
         let scope: Scope = decode(&scope_json)?;
-        let result = block_on(self.handle.list_graphs(&scope)).map_err(to_napi_error)?;
+        let result = block_on(self.handle()?.list_graphs(&scope)).map_err(to_napi_error)?;
         encode(&result)
     }
 
@@ -1379,7 +1657,7 @@ impl NativeKnowledgeQueryApi {
         let value = decode::<serde_json::Value>(&request_json)?;
         let document_id = id_field(&value, "documentId")?;
         let scope = scope_field(&value)?;
-        let result = block_on(self.handle.list_chunks_by_document(&document_id, &scope))
+        let result = block_on(self.handle()?.list_chunks_by_document(&document_id, &scope))
             .map_err(to_napi_error)?;
         encode(&result)
     }
@@ -1392,18 +1670,30 @@ impl NativeKnowledgeQueryApi {
 /// Community-query handle proxy (Louvain overview + member index + community-of).
 #[napi]
 pub struct NativeCommunityQueryApi {
-    handle: Arc<dyn CommunityQuery>,
+    handle: Option<Arc<dyn CommunityQuery>>,
 }
 
+impl NativeCommunityQueryApi {
+    fn handle(&self) -> Result<&Arc<dyn CommunityQuery>> {
+        self.handle
+            .as_ref()
+            .ok_or_else(|| Error::from_reason("native capability handle is closed"))
+    }
+}
 #[napi]
 impl NativeCommunityQueryApi {
+    #[napi]
+    pub fn close(&mut self) {
+        self.handle.take();
+    }
+
     /// Community overview: top-N communities + inter-community meta-edges.
     #[napi(js_name = "overviewJson")]
     pub fn overview_json(&self, request_json: String) -> Result<String> {
         let value = decode::<serde_json::Value>(&request_json)?;
         let scope = scope_field(&value)?;
         let limit = value.get("limit").and_then(|v| v.as_u64()).unwrap_or(150) as usize;
-        let result = block_on(self.handle.overview(&scope, limit)).map_err(to_napi_error)?;
+        let result = block_on(self.handle()?.overview(&scope, limit)).map_err(to_napi_error)?;
         encode(&result)
     }
 
@@ -1411,7 +1701,7 @@ impl NativeCommunityQueryApi {
     #[napi(js_name = "memberIndexJson")]
     pub fn member_index_json(&self, scope_json: String) -> Result<String> {
         let scope: Scope = decode(&scope_json)?;
-        let result = block_on(self.handle.member_index(&scope)).map_err(to_napi_error)?;
+        let result = block_on(self.handle()?.member_index(&scope)).map_err(to_napi_error)?;
         encode(&result)
     }
 
@@ -1422,7 +1712,7 @@ impl NativeCommunityQueryApi {
         let scope = scope_field(&value)?;
         let entity_id = value.get("entityId").and_then(|v| v.as_str()).unwrap_or("");
         let result =
-            block_on(self.handle.community_of(&scope, entity_id)).map_err(to_napi_error)?;
+            block_on(self.handle()?.community_of(&scope, entity_id)).map_err(to_napi_error)?;
         encode(&result)
     }
 
@@ -1430,7 +1720,7 @@ impl NativeCommunityQueryApi {
     #[napi(js_name = "scopeCountsJson")]
     pub fn scope_counts_json(&self, scope_json: String) -> Result<String> {
         let scope: Scope = decode(&scope_json)?;
-        let result = block_on(self.handle.scope_counts(&scope)).map_err(to_napi_error)?;
+        let result = block_on(self.handle()?.scope_counts(&scope)).map_err(to_napi_error)?;
         encode(&result)
     }
 }
@@ -1444,11 +1734,23 @@ impl NativeCommunityQueryApi {
 /// tools).
 #[napi]
 pub struct NativeBeliefsApi {
-    handle: Arc<dyn BeliefRepository>,
+    handle: Option<Arc<dyn BeliefRepository>>,
 }
 
+impl NativeBeliefsApi {
+    fn handle(&self) -> Result<&Arc<dyn BeliefRepository>> {
+        self.handle
+            .as_ref()
+            .ok_or_else(|| Error::from_reason("native capability handle is closed"))
+    }
+}
 #[napi]
 impl NativeBeliefsApi {
+    #[napi]
+    pub fn close(&mut self) {
+        self.handle.take();
+    }
+
     /// Returns the live belief for a subject at `asOf` (default now). Takes
     /// `{ subject, scope, asOf? }` JSON (asOf is RFC3339), returns a `Belief`
     /// JSON or `null`.
@@ -1467,7 +1769,7 @@ impl NativeBeliefsApi {
             None => chrono::Utc::now(),
         };
         let query = BeliefQuery::live_subject(scope, subject, as_of);
-        let result = block_on(self.handle.get_belief(query)).map_err(to_napi_error)?;
+        let result = block_on(self.handle()?.get_belief(query)).map_err(to_napi_error)?;
         encode(&result)
     }
 
@@ -1476,7 +1778,7 @@ impl NativeBeliefsApi {
     #[napi(js_name = "upsertBeliefJson")]
     pub fn upsert_belief_json(&self, belief_json: String) -> Result<String> {
         let belief: Belief = decode(&belief_json)?;
-        let result = block_on(self.handle.upsert_belief(belief)).map_err(to_napi_error)?;
+        let result = block_on(self.handle()?.upsert_belief(belief)).map_err(to_napi_error)?;
         encode(&result)
     }
 
@@ -1495,7 +1797,7 @@ impl NativeBeliefsApi {
             None => chrono::Utc::now(),
         };
         let result =
-            block_on(self.handle.retract_belief(&id, &scope, at)).map_err(to_napi_error)?;
+            block_on(self.handle()?.retract_belief(&id, &scope, at)).map_err(to_napi_error)?;
         encode(&result)
     }
 
@@ -1504,7 +1806,7 @@ impl NativeBeliefsApi {
     #[napi(js_name = "listStaleBeliefsJson")]
     pub fn list_stale_beliefs_json(&self, scope_json: String) -> Result<String> {
         let scope: Scope = decode(&scope_json)?;
-        let result = block_on(self.handle.list_stale(&scope)).map_err(to_napi_error)?;
+        let result = block_on(self.handle()?.list_stale(&scope)).map_err(to_napi_error)?;
         encode(&result)
     }
 
@@ -1514,7 +1816,7 @@ impl NativeBeliefsApi {
     #[napi(js_name = "listBeliefsJson")]
     pub fn list_beliefs_json(&self, scope_json: String) -> Result<String> {
         let scope: Scope = decode(&scope_json)?;
-        let result = block_on(self.handle.list_beliefs(&scope)).map_err(to_napi_error)?;
+        let result = block_on(self.handle()?.list_beliefs(&scope)).map_err(to_napi_error)?;
         encode(&result)
     }
 
@@ -1530,7 +1832,7 @@ impl NativeBeliefsApi {
             .and_then(|v| v.as_str())
             .map(|s| engram_domain::Cursor::new(s.to_owned()));
         let limit = value.get("limit").and_then(|v| v.as_u64()).unwrap_or(100) as usize;
-        let page: Page<Belief> = block_on(self.handle.list_beliefs_paged(
+        let page: Page<Belief> = block_on(self.handle()?.list_beliefs_paged(
             &scope,
             after.as_ref(),
             limit,
@@ -1544,7 +1846,7 @@ impl NativeBeliefsApi {
     #[napi(js_name = "listContradictionsJson")]
     pub fn list_contradictions_json(&self, scope_json: String) -> Result<String> {
         let scope: Scope = decode(&scope_json)?;
-        let result = block_on(self.handle.list_contradictions(&scope)).map_err(to_napi_error)?;
+        let result = block_on(self.handle()?.list_contradictions(&scope)).map_err(to_napi_error)?;
         encode(&result)
     }
 
@@ -1554,7 +1856,7 @@ impl NativeBeliefsApi {
     pub fn put_contradiction_json(&self, contradiction_json: String) -> Result<String> {
         let contradiction: Contradiction = decode(&contradiction_json)?;
         let result =
-            block_on(self.handle.put_contradiction(contradiction)).map_err(to_napi_error)?;
+            block_on(self.handle()?.put_contradiction(contradiction)).map_err(to_napi_error)?;
         encode(&result)
     }
 }
@@ -1571,12 +1873,25 @@ impl NativeBeliefsApi {
 /// the call edges it clusters; `pathForJson` does not.
 #[napi]
 pub struct NativeHierarchyApi {
-    handle: Arc<dyn HierarchyRepository>,
+    handle: Option<Arc<dyn HierarchyRepository>>,
     knowledge_query: Option<Arc<dyn KnowledgeQuery>>,
 }
 
+impl NativeHierarchyApi {
+    fn handle(&self) -> Result<&Arc<dyn HierarchyRepository>> {
+        self.handle
+            .as_ref()
+            .ok_or_else(|| Error::from_reason("native capability handle is closed"))
+    }
+}
 #[napi]
 impl NativeHierarchyApi {
+    #[napi]
+    pub fn close(&mut self) {
+        self.handle.take();
+        self.knowledge_query.take();
+    }
+
     /// Navigation path for seed entity ids. Takes `{ seeds: [String], scope,
     /// maxLayer? }` JSON, returns a `HierarchyPath` JSON (nodes/relations/lca).
     #[napi(js_name = "pathForJson")]
@@ -1597,7 +1912,7 @@ impl NativeHierarchyApi {
             .and_then(|v| v.as_u64())
             .map(|n| n as u32);
         let result =
-            block_on(self.handle.path_for(&seeds, &scope, max_layer)).map_err(to_napi_error)?;
+            block_on(self.handle()?.path_for(&seeds, &scope, max_layer)).map_err(to_napi_error)?;
         encode(&result)
     }
 
@@ -1624,7 +1939,7 @@ impl NativeHierarchyApi {
         })?;
         let stats = block_on(engram_integration::build_hierarchy_from_communities(
             &knowledge_query,
-            &self.handle,
+            self.handle()?,
             &scope,
             max_passes,
             "engram-node",
@@ -1642,11 +1957,23 @@ impl NativeHierarchyApi {
 /// BM25-lane upsert operations as JSON-in / JSON-out methods.
 #[napi]
 pub struct NativeLexicalFeedApi {
-    handle: Arc<dyn LexicalFeed>,
+    handle: Option<Arc<dyn LexicalFeed>>,
 }
 
+impl NativeLexicalFeedApi {
+    fn handle(&self) -> Result<&Arc<dyn LexicalFeed>> {
+        self.handle
+            .as_ref()
+            .ok_or_else(|| Error::from_reason("native capability handle is closed"))
+    }
+}
 #[napi]
 impl NativeLexicalFeedApi {
+    #[napi]
+    pub fn close(&mut self) {
+        self.handle.take();
+    }
+
     /// Upserts one searchable document. Takes `{ targetId, text }` JSON.
     #[napi(js_name = "upsertJson")]
     pub fn upsert_json(&self, request_json: String) -> Result<String> {
@@ -1659,7 +1986,7 @@ impl NativeLexicalFeedApi {
             .get("text")
             .and_then(|v| v.as_str())
             .ok_or_else(|| Error::from_reason("text is required"))?;
-        block_on(self.handle.upsert(target_id, text)).map_err(to_napi_error)?;
+        block_on(self.handle()?.upsert(target_id, text)).map_err(to_napi_error)?;
         encode(&serde_json::json!({"ok": true}))
     }
 
@@ -1676,7 +2003,7 @@ impl NativeLexicalFeedApi {
             })
             .collect();
         let count = pairs.len();
-        block_on(self.handle.upsert_batch(&pairs)).map_err(to_napi_error)?;
+        block_on(self.handle()?.upsert_batch(&pairs)).map_err(to_napi_error)?;
         encode(&serde_json::json!({"ok": true, "count": count}))
     }
 }
@@ -1690,17 +2017,29 @@ impl NativeLexicalFeedApi {
 /// JSON-in / JSON-out methods.
 #[napi]
 pub struct NativeProceduresApi {
-    handle: Arc<dyn ProcedureRepository>,
+    handle: Option<Arc<dyn ProcedureRepository>>,
 }
 
+impl NativeProceduresApi {
+    fn handle(&self) -> Result<&Arc<dyn ProcedureRepository>> {
+        self.handle
+            .as_ref()
+            .ok_or_else(|| Error::from_reason("native capability handle is closed"))
+    }
+}
 #[napi]
 impl NativeProceduresApi {
+    #[napi]
+    pub fn close(&mut self) {
+        self.handle.take();
+    }
+
     /// Upserts a procedure by id. Takes a `Procedure` JSON, returns the persisted
     /// `Procedure` JSON.
     #[napi(js_name = "upsertJson")]
     pub fn upsert_json(&self, procedure_json: String) -> Result<String> {
         let procedure: Procedure = decode(&procedure_json)?;
-        let result = block_on(self.handle.upsert_procedure(procedure)).map_err(to_napi_error)?;
+        let result = block_on(self.handle()?.upsert_procedure(procedure)).map_err(to_napi_error)?;
         encode(&result)
     }
 
@@ -1708,7 +2047,7 @@ impl NativeProceduresApi {
     #[napi(js_name = "listJson")]
     pub fn list_json(&self, scope_json: String) -> Result<String> {
         let scope: Scope = decode(&scope_json)?;
-        let result = block_on(self.handle.list_procedures(&scope)).map_err(to_napi_error)?;
+        let result = block_on(self.handle()?.list_procedures(&scope)).map_err(to_napi_error)?;
         encode(&result)
     }
 
@@ -1719,7 +2058,8 @@ impl NativeProceduresApi {
         let value = decode::<serde_json::Value>(&request_json)?;
         let id: Id = id_field(&value, "id")?;
         let scope = scope_field(&value)?;
-        let result = block_on(self.handle.increment_success(&id, &scope)).map_err(to_napi_error)?;
+        let result =
+            block_on(self.handle()?.increment_success(&id, &scope)).map_err(to_napi_error)?;
         encode(&result)
     }
 
@@ -1730,7 +2070,8 @@ impl NativeProceduresApi {
         let value = decode::<serde_json::Value>(&request_json)?;
         let id: Id = id_field(&value, "id")?;
         let scope = scope_field(&value)?;
-        let result = block_on(self.handle.increment_failure(&id, &scope)).map_err(to_napi_error)?;
+        let result =
+            block_on(self.handle()?.increment_failure(&id, &scope)).map_err(to_napi_error)?;
         encode(&result)
     }
 }
@@ -1744,17 +2085,29 @@ impl NativeProceduresApi {
 /// windows. Association data, never causal proof.
 #[napi]
 pub struct NativeOutcomesApi {
-    handle: Arc<dyn OutcomeLedger>,
+    handle: Option<Arc<dyn OutcomeLedger>>,
 }
 
+impl NativeOutcomesApi {
+    fn handle(&self) -> Result<&Arc<dyn OutcomeLedger>> {
+        self.handle
+            .as_ref()
+            .ok_or_else(|| Error::from_reason("native capability handle is closed"))
+    }
+}
 #[napi]
 impl NativeOutcomesApi {
+    #[napi]
+    pub fn close(&mut self) {
+        self.handle.take();
+    }
+
     /// Appends one attributed outcome. Takes a `ReportOutcomeRequest` JSON,
     /// returns a `ReportOutcomeResult` JSON.
     #[napi(js_name = "reportOutcomeJson")]
     pub fn report_outcome_json(&self, request_json: String) -> Result<String> {
         let request = decode(&request_json)?;
-        let result = block_on(self.handle.report_outcome(request)).map_err(to_napi_error)?;
+        let result = block_on(self.handle()?.report_outcome(request)).map_err(to_napi_error)?;
         encode(&result)
     }
 
@@ -1763,7 +2116,7 @@ impl NativeOutcomesApi {
     #[napi(js_name = "listOutcomesJson")]
     pub fn list_outcomes_json(&self, window_json: String) -> Result<String> {
         let window = decode(&window_json)?;
-        let result = block_on(self.handle.list_outcomes(&window)).map_err(to_napi_error)?;
+        let result = block_on(self.handle()?.list_outcomes(&window)).map_err(to_napi_error)?;
         encode(&result)
     }
 }
@@ -1772,17 +2125,29 @@ impl NativeOutcomesApi {
 /// latest-checkpoint reads (never recallable content).
 #[napi]
 pub struct NativeChangeLogApi {
-    handle: Arc<dyn KnowledgeChangeLog>,
+    handle: Option<Arc<dyn KnowledgeChangeLog>>,
 }
 
+impl NativeChangeLogApi {
+    fn handle(&self) -> Result<&Arc<dyn KnowledgeChangeLog>> {
+        self.handle
+            .as_ref()
+            .ok_or_else(|| Error::from_reason("native capability handle is closed"))
+    }
+}
 #[napi]
 impl NativeChangeLogApi {
+    #[napi]
+    pub fn close(&mut self) {
+        self.handle.take();
+    }
+
     /// One page after an opaque cursor. Takes a `KnowledgeChangesRequest`
     /// JSON, returns a `KnowledgeChangesPage` JSON.
     #[napi(js_name = "changesSinceJson")]
     pub fn changes_since_json(&self, request_json: String) -> Result<String> {
         let request = decode(&request_json)?;
-        let result = block_on(self.handle.changes_since(&request)).map_err(to_napi_error)?;
+        let result = block_on(self.handle()?.changes_since(&request)).map_err(to_napi_error)?;
         encode(&result)
     }
 
@@ -1797,7 +2162,8 @@ impl NativeChangeLogApi {
             .as_str()
             .or_else(|| request["stable_source_key"].as_str())
             .ok_or_else(|| napi::Error::from_reason("stableSourceKey is required"))?;
-        let result = block_on(self.handle.latest_checkpoint(&scope, key)).map_err(to_napi_error)?;
+        let result =
+            block_on(self.handle()?.latest_checkpoint(&scope, key)).map_err(to_napi_error)?;
         encode(&result)
     }
 }
@@ -1805,17 +2171,29 @@ impl NativeChangeLogApi {
 /// Scan-checkpoint API: the scan coordinator's write side.
 #[napi]
 pub struct NativeCheckpointsApi {
-    handle: Arc<dyn ScanCheckpointStore>,
+    handle: Option<Arc<dyn ScanCheckpointStore>>,
 }
 
+impl NativeCheckpointsApi {
+    fn handle(&self) -> Result<&Arc<dyn ScanCheckpointStore>> {
+        self.handle
+            .as_ref()
+            .ok_or_else(|| Error::from_reason("native capability handle is closed"))
+    }
+}
 #[napi]
 impl NativeCheckpointsApi {
+    #[napi]
+    pub fn close(&mut self) {
+        self.handle.take();
+    }
+
     /// Upserts a checkpoint (stale runs never overwrite newer ones). Takes
     /// a `ScanCheckpoint` JSON, returns the stored `ScanCheckpoint` JSON.
     #[napi(js_name = "putCheckpointJson")]
     pub fn put_checkpoint_json(&self, checkpoint_json: String) -> Result<String> {
         let checkpoint = decode(&checkpoint_json)?;
-        let result = block_on(self.handle.put_checkpoint(checkpoint)).map_err(to_napi_error)?;
+        let result = block_on(self.handle()?.put_checkpoint(checkpoint)).map_err(to_napi_error)?;
         encode(&result)
     }
 }
@@ -1825,17 +2203,29 @@ impl NativeCheckpointsApi {
 /// path; `applying` outcomes report the retry-safe in-progress state.
 #[napi]
 pub struct NativeProposalsApi {
-    handle: Arc<ProposalService>,
+    handle: Option<Arc<ProposalService>>,
 }
 
+impl NativeProposalsApi {
+    fn handle(&self) -> Result<&Arc<ProposalService>> {
+        self.handle
+            .as_ref()
+            .ok_or_else(|| Error::from_reason("native capability handle is closed"))
+    }
+}
 #[napi]
 impl NativeProposalsApi {
+    #[napi]
+    pub fn close(&mut self) {
+        self.handle.take();
+    }
+
     /// Submits a proposal. Takes a `ProposalSubmitRequest` JSON, returns a
     /// `ProposalSubmitResult` JSON.
     #[napi(js_name = "submitJson")]
     pub fn submit_json(&self, request_json: String) -> Result<String> {
         let request = decode(&request_json)?;
-        let result = block_on(self.handle.submit(request)).map_err(to_napi_error)?;
+        let result = block_on(self.handle()?.submit(request)).map_err(to_napi_error)?;
         encode(&result)
     }
 
@@ -1844,7 +2234,7 @@ impl NativeProposalsApi {
     #[napi(js_name = "listJson")]
     pub fn list_json(&self, request_json: String) -> Result<String> {
         let request = decode(&request_json)?;
-        let result = block_on(self.handle.list(request)).map_err(to_napi_error)?;
+        let result = block_on(self.handle()?.list(request)).map_err(to_napi_error)?;
         encode(&result)
     }
 
@@ -1853,7 +2243,7 @@ impl NativeProposalsApi {
     #[napi(js_name = "approveJson")]
     pub fn approve_json(&self, request_json: String) -> Result<String> {
         let request = decode(&request_json)?;
-        let result = block_on(self.handle.approve(request)).map_err(to_napi_error)?;
+        let result = block_on(self.handle()?.approve(request)).map_err(to_napi_error)?;
         encode(&result)
     }
 
@@ -1862,24 +2252,76 @@ impl NativeProposalsApi {
     #[napi(js_name = "rejectJson")]
     pub fn reject_json(&self, request_json: String) -> Result<String> {
         let request = decode(&request_json)?;
-        let result = block_on(self.handle.reject(request)).map_err(to_napi_error)?;
+        let result = block_on(self.handle()?.reject(request)).map_err(to_napi_error)?;
         encode(&result)
     }
 }
 
 #[napi]
 pub struct NativeOntologyApi {
-    handle: Arc<dyn OntologyRepository>,
+    handle: Option<Arc<dyn OntologyRepository>>,
 }
 
+impl NativeOntologyApi {
+    fn handle(&self) -> Result<&Arc<dyn OntologyRepository>> {
+        self.handle
+            .as_ref()
+            .ok_or_else(|| Error::from_reason("native capability handle is closed"))
+    }
+}
 #[napi]
 impl NativeOntologyApi {
+    #[napi]
+    pub fn close(&mut self) {
+        self.handle.take();
+    }
+
+    #[napi(js_name = "validateGraphJson")]
+    pub fn validate_graph_json(&self, request_json: String) -> Result<String> {
+        let value: serde_json::Value = decode(&request_json)?;
+        let graph = id_field(&value, "graphId")?;
+        let ontology = id_field(&value, "ontologyId")?;
+        let scope = scope_field(&value)?;
+        encode(
+            &block_on(self.handle()?.validate_graph(&graph, &ontology, &scope))
+                .map_err(to_napi_error)?,
+        )
+    }
+
+    #[napi(js_name = "putOntologyJson")]
+    pub fn put_ontology_json(&self, record_json: String) -> Result<String> {
+        let record = decode(&record_json)?;
+        let stored = block_on(self.handle()?.put_ontology(record)).map_err(to_napi_error)?;
+        encode(&stored)
+    }
+
+    #[napi(js_name = "putClassJson")]
+    pub fn put_class_json(&self, record_json: String) -> Result<String> {
+        let record = decode(&record_json)?;
+        let stored = block_on(self.handle()?.put_class(record)).map_err(to_napi_error)?;
+        encode(&stored)
+    }
+
+    #[napi(js_name = "putPropertyJson")]
+    pub fn put_property_json(&self, record_json: String) -> Result<String> {
+        let record = decode(&record_json)?;
+        let stored = block_on(self.handle()?.put_property(record)).map_err(to_napi_error)?;
+        encode(&stored)
+    }
+
+    #[napi(js_name = "putAxiomJson")]
+    pub fn put_axiom_json(&self, record_json: String) -> Result<String> {
+        let record = decode(&record_json)?;
+        let stored = block_on(self.handle()?.put_axiom(record)).map_err(to_napi_error)?;
+        encode(&stored)
+    }
+
     #[napi(js_name = "getOntologyJson")]
     pub fn get_ontology_json(&self, request_json: String) -> Result<String> {
         let value = decode::<serde_json::Value>(&request_json)?;
         let id = id_field(&value, "id")?;
         let scope = scope_field(&value)?;
-        let result = block_on(self.handle.get_ontology(&id, &scope)).map_err(to_napi_error)?;
+        let result = block_on(self.handle()?.get_ontology(&id, &scope)).map_err(to_napi_error)?;
         encode(&result)
     }
 
@@ -1891,18 +2333,60 @@ impl NativeOntologyApi {
 
 #[napi]
 pub struct NativeTaxonomyApi {
-    handle: Arc<dyn TaxonomyRepository>,
+    handle: Option<Arc<dyn TaxonomyRepository>>,
 }
 
+impl NativeTaxonomyApi {
+    fn handle(&self) -> Result<&Arc<dyn TaxonomyRepository>> {
+        self.handle
+            .as_ref()
+            .ok_or_else(|| Error::from_reason("native capability handle is closed"))
+    }
+}
 #[napi]
 impl NativeTaxonomyApi {
+    #[napi]
+    pub fn close(&mut self) {
+        self.handle.take();
+    }
+
+    #[napi(js_name = "getConceptSchemeJson")]
+    pub fn get_concept_scheme_json(&self, request_json: String) -> Result<String> {
+        let value: serde_json::Value = decode(&request_json)?;
+        let id = id_field(&value, "id")?;
+        let scope = scope_field(&value)?;
+        encode(&block_on(self.handle()?.get_concept_scheme(&id, &scope)).map_err(to_napi_error)?)
+    }
+
+    #[napi(js_name = "putConceptSchemeJson")]
+    pub fn put_concept_scheme_json(&self, record_json: String) -> Result<String> {
+        let record = decode(&record_json)?;
+        let stored = block_on(self.handle()?.put_concept_scheme(record)).map_err(to_napi_error)?;
+        encode(&stored)
+    }
+
+    #[napi(js_name = "putConceptJson")]
+    pub fn put_concept_json(&self, record_json: String) -> Result<String> {
+        let record = decode(&record_json)?;
+        let stored = block_on(self.handle()?.put_concept(record)).map_err(to_napi_error)?;
+        encode(&stored)
+    }
+
+    #[napi(js_name = "putConceptRelationJson")]
+    pub fn put_concept_relation_json(&self, record_json: String) -> Result<String> {
+        let record = decode(&record_json)?;
+        let stored =
+            block_on(self.handle()?.put_concept_relation(record)).map_err(to_napi_error)?;
+        encode(&stored)
+    }
+
     #[napi(js_name = "listConceptsJson")]
     pub fn list_concepts_json(&self, request_json: String) -> Result<String> {
         let value = decode::<serde_json::Value>(&request_json)?;
         let scheme_id = id_field(&value, "schemeId")?;
         let scope = scope_field(&value)?;
         let result =
-            block_on(self.handle.list_concepts(&scheme_id, &scope)).map_err(to_napi_error)?;
+            block_on(self.handle()?.list_concepts(&scheme_id, &scope)).map_err(to_napi_error)?;
         encode(&result)
     }
 
@@ -1914,15 +2398,28 @@ impl NativeTaxonomyApi {
 
 #[napi]
 pub struct NativeRetrievalApi {
-    handle: Arc<dyn RetrievalIndex>,
+    handle: Option<Arc<dyn RetrievalIndex>>,
 }
 
+impl NativeRetrievalApi {
+    fn handle(&self) -> Result<&Arc<dyn RetrievalIndex>> {
+        self.handle
+            .as_ref()
+            .ok_or_else(|| Error::from_reason("native capability handle is closed"))
+    }
+}
 #[napi]
 impl NativeRetrievalApi {
+    #[napi]
+    pub fn close(&mut self) {
+        self.handle.take();
+    }
+
     #[napi(js_name = "retrieveCandidatesJson")]
     pub fn retrieve_candidates_json(&self, request_json: String) -> Result<String> {
         let request: engram_domain::RetrievalRequest = decode(&request_json)?;
-        let result = block_on(self.handle.retrieve_candidates(&request)).map_err(to_napi_error)?;
+        let result =
+            block_on(self.handle()?.retrieve_candidates(&request)).map_err(to_napi_error)?;
         encode(&result)
     }
 
@@ -1934,14 +2431,26 @@ impl NativeRetrievalApi {
 
 #[napi]
 pub struct NativeVectorsApi {
-    handle: Arc<dyn VectorIndex>,
+    handle: Option<Arc<dyn VectorIndex>>,
 }
 
+impl NativeVectorsApi {
+    fn handle(&self) -> Result<&Arc<dyn VectorIndex>> {
+        self.handle
+            .as_ref()
+            .ok_or_else(|| Error::from_reason("native capability handle is closed"))
+    }
+}
 #[napi]
 impl NativeVectorsApi {
+    #[napi]
+    pub fn close(&mut self) {
+        self.handle.take();
+    }
+
     #[napi(js_name = "embeddingSpace")]
     pub fn embedding_space(&self) -> Result<String> {
-        let space = self.handle.embedding_space();
+        let space = self.handle()?.embedding_space();
         encode(&space)
     }
 
@@ -1953,15 +2462,30 @@ impl NativeVectorsApi {
 
 #[napi]
 pub struct NativeMigrationApi {
-    handle: Arc<dyn MigrationService>,
+    handle: Option<Arc<dyn MigrationService>>,
 }
 
+impl NativeMigrationApi {
+    fn handle(&self) -> Result<&Arc<dyn MigrationService>> {
+        self.handle
+            .as_ref()
+            .ok_or_else(|| Error::from_reason("native capability handle is closed"))
+    }
+}
 #[napi]
 impl NativeMigrationApi {
+    #[napi]
+    pub fn close(&mut self) {
+        self.handle.take();
+    }
+
     #[napi(js_name = "dryRunImportJson")]
     pub fn dry_run_import_json(&self, import_json: String) -> Result<String> {
         let import: engram_integration::ImportData = decode(&import_json)?;
-        let result = self.handle.dry_run_import(&import).map_err(to_napi_error)?;
+        let result = self
+            .handle()?
+            .dry_run_import(&import)
+            .map_err(to_napi_error)?;
         encode(&result)
     }
 
@@ -1973,26 +2497,38 @@ impl NativeMigrationApi {
 
 #[napi]
 pub struct NativeEmbeddingProviderApi {
-    handle: Arc<dyn EmbeddingProvider>,
+    handle: Option<Arc<dyn EmbeddingProvider>>,
 }
 
+impl NativeEmbeddingProviderApi {
+    fn handle(&self) -> Result<&Arc<dyn EmbeddingProvider>> {
+        self.handle
+            .as_ref()
+            .ok_or_else(|| Error::from_reason("native capability handle is closed"))
+    }
+}
 #[napi]
 impl NativeEmbeddingProviderApi {
+    #[napi]
+    pub fn close(&mut self) {
+        self.handle.take();
+    }
+
     #[napi(js_name = "embeddingSpace")]
     pub fn embedding_space(&self) -> Result<String> {
-        let space = self.handle.embedding_space();
+        let space = self.handle()?.embedding_space();
         encode(&space)
     }
 
     #[napi(js_name = "providerId")]
-    pub fn provider_id(&self) -> String {
-        self.handle.provider_id().to_owned()
+    pub fn provider_id(&self) -> Result<String> {
+        Ok(self.handle()?.provider_id().to_owned())
     }
 
     /// Generate a query embedding through the configured Rust provider.
     #[napi(js_name = "embedQuery")]
     pub fn embed_query(&self, text: String) -> Result<Vec<f64>> {
-        self.handle
+        self.handle()?
             .embed_query(&text)
             .map(|vector| vector.into_iter().map(f64::from).collect())
             .map_err(to_napi_error)
@@ -2001,7 +2537,7 @@ impl NativeEmbeddingProviderApi {
     /// Generate an indexed passage embedding through the configured Rust provider.
     #[napi(js_name = "embedPassage")]
     pub fn embed_passage(&self, text: String) -> Result<Vec<f64>> {
-        self.handle
+        self.handle()?
             .embed_passage(&text)
             .map(|vector| vector.into_iter().map(f64::from).collect())
             .map_err(to_napi_error)
@@ -2010,7 +2546,7 @@ impl NativeEmbeddingProviderApi {
     /// Generate passage embeddings in the provider's original batch order.
     #[napi(js_name = "embedBatch")]
     pub fn embed_batch(&self, texts: Vec<String>) -> Result<Vec<Vec<f64>>> {
-        self.handle
+        self.handle()?
             .embed_batch(&texts)
             .map(|vectors| {
                 vectors
@@ -2411,5 +2947,112 @@ mod tests {
             "None counts are omitted: {}",
             json["steps"][episode_index]
         );
+    }
+}
+
+/// Fixture-only projection through the same native batch serializer.
+#[cfg(feature = "test-controls")]
+#[napi]
+pub fn presentation_batch_fixture() -> Result<String> {
+    let outcome = BatchOutcome {
+        guarantee: TransactionGuarantee::BestEffort,
+        status: BatchStatus::Partial,
+        steps: vec![
+            engram_integration::StepOutcome::ok(BatchStep::Episode, StepStatus::Succeeded),
+            engram_integration::StepOutcome {
+                step: BatchStep::Facts, status: StepStatus::Failed,
+                error: Some(CoreError::Adapter { adapter: "helixdb".into(), message: "OutcomeUnknown operation_id=11111111-2222-4333-8444-555555555555 <private record=secret-record credential=secret-token>".into() }),
+                supersession: None,
+            },
+            engram_integration::StepOutcome::ok(BatchStep::Entities, StepStatus::Skipped),
+        ],
+    };
+    encode(&BatchOutcomeJson::from(&outcome))
+}
+
+/// Only explicitly instrumented addons can initialize fixture-local native faults.
+#[cfg(feature = "test-controls")]
+#[napi]
+impl NativeProvider {
+    #[napi(js_name = "openInstrumented")]
+    pub fn open_instrumented(config_json: String, fixture_json: String) -> Result<Self> {
+        use engram_backend_provider::test_controls::{FixtureHost, FixtureIdentity};
+        let value: serde_json::Value = decode(&config_json)?;
+        let scope: Scope = serde_json::from_value(
+            value
+                .get("scope")
+                .cloned()
+                .ok_or_else(|| Error::from_reason("fixture scope required"))?,
+        )
+        .map_err(|_| Error::from_reason("invalid fixture scope"))?;
+        let authority: Option<Vec<Scope>> = value
+            .get("codeAuthority")
+            .and_then(|v| v.get("launchScopes"))
+            .cloned()
+            .map(serde_json::from_value)
+            .transpose()
+            .map_err(|_| Error::from_reason("invalid fixture authority"))?;
+        let config: EngramConfig = serde_json::from_value(value)
+            .map_err(|_| Error::from_reason("invalid fixture config"))?;
+        let f: serde_json::Value = decode(&fixture_json)?;
+        let field = |name: &str| {
+            f.get(name)
+                .and_then(|v| v.as_str())
+                .ok_or_else(|| Error::from_reason("missing fixture identity"))
+        };
+        let identity = FixtureIdentity::new(
+            field("invocation")?,
+            FixtureHost::Native,
+            field("sourceRoot")?.into(),
+            field("sourceRevision")?.into(),
+            field("artifactSha256")?.into(),
+            field("ownedRoot")?.into(),
+        )
+        .map_err(to_napi_error)?;
+        let opened = engram_backend_provider::test_controls::open(
+            &config,
+            &scope,
+            Arc::new(NativePolicy(Some(scope.clone()))),
+            identity,
+        )
+        .map_err(to_napi_error)?;
+        let provider = match authority {
+            Some(scopes) => opened
+                .provider
+                .with_code_authorizer(Arc::new(
+                    engram_integration::code_binding::ScopeSetAuthorizer::new(scopes),
+                ))
+                .map_err(to_napi_error)?,
+            None => opened.provider,
+        };
+        let binding = serde_json::json!({"backend":opened.binding.backend,"mode":opened.binding.mode,"store":opened.binding.logical_store,"scope":opened.binding.scope});
+        let control = opened.control;
+        let fixture_control = Arc::new(move |request: String| -> Result<String> {
+            let value: serde_json::Value = decode(&request)?;
+            match value["operation"].as_str() {
+                Some("loseAck") => control.lose_mutation_ack_after(
+                    value["acknowledgedBefore"].as_u64().unwrap_or(0) as usize,
+                ),
+                Some("definiteFailure") => control.reject_next_mutation_definitely(),
+                Some("snapshot") => {}
+                _ => return Err(Error::from_reason("invalid fixture control operation")),
+            }
+            let snapshot = control.snapshot();
+            encode(
+                &serde_json::json!({"binding":binding,"allSends":snapshot.all_sends,"reconciliationReads":snapshot.reconciliation_reads,"mutationAttempts":snapshot.mutation_attempts,"landedCommits":snapshot.landed_commits}),
+            )
+        });
+        Ok(Self {
+            inner: Some(provider),
+            fixture_control: Some(fixture_control),
+        })
+    }
+
+    #[napi(js_name = "fixtureControlJson")]
+    pub fn fixture_control_json(&self, request: String) -> Result<String> {
+        self.inner()?;
+        self.fixture_control
+            .as_ref()
+            .ok_or_else(|| Error::from_reason("provider is not instrumented"))?(request)
     }
 }

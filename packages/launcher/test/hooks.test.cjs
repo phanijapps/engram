@@ -25,7 +25,9 @@ function tmpStore(name) {
 }
 
 /** Stub binary: emits canned recall JSON. Env knob = ENGRAM_STUB_RESPONSE. */
-const STUB = path.join(__dirname, 'fixtures', 'stub-engram-mcp.cjs');
+const fixtureRoot = tmpStore('binaries');
+const STUB = path.join(fixtureRoot, 'stub-engram-mcp.cjs');
+test.after(() => fs.rmSync(fixtureRoot, {recursive:true,force:true}));
 fs.mkdirSync(path.dirname(STUB), { recursive: true });
 fs.writeFileSync(
   STUB,
@@ -190,6 +192,8 @@ test('dedupe suppresses the same items on the next fire', () => {
 test('stale binary (exit 2) falls through to next candidate', () => {
   const store = tmpStore('stale');
   const good = recallWith([0.30, 0.10], ['exact', 'weak']);
+  fs.copyFileSync(STUB, path.join(fixtureRoot, 'engram-mcp'));
+  fs.chmodSync(path.join(fixtureRoot, 'engram-mcp'),0o755);
   const res = fire(RECALL, '{"prompt":"scanner module latency dissolution","cwd":"/tmp"}', {
     ENGRAM_STORAGE: store,
     ENGRAM_MCP_BIN: '', // unset → resolution chain
@@ -197,8 +201,6 @@ test('stale binary (exit 2) falls through to next candidate', () => {
     ENGRAM_STUB_RESPONSE: good,
     PATH: path.dirname(STUB) + path.delimiter + process.env.PATH,
   });
-  // The stub is NOT named engram-mcp on PATH, so resolution skips it and
-  // finds either a dev build or nothing — both must exit 0 silently.
   assert.equal(res.status, 0);
 });
 
@@ -443,4 +445,88 @@ test('CLI: --version/-V exit 0 with the version line; --help/-h exit 0 with the 
   const recallHelp = run(['recall', '--help']);
   assert.equal(recallHelp.status, 0, 'recall --help exits 0');
   assert.match(recallHelp.stdout, /--query/, 'recall help shows --query');
+});
+
+
+function selectionFixture(store) {
+  const bin = path.join(store,'selected-recall.cjs');
+  const argv = path.join(store,'argv.json');
+  fs.writeFileSync(bin, `#!/usr/bin/env node
+const fs = require('node:fs');
+fs.writeFileSync(${JSON.stringify(argv)},JSON.stringify(process.argv.slice(2)));
+const args=process.argv.slice(2);
+const selected=args[args.indexOf('--helix-store')+1];
+const payload=selected==='owned-store' ? {ok:true,results:[{kind:'memory',score:1,evidence:'exact',content:'selected store boundary invariants'}]} : {ok:true,results:[]};
+console.log(JSON.stringify(payload));
+`,{mode:0o755});
+  return {bin,argv};
+}
+function selectedEnvironment(store, bin) {
+  return {ENGRAM_STORAGE:store,ENGRAM_MCP_BIN:bin,ENGRAM_BACKEND:'helixdb',ENGRAM_HELIX_MODE:'service',
+    ENGRAM_HELIX_STORE:'owned-store',ENGRAM_HELIX_ENDPOINT:'http://127.0.0.1:9999',
+    ENGRAM_HELIX_CREDENTIAL_ENV:'FIXTURE_REFERENCE',FIXTURE_REFERENCE:'NEVER_LOG_THIS_VALUE',
+    ENGRAM_TRUSTED_ROOT:store,ENGRAM_PROJECT:'project',ENGRAM_ORG:'tenant',ENGRAM_DOMAIN:'domain',
+    ENGRAM_SUBDOMAIN:'subdomain',ENGRAM_ENABLE_VECTOR:'true',ENGRAM_EMBEDDING_PROVIDER:'none'};
+}
+function assertSelectedArgs(args, store) {
+  for (const [flag,value] of [['--backend','helixdb'],['--helix-mode','service'],['--helix-store','owned-store'],
+    ['--helix-credential-env','FIXTURE_REFERENCE'],['--trusted-root',store],['--org','tenant'],
+    ['--domain','domain'],['--subdomain','subdomain'],['--project','project'],['--embedding-provider','none']])
+    assert.equal(args[args.indexOf(flag)+1],value,flag);
+  assert.ok(args.includes('--vector'));
+  assert.ok(!args.includes('--no-vector'));
+  assert.ok(!JSON.stringify(args).includes('NEVER_LOG_THIS_VALUE'));
+}
+test('recall hook forwards selected identity and scope and excludes wrong-store sentinel', () => {
+  const store=tmpStore('selection'); const f=selectionFixture(store);
+  const env=selectedEnvironment(store,f.bin);
+  const input=JSON.stringify({prompt:'selected store boundary invariants',cwd:store});
+  const first=fire(RECALL,input,env);
+  assert.equal(first.status,0,first.stderr);
+  assert.match(first.stdout,/selected store boundary invariants/);
+  assertSelectedArgs(JSON.parse(fs.readFileSync(f.argv)),store);
+  const other=fire(RECALL,input,{...env,ENGRAM_HELIX_STORE:'other-store'});
+  assert.equal(other.stdout,'');
+  const hb=fs.readFileSync(path.join(store,'hook-heartbeat.jsonl'),'utf8');
+  assert.match(hb,/"outcome":"empty"/);
+  assert.ok(!hb.includes('NEVER_LOG_THIS_VALUE'));
+});
+test('recall default stays vectors off and explicit false stays off', () => {
+  const store=tmpStore('vector-default'); const f=selectionFixture(store);
+  for (const choice of ['', 'false']) {
+    fire(RECALL,JSON.stringify({prompt:'selected store boundary invariants'}),{
+      ENGRAM_STORAGE:store,ENGRAM_MCP_BIN:f.bin,ENGRAM_ENABLE_VECTOR:choice,ENGRAM_BACKEND:'sqlite',
+    });
+    const args=JSON.parse(fs.readFileSync(f.argv));
+    assert.ok(args.includes('--no-vector')); assert.ok(!args.includes('--vector'));
+    assert.ok(!args.includes('--helix-store'));
+  }
+});
+test('recall diagnostics distinguish failed empty gated and deduplicated without error payloads', () => {
+  const store=tmpStore('outcomes');
+  const input='{"prompt":"scanner module latency dissolution"}';
+  for (const payload of [{ok:false,error:'PRIVATE_FAILURE'}, {ok:true,results:[]}])
+    fire(RECALL,input,{ENGRAM_STORAGE:store,ENGRAM_STUB_RESPONSE:JSON.stringify(payload)});
+  fire(RECALL,input,{ENGRAM_STORAGE:store,ENGRAM_STUB_RESPONSE:IRRELEVANT});
+  fire(RECALL,input,{ENGRAM_STORAGE:store,ENGRAM_STUB_RESPONSE:RELEVANT});
+  fire(RECALL,input,{ENGRAM_STORAGE:store,ENGRAM_STUB_RESPONSE:RELEVANT});
+  const hb=fs.readFileSync(path.join(store,'hook-heartbeat.jsonl'),'utf8');
+  for (const outcome of ['failed','empty','gated','deduplicated']) assert.ok(hb.includes(`"outcome":"${outcome}"`));
+  assert.ok(!hb.includes('PRIVATE_FAILURE'));
+});
+test('pi hook forwards selected identity and scope and reports safe outcomes', async () => {
+  const store=tmpStore('pi-selection'); const f=selectionFixture(store);
+  const env=selectedEnvironment(store,f.bin); const saved={};
+  for (const [key,value] of Object.entries(env)) {saved[key]=process.env[key];process.env[key]=value;}
+  const handlers={}; const diagnostics=[];
+  try {
+    require('../hooks/engram-recall-pi.cjs')({on:(name,fn)=>handlers[name]=fn,
+      events:{emit:(name,value)=>{if(name==='engram-recall:diagnostic')diagnostics.push(value.outcome);}}});
+    const event={messageType:'user',prompt:'selected store boundary invariants'};
+    const first=await handlers.before_agent_start(event);
+    assert.match(first.message.text,/selected store boundary invariants/);
+    assertSelectedArgs(JSON.parse(fs.readFileSync(f.argv)),store);
+    assert.equal(await handlers.before_agent_start(event),undefined);
+    assert.deepEqual(diagnostics,['injected','deduplicated']);
+  } finally {for(const [key,value] of Object.entries(saved)) {if(value===undefined)delete process.env[key];else process.env[key]=value;}}
 });

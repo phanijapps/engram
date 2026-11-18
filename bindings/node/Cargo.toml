@@ -19,15 +19,14 @@ engram-eval = { path = "../../core/eval", version = "0.1.0" }
 engram-hierarchy = { path = "../../core/hierarchy", version = "0.1.0" }
 engram-procedures = { path = "../../core/procedures", version = "0.1.0" }
 engram-proposals = { path = "../../core/proposals", version = "0.1.0" }
-engram-conformance = { path = "../../adapters/integration", version = "0.1.0" }
-engram-integration = { path = "../../core/integration", version = "0.1.0", features = ["sqlite"] }
-engram-backend-pgvector = { path = "../../backends/pgvector", optional = true }
+engram-integration = { path = "../../core/integration", version = "0.1.0", default-features = false, features = ["code-lanes"] }
+engram-backend-provider = { path = "../../backends/provider", default-features = false }
 engram-ingest = { path = "../../adapters/ingest", version = "0.1.0" }
 engram-knowledge = { path = "../../core/knowledge", version = "0.1.0" }
 engram-memory = { path = "../../core/memory", version = "0.1.0" }
 engram-retrieval = { path = "../../core/retrieval", version = "0.1.0" }
 engram-runtime = { path = "../../core/runtime", version = "0.1.0" }
-engram-store-sqlite = { path = "../../adapters/sqlite", version = "0.1.0" }
+engram-store-sqlite = { path = "../../adapters/sqlite", version = "0.1.0", optional = true }
 engram-store-associative-graph = { path = "../../adapters/retrieval/associative-graph", version = "0.1.0" }
 engram-store-lexical = { path = "../../adapters/retrieval/tantivy-lexical", version = "0.1.0" }
 futures.workspace = true
@@ -37,15 +36,15 @@ serde.workspace = true
 serde_json.workspace = true
 
 [features]
-http-embeddings = ["engram-integration/http-embeddings", "engram-backend-pgvector?/http-embeddings"]
-# Enables NativeRetrievalEngine (FastEmbed passage + query embeddings). The demo
-# build turns this on; default builds stay free of model-bearing code.
-default = ["http-embeddings"]
-fastembed = ["engram-store-sqlite/fastembed", "engram-integration/fastembed"]
-# Enables the pgvector (Postgres) backend: routes a config carrying
-# pgvector_connection_string to backends_pgvector::open. Opt-in (default builds
-# stay SQLite + FastEmbed).
-pgvector = ["dep:engram-backend-pgvector"]
+default = ["sqlite", "http-embeddings"]
+sqlite = ["dep:engram-store-sqlite", "engram-backend-provider/sqlite"]
+pgvector = ["engram-backend-provider/pgvector"]
+helixdb-service = ["engram-backend-provider/helixdb-service"]
+helixdb-embedded = ["engram-backend-provider/helixdb-embedded"]
+helixdb = ["helixdb-service", "helixdb-embedded"]
+http-embeddings = ["engram-integration/http-embeddings", "engram-backend-provider/http-embeddings"]
+fastembed = ["engram-store-sqlite?/fastembed", "engram-integration/fastembed", "engram-backend-provider/fastembed"]
+test-controls = ["engram-backend-provider/test-controls"]
 
 [build-dependencies]
 napi-build = "2.3.2"

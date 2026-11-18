@@ -135,7 +135,10 @@ fn parse_lanes(raw: &Value) -> LaneFilter {
 /// `write_memory`: persist an observation/episode to the memory layer.
 pub fn write_memory(app: &App, args: &Value) -> Result<Value, ToolError> {
     let content = req_str(args, "content")?;
-    let memory = app.provider.require_memory().map_err(internal)?;
+    let memory = app
+        .provider
+        .require_memory()
+        .map_err(|error| internal(error.to_redacted()))?;
     let request = WriteMemoryRequest {
         kind: MemoryKind::Observation,
         content: MemoryContent {
@@ -155,7 +158,8 @@ pub fn write_memory(app: &App, args: &Value) -> Result<Value, ToolError> {
         verdict: None,
         idempotency_key: None,
     };
-    let response = block_on(memory.write_memory(request)).map_err(internal)?;
+    let response =
+        block_on(memory.write_memory(request)).map_err(|error| internal(error.to_redacted()))?;
     let body = serde_json::to_string_pretty(&response).unwrap_or_else(|_| "OK".to_owned());
     Ok(protocol::text_content(body))
 }
@@ -174,7 +178,10 @@ pub fn forget(app: &App, args: &Value) -> Result<Value, ToolError> {
             )));
         }
     };
-    let memory = app.provider.require_memory().map_err(internal)?;
+    let memory = app
+        .provider
+        .require_memory()
+        .map_err(|error| internal(error.to_redacted()))?;
     let request = ForgetRequest {
         target_type: ForgetTargetType::Memory,
         target_id: target_id.to_owned(),
@@ -183,7 +190,8 @@ pub fn forget(app: &App, args: &Value) -> Result<Value, ToolError> {
         mode,
         reason: None,
     };
-    let response = block_on(memory.forget(request)).map_err(internal)?;
+    let response =
+        block_on(memory.forget(request)).map_err(|error| internal(error.to_redacted()))?;
     // Correction propagation (MCCL-audit F2): a corrected memory must not
     // keep feeding derived beliefs. Stale live beliefs that CITE this memory
     // (lineage made this findable); best-effort, reported, never blocking the
@@ -225,7 +233,10 @@ pub fn put_entity(app: &App, args: &Value) -> Result<Value, ToolError> {
         .as_str()
         .and_then(|s| chrono::DateTime::parse_from_rfc3339(s).ok())
         .map(|dt| dt.with_timezone(&Utc));
-    let knowledge = app.provider.require_knowledge().map_err(internal)?;
+    let knowledge = app
+        .provider
+        .require_knowledge()
+        .map_err(|error| internal(error.to_redacted()))?;
     let entity = KnowledgeEntity {
         id: Id::from(name),
         graph_id: None,
@@ -245,7 +256,8 @@ pub fn put_entity(app: &App, args: &Value) -> Result<Value, ToolError> {
 
         archived_at: None,
     };
-    let stored = block_on(knowledge.put_entity(entity)).map_err(internal)?;
+    let stored =
+        block_on(knowledge.put_entity(entity)).map_err(|error| internal(error.to_redacted()))?;
     Ok(protocol::text_content(format!(
         "Entity '{}' ({:?}) stored.",
         stored.name, stored.kind
@@ -259,7 +271,10 @@ pub fn put_relationship(app: &App, args: &Value) -> Result<Value, ToolError> {
     let subject = req_str(args, "subject")?;
     let predicate = req_str(args, "predicate")?;
     let object = req_str(args, "object")?;
-    let knowledge = app.provider.require_knowledge().map_err(internal)?;
+    let knowledge = app
+        .provider
+        .require_knowledge()
+        .map_err(|error| internal(error.to_redacted()))?;
     let rel = KnowledgeRelationship {
         id: Id::from(format!("{subject}\u{1f}{predicate}\u{1f}{object}")),
         graph_id: None,
@@ -286,7 +301,7 @@ pub fn put_relationship(app: &App, args: &Value) -> Result<Value, ToolError> {
 
         archived_at: None,
     };
-    block_on(knowledge.put_relationship(rel)).map_err(internal)?;
+    block_on(knowledge.put_relationship(rel)).map_err(|error| internal(error.to_redacted()))?;
     Ok(protocol::text_content(format!(
         "{subject} -[{predicate}]-> {object} stored."
     )))
@@ -331,7 +346,10 @@ pub fn recall(app: &App, args: &Value) -> Result<Value, ToolError> {
     const RECALL_ITEM_EXCERPT_CHARS: usize = 1000;
     const RECALL_TOTAL_CHAR_BUDGET: usize = 20_000;
 
-    let recall = app.provider.require_recall().map_err(internal)?;
+    let recall = app
+        .provider
+        .require_recall()
+        .map_err(|error| internal(error.to_redacted()))?;
     let request = RetrievalRequest {
         query: query.to_owned(),
         scope: app.scope.clone(),
@@ -343,7 +361,8 @@ pub fn recall(app: &App, args: &Value) -> Result<Value, ToolError> {
         budget: None,
         include_explanations: Some(true),
     };
-    let payload = block_on(recall.recall(request)).map_err(internal)?;
+    let payload =
+        block_on(recall.recall(request)).map_err(|error| internal(error.to_redacted()))?;
 
     let has_hits = payload.items.iter().any(|i| lanes.allows(&i.target_type));
 
@@ -464,7 +483,10 @@ pub fn recall(app: &App, args: &Value) -> Result<Value, ToolError> {
 /// `consolidate`: run reflection + decay over the project scope.
 pub fn consolidate(app: &App, args: &Value) -> Result<Value, ToolError> {
     let dry_run = args["dry_run"].as_bool().unwrap_or(false);
-    let consolidation = app.provider.require_consolidation().map_err(internal)?;
+    let consolidation = app
+        .provider
+        .require_consolidation()
+        .map_err(|error| internal(error.to_redacted()))?;
     let request = ConsolidationRequest {
         scope: app.scope.clone(),
         requester: requester(),
@@ -477,7 +499,8 @@ pub fn consolidate(app: &App, args: &Value) -> Result<Value, ToolError> {
         strategy: Some(engram_domain::ConsolidationStrategy::Hybrid),
         dry_run: Some(dry_run),
     };
-    let run = block_on(consolidation.consolidate(request)).map_err(internal)?;
+    let run = block_on(consolidation.consolidate(request))
+        .map_err(|error| internal(error.to_redacted()))?;
     let summary: Vec<String> = run
         .tasks
         .iter()
@@ -514,7 +537,10 @@ pub fn consolidate(app: &App, args: &Value) -> Result<Value, ToolError> {
 /// Entries missing a required field are skipped (lenient): a malformed fact /
 /// entity / relationship does not abort the batch; valid entries still land.
 pub fn store_knowledge(app: &App, args: &Value) -> Result<Value, ToolError> {
-    let batch = app.provider.require_batch().map_err(internal)?;
+    let batch = app
+        .provider
+        .require_batch()
+        .map_err(|error| internal(error.to_redacted()))?;
     let idempotency_key = args["idempotency_key"]
         .as_str()
         .filter(|s| !s.is_empty())
@@ -698,13 +724,13 @@ pub fn store_knowledge(app: &App, args: &Value) -> Result<Value, ToolError> {
         embeddings: Vec::new(),
         source_id,
     };
-    let outcome = block_on(batch.ingest(request)).map_err(internal)?;
+    let outcome = block_on(batch.ingest(request)).map_err(|error| internal(error.to_redacted()))?;
 
     let steps: Vec<String> = outcome
         .steps
         .iter()
         .map(|s| {
-            let mut line = format!("{:?}: {:?}", s.step, s.status);
+            let mut line = presentation_step(s);
             if let Some(counts) = &s.supersession
                 && let Some(note) = supersession_summary(counts)
             {
@@ -902,8 +928,11 @@ pub fn index_docs(app: &App, args: &Value) -> Result<Value, ToolError> {
         embeddings: Vec::new(),
         source_id: None,
     };
-    let batch = app.provider.require_batch().map_err(internal)?;
-    let outcome = block_on(batch.ingest(request)).map_err(internal)?;
+    let batch = app
+        .provider
+        .require_batch()
+        .map_err(|error| internal(error.to_redacted()))?;
+    let outcome = block_on(batch.ingest(request)).map_err(|error| internal(error.to_redacted()))?;
     Ok(protocol::text_content(format!(
         "Indexed {} chunk(s). Batch {:?} (guarantee: {:?}).",
         chunk_count, outcome.status, outcome.guarantee
@@ -2983,8 +3012,11 @@ pub fn register_code_tools(registry: &mut crate::registry::ToolRegistry<App>) {
 /// own distinct value — consumers render them "(unset)". Read-only by
 /// construction: the underlying port has no write operations.
 pub fn scope_inventory(app: &App, _args: &Value) -> Result<Value, ToolError> {
-    let inventory = app.provider.require_scope_inventory().map_err(internal)?;
-    let rows = block_on(inventory.inventory()).map_err(internal)?;
+    let inventory = app
+        .provider
+        .require_scope_inventory()
+        .map_err(|error| internal(error.to_redacted()))?;
+    let rows = block_on(inventory.inventory()).map_err(|error| internal(error.to_redacted()))?;
     Ok(json!({
         "partitions": rows,
         "partitionCount": rows.len()
@@ -3061,4 +3093,13 @@ mod scope_inventory_tests {
         assert_eq!(unset["memoryCount"], json!(1));
         assert_eq!(result["partitionCount"], json!(2));
     }
+}
+
+/// Shared existing text envelope for individual batch outcomes.
+pub(crate) fn presentation_step(step: &engram_integration::StepOutcome) -> String {
+    let mut line = format!("{:?}: {:?}", step.step, step.status);
+    if let Some(error) = &step.error {
+        line.push_str(&format!(": {}", error.to_redacted()));
+    }
+    line
 }

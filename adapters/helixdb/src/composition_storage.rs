@@ -167,6 +167,10 @@ pub struct NativeCall {
     owned: Mutex<NativeOwned>,
 }
 impl HelixStore {
+    /// Retained access authority, independent of any recipe configuration assertion.
+    pub fn composition_read_only(&self) -> bool {
+        self.inner.lease.is_none()
+    }
     pub fn composition_scope(&self) -> &Scope {
         &self.inner.partition.scope
     }

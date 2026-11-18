@@ -104,7 +104,7 @@ function resolveBinary() {
 
 // Subcommands that do NOT need the binary.
 const argv = process.argv.slice(2);
-if (argv[0] === "install" && (argv[1] === "--client" || argv.length === 1)) {
+if (argv[0] === "install" && !argv.includes("--agent")) {
   require("./install.js").install(argv.slice(1));
   process.exit(0);
 }

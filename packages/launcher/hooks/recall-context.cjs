@@ -28,13 +28,40 @@ const os = require('node:os');
 const path = require('node:path');
 const { createRequire } = require('node:module');
 
+
+// Values are references/configuration only; credential values remain inherited.
+function selectionArgs(repo = {}) {
+  const args = [];
+  const fields = [
+    ['backend','ENGRAM_BACKEND','--backend'], ['helixMode','ENGRAM_HELIX_MODE','--helix-mode'],
+    ['helixStore','ENGRAM_HELIX_STORE','--helix-store'], ['helixEndpoint','ENGRAM_HELIX_ENDPOINT','--helix-endpoint'],
+    ['helixCredentialEnv','ENGRAM_HELIX_CREDENTIAL_ENV','--helix-credential-env'], ['helixPath','ENGRAM_HELIX_PATH','--helix-path'],
+    ['trustedRoot','ENGRAM_TRUSTED_ROOT','--trusted-root'], ['org','ENGRAM_ORG','--org'],
+    ['domain','ENGRAM_DOMAIN','--domain'], ['subdomain','ENGRAM_SUBDOMAIN','--subdomain'],
+    ['embeddingProvider','ENGRAM_EMBEDDING_PROVIDER','--embedding-provider'],
+  ];
+  const backend = process.env.ENGRAM_BACKEND || repo.backend || 'sqlite';
+  for (const [key, env, flag] of fields) {
+    if (flag.startsWith('--helix-') && backend !== 'helixdb') continue;
+    const value = process.env[env] || repo[key];
+    if (value !== undefined && value !== '') args.push(flag, String(value));
+  }
+  const vector = (process.env.ENGRAM_ENABLE_VECTOR || undefined) ?? repo.enableVector ?? false;
+  if (vector !== undefined) {
+    if (vector === true || ['true','1'].includes(String(vector))) args.push('--vector');
+    else if (vector === false || ['false','0'].includes(String(vector))) args.push('--no-vector');
+    else throw new Error('invalid vector selection');
+  }
+  return args;
+}
+
 function resolveCandidates() {
   // Ordered: env override → this package's platform dep → PATH → dev build.
   // The CALLER falls through to the next candidate when a binary exits 2
   // (usage error = a stale pre-oneshot binary that lacks the subcommand —
   // observed in dev trees with mixed node_modules).
   const out = [];
-  if (process.env.ENGRAM_MCP_BIN) out.push(process.env.ENGRAM_MCP_BIN);
+  if (process.env.ENGRAM_MCP_BIN) return [process.env.ENGRAM_MCP_BIN];
   // Resolution order (mirrors bin.js discipline — version lockstep by
   // construction): env override → require.resolve from THIS hook's own
   // location (the launcher package's platform optionalDependency, pinned
@@ -178,6 +205,11 @@ function main() {
   }
   const query = isSessionStart ? SESSION_QUERY : prompt;
 
+  let selected;
+  try { selected = selectionArgs(); } catch {
+    heartbeat(storage, 'recall', { outcome: 'failed', err: 'selection' });
+    process.exit(0);
+  }
   const candidates = resolveCandidates();
   if (candidates.length === 0) process.exit(0); // engram not installed — stay silent
 
@@ -186,7 +218,7 @@ function main() {
   for (const cand of candidates) {
     const r = spawnSync(
       cand,
-      ['recall', '--storage', storage, '--project', project, '--no-vector',
+      ['recall', '--storage', storage, '--project', project, ...selected,
        '--json', '--limit', '5', '--query', query],
       { timeout: 3000, encoding: 'utf8', maxBuffer: 4 * 1024 * 1024 },
     );
@@ -198,7 +230,7 @@ function main() {
     break;
   }
   if (!res || res.error || res.status !== 0) {
-    heartbeat(storage, 'recall', { err: 'spawn', code: res && !res.error ? res.status : 'none' });
+    heartbeat(storage, 'recall', { outcome: 'failed', err: 'spawn', code: res && !res.error ? res.status : 'none' });
     process.exit(0);
   }
 
@@ -207,11 +239,11 @@ function main() {
     const line = res.stdout.split('\n').reverse().find((l) => l.trim().startsWith('{'));
     payload = JSON.parse(line);
   } catch {
-    heartbeat(storage, 'recall', { err: 'parse' });
+    heartbeat(storage, 'recall', { outcome: 'failed', err: 'parse' });
     process.exit(0);
   }
   if (!payload.ok || !Array.isArray(payload.results) || payload.results.length === 0) {
-    heartbeat(storage, 'recall', { ok: false, hits: 0 });
+    heartbeat(storage, 'recall', { ok: !!payload.ok, outcome: payload.ok ? 'empty' : 'failed', hits: 0 });
     process.exit(0);
   }
 
@@ -250,18 +282,21 @@ function main() {
   // query is a fixed discovery probe, not a user prompt).
   const passes = isSessionStart ? scores.length >= 1 : sepPass || overlapPass;
   if (!passes) {
-    heartbeat(storage, 'recall', { ok: true, gated: true, hits: payload.hit_count });
+    heartbeat(storage, 'recall', { ok: true, outcome: 'gated', gated: true, hits: payload.hit_count });
     process.exit(0); // silence beats a wrong pointer
   }
 
   // --- Dedupe: suppress recently-injected items ---
-  const dedupe = loadDedupe(storage);
+  const stateKey = require('node:crypto').createHash('sha256')
+    .update(JSON.stringify([project, selected])).digest('hex');
+  const dedupeStorage = path.join(storage, '.hook-state', stateKey);
+  const dedupe = loadDedupe(dedupeStorage);
   const now = Date.now();
   const fresh = payload.results.filter(
     (r) => !dedupe.some((d) => d.id === hashItem(r) && d.until > now),
   );
   if (fresh.length === 0) {
-    heartbeat(storage, 'recall', { ok: true, deduped: true });
+    heartbeat(storage, 'recall', { ok: true, outcome: 'deduplicated', deduped: true });
     process.exit(0);
   }
 
@@ -274,9 +309,10 @@ function main() {
     `\n────────────────────────────── background only; discard if irrelevant to the task at hand.`;
   if (block.length > MAX_CHARS) block = block.slice(0, MAX_CHARS - 1) + '…';
 
-  saveDedupe(storage, items.map(hashItem));
+  saveDedupe(dedupeStorage, items.map(hashItem));
   heartbeat(storage, isSessionStart ? 'session-pack' : 'recall', {
     ok: true,
+    outcome: 'injected',
     injected: items.length,
     ms: Date.now() - t0,
   });

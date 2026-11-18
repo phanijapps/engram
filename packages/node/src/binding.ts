@@ -130,6 +130,8 @@ export interface NativeRetrievalEngineConstructor {
 
 /** Memory API handle proxy: retrieve / write / forget. */
 export interface NativeMemoryApiBinding {
+  /** Explicitly release this retained native handle. */
+  close?(): void;
   searchJson(requestJson: string): string;
   writeJson(requestJson: string): string;
   forgetJson(requestJson: string): string;
@@ -138,11 +140,13 @@ export interface NativeMemoryApiBinding {
 
 /** Unified-recall API handle proxy: one query fused across lanes. */
 export interface NativeRecallApiBinding {
+  close?(): void;
   recallJson(requestJson: string): string;
 }
 
 /** Graph API handle proxy: entity/relationship reads/writes + neighbors. */
 export interface NativeGraphApiBinding {
+  close?(): void;
   getEntityJson(requestJson: string): string;
   putEntityJson(entityJson: string): string;
   putRelationshipJson(relationshipJson: string): string;
@@ -151,6 +155,7 @@ export interface NativeGraphApiBinding {
 
 /** Graph-maintenance handle proxy: reversible plan/apply graph repair (ADR-0027). */
 export interface NativeGraphMaintenanceApiBinding {
+  close?(): void;
   buildPlanJson(requestJson: string): string;
   applyPlanJson(requestJson: string): string;
   listMaintenanceCandidatesJson(requestJson: string): string;
@@ -159,12 +164,14 @@ export interface NativeGraphMaintenanceApiBinding {
 
 /** Batch-ingest API handle proxy: best-effort batch write + guarantee. */
 export interface NativeBatchApiBinding {
+  close?(): void;
   ingestJson(requestJson: string): string;
   transactionGuarantee(): string;
 }
 
 /** Beliefs API handle proxy: belief lifecycle. */
 export interface NativeBeliefsApiBinding {
+  close?(): void;
   getBeliefJson(requestJson: string): string;
   upsertBeliefJson(beliefJson: string): string;
   retractBeliefJson(requestJson: string): string;
@@ -178,11 +185,13 @@ export interface NativeBeliefsApiBinding {
 /** Observability / diagnostics handle proxy: point-in-time snapshot
  *  (capability report, record counts, embedding config, versions). */
 export interface NativeObservabilityApiBinding {
+  close?(): void;
   diagnosticsJson(): string;
 }
 
 /** Community-query handle proxy: Louvain overview + member index + community-of. */
 export interface NativeCommunityQueryApiBinding {
+  close?(): void;
   overviewJson(requestJson: string): string;
   memberIndexJson(scopeJson: string): string;
   communityOfJson(requestJson: string): string;
@@ -192,6 +201,7 @@ export interface NativeCommunityQueryApiBinding {
 /** Knowledge-query handle proxy: scope-wide entity + relationship listing
  *  (the engine-neutral port backing graph traversal / codegraph tools). */
 export interface NativeKnowledgeQueryApiBinding {
+  close?(): void;
   listEntitiesJson(scopeJson: string): string;
   listRelationshipsJson(scopeJson: string): string;
   listGraphsJson(scopeJson: string): string;
@@ -201,12 +211,14 @@ export interface NativeKnowledgeQueryApiBinding {
 /** Hierarchy handle proxy: navigation path for seed entity ids + build (cluster
  *  the KG via Louvain and persist layer-0 cluster nodes). */
 export interface NativeHierarchyApiBinding {
+  close?(): void;
   pathForJson(requestJson: string): string;
   buildHierarchyJson(requestJson: string): string;
 }
 
 /** Procedures handle proxy: replayable runbook lifecycle (Layer 6). */
 export interface NativeProceduresApiBinding {
+  close?(): void;
   upsertJson(procedureJson: string): string;
   listJson(scopeJson: string): string;
   incrementSuccessJson(requestJson: string): string;
@@ -217,6 +229,7 @@ export interface NativeProceduresApiBinding {
  *  policy-checked memory write path (approval is review-gated; `applying`
  *  outcomes report the retry-safe in-progress state). */
 export interface NativeProposalsApiBinding {
+  close?(): void;
   submitJson(requestJson: string): string;
   listJson(requestJson: string): string;
   approveJson(requestJson: string): string;
@@ -226,6 +239,7 @@ export interface NativeProposalsApiBinding {
 /** Knowledge change-log proxy: bounded resumable invalidation pages +
  *  latest-checkpoint reads (never recallable content). */
 export interface NativeChangeLogApiBinding {
+  close?(): void;
   changesSinceJson(requestJson: string): string;
   latestCheckpointJson(requestJson: string): string;
 }
@@ -233,6 +247,7 @@ export interface NativeChangeLogApiBinding {
 /** Outcome-ledger proxy (F2): attributed post-action results — association
  *  data, never causal proof. */
 export interface NativeOutcomesApiBinding {
+  close?(): void;
   reportOutcomeJson(requestJson: string): string;
   listOutcomesJson(windowJson: string): string;
 }
@@ -240,12 +255,14 @@ export interface NativeOutcomesApiBinding {
 /** Scan-checkpoint proxy: the scan coordinator's write side (stale runs
  *  never overwrite newer ones). */
 export interface NativeCheckpointsApiBinding {
+  close?(): void;
   putCheckpointJson(checkpointJson: string): string;
 }
 
 /** Scope-inventory handle proxy: distinct-partition enumeration +
  *  exact-partition listings (read-only port; job 012). */
 export interface NativeScopeInventoryApiBinding {
+  close?(): void;
   inventoryJson(): string;
   partitionMemoriesJson(requestJson: string): string;
   partitionEntitiesJson(requestJson: string): string;
@@ -255,6 +272,7 @@ export interface NativeScopeInventoryApiBinding {
 
 /** Native handle for configured Rust embedding inference and space identity. */
 export interface NativeEmbeddingProviderApiBinding {
+  close?(): void;
   embeddingSpace(): string;
   providerId(): string;
   embedQuery(text: string): number[];
@@ -272,6 +290,10 @@ export interface NativeEmbeddingProviderApiBinding {
  * export_import, observability) are typed on demand when a module needs them.
  */
 export interface NativeProviderBinding {
+  requireOntologyApi?(): NativeOntologyApiBinding;
+  requireTaxonomyApi?(): NativeTaxonomyApiBinding;
+  /** Releases this owner; capability handles already returned remain owned. */
+  close?(): void;
   capabilitiesJson(): string;
   fileDependenciesJson(requestJson: string): string;
   exploreJson(requestJson: string): string;
@@ -314,7 +336,7 @@ export interface NativeProviderBinding {
 /** Constructor shape for the held `EngramProvider`. */
 export interface NativeProviderConstructor {
   new (configJson: string): NativeProviderBinding;
-  fromProfileFile(path: string): NativeProviderBinding;
+  fromProfileFile(path: string, scopeJson?: string): NativeProviderBinding;
 }
 
 /** Native addon surface consumed by `@engram/node`. */
@@ -371,4 +393,23 @@ function isModuleNotFound(error: unknown): boolean {
     "code" in error &&
     (error as NodeJS.ErrnoException).code === "MODULE_NOT_FOUND"
   );
+}
+
+/** Vocabulary records are decoded and validated by the existing Rust ports. */
+export interface NativeOntologyApiBinding {
+  close?(): void;
+  putOntologyJson(recordJson: string): string;
+  putClassJson(recordJson: string): string;
+  putPropertyJson(recordJson: string): string;
+  putAxiomJson(recordJson: string): string;
+  getOntologyJson(requestJson: string): string;
+  validateGraphJson(requestJson: string): string;
+}
+export interface NativeTaxonomyApiBinding {
+  close?(): void;
+  putConceptSchemeJson(recordJson: string): string;
+  getConceptSchemeJson(requestJson: string): string;
+  putConceptJson(recordJson: string): string;
+  putConceptRelationJson(recordJson: string): string;
+  listConceptsJson(requestJson: string): string;
 }

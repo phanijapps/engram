@@ -30,6 +30,33 @@ function repoConfig() {
   return {};
 }
 
+
+// Values are references/configuration only; credential values remain inherited.
+function selectionArgs(repo = {}) {
+  const args = [];
+  const fields = [
+    ['backend','ENGRAM_BACKEND','--backend'], ['helixMode','ENGRAM_HELIX_MODE','--helix-mode'],
+    ['helixStore','ENGRAM_HELIX_STORE','--helix-store'], ['helixEndpoint','ENGRAM_HELIX_ENDPOINT','--helix-endpoint'],
+    ['helixCredentialEnv','ENGRAM_HELIX_CREDENTIAL_ENV','--helix-credential-env'], ['helixPath','ENGRAM_HELIX_PATH','--helix-path'],
+    ['trustedRoot','ENGRAM_TRUSTED_ROOT','--trusted-root'], ['org','ENGRAM_ORG','--org'],
+    ['domain','ENGRAM_DOMAIN','--domain'], ['subdomain','ENGRAM_SUBDOMAIN','--subdomain'],
+    ['embeddingProvider','ENGRAM_EMBEDDING_PROVIDER','--embedding-provider'],
+  ];
+  const backend = process.env.ENGRAM_BACKEND || repo.backend || 'sqlite';
+  for (const [key, env, flag] of fields) {
+    if (flag.startsWith('--helix-') && backend !== 'helixdb') continue;
+    const value = process.env[env] || repo[key];
+    if (value !== undefined && value !== '') args.push(flag, String(value));
+  }
+  const vector = (process.env.ENGRAM_ENABLE_VECTOR || undefined) ?? repo.enableVector ?? false;
+  if (vector !== undefined) {
+    if (vector === true || ['true','1'].includes(String(vector))) args.push('--vector');
+    else if (vector === false || ['false','0'].includes(String(vector))) args.push('--no-vector');
+    else throw new Error('invalid vector selection');
+  }
+  return args;
+}
+
 module.exports = (pi) => {
   const repo = repoConfig();
   const storage =
@@ -37,6 +64,10 @@ module.exports = (pi) => {
   const project =
     process.env.ENGRAM_PROJECT || repo.project || path.basename(process.cwd()) || 'default';
   const hooksOff = process.env.ENGRAM_HOOKS === '0';
+  function diagnostic(outcome) { pi.events.emit('engram-recall:diagnostic', { outcome }); }
+  let selected;
+  try { selected = selectionArgs(repo); } catch { selected = null; }
+  const recent = new Set();
 
   function resolveBinary() {
     // Ordered: env override → repo build (release, then debug — whichever
@@ -74,10 +105,10 @@ module.exports = (pi) => {
   function recallOnce(query, limit = 5) {
     return new Promise((resolve) => {
       const bin = resolveBinary();
-      if (!bin) return resolve(null);
+      if (!bin || !selected) return resolve(null);
       const child = spawn(
         bin,
-        ['recall', '--storage', storage, '--project', project, '--no-vector', '--json', '--limit', String(limit), '--query', query],
+        ['recall', '--storage', storage, '--project', project, ...selected, '--json', '--limit', String(limit), '--query', query],
         { stdio: ['ignore', 'pipe', 'ignore'] },
       );
       let out = '';
@@ -146,8 +177,15 @@ module.exports = (pi) => {
     const words = prompt.split(/\s+/).filter(Boolean);
     if (words.length < 3 || prompt.startsWith('/')) return;
     const payload = await recallOnce(prompt);
-    const items = gate(payload, prompt);
-    if (items.length === 0) return;
+    if (!payload || !payload.ok || !Array.isArray(payload.results)) { diagnostic('failed'); return; }
+    if (!payload.results.length) { diagnostic('empty'); return; }
+    const gated = gate(payload, prompt);
+    if (!gated.length) { diagnostic('gated'); return; }
+    const items = gated.filter(item => !recent.has(JSON.stringify([item.kind,item.content])));
+    if (!items.length) { diagnostic('deduplicated'); return; }
+    recent.clear();
+    for (const item of items) recent.add(JSON.stringify([item.kind,item.content]));
+    diagnostic('injected');
     return {
       message: {
         role: 'user',

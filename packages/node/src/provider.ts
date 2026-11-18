@@ -267,6 +267,19 @@ export interface CodeFetchResult {
 /** The typed transport over the native binding — every route in the TS MCP
  *  server dispatches through one of these methods. */
 export interface NativeProviderTransport {
+  putOntology(record: unknown): Promise<unknown>;
+  putClass(record: unknown): Promise<unknown>;
+  putProperty(record: unknown): Promise<unknown>;
+  putAxiom(record: unknown): Promise<unknown>;
+  getOntology(request: {id: string; scope: Scope}): Promise<unknown>;
+  validateGraph(request: {graphId: string; ontologyId: string; scope: Scope}): Promise<unknown>;
+  putConceptScheme(record: unknown): Promise<unknown>;
+  getConceptScheme(request: {id: string; scope: Scope}): Promise<unknown>;
+  putConcept(record: unknown): Promise<unknown>;
+  putConceptRelation(record: unknown): Promise<unknown>;
+  listConcepts(request: {schemeId: string; scope: Scope}): Promise<unknown>;
+  /** Idempotently release this transport owner. Retained native handles own themselves. */
+  close(): void;
   /** Access the configured Rust embedding provider; throws when unavailable. */
   embedding(): NativeEmbeddingProviderTransport;
   /** The serialized `CapabilityReport` for the open provider. */
@@ -438,7 +451,86 @@ export function createNativeProviderTransport(
 }
 
 class JsonNativeProviderTransport implements NativeProviderTransport {
+  private closed = false;
   constructor(private readonly provider: NativeProviderBinding) {}
+
+  close(): void {
+    if (this.closed) return;
+    this.provider.close?.();
+    this.closed = true;
+  }
+
+  private withApi<Api extends {close?(): void}, Value>(open: () => Api, operation: (api: Api) => Value): Value {
+    if (this.closed) throw new Error("native provider transport is closed");
+    const api = open();
+    try { return operation(api); } finally { api.close?.(); }
+  }
+
+  async putOntology(request: unknown): Promise<unknown> {
+    const open = this.provider.requireOntologyApi;
+    if (!open) throw new Error("selected native vocabulary capability is unavailable");
+    return decode(this.withApi(() => open.call(this.provider), api => api.putOntologyJson(encode(request))));
+  }
+
+  async putClass(request: unknown): Promise<unknown> {
+    const open = this.provider.requireOntologyApi;
+    if (!open) throw new Error("selected native vocabulary capability is unavailable");
+    return decode(this.withApi(() => open.call(this.provider), api => api.putClassJson(encode(request))));
+  }
+
+  async putProperty(request: unknown): Promise<unknown> {
+    const open = this.provider.requireOntologyApi;
+    if (!open) throw new Error("selected native vocabulary capability is unavailable");
+    return decode(this.withApi(() => open.call(this.provider), api => api.putPropertyJson(encode(request))));
+  }
+
+  async putAxiom(request: unknown): Promise<unknown> {
+    const open = this.provider.requireOntologyApi;
+    if (!open) throw new Error("selected native vocabulary capability is unavailable");
+    return decode(this.withApi(() => open.call(this.provider), api => api.putAxiomJson(encode(request))));
+  }
+
+  async getOntology(request: {id: string; scope: Scope}): Promise<unknown> {
+    const open = this.provider.requireOntologyApi;
+    if (!open) throw new Error("selected native vocabulary capability is unavailable");
+    return decode(this.withApi(() => open.call(this.provider), api => api.getOntologyJson(encode(request))));
+  }
+
+  async validateGraph(request: {graphId: string; ontologyId: string; scope: Scope}): Promise<unknown> {
+    const open = this.provider.requireOntologyApi;
+    if (!open) throw new Error("selected native vocabulary capability is unavailable");
+    return decode(this.withApi(() => open.call(this.provider), api => api.validateGraphJson(encode(request))));
+  }
+
+  async putConceptScheme(request: unknown): Promise<unknown> {
+    const open = this.provider.requireTaxonomyApi;
+    if (!open) throw new Error("selected native vocabulary capability is unavailable");
+    return decode(this.withApi(() => open.call(this.provider), api => api.putConceptSchemeJson(encode(request))));
+  }
+
+  async getConceptScheme(request: {id: string; scope: Scope}): Promise<unknown> {
+    const open = this.provider.requireTaxonomyApi;
+    if (!open) throw new Error("selected native vocabulary capability is unavailable");
+    return decode(this.withApi(() => open.call(this.provider), api => api.getConceptSchemeJson(encode(request))));
+  }
+
+  async putConcept(request: unknown): Promise<unknown> {
+    const open = this.provider.requireTaxonomyApi;
+    if (!open) throw new Error("selected native vocabulary capability is unavailable");
+    return decode(this.withApi(() => open.call(this.provider), api => api.putConceptJson(encode(request))));
+  }
+
+  async putConceptRelation(request: unknown): Promise<unknown> {
+    const open = this.provider.requireTaxonomyApi;
+    if (!open) throw new Error("selected native vocabulary capability is unavailable");
+    return decode(this.withApi(() => open.call(this.provider), api => api.putConceptRelationJson(encode(request))));
+  }
+
+  async listConcepts(request: {schemeId: string; scope: Scope}): Promise<unknown> {
+    const open = this.provider.requireTaxonomyApi;
+    if (!open) throw new Error("selected native vocabulary capability is unavailable");
+    return decode(this.withApi(() => open.call(this.provider), api => api.listConceptsJson(encode(request))));
+  }
 
   embedding(): NativeEmbeddingProviderTransport {
     return createNativeEmbeddingProviderTransport(this.provider);
@@ -449,11 +541,11 @@ class JsonNativeProviderTransport implements NativeProviderTransport {
   }
 
   async recall(request: RetrievalRequest): Promise<ContextPayload> {
-    return decode<ContextPayload>(this.provider.requireRecallApi().recallJson(encode(request)));
+    return decode<ContextPayload>(this.withApi(() => this.provider.requireRecallApi(), api => api.recallJson(encode(request))));
   }
 
   async write(request: WriteMemoryRequest): Promise<WriteMemoryResponse> {
-    return decode<WriteMemoryResponse>(this.provider.requireMemoryApi().writeJson(encode(request)));
+    return decode<WriteMemoryResponse>(this.withApi(() => this.provider.requireMemoryApi(), api => api.writeJson(encode(request))));
   }
 
   async scan(request: CodeScanRequest): Promise<CodeScanResult> {
@@ -536,21 +628,21 @@ class JsonNativeProviderTransport implements NativeProviderTransport {
   }
 
   async putEntity(entity: unknown): Promise<unknown> {
-    return decode(this.provider.requireGraphApi().putEntityJson(encode(entity)));
+    return decode(this.withApi(() => this.provider.requireGraphApi(), api => api.putEntityJson(encode(entity))));
   }
 
   async putRelationship(relationship: unknown): Promise<unknown> {
     return decode(
-      this.provider.requireGraphApi().putRelationshipJson(encode(relationship))
+      this.withApi(() => this.provider.requireGraphApi(), api => api.putRelationshipJson(encode(relationship)))
     );
   }
 
   async beliefPut(belief: unknown): Promise<unknown> {
-    return decode(this.provider.requireBeliefsApi().upsertBeliefJson(encode(belief)));
+    return decode(this.withApi(() => this.provider.requireBeliefsApi(), api => api.upsertBeliefJson(encode(belief))));
   }
 
   async listBeliefs(scope: unknown): Promise<unknown[]> {
-    return decode<unknown[]>(this.provider.requireBeliefsApi().listBeliefsJson(encode(scope)));
+    return decode<unknown[]>(this.withApi(() => this.provider.requireBeliefsApi(), api => api.listBeliefsJson(encode(scope))));
   }
 
   async listBeliefsPaged(
@@ -559,34 +651,32 @@ class JsonNativeProviderTransport implements NativeProviderTransport {
     limit?: number,
   ): Promise<BeliefPage> {
     return decode<BeliefPage>(
-      this.provider.requireBeliefsApi().listBeliefsPagedJson(
-        encode({
+      this.withApi(() => this.provider.requireBeliefsApi(), api => api.listBeliefsPagedJson(encode({
           scope,
           ...(after ? { after } : {}),
           ...(limit ? { limit } : {}),
-        }),
-      ),
+        }))),
     );
   }
 
   async listContradictions(scope: unknown): Promise<unknown[]> {
     return decode<unknown[]>(
-      this.provider.requireBeliefsApi().listContradictionsJson(encode(scope)),
+      this.withApi(() => this.provider.requireBeliefsApi(), api => api.listContradictionsJson(encode(scope))),
     );
   }
 
   async putContradiction(contradiction: unknown): Promise<unknown> {
     return decode(
-      this.provider.requireBeliefsApi().putContradictionJson(encode(contradiction)),
+      this.withApi(() => this.provider.requireBeliefsApi(), api => api.putContradictionJson(encode(contradiction))),
     );
   }
 
   async forget(request: unknown): Promise<unknown> {
-    return decode(this.provider.requireMemoryApi().forgetJson(encode(request)));
+    return decode(this.withApi(() => this.provider.requireMemoryApi(), api => api.forgetJson(encode(request))));
   }
 
   async batchIngest(request: unknown): Promise<unknown> {
-    return decode(this.provider.requireBatchApi().ingestJson(encode(request)));
+    return decode(this.withApi(() => this.provider.requireBatchApi(), api => api.ingestJson(encode(request))));
   }
 
   async listMemoriesPaged(
@@ -595,194 +685,187 @@ class JsonNativeProviderTransport implements NativeProviderTransport {
     limit?: number
   ): Promise<MemoryPage> {
     return decode<MemoryPage>(
-      this.provider.requireMemoryApi().listMemoriesPagedJson(
-        encode({
+      this.withApi(() => this.provider.requireMemoryApi(), api => api.listMemoriesPagedJson(encode({
           scope,
           ...(after ? { after } : {}),
           ...(limit ? { limit } : {}),
-        })
-      )
+        })))
     );
   }
 
   async diagnostics(): Promise<Diagnostics> {
-    return decode<Diagnostics>(this.provider.requireObservabilityApi().diagnosticsJson());
+    return decode<Diagnostics>(this.withApi(() => this.provider.requireObservabilityApi(), api => api.diagnosticsJson()));
   }
 
   async communityOverview(scope: unknown, limit?: number): Promise<CommunityOverviewData> {
     return decode<CommunityOverviewData>(
-      this.provider.requireCommunityQueryApi().overviewJson(
-        encode({ scope, ...(limit ? { limit } : {}) })
-      )
+      this.withApi(() => this.provider.requireCommunityQueryApi(), api => api.overviewJson(encode({ scope, ...(limit ? { limit } : {}) })))
     );
   }
 
   async communityMemberIndex(scope: unknown): Promise<CommunityMemberIndex> {
     return decode<CommunityMemberIndex>(
-      this.provider.requireCommunityQueryApi().memberIndexJson(encode(scope))
+      this.withApi(() => this.provider.requireCommunityQueryApi(), api => api.memberIndexJson(encode(scope)))
     );
   }
 
   async scopeInventory(): Promise<PartitionSummary[]> {
-    return decode<PartitionSummary[]>(this.provider.requireScopeInventoryApi().inventoryJson());
+    return decode<PartitionSummary[]>(this.withApi(() => this.provider.requireScopeInventoryApi(), api => api.inventoryJson()));
   }
 
   async partitionMemories(request: PartitionRequest): Promise<PartitionRecords<unknown>> {
     return decode(
-      this.provider.requireScopeInventoryApi().partitionMemoriesJson(encode(request))
+      this.withApi(() => this.provider.requireScopeInventoryApi(), api => api.partitionMemoriesJson(encode(request)))
     );
   }
 
   async partitionEntities(request: PartitionRequest): Promise<PartitionRecords<unknown>> {
     return decode(
-      this.provider.requireScopeInventoryApi().partitionEntitiesJson(encode(request))
+      this.withApi(() => this.provider.requireScopeInventoryApi(), api => api.partitionEntitiesJson(encode(request)))
     );
   }
 
   async partitionRelationships(request: PartitionRequest): Promise<PartitionRecords<unknown>> {
     return decode(
-      this.provider.requireScopeInventoryApi().partitionRelationshipsJson(encode(request))
+      this.withApi(() => this.provider.requireScopeInventoryApi(), api => api.partitionRelationshipsJson(encode(request)))
     );
   }
 
   async partitionRecentMemories(request: PartitionRecentRequest): Promise<unknown[]> {
     return decode(
-      this.provider.requireScopeInventoryApi().partitionRecentMemoriesJson(encode(request))
+      this.withApi(() => this.provider.requireScopeInventoryApi(), api => api.partitionRecentMemoriesJson(encode(request)))
     );
   }
 
   async scopeCounts(scope: unknown): Promise<ScopeCounts> {
     return decode<ScopeCounts>(
-      this.provider.requireCommunityQueryApi().scopeCountsJson(encode(scope))
+      this.withApi(() => this.provider.requireCommunityQueryApi(), api => api.scopeCountsJson(encode(scope)))
     );
   }
 
   async beliefGet(request: unknown): Promise<unknown> {
-    return decode(this.provider.requireBeliefsApi().getBeliefJson(encode(request)));
+    return decode(this.withApi(() => this.provider.requireBeliefsApi(), api => api.getBeliefJson(encode(request))));
   }
 
   async beliefRetract(request: unknown): Promise<unknown> {
-    return decode(this.provider.requireBeliefsApi().retractBeliefJson(encode(request)));
+    return decode(this.withApi(() => this.provider.requireBeliefsApi(), api => api.retractBeliefJson(encode(request))));
   }
 
   async beliefStaleList(scope: unknown): Promise<unknown[]> {
     return decode<unknown[]>(
-      this.provider.requireBeliefsApi().listStaleBeliefsJson(encode(scope)),
+      this.withApi(() => this.provider.requireBeliefsApi(), api => api.listStaleBeliefsJson(encode(scope))),
     );
   }
 
   async listEntities(scope: unknown): Promise<unknown[]> {
     return decode<unknown[]>(
-      this.provider.requireKnowledgeQueryApi().listEntitiesJson(encode(scope)),
+      this.withApi(() => this.provider.requireKnowledgeQueryApi(), api => api.listEntitiesJson(encode(scope))),
     );
   }
 
   async listRelationships(scope: unknown): Promise<unknown[]> {
     return decode<unknown[]>(
-      this.provider.requireKnowledgeQueryApi().listRelationshipsJson(encode(scope)),
+      this.withApi(() => this.provider.requireKnowledgeQueryApi(), api => api.listRelationshipsJson(encode(scope))),
     );
   }
 
   async listGraphs(scope: unknown): Promise<unknown[]> {
     return decode<unknown[]>(
-      this.provider.requireKnowledgeQueryApi().listGraphsJson(encode(scope)),
+      this.withApi(() => this.provider.requireKnowledgeQueryApi(), api => api.listGraphsJson(encode(scope))),
     );
   }
 
   async listChunksByDocument(documentId: string, scope: unknown): Promise<unknown[]> {
     return decode<unknown[]>(
-      this.provider.requireKnowledgeQueryApi().listChunksByDocumentJson(
-        encode({ documentId, scope }),
-      ),
+      this.withApi(() => this.provider.requireKnowledgeQueryApi(), api => api.listChunksByDocumentJson(encode({ documentId, scope }))),
     );
   }
 
   async hierarchyPath(request: unknown): Promise<unknown> {
-    return decode(this.provider.requireHierarchyApi().pathForJson(encode(request)));
+    return decode(this.withApi(() => this.provider.requireHierarchyApi(), api => api.pathForJson(encode(request))));
   }
 
   async buildHierarchy(scope: unknown, maxPasses?: number): Promise<unknown> {
     return decode(
-      this.provider
-        .requireHierarchyApi()
-        .buildHierarchyJson(encode({ scope, ...(maxPasses ? { maxPasses } : {}) })),
+      this.withApi(() => this.provider
+        .requireHierarchyApi(), api => api.buildHierarchyJson(encode({ scope, ...(maxPasses ? { maxPasses } : {}) }))),
     );
   }
 
   async getEntity(id: string, scope: unknown): Promise<unknown> {
-    return decode(this.provider.requireGraphApi().getEntityJson(encode({ id, scope })));
+    return decode(this.withApi(() => this.provider.requireGraphApi(), api => api.getEntityJson(encode({ id, scope }))));
   }
 
   async graphNeighbors(request: unknown): Promise<unknown> {
-    return decode(this.provider.requireGraphApi().neighborsJson(encode(request)));
+    return decode(this.withApi(() => this.provider.requireGraphApi(), api => api.neighborsJson(encode(request))));
   }
 
   async graphMaintenanceBuildPlan(request: unknown): Promise<unknown> {
-    return decode(this.provider.requireGraphMaintenanceApi().buildPlanJson(encode(request)));
+    return decode(this.withApi(() => this.provider.requireGraphMaintenanceApi(), api => api.buildPlanJson(encode(request))));
   }
 
   async graphMaintenanceApplyPlan(request: unknown): Promise<unknown> {
-    return decode(this.provider.requireGraphMaintenanceApi().applyPlanJson(encode(request)));
+    return decode(this.withApi(() => this.provider.requireGraphMaintenanceApi(), api => api.applyPlanJson(encode(request))));
   }
 
   async graphMaintenanceCandidates(request: unknown): Promise<unknown[]> {
     return decode<unknown[]>(
-      this.provider.requireGraphMaintenanceApi().listMaintenanceCandidatesJson(encode(request)),
+      this.withApi(() => this.provider.requireGraphMaintenanceApi(), api => api.listMaintenanceCandidatesJson(encode(request))),
     );
   }
 
   async graphMaintenanceHealth(request: unknown): Promise<unknown> {
-    return decode(this.provider.requireGraphMaintenanceApi().graphHealthJson(encode(request)));
+    return decode(this.withApi(() => this.provider.requireGraphMaintenanceApi(), api => api.graphHealthJson(encode(request))));
   }
 
   async procedureUpsert(procedure: unknown): Promise<unknown> {
-    return decode(this.provider.requireProceduresApi().upsertJson(encode(procedure)));
+    return decode(this.withApi(() => this.provider.requireProceduresApi(), api => api.upsertJson(encode(procedure))));
   }
 
   async procedureList(scope: unknown): Promise<unknown[]> {
-    return decode<unknown[]>(this.provider.requireProceduresApi().listJson(encode(scope)));
+    return decode<unknown[]>(this.withApi(() => this.provider.requireProceduresApi(), api => api.listJson(encode(scope))));
   }
 
   async procedureIncrementSuccess(request: unknown): Promise<unknown> {
     return decode(
-      this.provider.requireProceduresApi().incrementSuccessJson(encode(request)),
+      this.withApi(() => this.provider.requireProceduresApi(), api => api.incrementSuccessJson(encode(request))),
     );
   }
 
   async procedureIncrementFailure(request: unknown): Promise<unknown> {
     return decode(
-      this.provider.requireProceduresApi().incrementFailureJson(encode(request)),
+      this.withApi(() => this.provider.requireProceduresApi(), api => api.incrementFailureJson(encode(request))),
     );
   }
 
   /** Operator proposal queue: submit an inert pending memory write. */
   async proposalSubmit(request: unknown): Promise<unknown> {
-    return decode(this.provider.requireProposalsApi().submitJson(encode(request)));
+    return decode(this.withApi(() => this.provider.requireProposalsApi(), api => api.submitJson(encode(request))));
   }
 
   /** Operator proposal queue: list records (optionally by status), paged. */
   async proposalList(request: unknown): Promise<unknown> {
-    return decode(this.provider.requireProposalsApi().listJson(encode(request)));
+    return decode(this.withApi(() => this.provider.requireProposalsApi(), api => api.listJson(encode(request))));
   }
 
   /** Operator proposal queue: approve (policy-checked promotion; retry-safe). */
   async proposalApprove(request: unknown): Promise<unknown> {
-    return decode(this.provider.requireProposalsApi().approveJson(encode(request)));
+    return decode(this.withApi(() => this.provider.requireProposalsApi(), api => api.approveJson(encode(request))));
   }
 
   /** Outcome loop: report an attributed task result (association, non-causal). */
   async reportOutcome(request: unknown): Promise<unknown> {
-    return decode(this.provider.requireOutcomesApi().reportOutcomeJson(encode(request)));
+    return decode(this.withApi(() => this.provider.requireOutcomesApi(), api => api.reportOutcomeJson(encode(request))));
   }
 
   /** Outcome loop: read a window of attributed outcomes. */
   async listOutcomes(window: unknown): Promise<unknown[]> {
-    return decode<unknown[]>(this.provider.requireOutcomesApi().listOutcomesJson(encode(window)));
+    return decode<unknown[]>(this.withApi(() => this.provider.requireOutcomesApi(), api => api.listOutcomesJson(encode(window))));
   }
 
   /** Operator proposal queue: reject (payload stays inert). */
   async proposalReject(request: unknown): Promise<unknown> {
-    return decode(this.provider.requireProposalsApi().rejectJson(encode(request)));
+    return decode(this.withApi(() => this.provider.requireProposalsApi(), api => api.rejectJson(encode(request))));
   }
 }
 

@@ -4,7 +4,7 @@
  * packages/node/test/helpers … using existing cargo feature build interfaces
  * in isolated artifact directories before load").
  *
- * Builds BOTH recipe artifacts of the engram-node addon in artifact
+ * Builds selected provider recipe artifacts of the engram-node addon in artifact
  * directories. Every published artifact has a fresh versioned filename that
  * includes its content digest. Published files are immutable and are retained;
  * the helper never replaces or removes a published artifact. A consumer can
@@ -13,7 +13,7 @@
  *
  * Freshness: every invocation asks Cargo to validate the complete workspace
  * dependency graph for each recipe before publishing its artifact. Cargo uses
- * one shared `target/debug` directory, so ONE repository-wide lock covers the
+ * one shared `target/<profile>` tree, so ONE repository-wide lock covers the
  * delete, build, and copy pipeline for every artifact root. This serializes an
  * isolated-root transaction with a shared-root transaction. It prevents either
  * transaction from deleting or copying the shared cdylib while the other uses
@@ -28,7 +28,7 @@
  */
 import { execFileSync } from "node:child_process";
 import { createHash, randomUUID } from "node:crypto";
-import { closeSync, constants, copyFileSync, existsSync, mkdirSync, openSync, readFileSync, readdirSync, rmSync, statSync, utimesSync, writeSync } from "node:fs";
+import { closeSync, constants, copyFileSync, existsSync, mkdirSync, openSync, readFileSync, readdirSync, rmSync, statSync, utimesSync, writeFileSync, writeSync } from "node:fs";
 import { createRequire } from "node:module";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -51,18 +51,19 @@ if (!cdylib) {
   throw new Error(`unsupported platform: ${process.platform}`);
 }
 
-/** The two recipe builds this helper owns. */
-export const RECIPES = /** @type {const} */ (["sqlite", "pgvector"]);
+/** The four provider recipes this helper owns. */
+export const RECIPES = /** @type {const} */ (["sqlite", "pgvector", "helixdb-service", "helixdb-embedded"]);
 
 function featuresFor(recipe) {
-  switch (recipe) {
-    case "sqlite":
-      return ["--no-default-features", "--features", "http-embeddings"];
-    case "pgvector":
-      return ["--no-default-features", "--features", "http-embeddings,pgvector"];
-    default:
-      throw new Error(`unknown recipe: ${recipe}`);
+  if (!RECIPES.includes(recipe)) throw new Error(`unknown recipe: ${recipe}`);
+  return ["--no-default-features", "--features", `http-embeddings,${recipe}`];
+}
+
+function validateProfile(profile) {
+  if (profile !== "debug" && profile !== "release") {
+    throw new Error("invalid native build profile; expected debug or release");
   }
+  return profile;
 }
 
 function sharedTargetLockPath() {
@@ -133,11 +134,11 @@ function digestArtifact(path) {
 }
 
 /** Publishes a fresh immutable copy without replacing any published inode. */
-function publishArtifact(artifactsRoot, recipe, src) {
+function publishArtifact(artifactsRoot, recipe, src, profile) {
   const digest = digestArtifact(src);
-  const destinationDirectory = join(artifactsRoot, recipe);
+  const destinationDirectory = join(artifactsRoot, profile, recipe);
   mkdirSync(destinationDirectory, { recursive: true });
-  const dest = join(destinationDirectory, `engram_node.${recipe}.${digest.slice(0, 16)}.${randomUUID()}.node`);
+  const dest = join(destinationDirectory, `engram_node.${recipe}.${profile}.${digest.slice(0, 16)}.${randomUUID()}.node`);
   copyFileSync(src, dest, constants.COPYFILE_EXCL);
   // cargo keeps the cdylib mtime from its last link; stamp the new copy AFTER
   // the sources so freshness math stays monotonic without changing its bytes.
@@ -149,30 +150,37 @@ function publishArtifact(artifactsRoot, recipe, src) {
   return { path: dest, digest };
 }
 
-function buildRecipe(artifactsRoot, recipe) {
+function buildRecipe(artifactsRoot, recipe, instrumented = false, extraFeatures = [], profile = "debug") {
   // The repository-wide lock acquired by withRecipeArtifacts covers this
   // deletion, Cargo invocation, and publish step for every destination root.
-  const sharedCdylib = join(repoRoot, "target", "debug", cdylib);
+  const sharedCdylib = join(repoRoot, "target", profile, cdylib);
   if (existsSync(sharedCdylib)) {
     rmSync(sharedCdylib, { force: true });
   }
-  const argv = ["build", "-p", "engram-node", ...featuresFor(recipe)];
+  const argv = ["+1.88.0", "build", "--offline", "--locked", "-p", "engram-node", ...featuresFor(recipe)];
+  if (instrumented) argv[argv.length - 1] += ",test-controls";
+  if (extraFeatures.length) argv[argv.length - 1] += `,${extraFeatures.join(",")}`;
+  if (profile === "release") argv.push("--release");
   console.log(`[task_020 helper] cargo ${argv.join(" ")}`);
   execFileSync("cargo", argv, { stdio: "inherit", cwd: repoRoot });
   if (!existsSync(sharedCdylib)) {
     throw new Error(`build artifact not found: ${sharedCdylib}`);
   }
-  const artifact = publishArtifact(artifactsRoot, recipe, sharedCdylib);
+  const artifact = publishArtifact(artifactsRoot, instrumented ? `${recipe}-instrumented` : recipe, sharedCdylib, profile);
+  const source = execFileSync("git", ["rev-parse", "HEAD"], {cwd: repoRoot, encoding: "utf8"}).trim();
+  const lockSha256 = digestArtifact(join(repoRoot, "Cargo.lock"));
+  const diffSha256 = createHash("sha256").update(execFileSync("git", ["diff", "--binary", "HEAD"], {cwd: repoRoot})).digest("hex");
+  writeFileSync(`${artifact.path}.json`, JSON.stringify({source, diffSha256, lockSha256, recipe, profile, instrumented, cargo: argv, platform: process.platform, arch: process.arch, artifactSha256: artifact.digest}, null, 2) + "\n", {flag:"wx"});
   console.log(`[task_020 helper] published ${recipe} artifact: ${artifact.path}`);
   return artifact;
 }
 
 /** Builds, validates, and hashes an artifact set while the shared lock is held. */
-function rebuildRecipeArtifacts(artifactsRoot) {
+function rebuildRecipeArtifacts(artifactsRoot, recipes = RECIPES, extraFeatures = [], profile = "debug") {
   const paths = {};
   const digests = {};
-  for (const recipe of RECIPES) {
-    const artifact = buildRecipe(artifactsRoot, recipe);
+  for (const recipe of recipes) {
+    const artifact = buildRecipe(artifactsRoot, recipe, false, extraFeatures, profile);
     paths[recipe] = artifact.path;
     digests[recipe] = artifact.digest;
   }
@@ -200,28 +208,30 @@ export function resolveRecipeArtifact(recipe, expectedDigest, { inspect, rebuild
 }
 
 /** Runs a callback inside the shared-target build transaction. */
-export function withRecipeArtifacts(callback, { artifactsRoot = sharedArtifactsRoot } = {}) {
+export function withRecipeArtifacts(callback, { artifactsRoot = sharedArtifactsRoot, recipes = RECIPES, extraFeatures = [], profile = "debug" } = {}) {
+  validateProfile(profile);
   const release = acquireSharedTargetLock();
   try {
-    const artifacts = rebuildRecipeArtifacts(artifactsRoot);
+    const artifacts = rebuildRecipeArtifacts(artifactsRoot, recipes, extraFeatures, profile);
     return callback({
       ...artifacts,
-      rebuild: () => rebuildRecipeArtifacts(artifactsRoot),
+      rebuild: () => rebuildRecipeArtifacts(artifactsRoot, recipes, extraFeatures, profile),
     });
   } finally {
     release();
   }
 }
 
-/** Validates and rebuilds both recipe artifacts through Cargo. Returns paths
+/** Validates and rebuilds selected recipe artifacts through Cargo. Returns paths
  * and SHA-256 digests calculated while the shared target lock is held. */
 export function ensureRecipeArtifacts(options) {
   return withRecipeArtifacts(({ paths, digests }) => ({ ...paths, digests }), options);
 }
 
 /** Returns the newest valid immutable artifact that the warm build published. */
-function publishedRecipeArtifact(recipe, artifactsRoot = sharedArtifactsRoot) {
-  const directory = join(artifactsRoot, recipe);
+export function publishedRecipeArtifact(recipe, artifactsRoot = sharedArtifactsRoot, { profile = "debug" } = {}) {
+  validateProfile(profile);
+  const directory = join(artifactsRoot, profile, recipe);
   if (!existsSync(directory)) {
     return undefined;
   }
@@ -233,7 +243,9 @@ function publishedRecipeArtifact(recipe, artifactsRoot = sharedArtifactsRoot) {
     try {
       validateArtifact(path, recipe);
       const digest = digestArtifact(path);
-      if (path.includes(`.${digest.slice(0, 16)}.`)) {
+      const metadata = JSON.parse(readFileSync(`${path}.json`, "utf8"));
+      if (metadata.profile === profile && metadata.artifactSha256 === digest &&
+          path.includes(`.${profile}.${digest.slice(0, 16)}.`)) {
         return { path, digest };
       }
     } catch {
@@ -254,8 +266,18 @@ export function loadRecipe(recipe) {
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
-  const { digests } = ensureRecipeArtifacts();
-  for (const recipe of RECIPES) {
+  const flag = process.argv.indexOf("--providers");
+  const recipes = flag < 0 ? RECIPES : process.argv[flag + 1]?.split(",");
+  if (!recipes?.length || recipes.some(r => !RECIPES.includes(r))) throw new Error("invalid --providers recipe selection");
+  const { digests } = ensureRecipeArtifacts({ recipes });
+  for (const recipe of recipes) {
     console.log(`[task_020 helper] built ${recipe} artifact digest: ${digests[recipe]}`);
   }
+}
+
+/** Separate nonproduction artifact; never used by the normal four recipes. */
+export function ensureInstrumentedRecipeArtifact(recipe = "helixdb-embedded", {artifactsRoot = sharedArtifactsRoot, profile = "debug"} = {}) {
+  validateProfile(profile);
+  const release = acquireSharedTargetLock();
+  try { return buildRecipe(artifactsRoot, recipe, true, [], profile); } finally { release(); }
 }

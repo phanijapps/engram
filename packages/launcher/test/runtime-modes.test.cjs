@@ -113,3 +113,105 @@ test('release builds one embedding-capable artifact for every declared dependenc
   assert.match(workflow, /mv "\$PACK" artifacts\//);
   assert.doesNotMatch(workflow, /mv \*\.tgz artifacts/);
 });
+
+
+test('selected provider installation retains Helix identity and full launch scope', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'engram-install-selection-'));
+  const selected = ['--backend','helixdb','--helix-mode','service','--helix-store','owned-logical',
+    '--helix-endpoint','http://127.0.0.1:9999','--helix-credential-env','OWNED_CREDENTIAL_REFERENCE',
+    '--trusted-root',dir,'--org','org-selected','--domain','domain-selected','--subdomain','sub-selected',
+    '--vector','--embedding-provider','none'];
+  try {
+    const result = spawnSync(process.execPath, ['-e', 'require(process.argv[1]).install(process.argv.slice(2))',
+      path.join(root,'install.js'),'--client','claude','--storage',dir,'--project','project-selected',...selected],
+      {cwd:dir,encoding:'utf8',env:{...process.env,OWNED_CREDENTIAL_REFERENCE:'PRIVATE_CREDENTIAL_VALUE'}});
+    assert.equal(result.status,0,result.stderr);
+    const config = fs.readFileSync(path.join(dir,'.mcp.json'),'utf8');
+    const saved = JSON.parse(config).mcpServers.engram.args;
+    assert.deepEqual(saved.slice(-selected.length),selected);
+    assert.doesNotMatch(config + result.stdout + result.stderr,/PRIVATE_CREDENTIAL_VALUE/);
+  } finally { fs.rmSync(dir,{recursive:true,force:true}); }
+});
+
+
+test('installer rejects conflicting selection and embedded credentials before config writes', () => {
+  const dir=fs.mkdtempSync(path.join(os.tmpdir(),'engram-install-conflict-'));
+  try {
+    for(const flags of [
+      ['--backend','sqlite','--helix-mode','embedded'],
+      ['--backend','sqlite','--backend','helixdb'],
+      ['--backend','helixdb','--helix-mode','service','--helix-store','owned','--helix-endpoint','http://user:SECRET_MARKER@localhost','--helix-credential-env','REFERENCE'],
+    ]) {
+      const result=spawnSync(process.execPath,['-e','require(process.argv[1]).install(process.argv.slice(2))',path.join(root,'install.js'),'--client','claude',...flags],{cwd:dir,encoding:'utf8'});
+      assert.equal(result.status,1);
+      assert.ok(!fs.existsSync(path.join(dir,'.mcp.json')));
+      assert.doesNotMatch(result.stdout+result.stderr,/SECRET_MARKER/);
+    }
+  } finally {fs.rmSync(dir,{recursive:true,force:true});}
+});
+
+
+test('installer preserves explicit vector precedence and inactive provider secrets stay unpersisted', () => {
+  const dir=fs.mkdtempSync(path.join(os.tmpdir(),'engram-install-environment-'));
+  try {
+    for(const backend of ['sqlite','pgvector']) {
+      const result=spawnSync(process.execPath,['-e','require(process.argv[1]).install(process.argv.slice(2))',
+        path.join(root,'install.js'),'--client','claude','--vector'],{cwd:dir,encoding:'utf8',env:{...process.env,
+        ENGRAM_BACKEND:backend,ENGRAM_ENABLE_VECTOR:'false',ENGRAM_HELIX_MODE:'service',
+        ENGRAM_HELIX_ENDPOINT:'http://INACTIVE_PRIVATE_MARKER',
+        ENGRAM_PG_CONNECTION_STRING:'postgres://user:PRIVATE_PG_CREDENTIAL@localhost/db'}});
+      assert.equal(result.status,0,result.stderr);
+      const config=fs.readFileSync(path.join(dir,'.mcp.json'),'utf8');
+      const args=JSON.parse(config).mcpServers.engram.args;
+      assert.equal(args[args.indexOf('--backend')+1],backend);
+      assert.ok(args.includes('--vector')); assert.ok(!args.includes('--no-vector'));
+      assert.doesNotMatch(config+result.stdout+result.stderr,/PRIVATE_PG_CREDENTIAL|INACTIVE_PRIVATE_MARKER/);
+    }
+  } finally {fs.rmSync(dir,{recursive:true,force:true});}
+});
+
+
+function originInstallation(endpoint, expectValid) {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'engram-install-origin-'));
+  const file = path.join(dir, '.mcp.json');
+  const before = JSON.stringify({mcpServers:{engram:{command:'existing-owned-entry'}},untouched:true})+'\n';
+  fs.writeFileSync(file, before);
+  const result = spawnSync(process.execPath, ['-e', 'require(process.argv[1]).install(process.argv.slice(2))',
+    path.join(root, 'install.js'), '--client','claude','--storage',dir,
+    '--backend','helixdb','--helix-mode','service','--helix-store','origin-owned',
+    '--helix-endpoint',endpoint,'--helix-credential-env','OWNED_ORIGIN_REFERENCE',
+    '--vector','--embedding-provider','none'], {cwd:dir,encoding:'utf8',env:{...process.env,
+      ENGRAM_HELIX_PATH:'',OWNED_ORIGIN_REFERENCE:'ORIGIN_PRIVATE_CREDENTIAL_VALUE'}});
+  const after = fs.readFileSync(file, 'utf8');
+  try {
+    if (expectValid) {
+      assert.equal(result.status,0,result.stderr);
+      const args=JSON.parse(after).mcpServers.engram.args;
+      assert.equal(args[args.indexOf('--helix-endpoint')+1],endpoint);
+      assert.equal(args[args.indexOf('--helix-credential-env')+1],'OWNED_ORIGIN_REFERENCE');
+    } else {
+      console.error(`ORIGIN_CONTROL root=${dir} status=${result.status} unchanged=${before===after}`);
+      assert.equal(result.status,1,'invalid origin must reject before client configuration changes');
+      assert.equal(after,before,'invalid origin changed existing client config');
+      assert.doesNotMatch(result.stdout+result.stderr,/ORIGIN_PRIVATE_CREDENTIAL_VALUE|ORIGIN_SECRET_MARKER/);
+    }
+    assert.doesNotMatch(after,/ORIGIN_PRIVATE_CREDENTIAL_VALUE/);
+  } catch (error) {
+    console.error(`ORIGIN_FAILED_ROOT_RETAIN ${dir}`);
+    throw error;
+  }
+  fs.rmSync(dir,{recursive:true,force:true});
+}
+test('origin rejects unsupported scheme before existing config changes', () => {
+  originInstallation('ftp://localhost/',false);
+});
+test('origin rejects missing host paths credentials and even empty query or fragment', () => {
+  for(const endpoint of ['file:///owned/path','http://','http://localhost/prefix',
+    'http://ORIGIN_SECRET_MARKER:password@localhost/','http://localhost/?token=ORIGIN_SECRET_MARKER',
+    'http://localhost/#ORIGIN_SECRET_MARKER','http://localhost/?','http://localhost/#',
+    'http://localhost?','http://localhost#','http://localhost:8080/prefix/']) originInstallation(endpoint,false);
+});
+test('origin preserves valid HTTP HTTPS port and IPv6 forwarding', () => {
+  for(const endpoint of ['http://localhost','http://127.0.0.1:9999/','https://example.invalid/',
+    'https://example.invalid:8443','http://[::1]:9999/']) originInstallation(endpoint,true);
+});

@@ -37,6 +37,7 @@ members = [
     "mcp/engram-mcp",
     "backends/pgvector",
     "backends/sqlite",
+    "backends/helixdb",
 ]
 resolver = "3"
 

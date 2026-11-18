@@ -6,7 +6,7 @@ mod code_generation;
 mod code_leases;
 mod code_retirement;
 pub mod codec;
-mod composition_storage;
+pub mod composition_storage;
 pub mod config;
 #[cfg(feature = "embedded")]
 mod embedded;

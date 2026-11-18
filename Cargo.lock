@@ -1314,6 +1314,38 @@ dependencies = [
 ]
 
 [[package]]
+name = "engram-backend-helixdb"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "chrono",
+ "engram-belief",
+ "engram-consolidation",
+ "engram-decay",
+ "engram-domain",
+ "engram-eval",
+ "engram-hierarchy",
+ "engram-ingest",
+ "engram-integration",
+ "engram-knowledge",
+ "engram-memory",
+ "engram-procedures",
+ "engram-proposals",
+ "engram-reflection",
+ "engram-retrieval",
+ "engram-runtime",
+ "engram-store-associative-graph",
+ "engram-store-community-summary",
+ "engram-store-helixdb",
+ "engram-store-lexical",
+ "futures",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "uuid",
+]
+
+[[package]]
 name = "engram-backend-pgvector"
 version = "0.1.0"
 dependencies = [
@@ -1356,6 +1388,7 @@ dependencies = [
  "engram-domain",
  "engram-runtime",
  "serde_json",
+ "sha2",
 ]
 
 [[package]]

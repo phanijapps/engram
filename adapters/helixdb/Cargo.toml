@@ -35,6 +35,8 @@ tempfile = "3"
 
 [features]
 default = []
+# Explicit nondefault native proof instrumentation; omitted from normal recipes.
+test-controls = []
 service = ["dep:reqwest"]
 embedded = ["helix-db/embedded", "dep:foyer", "dep:tokio"]
 

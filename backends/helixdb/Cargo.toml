@@ -1,0 +1,42 @@
+[package]
+name = "engram-backend-helixdb"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+engram-store-helixdb = { path = "../../adapters/helixdb", version = "0.1.0", default-features = false }
+engram-integration = { path = "../../core/integration", version = "0.1.0", default-features = false, features = ["code-lanes"] }
+engram-domain = { path = "../../core/domain", version = "0.1.0" }
+engram-runtime = { path = "../../core/runtime", version = "0.1.0" }
+engram-memory = { path = "../../core/memory", version = "0.1.0" }
+engram-knowledge = { path = "../../core/knowledge", version = "0.1.0" }
+engram-belief = { path = "../../core/belief", version = "0.1.0" }
+engram-hierarchy = { path = "../../core/hierarchy", version = "0.1.0" }
+engram-procedures = { path = "../../core/procedures", version = "0.1.0" }
+engram-proposals = { path = "../../core/proposals", version = "0.1.0" }
+engram-retrieval = { path = "../../core/retrieval", version = "0.1.0" }
+engram-consolidation = { path = "../../core/consolidation", version = "0.1.0" }
+engram-store-lexical = { path = "../../adapters/retrieval/tantivy-lexical", version = "0.1.0" }
+engram-store-associative-graph = { path = "../../adapters/retrieval/associative-graph", version = "0.1.0" }
+engram-store-community-summary = { path = "../../adapters/retrieval/community-summary", version = "0.1.0" }
+engram-decay = { path = "../../adapters/consolidation/decay", version = "0.1.0" }
+engram-reflection = { path = "../../core/reflection", version = "0.1.0" }
+engram-ingest = { path = "../../adapters/ingest", version = "0.1.0" }
+engram-eval = { path = "../../core/eval", version = "0.1.0" }
+async-trait.workspace = true
+serde_json.workspace = true
+chrono.workspace = true
+uuid = { version = "1", features = ["v4"] }
+
+[dev-dependencies]
+serde.workspace = true
+futures.workspace = true
+tempfile = "3"
+
+[features]
+default = []
+embedded = ["engram-store-helixdb/embedded"]
+service = ["engram-store-helixdb/service"]
+test-controls = ["engram-store-helixdb/test-controls"]

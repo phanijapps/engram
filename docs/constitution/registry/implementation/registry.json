@@ -158,6 +158,12 @@
       "name": "Shared eligibility-filtered community algorithms",
       "plane": "core",
       "ssot_module": "core/integration/src/community_composition.rs"
+    },
+    {
+      "concept_id": "belief.contradiction_detection",
+      "name": "Canonical advisory belief contradiction detection",
+      "plane": "core",
+      "ssot_module": "core/belief/src/contradiction.rs"
     }
   ]
 }

@@ -310,6 +310,12 @@
       "kind": "crate",
       "role": "adapter",
       "name": "engram-store-helixdb"
+    },
+    {
+      "path": "backends/helixdb",
+      "kind": "crate",
+      "role": "backend",
+      "name": "engram-backend-helixdb"
     }
   ]
 }

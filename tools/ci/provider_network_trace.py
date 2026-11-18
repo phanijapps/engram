@@ -157,7 +157,15 @@ class Capture:
             return ['strace','-ff','-ttt','-s','0','-yy','-e','trace=network,process','-e','raw=sendto,sendmsg,sendmmsg,recvfrom,recvmsg,recvmmsg,send,recv,execve,execveat','-o',str(self.directory/'syscalls'), '--',*argv]
         if sys.platform=='darwin':
             script=self.directory/'native.d';script.write_text(DTRACE)
-            return ['dtrace','-q','-s',str(script),'-o',str(self.directory/'native.trace'),'-c',shlex.join(argv)]
+            # DTrace's -c command parser is not our POSIX argv serializer.
+            # Give it one whitespace-free owned launcher path; the private
+            # executable script uses exec+POSIX quoting for the original argv.
+            launcher=(self.directory/'launch-owned').resolve()
+            if any(c.isspace() for c in str(launcher)):
+                raise TraceError('owned Mac launcher path contains unsupported DTrace command whitespace')
+            with launcher.open('x') as stream:stream.write('#!/bin/sh\nexec '+shlex.join(argv)+'\n')
+            launcher.chmod(0o700)
+            return ['dtrace','-q','-s',str(script),'-o',str(self.directory/'native.trace'),'-c',str(launcher)]
         from tools.ci.provider_windows_trace import Session,EtwError
         self.session=Session(self.directory,_run,self.acquisition_scope)
         try:self.session.start()
@@ -309,8 +317,15 @@ def positive_controls(directory,acquisition_scope='owned-process-tree'):
             interpreter=sys.executable;environment=os.environ.copy()
             if sys.platform=='win32':
                 interpreter,environment=owned_windows_image(owned);owner.acquire_rule(kind,interpreter)
-            command=[interpreter,'-c',code]
-            if sys.platform=='darwin':command=['sandbox-exec','-p','(version 1)(allow default)(deny network-outbound)',*command]
+            control=owned/'positive-control.py'
+            with control.open('x') as stream:stream.write(code+'\n')
+            control.chmod(0o600)
+            command=[interpreter,str(control.resolve())]
+            if sys.platform=='darwin':
+                sandbox=owned/'deny-network.sb'
+                with sandbox.open('x') as stream:stream.write('(version 1)\n(allow default)\n(deny network-outbound)\n')
+                sandbox.chmod(0o600)
+                command=['sandbox-exec','-f',str(sandbox.resolve()),*command]
             argv=owner.capture.wrap(command)
             if sys.platform=='linux':argv[1:1]=['-e','inject=connect:error=EACCES','-e','inject=sendto:error=EACCES']
             argv=[str(Path(shutil.which(argv[0]) or argv[0]).resolve()),*argv[1:]];owner.argv=argv

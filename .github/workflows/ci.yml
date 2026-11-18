@@ -223,6 +223,8 @@ jobs:
           cache: pnpm
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
+      - name: Fetch locked Rust sources before offline native builds
+        run: cargo +1.88.0 fetch --locked
       - name: Generate contracts
         run: pnpm run contracts:generate
       - name: Check generated contract drift

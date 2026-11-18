@@ -39,30 +39,33 @@ def checked_events(provider,events):
     """Check every version sharing an enabled ID before any ETW side effect."""
     grouped={}
     for event in events:grouped.setdefault(int(event['id']),[]).append(event)
-    selected=[]
+    selected=[];rejected=[]
     for identifier,versions in grouped.items():
         if provider.endswith('Kernel-Process') and identifier not in (1,2):continue
-        accepted=True
+        accepted=True;reasons=[]
         for event in versions:
             try:
                 template=ET.fromstring(event.get('template') or '<missing/>')
-            except ET.ParseError:accepted=False;break
+            except ET.ParseError:accepted=False;reasons.append({'version':event.get('version'),'reason':'invalid template XML'});break
             fields=[]
             for field in template.iter():
                 tag=field.tag.rsplit('}',1)[-1]
                 if tag in {'template'}:continue
-                if tag!='data' or field.get('count') or field.get('length'):accepted=False;break
+                if tag!='data' or field.get('count') or field.get('length'):
+                    accepted=False;reasons.append({'version':event.get('version'),'field':field.get('name','')[:128],'type':field.get('inType','')[:128],'reason':'unknown/count/length template node'});break
                 name=field.get('name','').lower();kind=field.get('inType','')
                 if name not in FIELDS|STRINGS or (kind not in SCALARS and not(kind=='win:UnicodeString' and name in STRINGS)):
-                    accepted=False;break
+                    accepted=False;reasons.append({'version':event.get('version'),'field':name[:128],'type':kind[:128],'reason':'field/type outside explicit metadata allowlist'});break
                 fields.append(name)
-            if not fields:accepted=False
-            if provider.endswith('Kernel-Process') and not {'processid','parentprocessid' if identifier==1 else 'processid'}.issubset(fields):accepted=False
+            if not fields:accepted=False;reasons.append({'version':event.get('version'),'reason':'no recognized data fields'})
+            if provider.endswith('Kernel-Process') and not {'processid','parentprocessid' if identifier==1 else 'processid'}.issubset(fields):
+                accepted=False;reasons.append({'version':event.get('version'),'reason':'required process identity fields missing','fields':fields[:8]})
             if not provider.endswith('Kernel-Process') and not any(name in fields for name in ('daddr','destaddr','destinationaddress','remoteaddress','remoteaddr','queryname','dropstatus','failurecode')):accepted=False
             if not accepted:break
         if accepted:selected.append(identifier)
-    if provider.endswith('Kernel-Process') and set(selected)!={1,2}:raise EtwError('process start/exit templates are unknown or not metadata-only')
-    if not selected:raise EtwError('no reviewed metadata-only attempt schemas for '+provider)
+        else:rejected.append({'id':identifier,'rejected':reasons[:4]})
+    if provider.endswith('Kernel-Process') and set(selected)!={1,2}:raise EtwError('process start/exit templates are unknown or not metadata-only; rejected schema metadata='+json.dumps(rejected[:4],sort_keys=True))
+    if not selected:raise EtwError('no reviewed metadata-only attempt schemas for '+provider+'; rejected schema metadata='+json.dumps(rejected[:4],sort_keys=True))
     if len(selected)>64:raise EtwError('event-ID filter exceeds reviewed bounded filter size')
     return sorted(selected)
 

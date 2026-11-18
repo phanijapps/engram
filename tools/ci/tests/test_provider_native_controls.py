@@ -246,3 +246,26 @@ class CompactHandoffTests(unittest.TestCase):
         value=json.loads((source/'report.json').read_text());value['records'][0]['profile']='embedded-offline';(source/'report.json').write_text(json.dumps(value))
         with self.assertRaises(policy.ObservationError):policy.export_compact(parent,invocation,destination,'fixture-source')
         self.assertFalse(list(destination.iterdir()))
+
+
+class NativeDeliveryRegressionTests(unittest.TestCase):
+    """Actual POSIX launcher/file checks; no claim that DTrace/ETW ran here."""
+    def root(self):
+        value=tempfile.TemporaryDirectory(dir=os.environ.get('TMPDIR'));self.addCleanup(value.cleanup);return Path(value.name)
+
+    def test_mac_dtrace_gets_single_owned_launcher_and_shell_preserves_argv(self):
+        from unittest.mock import patch
+        root=self.root();script=root/'arguments.py';script.write_text('import json,sys;print(json.dumps(sys.argv[1:]))\n');sentinel=root/'must-not-exist'
+        wanted=['space value',"single'quote",'double"quote','$(touch '+str(sentinel)+')','semi;colon']
+        with patch.object(trace.sys,'platform','darwin'),patch.object(trace,'readiness',return_value={}):
+            capture=trace.Capture(root/'capture');argv=capture.wrap([str(Path(sys.executable).resolve()),str(script),*wanted])
+        launcher=Path(argv[-1]);self.assertEqual(argv[-2],'-c');self.assertEqual(launcher.name,'launch-owned');self.assertEqual(launcher.stat().st_mode&0o777,0o700)
+        result=subprocess.run([str(launcher)],capture_output=True,text=True,check=False)
+        self.assertEqual(result.returncode,0,result.stderr);self.assertEqual(json.loads(result.stdout),wanted);self.assertFalse(sentinel.exists())
+
+    def test_unknown_windows_schema_reports_names_types_not_values_and_still_rejects(self):
+        from tools.ci.provider_windows_trace import checked_events,EtwError
+        safe='<template><data name="ProcessID" inType="win:UInt32"/><data name="ParentProcessID" inType="win:UInt32"/></template>'
+        forbidden='<template><data name="CommandLine" inType="win:UnicodeString" value="PRIVATE_EVENT_VALUE_MUST_NOT_APPEAR"/></template>'
+        with self.assertRaises(EtwError) as raised:checked_events('Microsoft-Windows-Kernel-Process',[{'id':1,'version':4,'template':forbidden},{'id':2,'version':0,'template':safe}])
+        message=str(raised.exception);self.assertIn('commandline',message);self.assertIn('win:UnicodeString',message);self.assertIn('"version": 4',message);self.assertNotIn('PRIVATE_EVENT_VALUE_MUST_NOT_APPEAR',message)

@@ -13,7 +13,11 @@
       "concept_id": "memory.service",
       "name": "Memory service",
       "plane": "core",
-      "ssot_module": "core/memory"
+      "ssot_module": "core/memory",
+      "transport_wrappers": [
+        {"module": "adapters/sqlite/src/memory/engine.rs", "transport": "rust", "must_import": "engram-memory"},
+        {"module": "adapters/helixdb/src/memory.rs", "transport": "rust", "must_import": "engram-memory"}
+      ]
     },
     {
       "concept_id": "knowledge.graph",

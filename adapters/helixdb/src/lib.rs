@@ -6,6 +6,7 @@ mod code_generation;
 mod code_leases;
 mod code_retirement;
 pub mod codec;
+mod composition_storage;
 pub mod config;
 #[cfg(feature = "embedded")]
 mod embedded;
@@ -53,6 +54,7 @@ pub struct HelixStore {
 }
 struct StoreInner {
     transport: Arc<dyn Transport>,
+    mode: &'static str,
     partition: Partition,
     lease: Option<ScopeLease>,
     reservation: std::sync::atomic::AtomicBool,
@@ -69,7 +71,7 @@ impl HelixStore {
         }
         let read_only = config.read_only;
         let transport = Arc::new(embedded::Embedded::open(config, partition.clone())?);
-        Self::finish_open(transport, partition, read_only)
+        Self::finish_open_with_mode(transport, partition, read_only, "embedded")
     }
     #[cfg(feature = "service")]
     pub fn open_service(config: config::ServiceConfig, partition: Partition) -> Result<Self> {
@@ -79,12 +81,21 @@ impl HelixStore {
         }
         let read_only = config.read_only;
         let transport = Arc::new(service::Service::open(config)?);
-        Self::finish_open(transport, partition, read_only)
+        Self::finish_open_with_mode(transport, partition, read_only, "service")
     }
+    #[cfg(test)]
     fn finish_open(
         transport: Arc<dyn Transport>,
         partition: Partition,
         read_only: bool,
+    ) -> Result<Self> {
+        Self::finish_open_with_mode(transport, partition, read_only, "controlled-transport")
+    }
+    fn finish_open_with_mode(
+        transport: Arc<dyn Transport>,
+        partition: Partition,
+        read_only: bool,
+        mode: &'static str,
     ) -> Result<Self> {
         partition.discriminator()?;
         let result = (|| {
@@ -106,6 +117,7 @@ impl HelixStore {
             Ok(lease) => Ok(Self {
                 inner: Arc::new(StoreInner {
                     transport,
+                    mode,
                     partition,
                     lease,
                     reservation: std::sync::atomic::AtomicBool::new(false),

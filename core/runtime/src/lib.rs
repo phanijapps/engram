@@ -5,6 +5,7 @@
 //! otherwise create circular dependencies between independently stored memory
 //! and knowledge systems.
 
+pub mod effect;
 pub mod error;
 pub mod redaction;
 

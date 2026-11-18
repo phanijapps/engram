@@ -84,6 +84,15 @@ impl SqlMemoryService {
         })
     }
 
+    pub(crate) fn canonical(&self) -> engram_memory::GovernedMemoryService {
+        engram_memory::GovernedMemoryService::new(
+            Arc::new(self.store.clone()),
+            self.authorizer.clone(),
+            self.clock.clone(),
+            self.ids.clone(),
+        )
+    }
+
     /// Returns the configured owning retrieval authorizer for internal recipe composition.
     pub fn retrieval_authorizer(&self) -> Arc<dyn PolicyAuthorizer> {
         Arc::clone(&self.authorizer)

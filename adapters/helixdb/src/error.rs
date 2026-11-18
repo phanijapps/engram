@@ -12,6 +12,8 @@ pub enum Error {
     Storage,
     #[error("Helix operation outcome unknown: {operation_id}")]
     OutcomeUnknown { operation_id: String },
+    #[error("Helix blocked by prior uncertain operation: {operation_id}")]
+    BlockedByPriorUnknown { operation_id: String },
     #[error("Helix cleanup is unconfirmed; writer remains owned")]
     CleanupUnconfirmed,
     #[error("Helix cleanup unconfirmed after: {cause}")]
@@ -27,6 +29,13 @@ pub enum Error {
 pub type Result<T> = std::result::Result<T, Error>;
 
 impl Error {
+    pub(crate) fn prior_unknown_operation(&self) -> Option<&str> {
+        match self {
+            Self::BlockedByPriorUnknown { operation_id } => Some(operation_id),
+            Self::CleanupAfterFailure { cause } => cause.prior_unknown_operation(),
+            _ => None,
+        }
+    }
     pub fn outcome_unknown_operation(&self) -> Option<&str> {
         match self {
             Self::OutcomeUnknown { operation_id } => Some(operation_id),

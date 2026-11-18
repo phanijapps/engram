@@ -5,6 +5,9 @@ use crate::{
     records::{self, EDGE, ENDPOINT, RELATIONSHIP},
     transport::Operation,
 };
+use engram_runtime::effect::{CleanupCertainty, EffectFrame, EffectIdentity, EffectOutcome};
+use std::sync::{Arc, Mutex};
+pub(crate) type StepFrames = Arc<Mutex<Vec<(EffectIdentity, EffectFrame)>>>;
 use helix_db::dsl::prelude::*;
 use serde_json::Value;
 use std::collections::BTreeMap;
@@ -17,6 +20,7 @@ pub(crate) struct Fence {
     pub(crate) reason: &'static str,
 }
 pub(crate) struct StepState {
+    pub(crate) frames: StepFrames,
     pub(crate) fences: Vec<Fence>,
     pub(crate) id: String,
     pub(crate) mutations: BTreeMap<(String, String), Option<Value>>,
@@ -26,10 +30,30 @@ pub struct StorageStep {
     pub(crate) id: String,
     store: HelixStore,
     finished: bool,
+    pub(crate) frames: StepFrames,
+    sent_operation: Option<String>,
 }
 impl Drop for StorageStep {
     fn drop(&mut self) {
         if !self.finished {
+            if let Ok(frames) = self.frames.lock() {
+                for (identity, frame) in frames.iter() {
+                    if frame.is_pending(identity).unwrap_or(false) {
+                        if let Some(operation_id) = &self.sent_operation {
+                            let _ = frame.finish(
+                                identity,
+                                &self.id,
+                                EffectOutcome::Unknown {
+                                    operation_id: operation_id.clone(),
+                                },
+                                CleanupCertainty::Unconfirmed,
+                            );
+                        } else {
+                            let _ = frame.cancel(identity, &self.id);
+                        }
+                    }
+                }
+            }
             if let Some(s) = &self.store.session {
                 if let Ok(mut p) = s.pending.lock() {
                     if p.as_ref().is_some_and(|step| step.id == self.id) {
@@ -54,7 +78,9 @@ impl HelixStore {
             return Err(Error::Contention);
         }
         let id = uuid::Uuid::new_v4().to_string();
+        let frames = Arc::new(Mutex::new(Vec::new()));
         *pending = Some(StepState {
+            frames: frames.clone(),
             id: id.clone(),
             mutations: BTreeMap::new(),
             fences: Vec::new(),
@@ -65,10 +91,47 @@ impl HelixStore {
             id,
             store,
             finished: false,
+            frames,
+            sent_operation: None,
         })
     }
 }
 impl StorageStep {
+    fn observe_result(&self, operation_id: &str, error: Option<&Error>) -> Result<()> {
+        let frames = self.frames.lock().map_err(|_| Error::Storage)?;
+        for (identity, frame) in frames.iter() {
+            if !frame
+                .is_pending(identity)
+                .map_err(|_| Error::CleanupUnconfirmed)?
+            {
+                continue;
+            }
+            let outcome = match error {
+                None => EffectOutcome::Acknowledged,
+                Some(error) => match error.outcome_unknown_operation() {
+                    Some(actual) if actual == operation_id => EffectOutcome::Unknown {
+                        operation_id: actual.into(),
+                    },
+                    Some(_) => return Err(Error::CleanupUnconfirmed),
+                    None => EffectOutcome::DefiniteFailure,
+                },
+            };
+            let cleanup = if error.is_some_and(|e| {
+                matches!(
+                    e,
+                    Error::CleanupAfterFailure { .. } | Error::CleanupUnconfirmed
+                )
+            }) {
+                CleanupCertainty::Unconfirmed
+            } else {
+                CleanupCertainty::Confirmed
+            };
+            frame
+                .finish(identity, &self.id, outcome, cleanup)
+                .map_err(|_| Error::CleanupUnconfirmed)?;
+        }
+        Ok(())
+    }
     pub fn commit(mut self) -> Result<String> {
         self.store.admit_logical_work()?;
         let _call = self.store.enter_call()?;
@@ -78,6 +141,7 @@ impl StorageStep {
             .as_mut()
             .filter(|step| step.id == self.id)
             .ok_or(Error::Contention)?;
+        self.store.retain_step_effect(&self.id, &self.frames)?;
         let explicit_mutation_count = step.mutations.len();
         crate::changes::augment(&self.store, &mut step.mutations)?;
         let operation_id = uuid::Uuid::new_v4().to_string();
@@ -252,6 +316,17 @@ impl StorageStep {
                 .concat(),
             );
         let operation = Operation::with_id(QueryRequest::write(batch), operation_id.clone())?;
+        // Bind the actual generated operation UUID before the transport can send.
+        {
+            let frames = self.frames.lock().map_err(|_| Error::Storage)?;
+            for (identity, frame) in frames.iter() {
+                if frame.is_pending(identity).map_err(|_| Error::Contention)? {
+                    frame
+                        .bind_commit(identity, &self.id, &operation_id)
+                        .map_err(|_| Error::Contention)?;
+                }
+            }
+        }
         self.store
             .inner
             .uncertain_receipts
@@ -264,6 +339,7 @@ impl StorageStep {
                     transport_unknown: false,
                 },
             );
+        self.sent_operation = Some(operation_id.clone());
         let response = match self.store.inner.transport.execute(&operation) {
             Ok(response) => response,
             Err(error) => {
@@ -290,6 +366,7 @@ impl StorageStep {
                         .map_err(|_| Error::Storage)?
                         .remove(&operation_id);
                 }
+                self.observe_result(&operation_id, Some(&error))?;
                 return Err(error);
             }
         };
@@ -318,6 +395,10 @@ impl StorageStep {
                             .lock()
                             .map_err(|_| Error::Storage)?
                             .remove(&operation_id);
+                        self.observe_result(
+                            &operation_id,
+                            Some(&Error::FenceRejected(fence.reason)),
+                        )?;
                         return Err(Error::FenceRejected(fence.reason));
                     }
                 }
@@ -331,6 +412,7 @@ impl StorageStep {
                 .lock()
                 .map_err(|_| Error::Storage)?
                 .remove(&operation_id);
+            self.observe_result(&operation_id, Some(&Error::Contention))?;
             return Err(Error::Contention);
         }
         let valid = rows.is_some_and(|rows| {
@@ -354,6 +436,12 @@ impl StorageStep {
                 .inner
                 .cleanup_only
                 .store(true, std::sync::atomic::Ordering::Release);
+            self.observe_result(
+                &operation_id,
+                Some(&Error::OutcomeUnknown {
+                    operation_id: operation_id.clone(),
+                }),
+            )?;
             return Err(Error::OutcomeUnknown { operation_id });
         }
         self.store
@@ -363,6 +451,7 @@ impl StorageStep {
             .map_err(|_| Error::Storage)?
             .remove(&operation_id);
         *pending = None;
+        self.observe_result(&operation_id, None)?;
         self.finished = true;
         Ok(operation_id)
     }
@@ -476,6 +565,7 @@ mod structural_response_controls {
                 let store = HelixStore {
                     inner: Arc::new(StoreInner {
                         transport: control.clone(),
+                        mode: actual.inner.mode,
                         partition: partition.clone(),
                         lease: actual.inner.lease.clone(),
                         reservation: AtomicBool::new(false),

@@ -108,9 +108,41 @@ pub(crate) fn core(error: Error) -> engram_runtime::CoreError {
             reason: reason.into(),
         };
     }
+    // Classify typed causes before conversion. Raw diagnostics never enter public text.
+    let valid_id = |id: &str| {
+        uuid::Uuid::parse_str(id)
+            .ok()
+            .filter(|id| id.get_version_num() == 4)
+            .filter(|parsed| parsed.to_string() == id)
+            .map(|_| id.to_owned())
+    };
+    let message = if let Some(id) = error.prior_unknown_operation() {
+        valid_id(id).map_or_else(
+            || "Helix blocked by prior uncertain operation".into(),
+            |id| format!("Helix blocked by prior uncertain operation: {id}"),
+        )
+    } else if let Some(id) = error.outcome_unknown_operation() {
+        valid_id(id).map_or_else(
+            || "Helix operation outcome unknown".into(),
+            |id| format!("Helix operation outcome unknown: {id}"),
+        )
+    } else {
+        match error {
+            Error::Contention => "Helix writer contention",
+            Error::Backpressure => "Helix index work is saturated; request had no effect",
+            Error::IncompatibleSchema => "Helix store marker is incompatible",
+            Error::ReadOnly => "Helix read-only handle cannot mutate storage",
+            Error::CleanupUnconfirmed | Error::CleanupAfterFailure { .. } => {
+                "Helix cleanup is unconfirmed; writer remains owned"
+            }
+            Error::InvalidConfig(_) => "Helix operation configuration rejected",
+            _ => "Helix storage operation failed",
+        }
+        .into()
+    };
     engram_runtime::CoreError::Adapter {
         adapter: "helixdb".into(),
-        message: error.to_string(),
+        message,
     }
 }
 pub(crate) fn missing(kind: &'static str, id: impl ToString) -> engram_runtime::CoreError {
@@ -539,6 +571,47 @@ pub(crate) fn properties(
 mod domain_error_tests {
     use super::*;
     #[test]
+    fn recursive_cleanup_preserves_only_valid_actual_uuid_through_redaction() {
+        let actual = uuid::Uuid::new_v4().to_string();
+        let cause = Error::CleanupAfterFailure {
+            cause: Box::new(Error::CleanupAfterFailure {
+                cause: Box::new(Error::OutcomeUnknown {
+                    operation_id: actual.clone(),
+                }),
+            }),
+        };
+        let public = core(cause).to_redacted().to_string();
+        assert_eq!(
+            public,
+            format!("adapter failed: helixdb: Helix operation outcome unknown: {actual}")
+        );
+        let private = core(Error::InvalidConfig(
+            "private-record credential-secret /private/path",
+        ));
+        assert!(!private.to_redacted().to_string().contains("private-record"));
+        assert!(
+            !private
+                .to_redacted()
+                .to_string()
+                .contains("credential-secret")
+        );
+    }
+    #[test]
+    fn public_mapping_discards_unvalidated_private_diagnostics() {
+        let error = Error::CleanupAfterFailure {
+            cause: Box::new(Error::OutcomeUnknown {
+                operation_id: "credential-secret-private-record-at-/owned/path".into(),
+            }),
+        };
+        let mapped = core(error).to_redacted().to_string();
+        assert!(
+            !mapped.contains("credential-secret"),
+            "unvalidated operation identifiers are private diagnostics: {mapped}"
+        );
+        assert!(!mapped.contains("private-record"));
+    }
+
+    #[test]
     fn only_proven_contention_is_conflict() {
         assert!(matches!(
             map_domain_error(Error::Contention),
@@ -548,22 +621,24 @@ mod domain_error_tests {
             Error::Storage,
             Error::IncompatibleSchema,
             Error::OutcomeUnknown {
-                operation_id: "uncertain-operation".into(),
+                operation_id: "b5e12447-4377-4c90-a40f-84cc19436748".into(),
             },
             Error::CleanupAfterFailure {
                 cause: Box::new(Error::OutcomeUnknown {
-                    operation_id: "uncertain-operation".into(),
+                    operation_id: "b5e12447-4377-4c90-a40f-84cc19436748".into(),
                 }),
             },
         ] {
-            let original = error.to_string();
+            let original = error.outcome_unknown_operation().map(str::to_owned);
             let mapped = map_domain_error(error);
             assert!(!matches!(
                 mapped,
                 engram_runtime::CoreError::Conflict { .. }
             ));
             assert!(
-                mapped.to_string().contains(&original),
+                original
+                    .as_ref()
+                    .is_none_or(|id| mapped.to_redacted().to_string().contains(id)),
                 "I/O/schema/cleanup/unknown cause and operation identity preserved"
             );
         }

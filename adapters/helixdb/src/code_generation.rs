@@ -213,6 +213,7 @@ mod public_source_parent_controls {
         HelixStore {
             inner: Arc::new(StoreInner {
                 transport,
+                mode: actual.inner.mode,
                 partition: actual.inner.partition.clone(),
                 lease: actual.inner.lease.clone(),
                 reservation: AtomicBool::new(false),

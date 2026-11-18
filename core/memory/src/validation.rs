@@ -148,3 +148,53 @@ mod tests {
         assert!(validate_write_request(&request).is_err());
     }
 }
+
+/// Validates behavior-level constraints for retrieval requests.
+///
+/// The SQL baseline rejects empty queries and zero budgets before touching
+/// storage so adapters share the same caller-facing failure behavior.
+pub fn validate_retrieval_request(request: &engram_domain::RetrievalRequest) -> CoreResult<()> {
+    if request.scope.tenant.trim().is_empty() {
+        return Err(CoreError::InvalidRequest {
+            reason: "scope.tenant is required".to_owned(),
+        });
+    }
+    if request.query.trim().is_empty() {
+        return Err(CoreError::InvalidRequest {
+            reason: "query is required".to_owned(),
+        });
+    }
+    if request.limit == Some(0) {
+        return Err(CoreError::InvalidRequest {
+            reason: "limit must be positive when supplied".to_owned(),
+        });
+    }
+    if let Some(budget) = &request.budget
+        && (budget.max_items == Some(0)
+            || budget.max_tokens == Some(0)
+            || budget.max_bytes == Some(0))
+    {
+        return Err(CoreError::InvalidRequest {
+            reason: "budget limits must be positive when supplied".to_owned(),
+        });
+    }
+    Ok(())
+}
+
+/// Validates behavior-level constraints for forget requests.
+///
+/// Forget validation happens before authorization or mutation to avoid partial
+/// lifecycle side effects from malformed target or scope data.
+pub fn validate_forget_request(request: &engram_domain::ForgetRequest) -> CoreResult<()> {
+    if request.scope.tenant.trim().is_empty() {
+        return Err(CoreError::InvalidRequest {
+            reason: "scope.tenant is required".to_owned(),
+        });
+    }
+    if request.target_id.trim().is_empty() {
+        return Err(CoreError::InvalidRequest {
+            reason: "targetId is required".to_owned(),
+        });
+    }
+    Ok(())
+}

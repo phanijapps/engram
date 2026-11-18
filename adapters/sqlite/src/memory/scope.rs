@@ -6,23 +6,7 @@
 
 use engram_domain::Scope;
 
-/// Returns true when a stored SQL row is visible to a request scope.
-///
-/// Tenant must match exactly. Optional request scope fields narrow visibility
-/// without requiring every scope dimension to be supplied.
-pub(crate) fn scope_allows(record_scope: &Scope, request_scope: &Scope) -> bool {
-    record_scope.tenant == request_scope.tenant
-        && optional_scope_matches(&record_scope.subject, &request_scope.subject)
-        && optional_scope_matches(&record_scope.workspace, &request_scope.workspace)
-        && optional_scope_matches(&record_scope.session, &request_scope.session)
-        && optional_scope_matches(&record_scope.environment, &request_scope.environment)
-}
-
-fn optional_scope_matches(record_value: &Option<String>, request_value: &Option<String>) -> bool {
-    request_value
-        .as_ref()
-        .is_none_or(|value| record_value.as_ref() == Some(value))
-}
+pub(crate) use engram_memory::scope::scope_allows;
 
 // ============================================================================
 // Scope inventory (job 012-admin-console-v1, STEP-002)
@@ -305,7 +289,7 @@ mod scope_inventory_tests {
     use engram_domain::{
         Actor, ActorKind, AllowedUse, Belief, BeliefId, BeliefStatus, BeliefSubject, EntityKind,
         EntityRef, Id, KnowledgeEntity, MemoryContent, MemoryKind, Policy, Provenance, Requester,
-        Retention, Sensitivity, Visibility, WriteMemoryRequest,
+        Retention, Visibility, WriteMemoryRequest,
     };
     use engram_knowledge::KnowledgeRepository;
     use engram_memory::MemoryService;

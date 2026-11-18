@@ -5,6 +5,14 @@
 //! vector indexes, or source ingestion are stored.
 
 pub mod extraction;
+mod forget;
+pub mod retrieval;
+pub mod scope;
+mod service;
+mod write;
+pub use service::GovernedMemoryService;
+pub mod storage;
+pub use storage::MemoryStorage;
 pub mod validation;
 pub use extraction::{extract, merge_entities};
 pub use validation::validate_write_request;

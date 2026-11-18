@@ -13,7 +13,6 @@ mod scope;
 mod service;
 mod temporal_retrieval;
 mod transactional_write;
-mod validation;
 mod write;
 
 pub use dependencies::{AllowAllPolicyAuthorizer, SequentialIdGenerator, SystemClock};

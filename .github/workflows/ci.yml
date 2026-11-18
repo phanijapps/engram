@@ -2,11 +2,16 @@ name: CI
 
 on:
   pull_request:
+    types: [opened, synchronize, reopened, labeled]
   push:
     branches:
       - main
   workflow_dispatch:
     inputs:
+      native_preflight:
+        description: "Run real native child custody and denied connect/DNS readiness controls ONLY"
+        type: boolean
+        default: false
       helix_e2e:
         description: "Execute the real Helix native matrix; missing prerequisites fail BLOCKED"
         type: boolean
@@ -510,3 +515,117 @@ jobs:
             ${{ env.PROVIDER_OUTPUT }}/*/report.json
             ${{ env.PROVIDER_OUTPUT }}/*/operations.jsonl
             ${{ env.PROVIDER_OUTPUT }}/*/raw.log
+
+  native-policy-readiness:
+    if: (github.event_name == 'workflow_dispatch' && inputs.native_preflight) || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && contains(github.event.pull_request.labels.*.name, 'engram-native-preflight'))
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - {target: linux-x64-gnu, runner: ubuntu-24.04}
+          - {target: linux-arm64-gnu, runner: ubuntu-24.04-arm}
+          - {target: darwin-arm64, runner: macos-15}
+          - {target: win32-x64, runner: windows-2025}
+    runs-on: ${{ matrix.runner }}
+    defaults:
+      run:
+        shell: bash
+    env:
+      TMPDIR: ${{ runner.temp }}/engram-native-${{ github.run_id }}-${{ github.run_attempt }}-${{ matrix.target }}
+      TEMP: ${{ runner.temp }}/engram-native-${{ github.run_id }}-${{ github.run_attempt }}-${{ matrix.target }}
+      TMP: ${{ runner.temp }}/engram-native-${{ github.run_id }}-${{ github.run_attempt }}-${{ matrix.target }}
+      CARGO_BUILD_JOBS: "2"
+      CARGO_PROFILE_DEV_DEBUG: "0"
+      CARGO_PROFILE_TEST_DEBUG: "0"
+      NATIVE_TARGET: ${{ matrix.target }}
+      NATIVE_OUTPUT: runs/network/native-preflight/${{ matrix.target }}
+      NATIVE_COMPACT_OUTPUT: ${{ runner.temp }}/engram-native-${{ github.run_id }}-${{ github.run_attempt }}-${{ matrix.target }}/compact
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - uses: dtolnay/rust-toolchain@1.88.0
+      - name: Record actual native environment and source
+        run: |
+          mkdir -p "$TMPDIR"
+          python - <<'PY_NATIVE_ENV'
+          import json, os, platform, subprocess, sys
+          from pathlib import Path
+          from tools.ci.provider_network_trace import native_target
+          if native_target()!=os.environ['NATIVE_TARGET']:
+              raise SystemExit('BLOCKED: actual runner architecture/OS differs')
+          print(json.dumps({'source_revision':subprocess.check_output(['git','rev-parse','HEAD'],text=True).strip(),'os':platform.system(),'machine':platform.machine(),'target':native_target(),'python':sys.executable,'python_version':sys.version,'TMPDIR':os.environ['TMPDIR'],'node':subprocess.check_output(['node','--version'],text=True).strip(),'rust':subprocess.check_output(['rustc','+1.88.0','--version'],text=True).strip(),'proof_kind':'controlled native custody/denied attempts ONLY; no Helix/addon/model/store'}))
+          PY_NATIVE_ENV
+      - name: Real native custody and denied network/DNS positive controls
+        run: |
+          PYTHON_NATIVE="$(python -c 'import sys;print(sys.executable)')"
+          if [ "${{ runner.os }}" = "Linux" ]; then
+            /usr/bin/python3 tools/ci/check_storage_network_policy.py --native-preflight --acquisition-scope github-hosted-disposable-readiness --target "$NATIVE_TARGET" --output "$NATIVE_OUTPUT"
+          elif [ "${{ runner.os }}" = "macOS" ]; then
+            # The first elevated process and its original children exit before a
+            # separate exporter hands only three compact files to this runner.
+            mkdir -m 700 "$NATIVE_COMPACT_OUTPUT"
+            set +e
+            sudo -n env TMPDIR="$TMPDIR" TEMP="$TEMP" TMP="$TMP" CARGO_BUILD_JOBS=2 CARGO_PROFILE_DEV_DEBUG=0 CARGO_PROFILE_TEST_DEBUG=0 GITHUB_ACTIONS="$GITHUB_ACTIONS" GITHUB_RUN_ID="$GITHUB_RUN_ID" GITHUB_RUN_ATTEMPT="$GITHUB_RUN_ATTEMPT" GITHUB_JOB="$GITHUB_JOB" RUNNER_NAME="$RUNNER_NAME" RUNNER_OS="$RUNNER_OS" RUNNER_ARCH="$RUNNER_ARCH" RUNNER_ENVIRONMENT="$RUNNER_ENVIRONMENT" RUNNER_TEMP="$RUNNER_TEMP" "$PYTHON_NATIVE" tools/ci/check_storage_network_policy.py --native-preflight --acquisition-scope github-hosted-disposable-readiness --target "$NATIVE_TARGET" --output "$NATIVE_OUTPUT" > "$TMPDIR/native-result.json"
+            PREFLIGHT_STATUS=$?
+            set -e
+            cat "$TMPDIR/native-result.json"
+            NATIVE_INVOCATION="$("$PYTHON_NATIVE" - <<'PY_NATIVE_INVOCATION'
+          import json, os, uuid
+          from pathlib import Path
+          value=json.loads((Path(os.environ['TMPDIR'])/'native-result.json').read_text())
+          source=Path(value['output'])
+          if source.parent!=Path(os.environ['NATIVE_OUTPUT']).absolute() or str(uuid.UUID(source.name))!=source.name:
+              raise SystemExit('BLOCKED: unexpected actual preflight invocation output')
+          print(source.name)
+          PY_NATIVE_INVOCATION
+            )"
+            export NATIVE_INVOCATION
+            sudo -n env TMPDIR="$TMPDIR" "$PYTHON_NATIVE" tools/ci/check_storage_network_policy.py --output "$NATIVE_OUTPUT" --export-native-preflight "$NATIVE_INVOCATION" --compact-export "$NATIVE_COMPACT_OUTPUT" > "$TMPDIR/native-export.json"
+            "$PYTHON_NATIVE" - <<'PY_NATIVE_EXPORT'
+          import hashlib, json, os, stat, subprocess
+          from pathlib import Path
+          names={'report.json','operations.jsonl','raw.log'}
+          receipt=json.loads((Path(os.environ['TMPDIR'])/'native-export.json').read_text())
+          root=Path(os.environ['NATIVE_COMPACT_OUTPUT'])
+          revision=subprocess.check_output(['git','rev-parse','HEAD'],text=True).strip()
+          if set(receipt['files'])!=names or set(p.name for p in root.iterdir())!=names or receipt['invocation']!=os.environ['NATIVE_INVOCATION'] or receipt['source_revision']!=revision or receipt['owner_uid']!=os.getuid() or Path(receipt['destination'])!=root:
+              raise SystemExit('BLOCKED: compact handoff identity/name/ownership mismatch')
+          for name in names:
+              path=root/name;meta=path.lstat()
+              if not stat.S_ISREG(meta.st_mode) or meta.st_uid!=os.getuid() or stat.S_IMODE(meta.st_mode)!=0o600 or hashlib.sha256(path.read_bytes()).hexdigest()!=receipt['files'][name]:
+                  raise SystemExit('BLOCKED: compact file is not actual runner-readable matched bytes')
+          print('Actual runner read all exact compact bytes; hashes/source/owner match. Private traces remain unexported.')
+          PY_NATIVE_EXPORT
+            exit "$PREFLIGHT_STATUS"
+          else
+            "$PYTHON_NATIVE" tools/ci/check_storage_network_policy.py --native-preflight --acquisition-scope github-hosted-disposable-readiness --target "$NATIVE_TARGET" --output "$NATIVE_OUTPUT"
+          fi
+      - name: Retain only compact actual native readiness observations
+        if: always() && runner.os != 'macOS'
+        uses: actions/upload-artifact@v4
+        with:
+          name: native-readiness-${{ matrix.target }}-${{ github.run_id }}-${{ github.run_attempt }}
+          if-no-files-found: error
+          path: |
+            ${{ env.NATIVE_OUTPUT }}/*/report.json
+            ${{ env.NATIVE_OUTPUT }}/*/operations.jsonl
+            ${{ env.NATIVE_OUTPUT }}/*/raw.log
+      - name: Retain only verified runner-owned Mac compact handoff
+        if: always() && runner.os == 'macOS'
+        uses: actions/upload-artifact@v4
+        with:
+          name: native-readiness-${{ matrix.target }}-${{ github.run_id }}-${{ github.run_attempt }}
+          if-no-files-found: error
+          path: |
+            ${{ env.NATIVE_COMPACT_OUTPUT }}/report.json
+            ${{ env.NATIVE_COMPACT_OUTPUT }}/operations.jsonl
+            ${{ env.NATIVE_COMPACT_OUTPUT }}/raw.log

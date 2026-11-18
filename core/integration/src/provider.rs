@@ -263,10 +263,16 @@ impl EngramProvider {
     /// }
     /// ```
     pub fn open(config: &EngramConfig) -> CoreResult<Self> {
-        config.validate().map_err(|e| CoreError::InvalidRequest {
-            reason: format!("configuration validation failed: {e}"),
-        })?;
-
+        if config.helixdb.is_some()
+            || config
+                .storage_provider
+                .is_some_and(|p| p != crate::config::StorageProvider::Sqlite)
+        {
+            return Err(CoreError::InvalidRequest {
+                reason: "explicit non-SQLite configuration requires the selected provider factory"
+                    .into(),
+            });
+        }
         if config.pgvector_connection_string.is_some() {
             return Err(CoreError::InvalidRequest {
                 reason: "pgvector configs must be opened via the `engram-backend-pgvector` recipe \
@@ -275,6 +281,9 @@ impl EngramProvider {
                     .to_owned(),
             });
         }
+        config.validate().map_err(|e| CoreError::InvalidRequest {
+            reason: format!("configuration validation failed: {e}"),
+        })?;
 
         #[cfg(feature = "sqlite")]
         {

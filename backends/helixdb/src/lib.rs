@@ -34,6 +34,15 @@ pub fn compose(
     config: &EngramConfig,
     authorizer: Arc<dyn PolicyAuthorizer>,
 ) -> CoreResult<EngramProvider> {
+    composition_paths(config)?;
+    let prepared =
+        engram_integration::prepare_embedding(&config.embedding_provider, config.enable_vector)?;
+    compose_prepared(store, config, authorizer, prepared)
+}
+
+fn composition_paths(
+    config: &EngramConfig,
+) -> CoreResult<(std::path::PathBuf, std::path::PathBuf, std::path::PathBuf)> {
     if config.rebuild_vectors {
         return Err(CoreError::CapabilityUnsupported {
             capability: "rebuild_vectors".into(),
@@ -43,7 +52,6 @@ pub fn compose(
     let storage =
         engram_store_helixdb::config::confined_path(&config.trusted_root, &config.storage_path)
             .map_err(|_| local_error())?;
-    std::fs::create_dir_all(&storage).map_err(|_| local_error())?;
     let retained = engram_store_helixdb::config::confined_path(
         &config.trusted_root,
         &storage.join("retained"),
@@ -52,9 +60,18 @@ pub fn compose(
     let lexical_path =
         engram_store_helixdb::config::confined_path(&config.trusted_root, &storage.join("lexical"))
             .map_err(|_| local_error())?;
+    Ok((storage, retained, lexical_path))
+}
+
+fn compose_prepared(
+    store: HelixStore,
+    config: &EngramConfig,
+    authorizer: Arc<dyn PolicyAuthorizer>,
+    prepared: engram_integration::PreparedEmbedding,
+) -> CoreResult<EngramProvider> {
+    let (storage, retained, lexical_path) = composition_paths(config)?;
+    std::fs::create_dir_all(&storage).map_err(|_| local_error())?;
     std::fs::create_dir_all(&lexical_path).map_err(|_| local_error())?;
-    let prepared =
-        engram_integration::prepare_embedding(&config.embedding_provider, config.enable_vector)?;
     let scope = store.composition_scope().clone();
     let native = Arc::new(store.clone());
     let knowledge = Arc::new(KnowledgePorts::new(store.clone()));
@@ -462,7 +479,27 @@ fn finish_open(
     config: &EngramConfig,
     authorizer: Arc<dyn PolicyAuthorizer>,
 ) -> CoreResult<EngramProvider> {
-    match compose(store.clone(), config, authorizer) {
+    let result = compose(store.clone(), config, authorizer);
+    finish_composition(store, result)
+}
+
+/// Consume the same canonical initialized provider used to select the native
+/// partition identity. No resolver or model initialization occurs here.
+pub fn finish_open_prepared(
+    store: HelixStore,
+    config: &EngramConfig,
+    authorizer: Arc<dyn PolicyAuthorizer>,
+    prepared: engram_integration::PreparedEmbedding,
+) -> CoreResult<EngramProvider> {
+    let result = compose_prepared(store.clone(), config, authorizer, prepared);
+    finish_composition(store, result)
+}
+
+fn finish_composition(
+    store: HelixStore,
+    result: CoreResult<EngramProvider>,
+) -> CoreResult<EngramProvider> {
+    match result {
         Ok(provider) => Ok(provider),
         Err(error) => {
             store

@@ -38,6 +38,7 @@ members = [
     "backends/pgvector",
     "backends/sqlite",
     "backends/helixdb",
+    "backends/provider",
 ]
 resolver = "3"
 

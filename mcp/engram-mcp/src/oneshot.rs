@@ -106,7 +106,7 @@ fn run_recall(argv: &[String]) -> i32 {
         match arg.as_str() {
             "--help" | "-h" => {
                 println!(
-                    "usage: engram-mcp recall --query <text> [--json] [--limit N] \\\n                       [--storage <path>] [--project <name>] [--no-vector]\n\n                       One-shot fused recall without the MCP handshake. --json emits\n                       {{ok, hit_count, top_score, elapsed_ms, results:[...]}}; errors exit 0\n                       with {{ok:false, error}} so hooks fail open."
+                    "usage: engram-mcp recall --query <text> [--json] [--limit N] \\\n                       [--storage <path>] [--project <name>] [--backend <provider>] [--helix-mode <mode>] [--no-vector]\n\n                       One-shot fused recall without the MCP handshake. --json emits\n                       {{ok, hit_count, top_score, elapsed_ms, results:[...]}}; errors exit 0\n                       with {{ok:false, error}} so hooks fail open."
                 );
                 return 0;
             }
@@ -131,6 +131,9 @@ fn run_recall(argv: &[String]) -> i32 {
     let config = match config::McpConfig::from_args(&rest) {
         Ok(c) => c,
         Err(message) => {
+            if json_out {
+                return fail_open_json("recall", &message);
+            }
             eprintln!("engram-mcp recall: {message}");
             return 2;
         }
@@ -288,6 +291,9 @@ fn run_status(argv: &[String]) -> i32 {
     let config = match config::McpConfig::from_args(&rest) {
         Ok(c) => c,
         Err(message) => {
+            if json_out {
+                return fail_open_json("status", &message);
+            }
             eprintln!("engram-mcp status: {message}");
             return 2;
         }

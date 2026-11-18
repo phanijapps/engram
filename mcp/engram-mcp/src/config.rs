@@ -25,6 +25,7 @@ pub enum McpBackend {
     #[default]
     Sqlite,
     Pgvector,
+    Helixdb,
 }
 
 /// Everything the server needs to open a provider and resolve scope.
@@ -33,6 +34,8 @@ pub enum McpBackend {
 /// loader; the generic core ignores them when absent (baked-in default).
 #[derive(Debug)]
 pub struct McpConfig {
+    pub trusted_root: Option<PathBuf>,
+    pub helixdb: Option<engram_integration::config::HelixConfig>,
     pub storage_path: PathBuf,
     pub project: String,
     pub scope_strategy: ScopeMappingStrategy,
@@ -74,7 +77,18 @@ impl McpConfig {
     /// `--no-vector` / `--vector` are value-less switches (RFC-0019 D3
     /// reversed) toggling `enable_vector` (default `true`).
     pub fn from_args(argv: &[String]) -> Result<Self, String> {
-        let (argv, embedding) = crate::embedding_config::from_args(argv)?;
+        // Extract embedding syntax without touching active environment/profile files.
+        // The real resolver runs only after selected-provider and path preflight.
+        let original_args = argv;
+        let mut syntax_args = argv.to_vec();
+        syntax_args.push("--no-vector".to_owned());
+        let (mut argv, _) = crate::embedding_config::from_args(&syntax_args)?;
+        argv.pop(); // remove only the synthetic final gate
+        let embedding = engram_integration::EmbeddingProviderConfig {
+            provider_type: "none".to_owned(),
+            model: "none".to_owned(),
+            ..Default::default()
+        };
         let mut storage_path = None;
         let mut project = None;
         let mut ontology_path = None;
@@ -87,6 +101,9 @@ impl McpConfig {
         let mut tool_profile = String::new();
         let mut backend: Option<McpBackend> = None;
         let mut pg_connection_string: Option<String> = None;
+        let mut trusted_root: Option<PathBuf> = None;
+        let mut helix = engram_integration::config::HelixConfig::default();
+        let mut explicit_helix = false;
         // Default-on (RFC-0019 D3 reversed): vector compiles in with the
         // `fastembed` default feature; `--no-vector` disables it at runtime
         // without a rebuild.
@@ -128,6 +145,12 @@ impl McpConfig {
                     | "--tools"
                     | "--backend"
                     | "--pg-connection-string"
+                    | "--trusted-root"
+                    | "--helix-mode"
+                    | "--helix-store"
+                    | "--helix-endpoint"
+                    | "--helix-credential-env"
+                    | "--helix-path"
             ) {
                 return Err(format!("unknown argument: {flag}"));
             }
@@ -159,17 +182,38 @@ impl McpConfig {
                 "--subdomain" => subdomain = Some(value),
                 "--tools" => tool_profile = value,
                 "--backend" => {
-                    backend = Some(match value.as_str() {
-                        "sqlite" => McpBackend::Sqlite,
-                        "pgvector" | "pg" | "postgres" => McpBackend::Pgvector,
-                        other => {
-                            return Err(format!(
-                                "unknown --backend value: {other}; expected sqlite|pgvector"
-                            ));
-                        }
-                    });
+                    let selected = parse_backend(&value)?;
+                    if backend.is_some_and(|previous| previous != selected) {
+                        return Err("conflicting --backend declarations".into());
+                    }
+                    backend = Some(selected);
                 }
                 "--pg-connection-string" => pg_connection_string = Some(value),
+                "--trusted-root" => trusted_root = Some(PathBuf::from(value)),
+                "--helix-mode" => {
+                    explicit_helix = true;
+                    let selected = parse_helix_mode(&value)?;
+                    if helix.mode.is_some_and(|previous| previous != selected) {
+                        return Err("conflicting --helix-mode declarations".into());
+                    }
+                    helix.mode = Some(selected);
+                }
+                "--helix-store" => {
+                    explicit_helix = true;
+                    helix.logical_store = value;
+                }
+                "--helix-endpoint" => {
+                    explicit_helix = true;
+                    helix.endpoint = Some(value);
+                }
+                "--helix-credential-env" => {
+                    explicit_helix = true;
+                    helix.credential_env = Some(value);
+                }
+                "--helix-path" => {
+                    explicit_helix = true;
+                    helix.path = Some(PathBuf::from(value));
+                }
                 _ => unreachable!("known flags are matched above"),
             }
             i += 2;
@@ -191,13 +235,49 @@ impl McpConfig {
                     .map(PathBuf::from)
             })
             .ok_or("missing required --storage <path> (or set ENGRAM_STORAGE)")?;
-        let backend = backend.unwrap_or_default();
+        let backend = match backend {
+            Some(backend) => backend,
+            None => environment("ENGRAM_BACKEND")
+                .map(|value| parse_backend(&value))
+                .transpose()?
+                .unwrap_or_default(),
+        };
+        if backend != McpBackend::Pgvector && pg_connection_string.is_some() {
+            return Err("--pg-connection-string conflicts with selected backend".to_owned());
+        }
+        if backend != McpBackend::Helixdb && explicit_helix {
+            return Err("--helix-* settings conflict with selected backend".to_owned());
+        }
+        let helixdb = if backend == McpBackend::Helixdb {
+            if helix.mode.is_none() {
+                helix.mode = environment("ENGRAM_HELIX_MODE")
+                    .map(|value| parse_helix_mode(&value))
+                    .transpose()?;
+            }
+            if helix.logical_store.is_empty() {
+                helix.logical_store = environment("ENGRAM_HELIX_STORE").unwrap_or_default();
+            }
+            if helix.endpoint.is_none() {
+                helix.endpoint = environment("ENGRAM_HELIX_ENDPOINT");
+            }
+            if helix.credential_env.is_none() {
+                helix.credential_env = environment("ENGRAM_HELIX_CREDENTIAL_ENV");
+            }
+            if helix.path.is_none() {
+                helix.path = environment("ENGRAM_HELIX_PATH").map(PathBuf::from);
+            }
+            Some(helix)
+        } else {
+            None
+        };
+        let trusted_root =
+            trusted_root.or_else(|| environment("ENGRAM_TRUSTED_ROOT").map(PathBuf::from));
         // The env var is a fallback, not an override: an explicit flag wins.
-        let pg_connection_string = pg_connection_string.or_else(|| {
-            std::env::var("ENGRAM_PG_CONNECTION_STRING")
-                .ok()
-                .filter(|s| !s.is_empty())
-        });
+        let pg_connection_string = if backend == McpBackend::Pgvector {
+            pg_connection_string.or_else(|| environment("ENGRAM_PG_CONNECTION_STRING"))
+        } else {
+            None
+        };
         if backend == McpBackend::Pgvector && pg_connection_string.is_none() {
             return Err(
                 "--backend pgvector requires --pg-connection-string <url> or the \
@@ -205,7 +285,9 @@ impl McpConfig {
                     .to_string(),
             );
         }
-        Ok(Self {
+        let mut parsed = Self {
+            trusted_root,
+            helixdb,
             storage_path,
             project: project
                 .or_else(|| {
@@ -230,7 +312,75 @@ impl McpConfig {
             tool_profile,
             backend,
             pg_connection_string,
-        })
+        };
+        let preflight = parsed.engram_config()?;
+        parsed.trusted_root = Some(preflight.trusted_root);
+        parsed.embedding = crate::embedding_config::from_args(original_args)
+            .map_err(|_| "embedding configuration could not be resolved".to_owned())?
+            .1;
+        parsed.engram_config()?;
+        Ok(parsed)
+    }
+
+    /// Shared preflight for parsed CLI and host-constructed configurations.
+    /// Packaging/shape checks are pure and precede even ancestor metadata reads.
+    pub fn engram_config(&self) -> Result<engram_integration::EngramConfig, String> {
+        use engram_integration::config::StorageProvider;
+        use engram_integration::{EngramConfig, SqliteStorageLayout};
+        let provider = match self.backend {
+            McpBackend::Sqlite => StorageProvider::Sqlite,
+            McpBackend::Pgvector => StorageProvider::Pgvector,
+            McpBackend::Helixdb => StorageProvider::Helixdb,
+        };
+        let mut config = EngramConfig::new(
+            self.storage_path.clone(),
+            self.trusted_root
+                .clone()
+                .unwrap_or_else(|| self.storage_path.clone()),
+            self.scope_strategy,
+            self.embedding.clone(),
+            self.migration_mode,
+            self.capability_policy,
+        )
+        .with_storage_provider(provider)
+        .with_enable_vector(self.enable_vector)
+        .with_rebuild_vectors(self.rebuild_vectors)
+        .with_sqlite_storage_layout(match self.sqlite_layout {
+            McpSqliteLayout::Single => SqliteStorageLayout::SingleFile {
+                file_name: self.db_file.clone(),
+            },
+            McpSqliteLayout::Multi => SqliteStorageLayout::MultiFileDirectory,
+        });
+        config.helixdb = self.helixdb.clone();
+        config.pgvector_connection_string = self.pg_connection_string.clone();
+        engram_backend_provider::validate_selection(&config).map_err(safe_error)?;
+        if self.trusted_root.is_none() {
+            config.trusted_root = engram_backend_provider::infer_trusted_root(&config.storage_path)
+                .map_err(safe_error)?;
+        }
+        engram_backend_provider::validate(&config).map_err(safe_error)?;
+        Ok(config)
+    }
+}
+fn safe_error(error: engram_runtime::CoreError) -> String {
+    error.to_redacted().to_string()
+}
+fn environment(name: &str) -> Option<String> {
+    std::env::var(name).ok().filter(|value| !value.is_empty())
+}
+fn parse_backend(value: &str) -> Result<McpBackend, String> {
+    match value {
+        "sqlite" => Ok(McpBackend::Sqlite),
+        "pgvector" | "pg" | "postgres" => Ok(McpBackend::Pgvector),
+        "helixdb" => Ok(McpBackend::Helixdb),
+        _ => Err("unknown --backend value; expected sqlite|pgvector|helixdb".to_owned()),
+    }
+}
+fn parse_helix_mode(value: &str) -> Result<engram_integration::config::HelixMode, String> {
+    match value {
+        "service" => Ok(engram_integration::config::HelixMode::Service),
+        "embedded" => Ok(engram_integration::config::HelixMode::Embedded),
+        _ => Err("--helix-mode requires service|embedded".to_owned()),
     }
 }
 
@@ -549,6 +699,7 @@ mod tests {
         assert_eq!(c.project, "p");
     }
     #[test]
+    #[cfg(feature = "pgvector")]
     fn from_args_parses_pgvector_backend() {
         let argv = [
             "--storage".to_string(),

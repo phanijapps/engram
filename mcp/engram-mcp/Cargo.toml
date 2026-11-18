@@ -12,7 +12,10 @@ path = "src/main.rs"
 [dependencies]
 engram-domain = { path = "../../core/domain", version = "0.1.0" }
 engram-ingest = { path = "../../adapters/ingest", version = "0.1.0" }
-engram-integration = { path = "../../core/integration", version = "0.1.0", features = ["sqlite"] }
+engram-integration = { path = "../../core/integration", version = "0.1.0", default-features = false, features = ["code-lanes"] }
+engram-backend-provider = { path = "../../backends/provider", version = "0.1.0", default-features = false }
+engram-runtime = { path = "../../core/runtime", version = "0.1.0" }
+engram-memory = { path = "../../core/memory", version = "0.1.0" }
 engram-knowledge = { path = "../../core/knowledge", version = "0.1.0" }
 engram-retrieval = { path = "../../core/retrieval", version = "0.1.0" }
 engram-belief = { path = "../../core/belief", version = "0.1.0" }
@@ -28,22 +31,27 @@ reqwest = { version = "0.12", default-features = false, features = ["blocking", 
 serde = { workspace = true }
 serde_json = { workspace = true }
 sha2 = { workspace = true }
-engram-backend-pgvector = { path = "../../backends/pgvector", optional = true }
 
 [features]
-http-embeddings = ["engram-integration/http-embeddings", "engram-backend-pgvector?/http-embeddings"]
+http-embeddings = ["engram-integration/http-embeddings", "engram-backend-provider/http-embeddings"]
 # RFC-0019 D3 (reversed): the MCP ships vector (fastembed) ON by default so a
 # fresh `cargo build -p engram-mcp` works out-of-the-box. Operators disable at
 # runtime via `--no-vector` / `enable_vector = false` (skips model load) or at
 # build time via `--no-default-features`.
-default = ["fastembed", "http-embeddings"]
-fastembed = ["engram-integration/fastembed"]
+default = ["sqlite", "fastembed", "http-embeddings"]
+fastembed = ["engram-integration/fastembed", "engram-backend-provider/fastembed"]
 # Cross-encoder reranker (RFC-0019 T4). Forwards to the integration feature so
 # an mcp build can opt into the cross-encoder dispatch path.
 cross-encoder-rerank = ["engram-integration/cross-encoder-rerank"]
 # Postgres/pgvector backend (pgvector-backend PS1). Wires `--backend pgvector`
 # through the backends/pgvector recipe; SQLite stays the zero-dep default.
-pgvector = ["dep:engram-backend-pgvector", "engram-backend-pgvector/fastembed"]
+sqlite = ["engram-backend-provider/sqlite"]
+pgvector = ["engram-backend-provider/pgvector"]
+helixdb-service = ["engram-backend-provider/helixdb-service"]
+helixdb-embedded = ["engram-backend-provider/helixdb-embedded"]
+helixdb = ["helixdb-service", "helixdb-embedded"]
+# Explicit instrumented artifacts only; normal product features omit controls.
+test-controls = ["engram-backend-provider/test-controls"]
 
 [dev-dependencies]
 tempfile = "3"

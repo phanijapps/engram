@@ -1,159 +1,96 @@
-//! Open the [`EngramProvider`] that every tool routes through.
-//!
-//! This is the single place the server touches a backend: it builds an
-//! [`EngramConfig`] (embedding-`none`, SQLite) and calls
-//! [`EngramProvider::open`]. No tool opens a store directly.
-
-use engram_integration::{EngramConfig, EngramProvider, SqliteStorageLayout};
-
-use crate::config::{McpBackend, McpConfig, McpSqliteLayout};
-
-/// Open the provider described by `config`. Errors are surfaced as a string
-/// for the caller (`main`) to report.
-pub fn open_provider(config: &McpConfig) -> Result<EngramProvider, String> {
-    // storage-dir-fix: the server owns its storage lifecycle — create the
-    // `--storage` directory tree up front. Previously a path with a missing
-    // PARENT failed validation with the confusing "trusted_root does not
-    // exist" (the trusted root is the storage path's parent), and the failure
-    // surfaced only on stderr of a stdio server — invisible to MCP clients.
-    // Creating the tree makes `--storage /any/deep/path` boot zero-config.
-    if let Err(e) = std::fs::create_dir_all(&config.storage_path) {
-        return Err(format!(
-            "cannot create storage directory {}: {e}",
-            config.storage_path.display()
-        ));
-    }
-    match config.backend {
-        McpBackend::Pgvector => open_pgvector(config),
-        McpBackend::Sqlite => open_sqlite(config),
-    }
-    // Host policy injection (review r6 finding 1): the MCP server is the
-    // HOST of the code-authority lane, and the recipes it opens install the
-    // deny-by-default `RecipeDefaultAuthorizer`. This seam injects the
-    // server's EXPLICIT launch policy — code operations are authorized for
-    // the launch scope only (the same fused scope every tool already uses;
-    // `scope::resolve_scope` over the same launch config) — so code tools
-    // work for the launched project while every OTHER scope keeps the typed
-    // `CodeAuthorizationRequired` denial. All five open sites (stdio server
-    // + the one-shot commands) share this single injection.
-    .and_then(|provider| {
-        let launch_scope = crate::scope::resolve_scope(
-            config.org.as_deref(),
-            config.domain.as_deref(),
-            config.subdomain.as_deref(),
-            &config.project,
-        );
-        provider
-            .with_code_authorizer(std::sync::Arc::new(
-                engram_integration::code_binding::ScopeSetAuthorizer::new(vec![launch_scope]),
-            ))
-            .map_err(|e| format!("failed to inject launch code authority: {e}"))
-    })
-}
-
-/// PS1: open through the `backends/pgvector` recipe — Postgres holds the
-/// graph, chunks, memories, and vectors. The recipe (ADR-0022) owns connection
-/// lifecycle, idempotent schema application, and cell composition; this
-/// function only builds the engine-neutral config. Requires the `pgvector`
-/// cargo feature at build time.
-fn open_pgvector(config: &McpConfig) -> Result<EngramProvider, String> {
-    #[cfg(feature = "pgvector")]
-    {
-        let trusted_root = config
-            .storage_path
-            .parent()
-            .map(std::path::PathBuf::from)
-            .unwrap_or_else(|| std::path::PathBuf::from("."));
-        let conn_str = config
-            .pg_connection_string
-            .clone()
-            .expect("config validation guarantees a pg connection string");
-        let engram_config = EngramConfig::new(
-            config.storage_path.clone(),
-            trusted_root,
-            config.scope_strategy,
-            config.embedding.clone(),
-            config.migration_mode,
-            config.capability_policy,
-        )
-        .with_pgvector(conn_str)
-        .with_enable_vector(config.enable_vector)
-        .with_rebuild_vectors(config.rebuild_vectors);
-        engram_backend_pgvector::open(&engram_config)
-            .map_err(|e| format!("failed to open pgvector provider: {e}"))
-    }
-    #[cfg(not(feature = "pgvector"))]
-    {
-        let _ = config;
-        Err(
-            "--backend pgvector requires a build with the `pgvector` feature: \
-             cargo build -p engram-mcp --features pgvector"
-                .to_string(),
-        )
-    }
-}
-
-fn open_sqlite(config: &McpConfig) -> Result<EngramProvider, String> {
-    // `EngramProvider::open` validates that `storage_path` is inside
-    // `trusted_root`, so default the trusted root to the storage path's parent
-    // (mirroring `EngramConfig::from_profile_file`) instead of a hardcoded
-    // temp dir — otherwise real `--storage` paths outside /tmp fail to boot.
-    let trusted_root = config
-        .storage_path
-        .parent()
-        .map(std::path::PathBuf::from)
-        .unwrap_or_else(|| std::path::PathBuf::from("."));
-    let layout = match config.sqlite_layout {
-        McpSqliteLayout::Single => SqliteStorageLayout::SingleFile {
-            file_name: config.db_file.clone(),
-        },
-        McpSqliteLayout::Multi => SqliteStorageLayout::MultiFileDirectory,
-    };
-    let engram_config = EngramConfig::new(
-        config.storage_path.clone(),
-        trusted_root,
-        config.scope_strategy,
-        config.embedding.clone(),
-        config.migration_mode,
-        config.capability_policy,
-    )
-    .with_sqlite_storage_layout(layout)
-    // RFC-0019 D3 (reversed): thread the runtime vector kill-switch through to
-    // `EngramConfig` so `bootstrap_sqlite` honors `--no-vector` without a
-    // rebuild. Default `true`; `--no-vector` skips the vector index + embedding
-    // provider/model + vector recall lane.
-    .with_enable_vector(config.enable_vector)
-    .with_rebuild_vectors(config.rebuild_vectors);
-    // RFC-0019 (Blocker 1): resolve the operator-facing `[recall_fusion]` config
-    // through the discovery ladder and apply it to the `EngramConfig` before
-    // `EngramProvider::open`. Without this, the MCP path always builds with
-    // `recall_fusion = None` (the `EngramConfig::new` default) and unified
-    // recall silently falls back to equal-weight RRF — the machinery exists
-    // (`bootstrap_sqlite` reads `config.recall_fusion`) but the MCP never fed
-    // it. Resolve from the storage path like scan-filter discovery
-    // (`codegraph::resolve_scan_filter`): `<storage_path>/.engram/recall.json`
-    // is rung 2 of the ladder; rung 1 (an explicit `[recall_fusion]` profile
-    // section) would require a profile path on `McpConfig`, which v1 does not
-    // carry — `open_provider` builds the config from flags, not a profile file.
-    //
-    // A present-but-invalid file surfaces as a boot error (not a silent
-    // swallow): the operator wrote a config expecting weighted fusion; a
-    // silent fall-back to equal-weight would hide the malformed file until
-    // someone noticed recall "feels wrong". An absent file is the
-    // backward-compatible equal-weight default (`Ok(None)`).
-    let engram_config = match EngramConfig::discover_recall_fusion(&config.storage_path) {
-        Ok(Some(fusion)) => engram_config.with_recall_fusion(fusion),
-        Ok(None) => engram_config,
-        Err(message) => {
-            return Err(format!(
-                "failed to load recall fusion config from storage path: {message}"
-            ));
-        }
-    };
-    EngramProvider::open(&engram_config).map_err(|e| format!("failed to open engram provider: {e}"))
-}
-
+//! Single MCP opener: preflight once, then delegate to the selected provider factory.
+use crate::config::McpConfig;
 #[cfg(test)]
+use crate::config::{McpBackend, McpSqliteLayout};
+use engram_domain::{Policy, Requester, Scope};
+use engram_integration::EngramProvider;
+use engram_runtime::{CoreError, CoreResult, PolicyAuthorizer};
+use std::sync::Arc;
+
+/// Host authority is confined to the launch scope; canonical memory algorithms
+/// remain responsible for allowed uses, retention, lifecycle and validation.
+struct LaunchPolicy(Scope);
+impl LaunchPolicy {
+    fn authorize(&self, scope: &Scope) -> CoreResult<()> {
+        if engram_memory::scope::scope_allows(scope, &self.0) {
+            Ok(())
+        } else {
+            Err(CoreError::PolicyDenied {
+                reason: "request scope is outside the MCP launch scope".into(),
+            })
+        }
+    }
+}
+impl PolicyAuthorizer for LaunchPolicy {
+    fn can_write(&self, _: &Requester, scope: &Scope, _: &Policy) -> CoreResult<()> {
+        self.authorize(scope)
+    }
+    fn can_retrieve(&self, _: &Requester, scope: &Scope, _: &Policy) -> CoreResult<()> {
+        self.authorize(scope)
+    }
+    fn can_forget(&self, _: &Requester, scope: &Scope, _: &Policy) -> CoreResult<()> {
+        self.authorize(scope)
+    }
+}
+/// No local storage/cache directory, model, credential or connection is opened
+/// until the effective provider/mode/features and path configuration pass.
+fn prepare_launch(config: &McpConfig) -> Result<(engram_integration::EngramConfig, Scope), String> {
+    let mut effective = config.engram_config()?;
+    effective =
+        match engram_integration::EngramConfig::discover_recall_fusion(&effective.storage_path) {
+            Ok(Some(fusion)) => effective.with_recall_fusion(fusion),
+            Ok(None) => effective,
+            Err(_) => return Err("failed to load recall fusion config from storage path".into()),
+        };
+    let launch_scope = crate::scope::resolve_scope(
+        config.org.as_deref(),
+        config.domain.as_deref(),
+        config.subdomain.as_deref(),
+        &config.project,
+    );
+    Ok((effective, launch_scope))
+}
+fn with_launch_authority(
+    provider: EngramProvider,
+    launch_scope: Scope,
+) -> CoreResult<EngramProvider> {
+    provider.with_code_authorizer(Arc::new(
+        engram_integration::code_binding::ScopeSetAuthorizer::new(vec![launch_scope]),
+    ))
+}
+pub fn open_provider(config: &McpConfig) -> Result<EngramProvider, String> {
+    let (effective, launch_scope) = prepare_launch(config)?;
+    engram_backend_provider::open(
+        &effective,
+        &launch_scope,
+        Arc::new(LaunchPolicy(launch_scope.clone())),
+    )
+    .and_then(|provider| with_launch_authority(provider, launch_scope))
+    .map_err(|error| error.to_redacted().to_string())
+}
+
+/// Only instrumented fixture builds expose this opener. The caller supplies
+/// artifact identity; no launch flag or environment variable enables controls.
+#[cfg(feature = "test-controls")]
+#[allow(dead_code)]
+pub(crate) fn open_instrumented_provider(
+    config: &McpConfig,
+    identity: engram_backend_provider::test_controls::FixtureIdentity,
+) -> Result<engram_backend_provider::test_controls::InstrumentedProvider, String> {
+    let (effective, launch_scope) = prepare_launch(config)?;
+    let mut opened = engram_backend_provider::test_controls::open(
+        &effective,
+        &launch_scope,
+        Arc::new(LaunchPolicy(launch_scope.clone())),
+        identity,
+    )
+    .map_err(|error| error.to_redacted().to_string())?;
+    opened.provider = with_launch_authority(opened.provider, launch_scope)
+        .map_err(|error| error.to_redacted().to_string())?;
+    Ok(opened)
+}
+
+#[cfg(all(test, feature = "sqlite"))]
 mod tests {
     use super::*;
     use engram_domain::ScopeMappingStrategy;
@@ -161,6 +98,8 @@ mod tests {
 
     fn test_config(dir: &std::path::Path) -> McpConfig {
         McpConfig {
+            trusted_root: None,
+            helixdb: None,
             // `storage_path` is the directory the shared database file lives in.
             storage_path: dir.to_path_buf(),
             project: "test".to_string(),

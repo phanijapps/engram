@@ -79,6 +79,12 @@ pub const CONTRACT_FLAGS: &[&str] = &[
     "--tools",
     "--backend",
     "--pg-connection-string",
+    "--trusted-root",
+    "--helix-mode",
+    "--helix-store",
+    "--helix-endpoint",
+    "--helix-credential-env",
+    "--helix-path",
     "--no-vector",
     "--vector",
     "--slim",
@@ -112,7 +118,13 @@ LAUNCH FLAGS
   --layout single|multi       SQLite file layout (default single)
   --db-file <name>            DB filename override
   --tools core|full|all|consolidated   Tool profile (default core = 45 tools)
-  --backend sqlite|pgvector   Engine recipe (default sqlite)
+  --backend sqlite|pgvector|helixdb  Engine recipe (default sqlite; env ENGRAM_BACKEND)
+  --trusted-root <path>        Existing root for local storage/cache confinement
+  --helix-mode service|embedded  Explicit selected Helix mode
+  --helix-store <id>           Logical store identity (required for Helix)
+  --helix-endpoint <origin>    Service HTTP(S) origin, without credentials
+  --helix-credential-env <name>  Storage credential environment reference
+  --helix-path <path>          Embedded store path (default <storage>/helixdb)
   --pg-connection-string <url> Postgres URL (pgvector; env ENGRAM_PG_CONNECTION_STRING)
   --slim                      Skip embeddings (no model download/load); keep lexical + graph
   --no-vector                 Compatibility spelling for --slim
@@ -213,7 +225,7 @@ fn main() {
             "usage: engram-mcp --storage <path> [--project <name>] \
              [--org <name> --domain <name> [--subdomain <name>]] \
              [--ontology <path>] [--taxonomy <path>] [--layout single|multi] \
-             [--db-file <name>] [--backend sqlite|pgvector] \
+             [--db-file <name>] [--backend sqlite|pgvector|helixdb] \
              [--pg-connection-string <url>] \
              [--tools core|full|all|consolidated] [--slim|--no-vector|--vector] [--rebuild-vectors] \
              one-shot: engram-mcp recall --query <text> [--json] [--limit N] | status [--json] \

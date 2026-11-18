@@ -7,6 +7,8 @@
 use engram_domain::types::ScopeMappingStrategy;
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
+pub mod helixdb;
+pub use helixdb::{HelixConfig, HelixMode, StorageProvider};
 
 /// Serde default for `EngramConfig::enable_vector` — `true`. Kept as a named
 /// fn (rather than `#[serde(default = "default_true")]` inline) so the field
@@ -15,6 +17,33 @@ use std::path::{Path, PathBuf};
 /// when the `fastembed` feature is compiled in).
 fn default_true() -> bool {
     true
+}
+
+#[cfg(test)]
+mod provider_selection_contracts {
+    use super::*;
+    #[test]
+    fn valid_deep_storage_is_validated_before_creation() {
+        let root = tempfile::tempdir().unwrap();
+        let storage = root.path().join("missing/parent/storage");
+        let config = EngramConfig::new(
+            &storage,
+            root.path(),
+            ScopeMappingStrategy::Strict,
+            EmbeddingProviderConfig {
+                provider_type: "none".into(),
+                ..Default::default()
+            },
+            MigrationMode::DryRun,
+            CapabilityPolicy::FailClosed,
+        );
+        assert!(
+            config.validate().is_ok(),
+            "valid deep storage must validate without eagerly creating its parents: {:?}",
+            config.validate()
+        );
+        assert!(!storage.exists());
+    }
 }
 
 /// Capability policy determines how unsupported capabilities are handled.
@@ -96,6 +125,11 @@ pub enum BackendProfile {
         /// Postgres connection string (e.g. `postgres://user@host/db`).
         connection_string: String,
     },
+    Helixdb {
+        data_root: String,
+        #[serde(flatten)]
+        config: HelixConfig,
+    },
 }
 
 /// Shape of a TOML profile file consumed by [`EngramConfig::from_profile_file`].
@@ -151,6 +185,12 @@ pub use crate::embedding_config::EmbeddingProviderConfig;
 /// weights/lambda, and `f32` does not implement `Eq`. `PartialEq` remains.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct EngramConfig {
+    /// Explicit storage selection; absent preserves legacy PG-string inference
+    /// and otherwise selects SQLite. It is independent of embedding selection.
+    #[serde(default)]
+    pub storage_provider: Option<StorageProvider>,
+    #[serde(default)]
+    pub helixdb: Option<HelixConfig>,
     /// Path to the storage directory where all data is persisted.
     pub storage_path: PathBuf,
 
@@ -221,6 +261,8 @@ impl EngramConfig {
         capability_policy: CapabilityPolicy,
     ) -> Self {
         Self {
+            storage_provider: None,
+            helixdb: None,
             storage_path: storage_path.into(),
             trusted_root: trusted_root.into(),
             scope_policy,
@@ -252,6 +294,17 @@ impl EngramConfig {
     /// Opts into the Postgres (pgvector) backend with the given connection string.
     pub fn with_pgvector(mut self, connection_string: impl Into<String>) -> Self {
         self.pgvector_connection_string = Some(connection_string.into());
+        self
+    }
+    #[must_use]
+    pub fn with_storage_provider(mut self, provider: StorageProvider) -> Self {
+        self.storage_provider = Some(provider);
+        self
+    }
+    #[must_use]
+    pub fn with_helixdb(mut self, config: HelixConfig) -> Self {
+        self.storage_provider = Some(StorageProvider::Helixdb);
+        self.helixdb = Some(config);
         self
     }
 
@@ -375,33 +428,47 @@ impl EngramConfig {
     /// the TOML does not deserialize into the profile shape.
     pub fn from_profile_file(path: impl AsRef<Path>) -> Result<Self, String> {
         let path = path.as_ref();
-        let contents = std::fs::read_to_string(path)
-            .map_err(|e| format!("read profile file {}: {e}", path.display()))?;
+        let contents =
+            std::fs::read_to_string(path).map_err(|_| "read profile file failed".to_string())?;
         let profile: ProfileFile = toml::from_str(&contents)
-            .map_err(|e| format!("parse profile file {}: {e}", path.display()))?;
+            .map_err(|_| "parse profile file: invalid configuration".to_string())?;
 
-        let storage_path = match &profile.backend {
-            BackendProfile::Sqlite { data_root } => PathBuf::from(data_root),
-            BackendProfile::Postgres { connection_string } => {
-                // No SQLite storage path for a Postgres profile; the active
-                // backend feature is required to interpret the connection
-                // string. Surface an explicit, typed message rather than a
-                // confusing path-confinement failure.
-                return Err(format!(
-                    "backend `postgres` (connection_string={connection_string}) must be \
-                     opened via the `engram-backend-pgvector` recipe \
-                     (engram_backend_pgvector::open); EngramProvider::open is sqlite-default"
-                ));
-            }
-        };
+        let (storage_path, storage_provider, helixdb, pgvector_connection_string) =
+            match profile.backend {
+                BackendProfile::Sqlite { data_root } => (
+                    PathBuf::from(data_root),
+                    Some(StorageProvider::Sqlite),
+                    None,
+                    None,
+                ),
+                BackendProfile::Postgres { connection_string } => {
+                    let cache = path
+                        .parent()
+                        .unwrap_or(Path::new("."))
+                        .join("engram-pg-cache");
+                    (
+                        cache,
+                        Some(StorageProvider::Pgvector),
+                        None,
+                        Some(connection_string),
+                    )
+                }
+                BackendProfile::Helixdb { data_root, config } => (
+                    PathBuf::from(data_root),
+                    Some(StorageProvider::Helixdb),
+                    Some(config),
+                    None,
+                ),
+            };
 
         // trusted_root defaults to the parent of data_root so path confinement
         // holds; the parent must exist (validate() checks this).
         let trusted_root = profile.trusted_root.unwrap_or_else(|| {
             storage_path
                 .parent()
-                .map(Path::to_path_buf)
-                .unwrap_or_else(|| storage_path.clone())
+                .filter(|p| !p.as_os_str().is_empty())
+                .unwrap_or(Path::new("."))
+                .to_path_buf()
         });
 
         let embedding_provider = profile.embedding_provider.unwrap_or_else(default_embedding);
@@ -418,6 +485,8 @@ impl EngramConfig {
             ));
         }
         Ok(Self {
+            storage_provider,
+            helixdb,
             storage_path,
             trusted_root,
             scope_policy: profile.scope_policy.unwrap_or(ScopeMappingStrategy::Strict),
@@ -429,7 +498,7 @@ impl EngramConfig {
             sqlite_storage_layout: profile
                 .sqlite_storage_layout
                 .unwrap_or(SqliteStorageLayout::MultiFileDirectory),
-            pgvector_connection_string: None,
+            pgvector_connection_string,
             recall_fusion: profile.recall_fusion,
             enable_vector: profile.enable_vector.unwrap_or(true),
             rebuild_vectors: profile.rebuild_vectors.unwrap_or(false),
@@ -447,6 +516,14 @@ impl EngramConfig {
         // Check storage_path is not empty
         if self.storage_path.as_os_str().is_empty() {
             return Err("storage_path cannot be empty".to_string());
+        }
+        if self
+            .storage_path
+            .components()
+            .chain(self.trusted_root.components())
+            .any(|part| matches!(part, std::path::Component::ParentDir))
+        {
+            return Err("storage paths must not contain parent traversal".into());
         }
 
         // Validate the single-file layout's file_name before any path is built
@@ -469,23 +546,39 @@ impl EngramConfig {
         let storage_path = match std::fs::canonicalize(&self.storage_path) {
             Ok(path) => path,
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
-                // Path doesn't exist yet — check parent directory
-                let parent = match self.storage_path.parent() {
-                    Some(p) => p,
-                    None => return Err("storage_path has no parent directory".to_string()),
+                let absolute = if self.storage_path.is_absolute() {
+                    self.storage_path.clone()
+                } else {
+                    std::env::current_dir()
+                        .map_err(|_| "working directory unavailable")?
+                        .join(&self.storage_path)
                 };
-
-                // Resolve parent to canonical form
-                let parent_canonical = match std::fs::canonicalize(parent) {
-                    Ok(p) => p,
-                    Err(e) => return Err(format!("cannot resolve storage_path parent: {}", e)),
-                };
-
-                // Simulate the full path by joining parent with filename
-                match self.storage_path.file_name() {
-                    Some(filename) => parent_canonical.join(filename),
-                    None => return Err("storage_path has no file name".to_string()),
+                let mut existing = absolute.as_path();
+                let mut missing = Vec::new();
+                while !existing.exists() {
+                    if std::fs::symlink_metadata(existing).is_ok() {
+                        return Err("storage path contains a dangling symlink".into());
+                    }
+                    missing.push(
+                        existing
+                            .file_name()
+                            .ok_or("storage path has no name")?
+                            .to_owned(),
+                    );
+                    existing = existing
+                        .parent()
+                        .ok_or("storage path has no existing ancestor")?;
                 }
+                if !existing.is_dir() {
+                    return Err("storage ancestor is not a directory".into());
+                }
+                let mut resolved = existing
+                    .canonicalize()
+                    .map_err(|_| "storage ancestor unavailable")?;
+                for part in missing.iter().rev() {
+                    resolved.push(part);
+                }
+                resolved
             }
             Err(e) => return Err(format!("cannot resolve storage_path: {}", e)),
         };

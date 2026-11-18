@@ -1,0 +1,33 @@
+[package]
+name = "engram-backend-provider"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+engram-integration = { path = "../../core/integration", version = "0.1.0", default-features = false }
+engram-domain = { path = "../../core/domain", version = "0.1.0" }
+engram-runtime = { path = "../../core/runtime", version = "0.1.0" }
+engram-backend-sqlite = { path = "../sqlite", version = "0.1.0", optional = true }
+engram-backend-pgvector = { path = "../pgvector", version = "0.1.0", optional = true, default-features = false }
+engram-backend-helixdb = { path = "../helixdb", version = "0.1.0", optional = true, default-features = false }
+engram-store-helixdb = { path = "../../adapters/helixdb", version = "0.1.0", optional = true, default-features = false }
+url = "2"
+uuid = { version = "1", features = ["v4"], optional = true }
+
+[dev-dependencies]
+tempfile = "3"
+futures.workspace = true
+serde_json.workspace = true
+
+[features]
+default = ["sqlite"]
+sqlite = ["dep:engram-backend-sqlite"]
+pgvector = ["dep:engram-backend-pgvector"]
+helixdb-service = ["dep:engram-backend-helixdb", "dep:engram-store-helixdb", "engram-backend-helixdb/service", "engram-store-helixdb/service"]
+helixdb-embedded = ["dep:engram-backend-helixdb", "dep:engram-store-helixdb", "engram-backend-helixdb/embedded", "engram-store-helixdb/embedded"]
+helixdb = ["helixdb-service", "helixdb-embedded"]
+fastembed = ["engram-integration/fastembed", "engram-backend-pgvector?/fastembed"]
+http-embeddings = ["engram-integration/http-embeddings", "engram-backend-pgvector?/http-embeddings"]
+test-controls = ["dep:engram-backend-helixdb", "dep:engram-store-helixdb", "engram-backend-helixdb/test-controls", "engram-store-helixdb/test-controls", "dep:uuid"]

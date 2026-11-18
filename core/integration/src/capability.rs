@@ -7,6 +7,9 @@
 use engram_domain::{CapabilityReason, CapabilityState};
 use serde::{Deserialize, Serialize};
 
+/// Existing unsupported-error shape, with a stable selected-build diagnostic.
+pub const BUILD_FEATURE_MISSING: &str = "BuildFeatureMissing";
+
 /// Capability report for all feature families.
 ///
 /// Applications use this report to discover which features are safe to enable

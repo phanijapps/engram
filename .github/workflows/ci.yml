@@ -194,14 +194,26 @@ jobs:
     name: TypeScript
     runs-on: ubuntu-latest
     env:
-      TMPDIR: ${{ runner.temp }}/engram-${{ github.run_id }}-${{ github.run_attempt }}-typescript
       CARGO_BUILD_JOBS: "2"
       CARGO_PROFILE_DEV_DEBUG: "0"
       CARGO_PROFILE_TEST_DEBUG: "0"
     steps:
       - uses: actions/checkout@v4
-      - name: Prepare owned temporary root
-        run: mkdir -p "$TMPDIR"
+      - name: Prepare fresh invocation-owned temporary paths
+        shell: bash
+        run: |
+          python3 - <<'PY_TEMP'
+          import json, os, tempfile
+          from pathlib import Path
+          parent=Path(os.environ['RUNNER_TEMP']).resolve(strict=True)
+          root=Path(tempfile.mkdtemp(prefix='engram-typescript-',dir=parent))
+          values={'TMPDIR':str(root),'TEMP':str(root),'TMP':str(root)}
+          if any('\n' in value or '\r' in value for value in values.values()):
+              raise SystemExit('invalid native temporary path')
+          with open(os.environ['GITHUB_ENV'],'a',encoding='utf-8') as stream:
+              for name,value in values.items():stream.write(name+'='+value+'\n')
+          print(json.dumps({'owned_temporary_paths':values}))
+          PY_TEMP
       - uses: dtolnay/rust-toolchain@1.88.0
       - name: Enable pnpm
         run: corepack enable
@@ -245,7 +257,6 @@ jobs:
     name: Provider inventory and omission controls (not workflow execution)
     runs-on: ubuntu-latest
     env:
-      TMPDIR: ${{ runner.temp }}/engram-provider-controls
       CARGO_BUILD_JOBS: "2"
       CARGO_PROFILE_DEV_DEBUG: "0"
       CARGO_PROFILE_TEST_DEBUG: "0"
@@ -254,12 +265,25 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+      - name: Prepare fresh invocation-owned temporary paths
+        shell: bash
+        run: |
+          python - <<'PY_TEMP'
+          import json, os, tempfile
+          from pathlib import Path
+          parent=Path(os.environ['RUNNER_TEMP']).resolve(strict=True)
+          root=Path(tempfile.mkdtemp(prefix='engram-provider-controls-',dir=parent))
+          values={'TMPDIR':str(root),'TEMP':str(root),'TMP':str(root)}
+          if any('\n' in value or '\r' in value for value in values.values()):
+              raise SystemExit('invalid native temporary path')
+          with open(os.environ['GITHUB_ENV'],'a',encoding='utf-8') as stream:
+              for name,value in values.items():stream.write(name+'='+value+'\n')
+          print(json.dumps({'owned_temporary_paths':values}))
+          PY_TEMP
       - uses: dtolnay/rust-toolchain@1.88.0
       - uses: actions/setup-node@v4
         with:
           node-version: "22"
-      - name: Prepare owned temporary root
-        run: mkdir -p "$TMPDIR"
       - name: Pure inventory and negative harness controls
         run: |
           python3 -m unittest tools.ci.tests.test_provider_e2e_controls tools.ci.tests.test_bound_code_matrix_controls tools.ci.tests.test_provider_builds
@@ -295,7 +319,6 @@ jobs:
       run:
         shell: bash
     env:
-      TMPDIR: ${{ runner.temp }}/engram-provider-${{ matrix.target }}-${{ matrix.mode }}
       CARGO_BUILD_JOBS: "2"
       CARGO_PROFILE_DEV_DEBUG: "0"
       CARGO_PROFILE_TEST_DEBUG: "0"
@@ -309,7 +332,6 @@ jobs:
       EXPECTED_RECORD_ARTIFACT_ID: ${{ inputs.expected_record_artifact_id }}
       EXPECTED_RECORD_PATH: ${{ inputs.expected_record_path }}
       EXPECTED_RECORD_SHA256: ${{ inputs.expected_record_sha256 }}
-      EXPECTED_RECORD_ROOT: ${{ runner.temp }}/provider-build-record-${{ matrix.target }}-${{ matrix.mode }}
       PROVIDER_INPUT_ROOT: ${{ github.workspace }}/runs/ci-provider-inputs/${{ github.run_id }}/${{ github.run_attempt }}/${{ matrix.target }}/${{ matrix.mode }}
       PROVIDER_OUTPUT: runs/ci-provider-e2e/${{ github.run_id }}/${{ github.run_attempt }}/${{ matrix.target }}/${{ matrix.mode }}
       PROVIDER_SERVICE_ROOT: runs/ci-provider-server/${{ github.run_id }}/${{ github.run_attempt }}/${{ matrix.target }}
@@ -318,6 +340,21 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+      - name: Prepare fresh invocation-owned temporary paths
+        shell: bash
+        run: |
+          python - <<'PY_TEMP'
+          import json, os, tempfile
+          from pathlib import Path
+          parent=Path(os.environ['RUNNER_TEMP']).resolve(strict=True)
+          root=Path(tempfile.mkdtemp(prefix='engram-provider-',dir=parent))
+          values={'TMPDIR':str(root),'TEMP':str(root),'TMP':str(root),'EXPECTED_RECORD_ROOT':str(root/'expected-build-record')}
+          if any('\n' in value or '\r' in value for value in values.values()):
+              raise SystemExit('invalid native temporary path')
+          with open(os.environ['GITHUB_ENV'],'a',encoding='utf-8') as stream:
+              for name,value in values.items():stream.write(name+'='+value+'\n')
+          print(json.dumps({'owned_temporary_paths':values}))
+          PY_TEMP
       - uses: actions/setup-node@v4
         with:
           node-version: "22"
@@ -533,15 +570,11 @@ jobs:
       run:
         shell: bash
     env:
-      TMPDIR: ${{ runner.temp }}/engram-native-${{ github.run_id }}-${{ github.run_attempt }}-${{ matrix.target }}
-      TEMP: ${{ runner.temp }}/engram-native-${{ github.run_id }}-${{ github.run_attempt }}-${{ matrix.target }}
-      TMP: ${{ runner.temp }}/engram-native-${{ github.run_id }}-${{ github.run_attempt }}-${{ matrix.target }}
       CARGO_BUILD_JOBS: "2"
       CARGO_PROFILE_DEV_DEBUG: "0"
       CARGO_PROFILE_TEST_DEBUG: "0"
       NATIVE_TARGET: ${{ matrix.target }}
       NATIVE_OUTPUT: runs/network/native-preflight/${{ matrix.target }}
-      NATIVE_COMPACT_OUTPUT: ${{ runner.temp }}/engram-native-${{ github.run_id }}-${{ github.run_attempt }}-${{ matrix.target }}/compact
     steps:
       - uses: actions/checkout@v4
         with:
@@ -549,6 +582,22 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+      - id: owned_paths
+        name: Prepare fresh invocation-owned temporary paths
+        shell: bash
+        run: |
+          python - <<'PY_TEMP'
+          import json, os, tempfile
+          from pathlib import Path
+          parent=Path(os.environ['RUNNER_TEMP']).resolve(strict=True)
+          root=Path(tempfile.mkdtemp(prefix='engram-native-',dir=parent))
+          values={'TMPDIR':str(root),'TEMP':str(root),'TMP':str(root),'NATIVE_COMPACT_OUTPUT':str(root/'compact')}
+          if any('\n' in value or '\r' in value for value in values.values()):
+              raise SystemExit('invalid native temporary path')
+          with open(os.environ['GITHUB_ENV'],'a',encoding='utf-8') as stream:
+              for name,value in values.items():stream.write(name+'='+value+'\n')
+          print(json.dumps({'owned_temporary_paths':values}))
+          PY_TEMP
       - uses: actions/setup-node@v4
         with:
           node-version: "22"
@@ -610,7 +659,7 @@ jobs:
             "$PYTHON_NATIVE" tools/ci/check_storage_network_policy.py --native-preflight --acquisition-scope github-hosted-disposable-readiness --target "$NATIVE_TARGET" --output "$NATIVE_OUTPUT"
           fi
       - name: Retain only compact actual native readiness observations
-        if: always() && runner.os != 'macOS'
+        if: always() && steps.owned_paths.outcome == 'success' && runner.os != 'macOS'
         uses: actions/upload-artifact@v4
         with:
           name: native-readiness-${{ matrix.target }}-${{ github.run_id }}-${{ github.run_attempt }}
@@ -620,7 +669,7 @@ jobs:
             ${{ env.NATIVE_OUTPUT }}/*/operations.jsonl
             ${{ env.NATIVE_OUTPUT }}/*/raw.log
       - name: Retain only verified runner-owned Mac compact handoff
-        if: always() && runner.os == 'macOS'
+        if: always() && steps.owned_paths.outcome == 'success' && runner.os == 'macOS'
         uses: actions/upload-artifact@v4
         with:
           name: native-readiness-${{ matrix.target }}-${{ github.run_id }}-${{ github.run_attempt }}

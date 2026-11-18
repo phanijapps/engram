@@ -1,0 +1,1134 @@
+{
+  "schema": "engram.provider-operations.v1",
+  "note": "Inventory and canonical request catalogue are not execution evidence. Actual per-host typed arguments/assertions are required in bound request plans.",
+  "operations": [
+    {
+      "operation": "memory.write",
+      "capability": "memory",
+      "native": {
+        "getter": "requireMemoryApi",
+        "method": "writeJson"
+      },
+      "mcp_tool": "write_memory",
+      "oneshot": {
+        "applicable": false,
+        "reason": "No corresponding operation in the existing one-shot command contract; stdio/native/Rust remain required."
+      },
+      "assertions_required": [
+        "selected_provider",
+        "full_scope",
+        "expected_outcome"
+      ],
+      "expected_error_reason_required": true
+    },
+    {
+      "operation": "memory.retrieve",
+      "capability": "memory",
+      "native": {
+        "getter": "requireMemoryApi",
+        "method": "searchJson"
+      },
+      "mcp_tool": "recall",
+      "oneshot": {
+        "applicable": false,
+        "reason": "No corresponding operation in the existing one-shot command contract; stdio/native/Rust remain required."
+      },
+      "assertions_required": [
+        "selected_provider",
+        "full_scope",
+        "expected_outcome"
+      ],
+      "expected_error_reason_required": true
+    },
+    {
+      "operation": "memory.forget",
+      "capability": "memory",
+      "native": {
+        "getter": "requireMemoryApi",
+        "method": "forgetJson"
+      },
+      "mcp_tool": "forget",
+      "oneshot": {
+        "applicable": false,
+        "reason": "No corresponding operation in the existing one-shot command contract; stdio/native/Rust remain required."
+      },
+      "assertions_required": [
+        "selected_provider",
+        "full_scope",
+        "expected_outcome"
+      ],
+      "expected_error_reason_required": true
+    },
+    {
+      "operation": "batch.ingest",
+      "capability": "atomic_batch",
+      "native": {
+        "getter": "requireBatchApi",
+        "method": "ingestJson"
+      },
+      "mcp_tool": "store_knowledge",
+      "oneshot": {
+        "applicable": false,
+        "reason": "No corresponding operation in the existing one-shot command contract; stdio/native/Rust remain required."
+      },
+      "assertions_required": [
+        "selected_provider",
+        "full_scope",
+        "expected_outcome"
+      ],
+      "expected_error_reason_required": true
+    },
+    {
+      "operation": "knowledge.put_source",
+      "capability": "knowledge",
+      "native": {
+        "getter": "requireBatchApi",
+        "method": "ingestJson"
+      },
+      "mcp_tool": "store_knowledge",
+      "oneshot": {
+        "applicable": false,
+        "reason": "No corresponding operation in the existing one-shot command contract; stdio/native/Rust remain required."
+      },
+      "assertions_required": [
+        "selected_provider",
+        "full_scope",
+        "expected_outcome"
+      ],
+      "expected_error_reason_required": true
+    },
+    {
+      "operation": "knowledge.put_document",
+      "capability": "knowledge",
+      "native": {
+        "getter": "requireBatchApi",
+        "method": "ingestJson"
+      },
+      "mcp_tool": "store_knowledge",
+      "oneshot": {
+        "applicable": false,
+        "reason": "No corresponding operation in the existing one-shot command contract; stdio/native/Rust remain required."
+      },
+      "assertions_required": [
+        "selected_provider",
+        "full_scope",
+        "expected_outcome"
+      ],
+      "expected_error_reason_required": true
+    },
+    {
+      "operation": "knowledge.put_chunk",
+      "capability": "knowledge",
+      "native": {
+        "getter": "requireBatchApi",
+        "method": "ingestJson"
+      },
+      "mcp_tool": "store_knowledge",
+      "oneshot": {
+        "applicable": false,
+        "reason": "No corresponding operation in the existing one-shot command contract; stdio/native/Rust remain required."
+      },
+      "assertions_required": [
+        "selected_provider",
+        "full_scope",
+        "expected_outcome"
+      ],
+      "expected_error_reason_required": true
+    },
+    {
+      "operation": "knowledge.put_entity",
+      "capability": "knowledge",
+      "native": {
+        "getter": "requireGraphApi",
+        "method": "putEntityJson"
+      },
+      "mcp_tool": "put_entity",
+      "oneshot": {
+        "applicable": false,
+        "reason": "No corresponding operation in the existing one-shot command contract; stdio/native/Rust remain required."
+      },
+      "assertions_required": [
+        "selected_provider",
+        "full_scope",
+        "expected_outcome"
+      ],
+      "expected_error_reason_required": true
+    },
+    {
+      "operation": "knowledge.put_relationship",
+      "capability": "knowledge",
+      "native": {
+        "getter": "requireGraphApi",
+        "method": "putRelationshipJson"
+      },
+      "mcp_tool": "put_relationship",
+      "oneshot": {
+        "applicable": false,
+        "reason": "No corresponding operation in the existing one-shot command contract; stdio/native/Rust remain required."
+      },
+      "assertions_required": [
+        "selected_provider",
+        "full_scope",
+        "expected_outcome"
+      ],
+      "expected_error_reason_required": true
+    },
+    {
+      "operation": "knowledge.get_entity",
+      "capability": "knowledge",
+      "native": {
+        "getter": "requireGraphApi",
+        "method": "getEntityJson"
+      },
+      "mcp_tool": "resolve_entity",
+      "oneshot": {
+        "applicable": false,
+        "reason": "No corresponding operation in the existing one-shot command contract; stdio/native/Rust remain required."
+      },
+      "assertions_required": [
+        "selected_provider",
+        "full_scope",
+        "expected_outcome"
+      ],
+      "expected_error_reason_required": true
+    },
+    {
+      "operation": "graph.neighbors",
+      "capability": "graph",
+      "native": {
+        "getter": "requireGraphApi",
+        "method": "neighborsJson"
+      },
+      "mcp_tool": "graph_neighbors",
+      "oneshot": {
+        "applicable": false,
+        "reason": "No corresponding operation in the existing one-shot command contract; stdio/native/Rust remain required."
+      },
+      "assertions_required": [
+        "selected_provider",
+        "full_scope",
+        "expected_outcome"
+      ],
+      "expected_error_reason_required": true
+    },
+    {
+      "operation": "identity.resolve_entity",
+      "capability": "entity_identity",
+      "native": {
+        "getter": "requireGraphApi",
+        "method": "resolveOrPutEntityJson"
+      },
+      "mcp_tool": "identity_resolve_or_put_entity",
+      "oneshot": {
+        "applicable": false,
+        "reason": "No corresponding operation in the existing one-shot command contract; stdio/native/Rust remain required."
+      },
+      "assertions_required": [
+        "selected_provider",
+        "full_scope",
+        "expected_outcome"
+      ],
+      "expected_error_reason_required": true
+    },
+    {
+      "operation": "identity.resolve_relationship",
+      "capability": "entity_identity",
+      "native": {
+        "getter": "requireGraphApi",
+        "method": "resolveOrPutRelationshipJson"
+      },
+      "mcp_tool": "identity_resolve_or_put_relationship",
+      "oneshot": {
+        "applicable": false,
+        "reason": "No corresponding operation in the existing one-shot command contract; stdio/native/Rust remain required."
+      },
+      "assertions_required": [
+        "selected_provider",
+        "full_scope",
+        "expected_outcome"
+      ],
+      "expected_error_reason_required": true
+    },
+    {
+      "operation": "ontology.put",
+      "capability": "ontology",
+      "native": {
+        "getter": "requireOntologyApi",
+        "method": "putOntologyJson"
+      },
+      "mcp_tool": "ontology_put",
+      "oneshot": {
+        "applicable": true,
+        "command": "pack",
+        "reason": "Pinned pack structural install invokes this canonical vocabulary write; readback assertions required, not launch-config display."
+      },
+      "assertions_required": [
+        "selected_provider",
+        "full_scope",
+        "expected_outcome"
+      ],
+      "expected_error_reason_required": true
+    },
+    {
+      "operation": "ontology.put_class",
+      "capability": "ontology",
+      "native": {
+        "getter": "requireOntologyApi",
+        "method": "putClassJson"
+      },
+      "mcp_tool": "ontology_put_class",
+      "oneshot": {
+        "applicable": true,
+        "command": "pack",
+        "reason": "Pinned pack structural install invokes this canonical vocabulary write; readback assertions required, not launch-config display."
+      },
+      "assertions_required": [
+        "selected_provider",
+        "full_scope",
+        "expected_outcome"
+      ],
+      "expected_error_reason_required": true
+    },
+    {
+      "operation": "ontology.put_property",
+      "capability": "ontology",
+      "native": {
+        "getter": "requireOntologyApi",
+        "method": "putPropertyJson"
+      },
+      "mcp_tool": "ontology_put_property",
+      "oneshot": {
+        "applicable": true,
+        "command": "pack",
+        "reason": "Pinned pack structural install invokes this canonical vocabulary write; readback assertions required, not launch-config display."
+      },
+      "assertions_required": [
+        "selected_provider",
+        "full_scope",
+        "expected_outcome"
+      ],
+      "expected_error_reason_required": true
+    },
+    {
+      "operation": "ontology.put_axiom",
+      "capability": "ontology",
+      "native": {
+        "getter": "requireOntologyApi",
+        "method": "putAxiomJson"
+      },
+      "mcp_tool": "ontology_put_axiom",
+      "oneshot": {
+        "applicable": false,
+        "reason": "No corresponding operation in the existing one-shot command contract; stdio/native/Rust remain required."
+      },
+      "assertions_required": [
+        "selected_provider",
+        "full_scope",
+        "expected_outcome"
+      ],
+      "expected_error_reason_required": true
+    },
+    {
+      "operation": "ontology.get",
+      "capability": "ontology",
+      "native": {
+        "getter": "requireOntologyApi",
+        "method": "getOntologyJson"
+      },
+      "mcp_tool": "ontology_get",
+      "oneshot": {
+        "applicable": false,
+        "reason": "No corresponding operation in the existing one-shot command contract; stdio/native/Rust remain required."
+      },
+      "assertions_required": [
+        "selected_provider",
+        "full_scope",
+        "expected_outcome"
+      ],
+      "expected_error_reason_required": true
+    },
+    {
+      "operation": "ontology.validate",
+      "capability": "ontology",
+      "native": {
+        "getter": "requireOntologyApi",
+        "method": "validateGraphJson"
+      },
+      "mcp_tool": "ontology_validate_graph",
+      "oneshot": {
+        "applicable": false,
+        "reason": "No corresponding operation in the existing one-shot command contract; stdio/native/Rust remain required."
+      },
+      "assertions_required": [
+        "selected_provider",
+        "full_scope",
+        "expected_outcome"
+      ],
+      "expected_error_reason_required": true
+    },
+    {
+      "operation": "taxonomy.put_scheme",
+      "capability": "taxonomy",
+      "native": {
+        "getter": "requireTaxonomyApi",
+        "method": "putConceptSchemeJson"
+      },
+      "mcp_tool": "taxonomy_put_scheme",
+      "oneshot": {
+        "applicable": true,
+        "command": "pack",
+        "reason": "Pinned pack structural install invokes this canonical vocabulary write; readback assertions required, not launch-config display."
+      },
+      "assertions_required": [
+        "selected_provider",
+        "full_scope",
+        "expected_outcome"
+      ],
+      "expected_error_reason_required": true
+    },
+    {
+      "operation": "taxonomy.get_scheme",
+      "capability": "taxonomy",
+      "native": {
+        "getter": "requireTaxonomyApi",
+        "method": "getConceptSchemeJson"
+      },
+      "mcp_tool": "taxonomy_get_scheme",
+      "oneshot": {
+        "applicable": false,
+        "reason": "No corresponding operation in the existing one-shot command contract; stdio/native/Rust remain required."
+      },
+      "assertions_required": [
+        "selected_provider",
+        "full_scope",
+        "expected_outcome"
+      ],
+      "expected_error_reason_required": true
+    },
+    {
+      "operation": "taxonomy.put_concept",
+      "capability": "taxonomy",
+      "native": {
+        "getter": "requireTaxonomyApi",
+        "method": "putConceptJson"
+      },
+      "mcp_tool": "taxonomy_put_concept",
+      "oneshot": {
+        "applicable": true,
+        "command": "pack",
+        "reason": "Pinned pack structural install invokes this canonical vocabulary write; readback assertions required, not launch-config display."
+      },
+      "assertions_required": [
+        "selected_provider",
+        "full_scope",
+        "expected_outcome"
+      ],
+      "expected_error_reason_required": true
+    },
+    {
+      "operation": "taxonomy.put_relation",
+      "capability": "taxonomy",
+      "native": {
+        "getter": "requireTaxonomyApi",
+        "method": "putConceptRelationJson"
+      },
+      "mcp_tool": "taxonomy_put_relation",
+      "oneshot": {
+        "applicable": true,
+        "command": "pack",
+        "reason": "Pinned pack structural install invokes this canonical vocabulary write; readback assertions required, not launch-config display."
+      },
+      "assertions_required": [
+        "selected_provider",
+        "full_scope",
+        "expected_outcome"
+      ],
+      "expected_error_reason_required": true
+    },
+    {
+      "operation": "taxonomy.list",
+      "capability": "taxonomy",
+      "native": {
+        "getter": "requireTaxonomyApi",
+        "method": "listConceptsJson"
+      },
+      "mcp_tool": "taxonomy_list_concepts",
+      "oneshot": {
+        "applicable": false,
+        "reason": "No corresponding operation in the existing one-shot command contract; stdio/native/Rust remain required."
+      },
+      "assertions_required": [
+        "selected_provider",
+        "full_scope",
+        "expected_outcome"
+      ],
+      "expected_error_reason_required": true
+    },
+    {
+      "operation": "beliefs.put",
+      "capability": "beliefs",
+      "native": {
+        "getter": "requireBeliefsApi",
+        "method": "upsertBeliefJson"
+      },
+      "mcp_tool": "belief_put",
+      "oneshot": {
+        "applicable": false,
+        "reason": "No corresponding operation in the existing one-shot command contract; stdio/native/Rust remain required."
+      },
+      "assertions_required": [
+        "selected_provider",
+        "full_scope",
+        "expected_outcome"
+      ],
+      "expected_error_reason_required": true
+    },
+    {
+      "operation": "beliefs.get",
+      "capability": "beliefs",
+      "native": {
+        "getter": "requireBeliefsApi",
+        "method": "getBeliefJson"
+      },
+      "mcp_tool": "belief_get",
+      "oneshot": {
+        "applicable": false,
+        "reason": "No corresponding operation in the existing one-shot command contract; stdio/native/Rust remain required."
+      },
+      "assertions_required": [
+        "selected_provider",
+        "full_scope",
+        "expected_outcome"
+      ],
+      "expected_error_reason_required": true
+    },
+    {
+      "operation": "beliefs.retract",
+      "capability": "beliefs",
+      "native": {
+        "getter": "requireBeliefsApi",
+        "method": "retractBeliefJson"
+      },
+      "mcp_tool": "belief_retract",
+      "oneshot": {
+        "applicable": false,
+        "reason": "No corresponding operation in the existing one-shot command contract; stdio/native/Rust remain required."
+      },
+      "assertions_required": [
+        "selected_provider",
+        "full_scope",
+        "expected_outcome"
+      ],
+      "expected_error_reason_required": true
+    },
+    {
+      "operation": "beliefs.stale",
+      "capability": "beliefs",
+      "native": {
+        "getter": "requireBeliefsApi",
+        "method": "listStaleBeliefsJson"
+      },
+      "mcp_tool": "belief_stale_list",
+      "oneshot": {
+        "applicable": false,
+        "reason": "No corresponding operation in the existing one-shot command contract; stdio/native/Rust remain required."
+      },
+      "assertions_required": [
+        "selected_provider",
+        "full_scope",
+        "expected_outcome"
+      ],
+      "expected_error_reason_required": true
+    },
+    {
+      "operation": "beliefs.contradictions",
+      "capability": "beliefs",
+      "native": {
+        "getter": "requireBeliefsApi",
+        "method": "listContradictionsJson"
+      },
+      "mcp_tool": "contradiction_list",
+      "oneshot": {
+        "applicable": false,
+        "reason": "No corresponding operation in the existing one-shot command contract; stdio/native/Rust remain required."
+      },
+      "assertions_required": [
+        "selected_provider",
+        "full_scope",
+        "expected_outcome"
+      ],
+      "expected_error_reason_required": true
+    },
+    {
+      "operation": "hierarchy.path",
+      "capability": "hierarchy",
+      "native": {
+        "getter": "requireHierarchyApi",
+        "method": "pathForJson"
+      },
+      "mcp_tool": "hierarchy_path",
+      "oneshot": {
+        "applicable": false,
+        "reason": "No corresponding operation in the existing one-shot command contract; stdio/native/Rust remain required."
+      },
+      "assertions_required": [
+        "selected_provider",
+        "full_scope",
+        "expected_outcome"
+      ],
+      "expected_error_reason_required": true
+    },
+    {
+      "operation": "retrieval.recall",
+      "capability": "unified_recall",
+      "native": {
+        "getter": "requireRecallApi",
+        "method": "recallJson"
+      },
+      "mcp_tool": "recall",
+      "oneshot": {
+        "applicable": true,
+        "command": "recall",
+        "reason": "Existing one-shot recall delegates selected provider."
+      },
+      "assertions_required": [
+        "selected_provider",
+        "full_scope",
+        "expected_outcome"
+      ],
+      "expected_error_reason_required": true
+    },
+    {
+      "operation": "procedures.put",
+      "capability": "procedures",
+      "native": {
+        "getter": "requireProceduresApi",
+        "method": "upsertJson"
+      },
+      "mcp_tool": "procedure_put",
+      "oneshot": {
+        "applicable": false,
+        "reason": "No corresponding operation in the existing one-shot command contract; stdio/native/Rust remain required."
+      },
+      "assertions_required": [
+        "selected_provider",
+        "full_scope",
+        "expected_outcome"
+      ],
+      "expected_error_reason_required": true
+    },
+    {
+      "operation": "procedures.list",
+      "capability": "procedures",
+      "native": {
+        "getter": "requireProceduresApi",
+        "method": "listJson"
+      },
+      "mcp_tool": "procedure_list",
+      "oneshot": {
+        "applicable": false,
+        "reason": "No corresponding operation in the existing one-shot command contract; stdio/native/Rust remain required."
+      },
+      "assertions_required": [
+        "selected_provider",
+        "full_scope",
+        "expected_outcome"
+      ],
+      "expected_error_reason_required": true
+    },
+    {
+      "operation": "procedures.increment_success",
+      "capability": "procedures",
+      "native": {
+        "getter": "requireProceduresApi",
+        "method": "incrementSuccessJson"
+      },
+      "mcp_tool": "procedure_increment",
+      "oneshot": {
+        "applicable": false,
+        "reason": "No corresponding operation in the existing one-shot command contract; stdio/native/Rust remain required."
+      },
+      "assertions_required": [
+        "selected_provider",
+        "full_scope",
+        "expected_outcome"
+      ],
+      "expected_error_reason_required": true
+    },
+    {
+      "operation": "proposals.submit",
+      "capability": "proposals",
+      "native": {
+        "getter": "requireProposalsApi",
+        "method": "submitJson"
+      },
+      "mcp_tool": "proposal_submit",
+      "oneshot": {
+        "applicable": false,
+        "reason": "No corresponding operation in the existing one-shot command contract; stdio/native/Rust remain required."
+      },
+      "assertions_required": [
+        "selected_provider",
+        "full_scope",
+        "expected_outcome"
+      ],
+      "expected_error_reason_required": true
+    },
+    {
+      "operation": "proposals.list",
+      "capability": "proposals",
+      "native": {
+        "getter": "requireProposalsApi",
+        "method": "listJson"
+      },
+      "mcp_tool": "proposal_list",
+      "oneshot": {
+        "applicable": false,
+        "reason": "No corresponding operation in the existing one-shot command contract; stdio/native/Rust remain required."
+      },
+      "assertions_required": [
+        "selected_provider",
+        "full_scope",
+        "expected_outcome"
+      ],
+      "expected_error_reason_required": true
+    },
+    {
+      "operation": "proposals.approve",
+      "capability": "proposals",
+      "native": {
+        "getter": "requireProposalsApi",
+        "method": "approveJson"
+      },
+      "mcp_tool": "proposal_approve",
+      "oneshot": {
+        "applicable": false,
+        "reason": "No corresponding operation in the existing one-shot command contract; stdio/native/Rust remain required."
+      },
+      "assertions_required": [
+        "selected_provider",
+        "full_scope",
+        "expected_outcome"
+      ],
+      "expected_error_reason_required": true
+    },
+    {
+      "operation": "proposals.reject",
+      "capability": "proposals",
+      "native": {
+        "getter": "requireProposalsApi",
+        "method": "rejectJson"
+      },
+      "mcp_tool": "proposal_reject",
+      "oneshot": {
+        "applicable": false,
+        "reason": "No corresponding operation in the existing one-shot command contract; stdio/native/Rust remain required."
+      },
+      "assertions_required": [
+        "selected_provider",
+        "full_scope",
+        "expected_outcome"
+      ],
+      "expected_error_reason_required": true
+    },
+    {
+      "operation": "outcomes.report",
+      "capability": "outcomes",
+      "native": {
+        "getter": "requireOutcomesApi",
+        "method": "reportOutcomeJson"
+      },
+      "mcp_tool": "report_outcome",
+      "oneshot": {
+        "applicable": false,
+        "reason": "No corresponding operation in the existing one-shot command contract; stdio/native/Rust remain required."
+      },
+      "assertions_required": [
+        "selected_provider",
+        "full_scope",
+        "expected_outcome"
+      ],
+      "expected_error_reason_required": true
+    },
+    {
+      "operation": "outcomes.list",
+      "capability": "outcomes",
+      "native": {
+        "getter": "requireOutcomesApi",
+        "method": "listOutcomesJson"
+      },
+      "mcp_tool": "list_outcomes",
+      "oneshot": {
+        "applicable": false,
+        "reason": "No corresponding operation in the existing one-shot command contract; stdio/native/Rust remain required."
+      },
+      "assertions_required": [
+        "selected_provider",
+        "full_scope",
+        "expected_outcome"
+      ],
+      "expected_error_reason_required": true
+    },
+    {
+      "operation": "provenance.for",
+      "capability": "episodes_evidence",
+      "native": {
+        "getter": "requireProvenanceApi",
+        "method": "provenanceForJson"
+      },
+      "mcp_tool": "provenance_for",
+      "oneshot": {
+        "applicable": false,
+        "reason": "No corresponding operation in the existing one-shot command contract; stdio/native/Rust remain required."
+      },
+      "assertions_required": [
+        "selected_provider",
+        "full_scope",
+        "expected_outcome"
+      ],
+      "expected_error_reason_required": true
+    },
+    {
+      "operation": "provenance.evidence",
+      "capability": "episodes_evidence",
+      "native": {
+        "getter": "requireProvenanceApi",
+        "method": "evidenceForJson"
+      },
+      "mcp_tool": "evidence_for",
+      "oneshot": {
+        "applicable": false,
+        "reason": "No corresponding operation in the existing one-shot command contract; stdio/native/Rust remain required."
+      },
+      "assertions_required": [
+        "selected_provider",
+        "full_scope",
+        "expected_outcome"
+      ],
+      "expected_error_reason_required": true
+    },
+    {
+      "operation": "provenance.by_source",
+      "capability": "episodes_evidence",
+      "native": {
+        "getter": "requireProvenanceApi",
+        "method": "provenanceBySourceJson"
+      },
+      "mcp_tool": "provenance_by_source",
+      "oneshot": {
+        "applicable": false,
+        "reason": "No corresponding operation in the existing one-shot command contract; stdio/native/Rust remain required."
+      },
+      "assertions_required": [
+        "selected_provider",
+        "full_scope",
+        "expected_outcome"
+      ],
+      "expected_error_reason_required": true
+    },
+    {
+      "operation": "provenance.by_scope",
+      "capability": "episodes_evidence",
+      "native": {
+        "getter": "requireProvenanceApi",
+        "method": "evidenceByScopeJson"
+      },
+      "mcp_tool": "evidence_by_scope",
+      "oneshot": {
+        "applicable": false,
+        "reason": "No corresponding operation in the existing one-shot command contract; stdio/native/Rust remain required."
+      },
+      "assertions_required": [
+        "selected_provider",
+        "full_scope",
+        "expected_outcome"
+      ],
+      "expected_error_reason_required": true
+    },
+    {
+      "operation": "provenance.attach",
+      "capability": "episodes_evidence",
+      "native": {
+        "getter": "requireProvenanceApi",
+        "method": "attachEvidenceJson"
+      },
+      "mcp_tool": "attach_evidence",
+      "oneshot": {
+        "applicable": false,
+        "reason": "No corresponding operation in the existing one-shot command contract; stdio/native/Rust remain required."
+      },
+      "assertions_required": [
+        "selected_provider",
+        "full_scope",
+        "expected_outcome"
+      ],
+      "expected_error_reason_required": true
+    },
+    {
+      "operation": "consolidation.run",
+      "capability": "consolidation",
+      "native": {
+        "getter": null,
+        "method": "consolidateJson"
+      },
+      "mcp_tool": "consolidate",
+      "oneshot": {
+        "applicable": false,
+        "reason": "No corresponding operation in the existing one-shot command contract; stdio/native/Rust remain required."
+      },
+      "assertions_required": [
+        "selected_provider",
+        "full_scope",
+        "expected_outcome"
+      ],
+      "expected_error_reason_required": true
+    },
+    {
+      "operation": "observability.diagnostics",
+      "capability": "observability",
+      "native": {
+        "getter": "requireObservabilityApi",
+        "method": "diagnosticsJson"
+      },
+      "mcp_tool": "provider_diagnostics",
+      "oneshot": {
+        "applicable": false,
+        "reason": "No corresponding operation in the existing one-shot command contract; stdio/native/Rust remain required."
+      },
+      "assertions_required": [
+        "selected_provider",
+        "full_scope",
+        "expected_outcome"
+      ],
+      "expected_error_reason_required": true
+    },
+    {
+      "operation": "community.overview",
+      "capability": "community_query",
+      "native": {
+        "getter": "requireCommunityQueryApi",
+        "method": "overviewJson"
+      },
+      "mcp_tool": "community_overview",
+      "oneshot": {
+        "applicable": false,
+        "reason": "No corresponding operation in the existing one-shot command contract; stdio/native/Rust remain required."
+      },
+      "assertions_required": [
+        "selected_provider",
+        "full_scope",
+        "expected_outcome"
+      ],
+      "expected_error_reason_required": true
+    },
+    {
+      "operation": "community.member_index",
+      "capability": "community_query",
+      "native": {
+        "getter": "requireCommunityQueryApi",
+        "method": "memberIndexJson"
+      },
+      "mcp_tool": "community_member_index",
+      "oneshot": {
+        "applicable": false,
+        "reason": "No corresponding operation in the existing one-shot command contract; stdio/native/Rust remain required."
+      },
+      "assertions_required": [
+        "selected_provider",
+        "full_scope",
+        "expected_outcome"
+      ],
+      "expected_error_reason_required": true
+    },
+    {
+      "operation": "community.of",
+      "capability": "community_query",
+      "native": {
+        "getter": "requireCommunityQueryApi",
+        "method": "communityOfJson"
+      },
+      "mcp_tool": "community_of",
+      "oneshot": {
+        "applicable": false,
+        "reason": "No corresponding operation in the existing one-shot command contract; stdio/native/Rust remain required."
+      },
+      "assertions_required": [
+        "selected_provider",
+        "full_scope",
+        "expected_outcome"
+      ],
+      "expected_error_reason_required": true
+    },
+    {
+      "operation": "community.scope_counts",
+      "capability": "community_query",
+      "native": {
+        "getter": "requireCommunityQueryApi",
+        "method": "scopeCountsJson"
+      },
+      "mcp_tool": "community_scope_counts",
+      "oneshot": {
+        "applicable": false,
+        "reason": "No corresponding operation in the existing one-shot command contract; stdio/native/Rust remain required."
+      },
+      "assertions_required": [
+        "selected_provider",
+        "full_scope",
+        "expected_outcome"
+      ],
+      "expected_error_reason_required": true
+    },
+    {
+      "operation": "scope.inventory",
+      "capability": "scope_inventory",
+      "native": {
+        "getter": "requireScopeInventoryApi",
+        "method": "inventoryJson"
+      },
+      "mcp_tool": "scope_inventory",
+      "oneshot": {
+        "applicable": false,
+        "reason": "No corresponding operation in the existing one-shot command contract; stdio/native/Rust remain required."
+      },
+      "assertions_required": [
+        "selected_provider",
+        "full_scope",
+        "expected_outcome"
+      ],
+      "expected_error_reason_required": true
+    },
+    {
+      "operation": "archive.export",
+      "capability": "export_import",
+      "native": {
+        "getter": "requireExportImportApi",
+        "method": "exportJson"
+      },
+      "mcp_tool": "archive_export",
+      "oneshot": {
+        "applicable": false,
+        "reason": "No corresponding operation in the existing one-shot command contract; stdio/native/Rust remain required."
+      },
+      "assertions_required": [
+        "selected_provider",
+        "full_scope",
+        "expected_outcome"
+      ],
+      "expected_error_reason_required": true
+    },
+    {
+      "operation": "archive.dry_run",
+      "capability": "migration",
+      "native": {
+        "getter": "requireMigrationApi",
+        "method": "dryRunImportJson"
+      },
+      "mcp_tool": "archive_dry_run",
+      "oneshot": {
+        "applicable": false,
+        "reason": "No corresponding operation in the existing one-shot command contract; stdio/native/Rust remain required."
+      },
+      "assertions_required": [
+        "selected_provider",
+        "full_scope",
+        "expected_outcome"
+      ],
+      "expected_error_reason_required": true
+    },
+    {
+      "operation": "archive.apply",
+      "capability": "migration",
+      "native": {
+        "getter": "requireMigrationApi",
+        "method": "applyImportJson"
+      },
+      "mcp_tool": "archive_apply",
+      "oneshot": {
+        "applicable": false,
+        "reason": "No corresponding operation in the existing one-shot command contract; stdio/native/Rust remain required."
+      },
+      "assertions_required": [
+        "selected_provider",
+        "full_scope",
+        "expected_outcome"
+      ],
+      "expected_error_reason_required": true
+    },
+    {
+      "operation": "maintenance.plan",
+      "capability": "graph_maintenance",
+      "native": {
+        "getter": "requireGraphMaintenanceApi",
+        "method": "buildPlanJson"
+      },
+      "mcp_tool": "build_maintenance_plan",
+      "oneshot": {
+        "applicable": false,
+        "reason": "No corresponding operation in the existing one-shot command contract; stdio/native/Rust remain required."
+      },
+      "assertions_required": [
+        "selected_provider",
+        "full_scope",
+        "expected_outcome"
+      ],
+      "expected_error_reason_required": true
+    },
+    {
+      "operation": "maintenance.apply",
+      "capability": "graph_maintenance",
+      "native": {
+        "getter": "requireGraphMaintenanceApi",
+        "method": "applyPlanJson"
+      },
+      "mcp_tool": "apply_maintenance_plan",
+      "oneshot": {
+        "applicable": false,
+        "reason": "No corresponding operation in the existing one-shot command contract; stdio/native/Rust remain required."
+      },
+      "assertions_required": [
+        "selected_provider",
+        "full_scope",
+        "expected_outcome"
+      ],
+      "expected_error_reason_required": true
+    },
+    {
+      "operation": "maintenance.candidates",
+      "capability": "graph_maintenance",
+      "native": {
+        "getter": "requireGraphMaintenanceApi",
+        "method": "listMaintenanceCandidatesJson"
+      },
+      "mcp_tool": "list_maintenance_candidates",
+      "oneshot": {
+        "applicable": false,
+        "reason": "No corresponding operation in the existing one-shot command contract; stdio/native/Rust remain required."
+      },
+      "assertions_required": [
+        "selected_provider",
+        "full_scope",
+        "expected_outcome"
+      ],
+      "expected_error_reason_required": true
+    },
+    {
+      "operation": "maintenance.health",
+      "capability": "graph_maintenance",
+      "native": {
+        "getter": "requireGraphMaintenanceApi",
+        "method": "graphHealthJson"
+      },
+      "mcp_tool": "graph_health",
+      "oneshot": {
+        "applicable": false,
+        "reason": "No corresponding operation in the existing one-shot command contract; stdio/native/Rust remain required."
+      },
+      "assertions_required": [
+        "selected_provider",
+        "full_scope",
+        "expected_outcome"
+      ],
+      "expected_error_reason_required": true
+    }
+  ]
+}

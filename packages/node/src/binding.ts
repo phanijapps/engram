@@ -147,10 +147,35 @@ export interface NativeRecallApiBinding {
 /** Graph API handle proxy: entity/relationship reads/writes + neighbors. */
 export interface NativeGraphApiBinding {
   close?(): void;
+  resolveOrPutEntityJson?(requestJson: string): string;
+  resolveOrPutRelationshipJson?(relationshipJson: string): string;
   getEntityJson(requestJson: string): string;
   putEntityJson(entityJson: string): string;
   putRelationshipJson(relationshipJson: string): string;
   neighborsJson(requestJson: string): string;
+}
+
+/** Canonical migration validation and explicit unsupported-apply boundary. */
+export interface NativeMigrationApiBinding {
+  close?(): void;
+  dryRunImportJson(importJson: string): string;
+  applyImportJson(manifestJson: string): string;
+}
+
+/** Scope-visible v1 export; the canonical Rust port owns omissions and filtering. */
+export interface NativeExportImportApiBinding {
+  close?(): void;
+  exportJson(scopeJson: string): string;
+}
+
+/** Canonical provenance/evidence queries retain the actual selected provider. */
+export interface NativeProvenanceApiBinding {
+  close?(): void;
+  provenanceForJson(requestJson: string): string;
+  evidenceForJson(requestJson: string): string;
+  attachEvidenceJson(requestJson: string): string;
+  provenanceBySourceJson?(requestJson: string): string;
+  evidenceByScopeJson?(requestJson: string): string;
 }
 
 /** Graph-maintenance handle proxy: reversible plan/apply graph repair (ADR-0027). */
@@ -290,6 +315,9 @@ export interface NativeEmbeddingProviderApiBinding {
  * export_import, observability) are typed on demand when a module needs them.
  */
 export interface NativeProviderBinding {
+  requireProvenanceApi?(): NativeProvenanceApiBinding;
+  requireMigrationApi?(): NativeMigrationApiBinding;
+  requireExportImportApi?(): NativeExportImportApiBinding;
   requireOntologyApi?(): NativeOntologyApiBinding;
   requireTaxonomyApi?(): NativeTaxonomyApiBinding;
   /** Releases this owner; capability handles already returned remain owned. */
@@ -405,6 +433,7 @@ export interface NativeOntologyApiBinding {
   getOntologyJson(requestJson: string): string;
   validateGraphJson(requestJson: string): string;
 }
+/** Selected-provider concept-scheme, concept and relation operations over Rust ports. */
 export interface NativeTaxonomyApiBinding {
   close?(): void;
   putConceptSchemeJson(recordJson: string): string;

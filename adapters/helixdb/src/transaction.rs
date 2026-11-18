@@ -8,6 +8,86 @@ use crate::{
 use engram_runtime::effect::{CleanupCertainty, EffectFrame, EffectIdentity, EffectOutcome};
 use std::sync::{Arc, Mutex};
 pub(crate) type StepFrames = Arc<Mutex<Vec<(EffectIdentity, EffectFrame)>>>;
+/// One canonical receipt-response predicate, reused by nonproduction observers.
+pub(crate) fn acknowledged_receipt(
+    response: &Value,
+    receipt: &Value,
+    operation_id: &str,
+    partition: &str,
+    mutation_guard: &str,
+) -> bool {
+    let owners = response.get("owner").and_then(Value::as_array);
+    response
+        .get("receipt")
+        .and_then(Value::as_array)
+        .is_some_and(|rows| {
+            response
+                .get(mutation_guard)
+                .and_then(Value::as_array)
+                .is_some_and(|v| v.len() == 1)
+                && owners.is_some_and(|owners| owners.len() == 1)
+                && rows.len() == 1
+                && rows[0].get("public_id").and_then(Value::as_str) == Some(operation_id)
+                && rows[0].get("partition").and_then(Value::as_str) == Some(partition)
+                && rows[0]
+                    .get("payload")
+                    .and_then(Value::as_str)
+                    .and_then(|v| serde_json::from_str::<Value>(v).ok())
+                    .as_ref()
+                    == Some(receipt)
+        })
+}
+#[cfg(all(test, feature = "test-controls"))]
+mod receipt_predicate_controls {
+    use super::*;
+    #[test]
+    fn canonical_predicate_rejects_forged_owner_partition_id_payload_and_guard() {
+        let id = "11111111-2222-4333-8444-555555555555";
+        let expected =
+            serde_json::json!({"owner":"actual-owner","epoch":1,"scope":{"tenant":"owned"}});
+        let response = serde_json::json!({"owner":[{}],"guard":[{}],"receipt":[{"public_id":id,"partition":"actual-partition","payload":expected.to_string()}]});
+        assert!(acknowledged_receipt(
+            &response,
+            &expected,
+            id,
+            "actual-partition",
+            "guard"
+        ));
+        for field in ["public_id", "partition", "payload"] {
+            let mut forged = response.clone();
+            forged["receipt"][0][field] = serde_json::json!("foreign");
+            assert!(!acknowledged_receipt(
+                &forged,
+                &expected,
+                id,
+                "actual-partition",
+                "guard"
+            ));
+        }
+        for field in ["owner", "guard"] {
+            let mut forged = response.clone();
+            forged[field] = serde_json::json!([]);
+            assert!(!acknowledged_receipt(
+                &forged,
+                &expected,
+                id,
+                "actual-partition",
+                "guard"
+            ));
+        }
+        let mut foreign = expected.clone();
+        foreign["owner"] = serde_json::json!("foreign-owner");
+        let mut forged = response.clone();
+        forged["receipt"][0]["payload"] = serde_json::json!(foreign.to_string());
+        assert!(!acknowledged_receipt(
+            &forged,
+            &expected,
+            id,
+            "actual-partition",
+            "guard"
+        ));
+    }
+}
 use helix_db::dsl::prelude::*;
 use serde_json::Value;
 use std::collections::BTreeMap;
@@ -129,6 +209,10 @@ impl StorageStep {
             frame
                 .finish(identity, &self.id, outcome, cleanup)
                 .map_err(|_| Error::CleanupUnconfirmed)?;
+            #[cfg(feature = "test-controls")]
+            if let Ok(observation) = frame.observation(identity) {
+                self.store.inner.transport.fixture_observed(observation);
+            }
         }
         Ok(())
     }
@@ -340,6 +424,31 @@ impl StorageStep {
                 },
             );
         self.sent_operation = Some(operation_id.clone());
+        #[cfg(feature = "test-controls")]
+        if let Ok(frames) = self.frames.lock() {
+            let expected = receipt.clone();
+            let actual_id = operation_id.clone();
+            let actual_partition = partition.clone();
+            let actual_guard = mutation_guard.clone();
+            self.store.inner.transport.fixture_bind_effects(
+                &operation_id,
+                frames
+                    .iter()
+                    .filter_map(|(identity, frame)| frame.observation(identity).ok())
+                    .collect(),
+                crate::transport::receipt_hash(&receipt),
+                serde_json::json!({"partition":partition,"mutationGuard":mutation_guard}),
+                Arc::new(move |response| {
+                    acknowledged_receipt(
+                        response,
+                        &expected,
+                        &actual_id,
+                        &actual_partition,
+                        &actual_guard,
+                    )
+                }),
+            );
+        }
         let response = match self.store.inner.transport.execute(&operation) {
             Ok(response) => response,
             Err(error) => {
@@ -415,22 +524,13 @@ impl StorageStep {
             self.observe_result(&operation_id, Some(&Error::Contention))?;
             return Err(Error::Contention);
         }
-        let valid = rows.is_some_and(|rows| {
-            response
-                .get(&mutation_guard)
-                .and_then(Value::as_array)
-                .is_some_and(|v| v.len() == 1)
-                && owners.is_some_and(|owners| owners.len() == 1)
-                && rows.len() == 1
-                && rows[0].get("public_id").and_then(Value::as_str) == Some(operation_id.as_str())
-                && rows[0].get("partition").and_then(Value::as_str) == Some(partition.as_str())
-                && rows[0]
-                    .get("payload")
-                    .and_then(Value::as_str)
-                    .and_then(|v| serde_json::from_str::<Value>(v).ok())
-                    .as_ref()
-                    == Some(&receipt)
-        });
+        let valid = acknowledged_receipt(
+            &response,
+            &receipt,
+            &operation_id,
+            &partition,
+            &mutation_guard,
+        );
         if !valid {
             self.store
                 .inner
@@ -452,6 +552,18 @@ impl StorageStep {
             .remove(&operation_id);
         *pending = None;
         self.observe_result(&operation_id, None)?;
+        // Test-only acknowledgement evidence follows the existing canonical
+        // receipt validation, never merely an inner transport Ok response.
+        #[cfg(feature = "test-controls")]
+        if let Ok(frames) = self.frames.lock() {
+            self.store.inner.transport.fixture_after_ack(
+                &operation_id,
+                frames
+                    .iter()
+                    .filter_map(|(identity, frame)| frame.observation(identity).ok())
+                    .collect(),
+            );
+        }
         self.finished = true;
         Ok(operation_id)
     }

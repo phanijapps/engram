@@ -1,5 +1,8 @@
 import {it,expect} from "vitest";
 import {createRequire} from "node:module";
+import {spawnSync} from "node:child_process";
+import {isAbsolute,resolve as resolvePath} from "node:path";
+import {existsSync} from "node:fs";
 // @ts-ignore Owned JavaScript native artifact builder.
 import {ensureInstrumentedRecipeArtifact} from "./helpers/build-native-recipes.mjs";
 const requireNode=createRequire(import.meta.url);
@@ -8,6 +11,26 @@ function currentInstrumentedArtifact() {
   return fileArtifact ??= ensureInstrumentedRecipeArtifact();
 }
 const id="11111111-2222-4333-8444-555555555555";
+// Actual producer/auditor route. Missing artifacts are a failing prerequisite,
+// never a skipped test or a presentation-only replacement for a landed write.
+for (const mode of ["service","embedded"] as const) {
+ it(`outcome_unknown ${mode} actual native host causal and privacy scenarios`,()=>{
+  expect(Number(process.versions.node.split('.')[0])).toBe(22);
+  const manifest=process.env.ENGRAM_PROVIDER_E2E_ARTIFACTS;
+  expect(manifest,"BLOCKED: actual instrumented native fixture manifest required").toBeTruthy();
+  expect(isAbsolute(manifest!)).toBe(true);expect(existsSync(manifest!)).toBe(true);
+  const expected=process.env.ENGRAM_PROVIDER_E2E_EXPECTED_BUILD_RECORD;
+  const pin=process.env.ENGRAM_PROVIDER_E2E_EXPECTED_BUILD_RECORD_SHA256;
+  expect(expected,"BLOCKED: independent orchestration build record required").toBeTruthy();
+  expect(pin,"BLOCKED: independently pinned build record hash required").toMatch(/^[a-f0-9]{64}$/);
+  const root=resolvePath(import.meta.dirname,"../../..");
+  const result=spawnSync("/usr/bin/python3",["tools/ci/run_provider_e2e.py","--provider","helixdb","--mode",mode,"--host","native","--phase","faults","--artifacts",manifest!,"--expected-build-record",expected!,"--expected-build-record-sha256",pin!,"--output","runs/e2e/gate022-native"],{cwd:root,encoding:"utf8",maxBuffer:64*1024*1024});
+  expect(result.error).toBeUndefined();
+  expect(result.status,`${result.stdout}\n${result.stderr}`).toBe(0);
+  const report=JSON.parse(result.stdout.trim().split("\n").at(-1)!);
+  expect(report.status).toBe("PASS");
+ },3_600_000);
+}
 it("presentation_ direct and batch preserve exact UUID/classification without private payload", () => {
  const artifact=currentInstrumentedArtifact();
  const addon=createRequire(import.meta.url)(artifact.path);

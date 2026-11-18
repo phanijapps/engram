@@ -38,6 +38,38 @@ Restart to switch modes, keeping the same storage path and project. Content
 added while embeddings are off needs vector backfill using the MCP `reindex`
 tool after re-enabling them.
 
+## Selected storage and recall
+
+SQLite remains the default. A binary compiled with the appropriate optional
+provider supports `--backend pgvector` or `--backend helixdb`. Helix requires an
+explicit service/embedded mode and logical store. Selection errors never open a
+substitute SQLite store. Installing flags does not add a missing binary feature.
+
+```sh
+engram-mcp install --client claude --backend helixdb --helix-mode embedded \
+  --helix-store my-store --trusted-root /absolute/owned-root \
+  --storage /absolute/owned-root/cache --helix-path /absolute/owned-root/native \
+  --project myproject --no-vector
+```
+
+For service, configure an HTTP(S) origin and `--helix-credential-env` variable
+**name**, never a secret value in arguments. Current effective PLT-001 still denies
+service with vectors off; early service use explicitly chooses `--vector
+--embedding-provider none`. The future ratified storage/auth exception is not yet
+an active permission. Embedded vectors-off storage remains offline.
+
+Installed hooks forward provider/mode/store and launch scope. Their default stays
+vectors off; `ENGRAM_ENABLE_VECTOR=true|false` selects the explicit choice. Preserve
+org/domain/subdomain/project with the logical store to avoid wrong-store recall.
+Prompt hooks fail open with distinct failure/empty/gated/deduplicated diagnostics;
+code authority stays fail closed. See [configuration](CONFIGURATION.md) for flags,
+environment precedence, trusted paths and read-only recall.
+
+Archive v1 is a projected export. Dry-run validates without writes; import apply
+is explicitly unsupported. Unknown write outcomes retain the original UUID and
+receipt: stop, preserve data and reconcile; never blindly replay a batch or reset
+a store to clear the error.
+
 ## Branch-bound code indexing
 
 Code indexes are pinned to a **canonical branch** (default `refs/heads/main`),
@@ -134,7 +166,8 @@ Other platforms require a source build.
 For remote embeddings, model caching and safe model changes, see
 [Configuration](https://github.com/phanijapps/engram/blob/main/packages/launcher/CONFIGURATION.md).
 
-Data stays in your chosen storage directory. No telemetry. Local inference
+Canonical data stays in the selected local store or configured storage service.
+Derived local caches stay under the trusted root. No telemetry. Local inference
 requires no embedding service; configuring a remote provider sends embedding
 inputs to that service.
 

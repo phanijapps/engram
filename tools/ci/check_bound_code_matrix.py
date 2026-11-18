@@ -98,7 +98,7 @@ def native_helper_argv(recipe: str) -> list[str]:
         raise ValueError(f"unknown native recipe: {recipe}")
     program = (
         "import {withRecipeArtifacts} from './packages/node/test/helpers/build-native-recipes.mjs';"
-        f"withRecipeArtifacts((a) => process.stdout.write(JSON.stringify({{recipe:{json.dumps(recipe)},path:a.paths[{json.dumps(recipe)}],digest:a.digests[{json.dumps(recipe)}]}})));"
+        f"withRecipeArtifacts((a) => process.stdout.write(JSON.stringify({{recipe:{json.dumps(recipe)},path:a.paths[{json.dumps(recipe)}],digest:a.digests[{json.dumps(recipe)}]}})),{{recipes:[{json.dumps(recipe)}]}});"
     )
     return ["node", "--input-type=module", "--eval", program]
 
@@ -117,6 +117,15 @@ def matrix_rows(require_native: bool, require_mcp: bool, require_pg: bool) -> li
     return rows
 
 
+def helix_matrix_rows() -> list[dict]:
+    """Same canonical operation/host/mode/native-target inventory as E2E.
+
+    Legacy SQLite/PG execution remains independent. Inventory is not a receipt.
+    """
+    from tools.ci.run_provider_e2e import inventory
+    return [row for row in inventory() if row["operation"].startswith("code.")]
+
+
 @dataclass(frozen=True)
 class CommandSpec:
     argv: list[str]
@@ -126,7 +135,7 @@ class CommandSpec:
 
 
 def cargo_spec(package: str, target: str, filter_name: str, marker: str, backend: str) -> CommandSpec:
-    argv = ["cargo", "test", "-p", package]
+    argv = ["cargo", "+1.88.0", "test", "-p", package]
     if backend == "sqlite" and package == "engram-backend-sqlite":
         argv.extend(["--no-default-features"])
     if package == "engram-integration":
@@ -299,6 +308,7 @@ class MatrixRunner:
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--helix-inventory", action="store_true", help="inspect canonical Helix four-axis code inventory; executes no workflow")
     parser.add_argument("--sqlite-temp", action="store_true", help="create a temporary file-backed SQLite root")
     parser.add_argument("--pg-url-env", default="ENGRAM_TEST_PG_URL", help="environment variable containing the approved PG URL")
     parser.add_argument("--require-native", action="store_true")
@@ -307,6 +317,10 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--receipt-dir", type=Path)
     parser.add_argument("--stub-command", help="synthetic control-only executable; runs once per configured row")
     args = parser.parse_args(argv)
+    if args.helix_inventory:
+        rows = helix_matrix_rows()
+        print(json.dumps({"inventory": rows, "runtime_status": "NOT_RUN"}))
+        return 0
     if not args.sqlite_temp:
         parser.error("--sqlite-temp is required; SQLite rows must use temporary file stores")
     environment = dict(os.environ)

@@ -255,7 +255,7 @@
       "path": "packages/node",
       "kind": "package",
       "role": "binding",
-      "name": "@engramlabs/node"
+      "name": "@engram/node"
     },
     {
       "path": "packages/runtime",
@@ -316,6 +316,18 @@
       "kind": "crate",
       "role": "backend",
       "name": "engram-backend-helixdb"
+    },
+    {
+      "path": "backends/provider",
+      "kind": "crate",
+      "role": "backend",
+      "name": "engram-backend-provider"
+    },
+    {
+      "path": "tools/ci/provider_e2e_rust",
+      "kind": "crate",
+      "role": "on-top",
+      "name": "engram-provider-e2e"
     }
   ]
 }

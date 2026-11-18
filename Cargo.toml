@@ -39,6 +39,7 @@ members = [
     "backends/sqlite",
     "backends/helixdb",
     "backends/provider",
+    "tools/ci/provider_e2e_rust",
 ]
 resolver = "3"
 

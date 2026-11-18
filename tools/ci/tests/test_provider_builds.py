@@ -1,8 +1,19 @@
 import unittest
-from tools.ci.check_provider_builds import SQLITE, package_names, violations
+from tools.ci.check_provider_builds import SQLITE, package_names, violations, forbidden_dependencies, provider_subsets, compiler_units
 
 
 class ProviderBuildTests(unittest.TestCase):
+    def test_runtime_command_is_fixed_to_actual_repo_consumer_not_printed_boolean(self):
+        from tools.ci.check_provider_builds import runtime_command,ROOT
+        self.assertEqual(runtime_command('engram-provider-e2e','/owned/consumer','/owned/request'),['/owned/consumer','--request','/owned/request'])
+        self.assertEqual(runtime_command('engram-node','/owned/addon.node','/owned/request'),['node',str(ROOT/'packages/node/test/provider-e2e.mjs'),'--request','/owned/request','--artifact','/owned/addon.node'])
+        with self.assertRaises(ValueError):runtime_command('echo','/owned/artifact','/owned/request')
+    def test_normal_conformance_edge_is_always_rejected(self):
+        self.assertTrue(
+            violations({"engram-node", "engram-conformance"}, SQLITE),
+            "a production conformance edge must fail even without SQLite",
+        )
+
     def test_injected_normal_sqlite_edge_is_rejected(self):
         production = package_names("engram-integration v0.1.0\nengram-store-sqlite v0.1.0\nrusqlite v0.32.0\n")
         self.assertTrue(violations(production, SQLITE), "injected normal SQLite production edge must be rejected")
@@ -19,6 +30,24 @@ class ProviderBuildTests(unittest.TestCase):
 
     def test_neutral_embedding_graph_is_accepted(self):
         self.assertFalse(violations({"engram-embedding-fastembed", "fastembed", "ort"}, SQLITE))
+
+    def test_every_nonempty_provider_subset_and_both_modes_are_explicit(self):
+        self.assertEqual(len(provider_subsets("explicit-combinations")), 15)
+        self.assertIn(("helixdb-service", "helixdb-embedded"), provider_subsets("single"))
+        self.assertEqual(len(set(provider_subsets("explicit-combinations"))), 15)
+
+    def test_unselected_postgres_and_conformance_do_not_hide_behind_sqlite_check(self):
+        forbidden = forbidden_dependencies(("helixdb-embedded",))
+        for edge in ("engram-conformance", "engram-backend-pgvector", "tokio-postgres", "engram-backend-sqlite", "rusqlite"):
+            self.assertTrue(violations({edge}, forbidden), edge)
+        self.assertFalse(violations({"engram-store-helixdb", "fastembed"}, forbidden))
+
+    def test_production_compiler_units_are_separate_from_dev_metadata(self):
+        import json
+        message = {"reason":"compiler-artifact","package_id":"path+file:///fixture#engram-node@0.1.0","features":["helixdb-service"],"filenames":["/owned/native.so"]}
+        packages, artifacts = compiler_units(json.dumps(message) + '\n' + json.dumps({"reason":"compiler-message","message":{"rendered":"dev metadata mentions engram-conformance"}}))
+        self.assertEqual(packages, {"engram-node"})
+        self.assertEqual(len(artifacts), 1)
 
 
 class CargoGraphTests(unittest.TestCase):
@@ -49,7 +78,7 @@ class CargoGraphTests(unittest.TestCase):
                         manifest += '[dependencies]\nrusqlite = { path = "../rusqlite" }\n'
                     (crate / "Cargo.toml").write_text(manifest)
                 (root / "Cargo.toml").write_text('[workspace]\nmembers = ["fixture-root", "bridge", "rusqlite"]\nresolver = "2"\n')
-                subprocess.run(["cargo", "generate-lockfile", "--offline"], cwd=root, check=True, capture_output=True)
+                subprocess.run(["cargo", "+1.88.0", "generate-lockfile", "--offline"], cwd=root, check=True, capture_output=True)
                 with patch.object(checker, "ROOT", root):
                     if edge == "feature":
                         self.assertFalse(checker.violations(checker.dependency_graph("fixture-root", "", "normal,build"), SQLITE))

@@ -213,7 +213,10 @@ fn main() {
     // Pack one-shot subcommands (plan S7): `engram-mcp pack list|install|widen|status`
     // run against the store + local cache and exit — no MCP server loop.
     if pack::is_pack_command(&argv) {
-        std::process::exit(pack::run(&argv[1..]));
+        let exit = pack::run(&argv[1..]);
+        #[cfg(feature = "test-controls")]
+        oneshot::finish_fixture();
+        std::process::exit(exit);
     }
 
     // Help/version: recognized anywhere in the flags, exit before parsing
@@ -324,8 +327,8 @@ fn tool_profile_set(profile: &str) -> Option<&'static [&'static str]> {
         "core" | "" => Some(DEFAULT_TOOLS),
         // Consolidated + specialist: 10 tools for maintenance work.
         "full" => Some(FULL_TOOLS),
-        // Legacy granular surface: all 44 tools. Superseded — kept for
-        // backward compatibility; new integrations should use core/full.
+        // Explicit extended surface: legacy granular tools plus canonical
+        // provider operations. Core/full retain their established budgets.
         "all" => None,
         // The original 7-verb consolidated surface ("remember"/"recall"/…).
         // Escape hatch for deployments tuned to the old default.
@@ -470,6 +473,10 @@ fn register_all(registry: &mut ToolRegistry<App>, profile: &str) {
             register_all_tools(registry);
             registry.retain(allowed);
         }
+    }
+    // Canonical provider operations are opt-in; existing profiles/budgets stay fixed.
+    if profile == "all" {
+        register_provider_tools(registry);
     }
 }
 
@@ -1817,6 +1824,269 @@ pub(crate) mod default_profile_tests {
                 DEFAULT_TOOLS.contains(&required),
                 "{required} must be on the DEFAULT profile (wiring-seam regression)"
             );
+        }
+    }
+}
+
+/// Scoped canonical provider extensions, available only through `--tools all`.
+fn register_provider_tools(registry: &mut ToolRegistry<App>) {
+    fn schema(mut properties: Value, required: &[&str]) -> Value {
+        properties["scope"] = json!({"type":"object","required":["tenant"],"properties":{
+            "tenant":{"type":"string"},"subject":{"type":["string","null"]},
+            "workspace":{"type":["string","null"]},"session":{"type":["string","null"]},
+            "environment":{"type":["string","null"]}},"additionalProperties":false});
+        json!({"type":"object","properties":properties,"required":required,"additionalProperties":false})
+    }
+    let records: [(&str, &str, Value, crate::registry::ToolHandler<App>); 26] = [
+        (
+            "archive_export",
+            "Export the launch scope using the existing archive-v1 projection.",
+            schema(json!({}), &[]),
+            tools::archive_export,
+        ),
+        (
+            "archive_dry_run",
+            "Validate existing archive-v1 data without mutations.",
+            schema(json!({"data": {"type": "object"}}), &["data"]),
+            tools::archive_dry_run,
+        ),
+        (
+            "archive_apply",
+            "Canonical archive-v1 apply: explicitly unsupported before writes.",
+            schema(json!({"manifest": {"type": "object"}}), &["manifest"]),
+            tools::archive_apply,
+        ),
+        (
+            "identity_resolve_or_put_entity",
+            "Apply the canonical entity identity policy to a typed request.",
+            schema(json!({"request": {"type": "object"}}), &["request"]),
+            tools::identity_resolve_or_put_entity,
+        ),
+        (
+            "identity_resolve_or_put_relationship",
+            "Resolve a typed KnowledgeRelationship through the identity port.",
+            schema(
+                json!({"relationship": {"type": "object"}}),
+                &["relationship"],
+            ),
+            tools::identity_resolve_or_put_relationship,
+        ),
+        (
+            "ontology_put",
+            "Persist a scoped ontology identity, not the launch-file configuration.",
+            schema(json!({"ontology": {"type": "object"}}), &["ontology"]),
+            tools::ontology_put,
+        ),
+        (
+            "ontology_put_class",
+            "Persist a class after validating its owning ontology scope.",
+            schema(json!({"class": {"type": "object"}}), &["class"]),
+            tools::ontology_put_class,
+        ),
+        (
+            "ontology_put_property",
+            "Persist a property after validating its owning ontology scope.",
+            schema(json!({"property": {"type": "object"}}), &["property"]),
+            tools::ontology_put_property,
+        ),
+        (
+            "ontology_put_axiom",
+            "Persist an axiom after validating its owning ontology scope.",
+            schema(json!({"axiom": {"type": "object"}}), &["axiom"]),
+            tools::ontology_put_axiom,
+        ),
+        (
+            "ontology_get",
+            "Read a durable scoped ontology by ID.",
+            schema(json!({"id": {"type": "string"}}), &["id"]),
+            tools::ontology_get,
+        ),
+        (
+            "ontology_validate_graph",
+            "Delegate scoped graph validation to the canonical ontology port.",
+            schema(
+                json!({"graphId": {"type": "string"}, "ontologyId": {"type": "string"}}),
+                &["graphId", "ontologyId"],
+            ),
+            tools::ontology_validate_graph,
+        ),
+        (
+            "taxonomy_put_scheme",
+            "Persist a scoped concept scheme.",
+            schema(json!({"scheme": {"type": "object"}}), &["scheme"]),
+            tools::taxonomy_put_scheme,
+        ),
+        (
+            "taxonomy_get_scheme",
+            "Read a durable scoped concept scheme by ID.",
+            schema(json!({"id": {"type": "string"}}), &["id"]),
+            tools::taxonomy_get_scheme,
+        ),
+        (
+            "taxonomy_put_concept",
+            "Persist a concept in its validated owning scheme.",
+            schema(json!({"concept": {"type": "object"}}), &["concept"]),
+            tools::taxonomy_put_concept,
+        ),
+        (
+            "taxonomy_put_relation",
+            "Persist a concept relation in its validated owning scheme.",
+            schema(json!({"relation": {"type": "object"}}), &["relation"]),
+            tools::taxonomy_put_relation,
+        ),
+        (
+            "taxonomy_list_concepts",
+            "List concepts from a scheme inside the exact launch scope.",
+            schema(json!({"schemeId": {"type": "string"}}), &["schemeId"]),
+            tools::taxonomy_list_concepts,
+        ),
+        (
+            "provenance_for",
+            "Read canonical provenance for a typed scoped target.",
+            schema(
+                json!({"target": {"type": "string"}, "id": {"type": "string"}}),
+                &["target", "id"],
+            ),
+            tools::provenance_for,
+        ),
+        (
+            "evidence_for",
+            "Read canonical evidence for a typed scoped target.",
+            schema(
+                json!({"target": {"type": "string"}, "id": {"type": "string"}}),
+                &["target", "id"],
+            ),
+            tools::evidence_for,
+        ),
+        (
+            "provenance_by_source",
+            "Query provenance by stable source key and observed-at window.",
+            schema(
+                json!({"source": {"type": "string"}, "window": {"type": "object", "properties": {"from": {"type": ["string", "null"], "format": "date-time"}, "to": {"type": ["string", "null"], "format": "date-time"}}}}),
+                &["source"],
+            ),
+            tools::provenance_by_source,
+        ),
+        (
+            "evidence_by_scope",
+            "Query scoped provenance entries with canonical time filtering.",
+            schema(
+                json!({"window": {"type": "object"}, "limit": {"type": "integer", "minimum": 0}}),
+                &[],
+            ),
+            tools::evidence_by_scope,
+        ),
+        (
+            "attach_evidence",
+            "Append typed evidence through canonical target-kind validation.",
+            schema(
+                json!({"target": {"type": "string"}, "id": {"type": "string"}, "evidence": {"type": "object"}}),
+                &["target", "id", "evidence"],
+            ),
+            tools::attach_evidence,
+        ),
+        (
+            "provider_diagnostics",
+            "Read the selected provider diagnostic snapshot.",
+            schema(json!({}), &[]),
+            tools::provider_diagnostics,
+        ),
+        (
+            "community_overview",
+            "Read canonical eligible communities; unavailable errors remain errors.",
+            schema(json!({"limit": {"type": "integer", "minimum": 0}}), &[]),
+            tools::community_overview,
+        ),
+        (
+            "community_member_index",
+            "Read the canonical eligible community member index.",
+            schema(json!({}), &[]),
+            tools::community_member_index,
+        ),
+        (
+            "community_of",
+            "Read the canonical community for an entity ID.",
+            schema(json!({"id": {"type": "string"}}), &["id"]),
+            tools::community_of,
+        ),
+        (
+            "community_scope_counts",
+            "Read canonical scoped family counts without synthesizing data.",
+            schema(json!({}), &[]),
+            tools::community_scope_counts,
+        ),
+    ];
+    for (name, description, input_schema, handler) in records {
+        registry.register(ToolRecord {
+            name,
+            description,
+            input_schema,
+            handler,
+        });
+    }
+}
+
+#[cfg(test)]
+mod canonical_provider_registration_tests {
+    use super::*;
+
+    #[test]
+    fn actual_all_profile_exposes_canonical_ports_without_expanding_defaults() {
+        let mut all = ToolRegistry::<App>::new();
+        register_all(&mut all, "all");
+        let names: Vec<String> = all
+            .list()
+            .iter()
+            .map(|t| t["name"].as_str().unwrap().to_owned())
+            .collect();
+        let mut defaults = ToolRegistry::<App>::new();
+        register_all(&mut defaults, "");
+        let default_names: Vec<String> = defaults
+            .list()
+            .iter()
+            .map(|t| t["name"].as_str().unwrap().to_owned())
+            .collect();
+        for name in [
+            "archive_export",
+            "archive_dry_run",
+            "archive_apply",
+            "identity_resolve_or_put_entity",
+            "identity_resolve_or_put_relationship",
+            "ontology_put",
+            "ontology_put_class",
+            "ontology_put_property",
+            "ontology_put_axiom",
+            "ontology_get",
+            "ontology_validate_graph",
+            "taxonomy_put_scheme",
+            "taxonomy_get_scheme",
+            "taxonomy_put_concept",
+            "taxonomy_put_relation",
+            "taxonomy_list_concepts",
+            "provenance_for",
+            "evidence_for",
+            "provenance_by_source",
+            "evidence_by_scope",
+            "attach_evidence",
+            "provider_diagnostics",
+            "community_overview",
+            "community_member_index",
+            "community_of",
+            "community_scope_counts",
+        ] {
+            assert!(
+                names.iter().any(|n| n == name),
+                "actual all profile missing {name}"
+            );
+            assert!(
+                !default_names.iter().any(|n| n == name),
+                "default profile unexpectedly includes {name}"
+            );
+            assert_eq!(names.iter().filter(|n| n.as_str() == name).count(), 1);
+        }
+        assert_eq!(default_names.len(), DEFAULT_TOOLS.len());
+        for legacy in ["resolve_entity", "ontology_read", "taxonomy_read"] {
+            assert!(names.iter().any(|name| name == legacy));
         }
     }
 }

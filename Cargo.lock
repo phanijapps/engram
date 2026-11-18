@@ -1791,6 +1791,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "engram-provider-e2e"
+version = "0.1.0"
+dependencies = [
+ "engram-backend-provider",
+ "engram-belief",
+ "engram-domain",
+ "engram-integration",
+ "engram-knowledge",
+ "engram-runtime",
+ "futures",
+ "serde",
+ "serde_json",
+ "sha2",
+]
+
+[[package]]
 name = "engram-reflection"
 version = "0.1.0"
 dependencies = [

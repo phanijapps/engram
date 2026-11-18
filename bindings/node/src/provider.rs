@@ -38,8 +38,8 @@ use engram_integration::{
     SupersessionCounts, TransactionGuarantee, UnifiedRecall,
 };
 use engram_knowledge::{
-    GraphMaintenanceRepository, KnowledgeGraphRepository, KnowledgeRepository, OntologyRepository,
-    TaxonomyRepository,
+    EntityIdentityRepository, GraphMaintenanceRepository, KnowledgeGraphRepository,
+    KnowledgeRepository, OntologyRepository, TaxonomyRepository,
 };
 use engram_knowledge::{KnowledgeChangeLog, ScanCheckpointStore};
 use engram_memory::MemoryService;
@@ -149,6 +149,7 @@ impl NativeProvider {
 #[napi]
 pub struct NativeProvider {
     inner: Option<EngramProvider>,
+    launch_scope: Option<Scope>,
     #[cfg(feature = "test-controls")]
     fixture_control: Option<Arc<dyn Fn(String) -> Result<String> + Send + Sync>>,
 }
@@ -229,8 +230,15 @@ impl NativeProvider {
     #[napi(constructor)]
     pub fn new(config_json: String) -> Result<Self> {
         let value: serde_json::Value = decode(&config_json)?;
+        let launch_scope = value
+            .get("scope")
+            .cloned()
+            .map(serde_json::from_value)
+            .transpose()
+            .map_err(|_| Error::from_reason("invalid provider launch scope"))?;
         Ok(Self {
             inner: Some(open_config(value)?),
+            launch_scope,
             #[cfg(feature = "test-controls")]
             fixture_control: None,
         })
@@ -246,8 +254,15 @@ impl NativeProvider {
         if let Some(scope) = scope_json {
             value["scope"] = decode(&scope)?;
         }
+        let launch_scope = value
+            .get("scope")
+            .cloned()
+            .map(serde_json::from_value)
+            .transpose()
+            .map_err(|_| Error::from_reason("invalid provider launch scope"))?;
         Ok(Self {
             inner: Some(open_config(value)?),
+            launch_scope,
             #[cfg(feature = "test-controls")]
             fixture_control: None,
         })
@@ -306,6 +321,8 @@ impl NativeProvider {
         Ok(NativeGraphApi {
             knowledge: Some(knowledge),
             graph: Some(graph),
+            identity: self.inner()?.identity().cloned(),
+            launch_scope: self.launch_scope.clone(),
         })
     }
 
@@ -333,6 +350,7 @@ impl NativeProvider {
             .clone();
         Ok(NativeProvenanceApi {
             handle: Some(handle),
+            launch_scope: self.launch_scope.clone(),
         })
     }
 
@@ -1030,9 +1048,24 @@ impl NativeMemoryApi {
 pub struct NativeGraphApi {
     knowledge: Option<Arc<dyn KnowledgeRepository>>,
     graph: Option<Arc<dyn KnowledgeGraphRepository>>,
+    identity: Option<Arc<dyn EntityIdentityRepository>>,
+    launch_scope: Option<Scope>,
 }
 
 impl NativeGraphApi {
+    fn check_identity_scope(&self, scope: &Scope) -> Result<()> {
+        self.knowledge()?;
+        if self
+            .launch_scope
+            .as_ref()
+            .is_some_and(|launch| launch != scope)
+        {
+            return Err(to_napi_error(CoreError::PolicyDenied {
+                reason: "identity request must match the complete native launch scope".into(),
+            }));
+        }
+        Ok(())
+    }
     fn knowledge(&self) -> Result<&Arc<dyn KnowledgeRepository>> {
         self.knowledge
             .as_ref()
@@ -1050,6 +1083,37 @@ impl NativeGraphApi {
     pub fn close(&mut self) {
         self.knowledge.take();
         self.graph.take();
+        self.identity.take();
+    }
+
+    /// Resolve identity through the selected canonical repository, not graph lookup.
+    #[napi(js_name = "resolveOrPutEntityJson")]
+    pub fn resolve_or_put_entity_json(&self, request_json: String) -> Result<String> {
+        let request: engram_domain::EntityWriteRequest = serde_json::from_str(&request_json)
+            .map_err(|_| Error::from_reason("invalid canonical entity identity request"))?;
+        self.check_identity_scope(&request.entity.scope)?;
+        let identity = self.identity.as_ref().ok_or_else(|| {
+            to_napi_error(CoreError::CapabilityUnsupported {
+                capability: "entity_identity".into(),
+                reason: "selected provider has no identity repository".into(),
+            })
+        })?;
+        encode(&block_on(identity.resolve_or_put_entity(request)).map_err(to_napi_error)?)
+    }
+
+    /// Resolve an exact canonical relationship identity without copying its algorithm.
+    #[napi(js_name = "resolveOrPutRelationshipJson")]
+    pub fn resolve_or_put_relationship_json(&self, request_json: String) -> Result<String> {
+        let request: KnowledgeRelationship = serde_json::from_str(&request_json)
+            .map_err(|_| Error::from_reason("invalid canonical relationship identity request"))?;
+        self.check_identity_scope(&request.scope)?;
+        let identity = self.identity.as_ref().ok_or_else(|| {
+            to_napi_error(CoreError::CapabilityUnsupported {
+                capability: "entity_identity".into(),
+                reason: "selected provider has no identity repository".into(),
+            })
+        })?;
+        encode(&block_on(identity.resolve_or_put_relationship(request)).map_err(to_napi_error)?)
     }
 
     /// Looks up an entity by ID inside a scope. Takes `{ id, scope }` JSON,
@@ -1206,9 +1270,23 @@ impl NativeGraphMaintenanceApi {
 #[napi]
 pub struct NativeProvenanceApi {
     handle: Option<Arc<dyn ProvenanceQuery>>,
+    launch_scope: Option<Scope>,
 }
 
 impl NativeProvenanceApi {
+    fn check_scope(&self, scope: &Scope) -> Result<()> {
+        self.handle()?;
+        if self
+            .launch_scope
+            .as_ref()
+            .is_some_and(|launch| launch != scope)
+        {
+            return Err(to_napi_error(CoreError::PolicyDenied {
+                reason: "provenance request must match the complete native launch scope".into(),
+            }));
+        }
+        Ok(())
+    }
     fn handle(&self) -> Result<&Arc<dyn ProvenanceQuery>> {
         self.handle
             .as_ref()
@@ -1220,6 +1298,44 @@ impl NativeProvenanceApi {
     #[napi]
     pub fn close(&mut self) {
         self.handle.take();
+    }
+
+    /// Read canonical provenance grouped by its stable source key.
+    #[napi(js_name = "provenanceBySourceJson")]
+    pub fn provenance_by_source_json(&self, request_json: String) -> Result<String> {
+        let value: serde_json::Value = serde_json::from_str(&request_json)
+            .map_err(|_| Error::from_reason("invalid canonical provenance request"))?;
+        let scope = scope_field(&value)?;
+        self.check_scope(&scope)?;
+        let source = value
+            .get("source")
+            .and_then(|v| v.as_str())
+            .ok_or_else(|| Error::from_reason("provenance source key required"))?;
+        let window = provenance_window(&value)?;
+        let entries = block_on(self.handle()?.provenance_by_source(source, &scope, window))
+            .map_err(to_napi_error)?;
+        encode(&entries.into_iter().map(|entry| serde_json::json!({"target":entry.target,"targetId":entry.target_id,"provenance":entry.provenance})).collect::<Vec<_>>())
+    }
+
+    /// Read bounded canonical evidence across the exact launch scope.
+    #[napi(js_name = "evidenceByScopeJson")]
+    pub fn evidence_by_scope_json(&self, request_json: String) -> Result<String> {
+        let value: serde_json::Value = serde_json::from_str(&request_json)
+            .map_err(|_| Error::from_reason("invalid canonical provenance request"))?;
+        let scope = scope_field(&value)?;
+        self.check_scope(&scope)?;
+        let window = provenance_window(&value)?;
+        let limit = match value.get("limit") {
+            None => 100,
+            Some(value) => value
+                .as_u64()
+                .filter(|limit| (1..=10000).contains(limit))
+                .ok_or_else(|| Error::from_reason("invalid bounded evidence query limit"))?
+                as usize,
+        };
+        let entries = block_on(self.handle()?.evidence_by_scope(&scope, window, limit))
+            .map_err(to_napi_error)?;
+        encode(&entries.into_iter().map(|entry| serde_json::json!({"target":entry.target,"targetId":entry.target_id,"provenance":entry.provenance})).collect::<Vec<_>>())
     }
 
     /// Provenance carried by a record. Takes `{ target, id, scope }` JSON
@@ -1269,6 +1385,17 @@ impl NativeProvenanceApi {
         .map_err(to_napi_error)?;
         encode(&result)
     }
+}
+
+fn provenance_window(value: &serde_json::Value) -> Result<engram_integration::TimeWindow> {
+    let parse = |key: &str| {
+        serde_json::from_value(value.get(key).cloned().unwrap_or(serde_json::Value::Null))
+            .map_err(|_| Error::from_reason("invalid canonical provenance time window"))
+    };
+    Ok(engram_integration::TimeWindow {
+        from: parse("from")?,
+        to: parse("to")?,
+    })
 }
 
 // ---------------------------------------------------------------------------
@@ -2489,6 +2616,17 @@ impl NativeMigrationApi {
         encode(&result)
     }
 
+    /// Calls the canonical unsupported-restore boundary; never reports no-write success.
+    #[napi(js_name = "applyImportJson")]
+    pub fn apply_import_json(&self, manifest_json: String) -> Result<String> {
+        let manifest: engram_integration::MigrationManifest = serde_json::from_str(&manifest_json)
+            .map_err(|_| Error::from_reason("invalid canonical migration manifest"))?;
+        self.handle()?
+            .apply_import(&manifest)
+            .map_err(to_napi_error)?;
+        encode(&())
+    }
+
     #[napi(js_name = "ping")]
     pub fn ping(&self) -> Result<String> {
         Ok("migration".to_owned())
@@ -3027,10 +3165,16 @@ impl NativeProvider {
         };
         let binding = serde_json::json!({"backend":opened.binding.backend,"mode":opened.binding.mode,"store":opened.binding.logical_store,"scope":opened.binding.scope});
         let control = opened.control;
+        control.configure_trace_recorder(std::path::Path::new(field("ownedRoot")?),
+            serde_json::json!({"host":"native","invocation":field("invocation")?,"sourceRevision":field("sourceRevision")?,"artifactSha256":field("artifactSha256")?,"actual":binding}))
+            .map_err(|_| Error::from_reason("fixture recorder unavailable"))?;
         let fixture_control = Arc::new(move |request: String| -> Result<String> {
             let value: serde_json::Value = decode(&request)?;
             match value["operation"].as_str() {
                 Some("loseAck") => control.lose_mutation_ack_after(
+                    value["acknowledgedBefore"].as_u64().unwrap_or(0) as usize,
+                ),
+                Some("loseAckCleanup") => control.lose_mutation_ack_with_cleanup_failure_after(
                     value["acknowledgedBefore"].as_u64().unwrap_or(0) as usize,
                 ),
                 Some("definiteFailure") => control.reject_next_mutation_definitely(),
@@ -3039,11 +3183,12 @@ impl NativeProvider {
             }
             let snapshot = control.snapshot();
             encode(
-                &serde_json::json!({"binding":binding,"allSends":snapshot.all_sends,"reconciliationReads":snapshot.reconciliation_reads,"mutationAttempts":snapshot.mutation_attempts,"landedCommits":snapshot.landed_commits}),
+                &serde_json::json!({"binding":binding,"allSends":snapshot.all_sends,"reconciliationReads":snapshot.reconciliation_reads,"mutationAttempts":snapshot.mutation_attempts,"landedCommits":snapshot.landed_commits,"events":snapshot.events_json(),"observations":snapshot.observations_json(),"nativeReceipts":snapshot.native_receipts,"cleanupGuardRefusals":snapshot.cleanup_guard_refusals,"recorderFailed":control.recorder_failed()}),
             )
         });
         Ok(Self {
             inner: Some(provider),
+            launch_scope: Some(scope),
             fixture_control: Some(fixture_control),
         })
     }

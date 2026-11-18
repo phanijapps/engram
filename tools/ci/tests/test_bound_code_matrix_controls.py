@@ -9,7 +9,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-SCRIPT = Path(__file__).resolve().parents[1] / "check-bound-code-matrix.py"
+SCRIPT = Path(__file__).resolve().parents[1] / "check_bound_code_matrix.py"
 spec = importlib.util.spec_from_file_location("bound_matrix", SCRIPT)
 matrix = importlib.util.module_from_spec(spec)
 sys.modules[spec.name] = matrix
@@ -17,6 +17,14 @@ spec.loader.exec_module(matrix)
 
 
 class BoundCodeMatrixControls(unittest.TestCase):
+    def test_helix_inventory_has_modes_targets_hosts_and_only_declared_rust_na(self):
+        rows = matrix.helix_matrix_rows()
+        self.assertEqual(len(rows), 10 * 4 * 2 * 4)
+        self.assertEqual({row['mode'] for row in rows}, {'service','embedded'})
+        self.assertEqual(len({row['target'] for row in rows}),4)
+        self.assertEqual({row['operation'] for row in rows if not row['required']}, {'code.backfill'})
+        self.assertTrue(all(row['status']=='NOT_RUN' for row in rows if row['required']))
+
     def private_env(self, directory: Path, url="postgresql://u:private-password@127.0.0.1:5432/engram_test_ec536887ebee") -> Path:
         directory.chmod(0o700)
         fixture = directory / "pg.env"
@@ -139,7 +147,7 @@ class BoundCodeMatrixControls(unittest.TestCase):
     def test_helper_real_path_invalidates_stale_content_and_rejects_wrong_loaded_identity(self):
         helper = matrix.ROOT / "packages/node/test/helpers/build-native-recipes.mjs"
         program = """
-            const { resolveRecipeArtifact } = await import(process.argv[1]);
+            const { resolveRecipeArtifact } = await import(process.argv[2]);
             const stale = { recipe: "sqlite", path: "/artifacts/sqlite.node", digest: "old-content" };
             const rebuilt = { recipe: "sqlite", path: "/artifacts/sqlite.node", digest: "new-content" };
             const calls = [];
@@ -161,7 +169,7 @@ class BoundCodeMatrixControls(unittest.TestCase):
             process.stdout.write(JSON.stringify({ calls, selected, wrongLoadedRejected }));
         """
         result = subprocess.run(
-            ["node", "--input-type=module", "--eval", program, str(helper)],
+            ["node", "--input-type=module", "--eval", program, "control-only", str(helper)],
             text=True,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,

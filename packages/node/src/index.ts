@@ -6,6 +6,9 @@ export {
   type NativeBatchApiBinding,
   type NativeBeliefsApiBinding,
   type NativeGraphApiBinding,
+  type NativeMigrationApiBinding,
+  type NativeProvenanceApiBinding,
+  type NativeExportImportApiBinding,
   type NativeGraphMaintenanceApiBinding,
   type NativeMemoryApiBinding,
   type NativeProviderBinding,
@@ -105,6 +108,8 @@ export {
 
 /** Serialized factory selection; domain operation fields remain contract-owned. */
 export type NativeStorageProvider = "sqlite" | "pgvector" | "helixdb";
+/** Explicit transport mode required when selecting the Helix provider. */
 export type NativeHelixMode = "service" | "embedded";
 
+/** Selected-provider vocabulary handles retain their native ownership and close contract. */
 export type { NativeOntologyApiBinding, NativeTaxonomyApiBinding } from "./binding.js";

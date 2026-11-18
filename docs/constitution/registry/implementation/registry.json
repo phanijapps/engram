@@ -164,6 +164,64 @@
       "name": "Canonical advisory belief contradiction detection",
       "plane": "core",
       "ssot_module": "core/belief/src/contradiction.rs"
+    },
+    {
+      "concept_id": "provider.selection",
+      "name": "Pure provider preflight and exactly one selected recipe",
+      "plane": "backend",
+      "ssot_module": "backends/provider",
+      "transport_wrappers": [
+        {
+          "module": "bindings/node",
+          "transport": "napi",
+          "must_import": "engram-backend-provider"
+        },
+        {
+          "module": "mcp/engram-mcp",
+          "transport": "mcp",
+          "must_import": "engram-backend-provider"
+        }
+      ]
+    },
+    {
+      "concept_id": "provider.helix_composition",
+      "name": "Helix typed contributor wiring over canonical core composition",
+      "plane": "backend",
+      "ssot_module": "backends/helixdb"
+    },
+    {
+      "concept_id": "runtime.effect_observation",
+      "name": "Exact immutable call identity and typed effect outcome",
+      "plane": "core",
+      "ssot_module": "core/runtime/src/effect.rs"
+    },
+    {
+      "concept_id": "native.recipe_artifacts",
+      "name": "Locked immutable native recipe artifacts separated by profile and instrumentation",
+      "plane": "binding",
+      "ssot_module": "packages/node/test/helpers/build-native-recipes.mjs",
+      "transport_wrappers": [
+        {
+          "module": "packages/node/scripts/build-native.mjs",
+          "transport": "node-build"
+        }
+      ]
+    },
+    {
+      "concept_id": "provider.workflow_evidence",
+      "name": "Helix selected-provider operation/host/mode/target inventory and typed evidence auditor",
+      "plane": "on-top",
+      "ssot_module": "tools/ci/run_provider_e2e.py",
+      "transport_wrappers": [
+        {
+          "module": "tools/ci/provider_e2e_rust",
+          "transport": "rust"
+        },
+        {
+          "module": "packages/node/test/provider-e2e.mjs",
+          "transport": "node-mcp"
+        }
+      ]
     }
   ]
 }

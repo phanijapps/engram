@@ -341,6 +341,20 @@ export interface NativeProviderTransport {
   }): Promise<unknown>;
   /** Upsert a knowledge entity. */
   putEntity(entity: unknown): Promise<unknown>;
+  /** Canonical identity write using the existing Rust EntityWriteRequest JSON. */
+  resolveOrPutEntity(request: unknown): Promise<unknown>;
+  /** Canonical exact relationship identity write; distinct from graph lookup. */
+  resolveOrPutRelationship(relationship: unknown): Promise<unknown>;
+  /** Scope-visible v1 export, retaining its documented omissions. */
+  exportArchive(scope: unknown): Promise<unknown>;
+  /** Nonmutating validation of existing ImportData, not restore authorization. */
+  dryRunImport(data: unknown): Promise<unknown>;
+  /** Calls canonical apply; unsupported restore must reject before target writes. */
+  applyImport(manifest: unknown): Promise<unknown>;
+  /** Canonical stable-source provenance query using existing TimeWindow fields. */
+  provenanceBySource(request: unknown): Promise<unknown>;
+  /** Canonical exact-scope evidence query with the existing bounded limit. */
+  evidenceByScope(request: unknown): Promise<unknown>;
   /** Upsert a knowledge relationship. */
   putRelationship(relationship: unknown): Promise<unknown>;
   /** Upsert a belief. */
@@ -629,6 +643,61 @@ class JsonNativeProviderTransport implements NativeProviderTransport {
 
   async putEntity(entity: unknown): Promise<unknown> {
     return decode(this.withApi(() => this.provider.requireGraphApi(), api => api.putEntityJson(encode(entity))));
+  }
+
+  async resolveOrPutEntity(request: unknown): Promise<unknown> {
+    return decode(this.withApi(() => this.provider.requireGraphApi(), api => {
+      if (!api.resolveOrPutEntityJson) throw new Error("native identity capability is unavailable");
+      return api.resolveOrPutEntityJson(encode(request));
+    }));
+  }
+
+  async resolveOrPutRelationship(relationship: unknown): Promise<unknown> {
+    return decode(this.withApi(() => this.provider.requireGraphApi(), api => {
+      if (!api.resolveOrPutRelationshipJson) throw new Error("native identity capability is unavailable");
+      return api.resolveOrPutRelationshipJson(encode(relationship));
+    }));
+  }
+
+  async exportArchive(scope: unknown): Promise<unknown> {
+    return decode(this.withApi(() => {
+      if (!this.provider.requireExportImportApi) throw new Error("native export capability is unavailable");
+      return this.provider.requireExportImportApi();
+    }, api => api.exportJson(encode(scope))));
+  }
+
+  async dryRunImport(data: unknown): Promise<unknown> {
+    return decode(this.withApi(() => {
+      if (!this.provider.requireMigrationApi) throw new Error("native migration capability is unavailable");
+      return this.provider.requireMigrationApi();
+    }, api => api.dryRunImportJson(encode(data))));
+  }
+
+  async applyImport(manifest: unknown): Promise<unknown> {
+    return decode(this.withApi(() => {
+      if (!this.provider.requireMigrationApi) throw new Error("native migration capability is unavailable");
+      return this.provider.requireMigrationApi();
+    }, api => api.applyImportJson(encode(manifest))));
+  }
+
+  async provenanceBySource(request: unknown): Promise<unknown> {
+    return decode(this.withApi(() => {
+      if (!this.provider.requireProvenanceApi) throw new Error("native provenance capability is unavailable");
+      return this.provider.requireProvenanceApi();
+    }, api => {
+      if (!api.provenanceBySourceJson) throw new Error("native source provenance query is unavailable");
+      return api.provenanceBySourceJson(encode(request));
+    }));
+  }
+
+  async evidenceByScope(request: unknown): Promise<unknown> {
+    return decode(this.withApi(() => {
+      if (!this.provider.requireProvenanceApi) throw new Error("native provenance capability is unavailable");
+      return this.provider.requireProvenanceApi();
+    }, api => {
+      if (!api.evidenceByScopeJson) throw new Error("native scope evidence query is unavailable");
+      return api.evidenceByScopeJson(encode(request));
+    }));
   }
 
   async putRelationship(relationship: unknown): Promise<unknown> {

@@ -189,6 +189,49 @@
       "status": "existing",
       "blocking": true,
       "notes": "lane 1: catalogue must match derivation from rules/*.md; drift = failure"
+    },
+    {
+      "gate_id": "GATE-PROVIDER-BUILDS",
+      "name": "check_provider_builds.py",
+      "path": "tools/ci/check_provider_builds.py",
+      "rules": [
+        "BLD-103",
+        "BLD-105",
+        "DD-002",
+        "PRD-107"
+      ],
+      "rule_class": "RULE-2",
+      "status": "existing",
+      "blocking": false,
+      "notes": "Provider production normal/build dependency and artifact controls; test/dev graphs separate. Registration is not evidence of native-target execution or release acceptance."
+    },
+    {
+      "gate_id": "GATE-BOUND-CODE-MATRIX",
+      "name": "check_bound_code_matrix.py",
+      "path": "tools/ci/check_bound_code_matrix.py",
+      "rules": [
+        "SEC-101",
+        "SEC-102",
+        "SEC-103",
+        "TST-105"
+      ],
+      "rule_class": "RULE-1",
+      "status": "existing",
+      "blocking": false,
+      "notes": "Operation/host/backend receipts and omission controls; explicit N/A reason required, missing observations cannot pass. Ordinary SQLite/PG compatibility retained; selected provider E2E is Helix only."
+    },
+    {
+      "gate_id": "GATE-PROVIDER-E2E",
+      "name": "run_provider_e2e.py",
+      "path": "tools/ci/run_provider_e2e.py",
+      "rules": [
+        "SP-001",
+        "CI-004"
+      ],
+      "rule_class": "RULE-3",
+      "status": "existing",
+      "blocking": true,
+      "notes": "Selected Helix service/embedded actual host consumers, exact source/lock/artifact/call/scope receipts; inventory and omission controls are not native workflow proof. Missing target ownership or required observations is BLOCKED."
     }
   ]
 }

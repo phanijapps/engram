@@ -1,0 +1,236 @@
+{
+  "schema": "engram.provider-code-operations.v1",
+  "operations": [
+    {
+      "operation": "code.register",
+      "capability": "code_binding",
+      "native": {
+        "getter": null,
+        "method": "codeRegisterJson"
+      },
+      "mcp_tool": "code_repo_register",
+      "oneshot": {
+        "applicable": true,
+        "command": "code",
+        "operation": "register",
+        "reason": "Existing bound-code command or backfill command delegates coordinator; exact source/ref/generation/owner assertions required."
+      },
+      "assertions_required": [
+        "selected_provider",
+        "full_scope",
+        "expected_outcome",
+        "code_authority"
+      ],
+      "expected_error_reason_required": true
+    },
+    {
+      "operation": "code.bind",
+      "capability": "code_binding",
+      "native": {
+        "getter": null,
+        "method": "codeBindJson"
+      },
+      "mcp_tool": "code_bind",
+      "oneshot": {
+        "applicable": true,
+        "command": "code",
+        "operation": "bind",
+        "reason": "Existing bound-code command or backfill command delegates coordinator; exact source/ref/generation/owner assertions required."
+      },
+      "assertions_required": [
+        "selected_provider",
+        "full_scope",
+        "expected_outcome",
+        "code_authority"
+      ],
+      "expected_error_reason_required": true
+    },
+    {
+      "operation": "code.status",
+      "capability": "code_binding",
+      "native": {
+        "getter": null,
+        "method": "codeStatusJson"
+      },
+      "mcp_tool": "code_status",
+      "oneshot": {
+        "applicable": true,
+        "command": "code",
+        "operation": "status",
+        "reason": "Existing bound-code command or backfill command delegates coordinator; exact source/ref/generation/owner assertions required."
+      },
+      "assertions_required": [
+        "selected_provider",
+        "full_scope",
+        "expected_outcome",
+        "code_authority"
+      ],
+      "expected_error_reason_required": true
+    },
+    {
+      "operation": "code.refresh",
+      "capability": "code_binding",
+      "native": {
+        "getter": null,
+        "method": "codeRefreshJson"
+      },
+      "mcp_tool": "code_refresh",
+      "oneshot": {
+        "applicable": true,
+        "command": "code",
+        "operation": "refresh",
+        "reason": "Existing bound-code command or backfill command delegates coordinator; exact source/ref/generation/owner assertions required."
+      },
+      "assertions_required": [
+        "selected_provider",
+        "full_scope",
+        "expected_outcome",
+        "code_authority"
+      ],
+      "expected_error_reason_required": true
+    },
+    {
+      "operation": "code.scan",
+      "capability": "code_binding",
+      "native": {
+        "getter": null,
+        "method": "scanRepositoryJson"
+      },
+      "mcp_tool": "scan_repo",
+      "oneshot": {
+        "applicable": true,
+        "command": "code",
+        "operation": "rebuild",
+        "reason": "Existing bound-code command or backfill command delegates coordinator; exact source/ref/generation/owner assertions required."
+      },
+      "assertions_required": [
+        "selected_provider",
+        "full_scope",
+        "expected_outcome",
+        "code_authority"
+      ],
+      "expected_error_reason_required": true
+    },
+    {
+      "operation": "code.source",
+      "capability": "code_binding",
+      "native": {
+        "getter": null,
+        "method": "codeFetchJson"
+      },
+      "mcp_tool": "fetch_content",
+      "oneshot": {
+        "applicable": true,
+        "command": "fetch-content",
+        "operation": "fetch-content",
+        "reason": "Existing bound-code command or backfill command delegates coordinator; exact source/ref/generation/owner assertions required."
+      },
+      "assertions_required": [
+        "selected_provider",
+        "full_scope",
+        "expected_outcome",
+        "code_authority"
+      ],
+      "expected_error_reason_required": true
+    },
+    {
+      "operation": "code.reset_preview",
+      "capability": "code_binding",
+      "native": {
+        "getter": null,
+        "method": "codeResetPreviewJson"
+      },
+      "mcp_tool": "code_reset_preview",
+      "oneshot": {
+        "applicable": true,
+        "command": "code",
+        "operation": "reset-preview",
+        "reason": "Existing bound-code command or backfill command delegates coordinator; exact source/ref/generation/owner assertions required."
+      },
+      "assertions_required": [
+        "selected_provider",
+        "full_scope",
+        "expected_outcome",
+        "code_authority"
+      ],
+      "expected_error_reason_required": true
+    },
+    {
+      "operation": "code.reset_apply",
+      "capability": "code_binding",
+      "native": {
+        "getter": null,
+        "method": "codeResetApplyJson"
+      },
+      "mcp_tool": "code_reset_apply",
+      "oneshot": {
+        "applicable": true,
+        "command": "code",
+        "operation": "reset-apply",
+        "reason": "Existing bound-code command or backfill command delegates coordinator; exact source/ref/generation/owner assertions required."
+      },
+      "assertions_required": [
+        "selected_provider",
+        "full_scope",
+        "expected_outcome",
+        "code_authority"
+      ],
+      "expected_error_reason_required": true
+    },
+    {
+      "operation": "code.reset_resume",
+      "capability": "code_binding",
+      "native": {
+        "getter": null,
+        "method": "codeResetResumeJson"
+      },
+      "mcp_tool": "code_reset_resume",
+      "oneshot": {
+        "applicable": true,
+        "command": "code",
+        "operation": "reset-resume",
+        "reason": "Existing bound-code command or backfill command delegates coordinator; exact source/ref/generation/owner assertions required."
+      },
+      "assertions_required": [
+        "selected_provider",
+        "full_scope",
+        "expected_outcome",
+        "code_authority"
+      ],
+      "expected_error_reason_required": true
+    },
+    {
+      "operation": "code.backfill",
+      "capability": "code_binding",
+      "native": {
+        "getter": null,
+        "method": "backfillEmbeddingsJson"
+      },
+      "mcp_tool": "reindex",
+      "oneshot": {
+        "applicable": true,
+        "command": "backfill-embeddings",
+        "operation": "backfill",
+        "reason": "Existing bound-code command or backfill command delegates coordinator; exact source/ref/generation/owner assertions required."
+      },
+      "assertions_required": [
+        "selected_provider",
+        "full_scope",
+        "expected_outcome",
+        "code_authority"
+      ],
+      "expected_error_reason_required": true,
+      "rust": {
+        "applicable": false,
+        "reason": "No EngramProvider embedding-backfill port or existing Rust host command. Algorithm is MCP-owned; no Rust algorithm is copied or fake result emitted.",
+        "source": [
+          "core/integration/src/provider.rs",
+          "mcp/engram-mcp/src/codegraph.rs:506",
+          "bindings/node/src/provider.rs:675"
+        ]
+      },
+      "native_expected": "canonical CapabilityUnsupported; distinguish missing provider from configured-lane NativeUnsupported"
+    }
+  ],
+  "identity_note": "resolve_entity graph lookup is not identity.resolve_entity canonical resolve-or-put."
+}

@@ -3,6 +3,75 @@
 mod host;
 pub(crate) use host::*;
 
+#[cfg(all(feature = "helixdb-service", feature = "helixdb-embedded"))]
+fn actual_host_faults(mode: &str) {
+    let manifest = std::env::var("ENGRAM_PROVIDER_E2E_ARTIFACTS")
+        .expect("BLOCKED: actual instrumented MCP artifact and fault-plan manifest required");
+    assert!(std::path::Path::new(&manifest).is_absolute());
+    assert!(std::path::Path::new(&manifest).is_file());
+    let expected = std::env::var("ENGRAM_PROVIDER_E2E_EXPECTED_BUILD_RECORD")
+        .expect("BLOCKED: independent orchestration build record required");
+    let pin = std::env::var("ENGRAM_PROVIDER_E2E_EXPECTED_BUILD_RECORD_SHA256")
+        .expect("BLOCKED: independently pinned build record hash required");
+    assert_eq!(pin.len(), 64);
+    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .unwrap()
+        .parent()
+        .unwrap();
+    for host in ["mcp-stdio", "mcp-oneshot"] {
+        let output = std::process::Command::new("/usr/bin/python3")
+            .current_dir(root)
+            .args([
+                "tools/ci/run_provider_e2e.py",
+                "--provider",
+                "helixdb",
+                "--mode",
+                mode,
+                "--host",
+                host,
+                "--phase",
+                "faults",
+                "--artifacts",
+                &manifest,
+                "--expected-build-record",
+                &expected,
+                "--expected-build-record-sha256",
+                &pin,
+                "--output",
+                "runs/e2e/gate022-mcp",
+            ])
+            .output()
+            .expect("actual host fault runner unavailable");
+        assert!(
+            output.status.success(),
+            "actual host fault proof non-PASS: {} {}",
+            String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr)
+        );
+        let report: serde_json::Value = serde_json::from_slice(
+            output
+                .stdout
+                .split(|byte| *byte == b'\n')
+                .filter(|line| !line.is_empty())
+                .last()
+                .unwrap(),
+        )
+        .unwrap();
+        assert_eq!(report["status"], "PASS");
+    }
+}
+#[cfg(all(feature = "helixdb-service", feature = "helixdb-embedded"))]
+#[test]
+fn outcome_unknown_service_actual_stdio_and_applicable_oneshot() {
+    actual_host_faults("service");
+}
+#[cfg(all(feature = "helixdb-service", feature = "helixdb-embedded"))]
+#[test]
+fn outcome_unknown_embedded_actual_stdio_and_applicable_oneshot() {
+    actual_host_faults("embedded");
+}
+
 #[test]
 fn presentation_batch_retains_statuses_original_id_and_redacts_private_fields() {
     use engram_integration::{BatchStep, StepOutcome, StepStatus};

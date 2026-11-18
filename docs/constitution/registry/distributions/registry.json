@@ -10,8 +10,16 @@
       "kind": "npm",
       "package": "@engramlabs/mcp",
       "manifest": "packages/launcher/package.json",
-      "payload": ["bin.js", "install.js", "agent-install.js", "hooks/", "skills/", "agents/", "scripts/"],
-      "reconcile": "package.json files[] vs on-disk payload; skills/ vs .agents/skills (DD-002)"
+      "payload": [
+        "bin.js",
+        "install.js",
+        "agent-install.js",
+        "hooks/",
+        "skills/",
+        "agents/",
+        "scripts/"
+      ],
+      "reconcile": "package.json files[] vs on-disk payload; skills/ vs .agents/skills (DD-002); actual platform package version/features/target/hash vs consumed executable; launcher flags cannot add an unpackaged provider; fixture-control artifacts excluded from production"
     },
     {
       "surface_id": "npm.engramlabs-client",
@@ -39,6 +47,23 @@
       "source_of_truth": ".agents/skills",
       "installed_copy": "packages/launcher/skills",
       "reconcile": "directory inventory + SKILL.md name-tag sync (DD-002); agents: mcp/engram-mcp/agents vs packages/launcher/agents"
+    },
+    {
+      "surface_id": "npm.engram-node",
+      "kind": "npm",
+      "package": "@engram/node",
+      "manifest": "packages/node/package.json",
+      "payload": [
+        "dist",
+        "*.node"
+      ],
+      "reconcile": "Current native target imports, selected-provider bootstrap/operations and explicit close; consumed addon hash, feature set, production dependency graph/link inputs and profile. Production build script uses release (SQLite + FastEmbed retained); debug/instrumented tests do not establish release closure."
+    },
+    {
+      "surface_id": "provider.artifact-inventory",
+      "kind": "build-inventory",
+      "manifest": "tools/ci/check_provider_builds.py",
+      "reconcile": "engram.provider-artifacts.v1 binds source/lock and host/provider/mode/target/path/digest/features/profile with production graph and link inputs. Inventory is not workflow/native-target execution; missing required observation is blocked, never passing skip."
     }
   ]
 }

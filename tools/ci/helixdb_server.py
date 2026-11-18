@@ -75,6 +75,56 @@ def owned_alive(identity):
         return False
 
 
+def acquire_process_identity(process, expected_exe, expected_argv, timeout=5, descriptor=None):
+    """Wait for this exact Popen child to finish exec before accepting custody."""
+    if not hasattr(os, "pidfd_open") or not hasattr(signal, "pidfd_send_signal"):
+        raise RuntimeError("native Linux pidfd ownership APIs required")
+    owned_descriptor=descriptor is None
+    if descriptor is None:descriptor = os.pidfd_open(process.pid)
+    try:
+        initial = process_identity(process.pid)["start_ticks"]
+        deadline = time.monotonic() + timeout
+        while True:
+            if process.poll() is not None:
+                raise RuntimeError("owned child exited during identity acquisition; preserve failed root")
+            identity = process_identity(process.pid)
+            if identity["start_ticks"] != initial:
+                raise RuntimeError("owned child identity changed during exec acquisition")
+            if identity["exe"] == expected_exe and identity["argv"] == expected_argv:
+                return identity
+            if time.monotonic() >= deadline:
+                raise RuntimeError("owned child exec identity unconfirmed; preserve pending custody")
+            time.sleep(0.01)
+    finally:
+        if owned_descriptor:os.close(descriptor)
+
+
+def record_child(state, state_path, process, role, expected_exe, expected_argv, *, custody=None, timeout=5):
+    # Persist expected ownership before any bounded acquisition can fail. Never
+    # record pre-exec [''] argv as a completed/cleanup-authorized identity.
+    state["acquisition_pending"] = {"pid": process.pid, "role": role,
+                                    "initial_identity": None,
+                                    "expected_exe": expected_exe, "expected_argv": expected_argv}
+    state_path.write_text(json.dumps(state, indent=2) + "\n")
+    descriptor=None
+    try:
+        descriptor=os.pidfd_open(process.pid)
+        if custody is not None:custody.update(process=process,pidfd=descriptor,state=state,state_path=state_path)
+        state['acquisition_pending']['initial_identity']=process_identity(process.pid)
+        state['acquisition_pending']['pidfd_acquired']=True
+        state_path.write_text(json.dumps(state,indent=2)+'\n')
+        identity = acquire_process_identity(process, expected_exe, expected_argv,timeout=timeout,descriptor=descriptor)
+        state["processes"].append({**identity, "role": role})
+        del state["acquisition_pending"]
+        state_path.write_text(json.dumps(state, indent=2) + "\n")
+        return identity
+    finally:
+        # The caller retaining custody owns the still-live Popen AND pidfd on
+        # every acquisition failure. Helper provision retains its durable
+        # pending record for exact guarded recovery; it never guesses a role.
+        if descriptor is not None and custody is None:os.close(descriptor)
+
+
 def wait_ready(endpoint, process, timeout=120):
     opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
     deadline = time.monotonic() + timeout
@@ -88,6 +138,79 @@ def wait_ready(endpoint, process, timeout=120):
         except OSError:
             time.sleep(0.1)
     raise RuntimeError("owned server readiness timed out")
+
+
+def canonical_operation_id(value):
+    import uuid
+    try:
+        return isinstance(value, str) and str(uuid.UUID(value)) == value
+    except (ValueError, AttributeError):
+        return False
+
+
+def bound_fault(directory, request):
+    """Select only an already-flushed actual BeforeSend from this owned invocation."""
+    control_path = directory / "fault-control.json"
+    if not control_path.exists():
+        return None
+    if control_path.is_symlink():
+        raise ValueError("symlinked fault declaration")
+    control = json.loads(control_path.read_text())
+    binding = control.get("binding", {})
+    required = ("invocation", "host", "sourceRevision", "artifactSha256", "actual")
+    if any(not binding.get(key) for key in required) or binding["host"] not in {"rust", "native", "mcp-stdio", "mcp-oneshot"}:
+        raise ValueError("incomplete fixture binding")
+    trace = Path(control.get("trace_file", ""))
+    owned = directory.parent.resolve()
+    if not trace.is_absolute() or not trace.is_relative_to(owned) or any(path.is_symlink() for path in (trace, *trace.parents)):
+        raise ValueError("trace outside owned invocation")
+    if control.get("action") not in {"lose_ack", "definite_failure"}:
+        raise ValueError("invalid fixture action")
+    if not trace.is_file():
+        return None # Startup reads precede the bound business-call recorder.
+    events = [json.loads(line) for line in trace.read_text().splitlines()]
+    candidates = [row["event"] for row in events if row.get("binding") == binding and row.get("event", {}).get("phase") == "BeforeSend"]
+    if not candidates:
+        return None
+    event = candidates[-1]
+    actual = binding["actual"]
+    if any(event.get(key) != actual.get(key) for key in ("backend", "mode", "store", "scope")):
+        raise ValueError("actual effect/host binding differs")
+    if not canonical_operation_id(event.get("commitId")) or not event.get("step") or not event.get("call") or not event.get("session"):
+        raise ValueError("missing exact causal frame")
+    digest = event.get("expectedReceiptSha256", "")
+    if not re.fullmatch(r"[0-9a-f]{64}", digest):
+        raise ValueError("missing canonical receipt hash")
+    # Match the actual serialized receipt literal in the operation tree. This
+    # does not recreate the receipt codec or expose its private payload.
+    def strings(value):
+        if isinstance(value, str):
+            yield value
+        elif isinstance(value, dict):
+            for child in value.values():
+                yield from strings(child)
+        elif isinstance(value, list):
+            for child in value:
+                yield from strings(child)
+    if not any(hashlib.sha256(value.encode()).hexdigest() == digest for value in strings(request)):
+        return None
+    return {"control": control, "event": event, "binding": binding}
+
+
+def matching_native_receipt(response, event):
+    """Evidence correlation only; client canonical receipt validation stays Rust-owned."""
+    context = event.get("receiptContext", {})
+    rows = response.get("receipt")
+    owners = response.get("owner")
+    guards = response.get(context.get("mutationGuard"))
+    if not all(isinstance(values, list) and len(values) == 1 for values in (rows, owners, guards)):
+        return False
+    row = rows[0]
+    payload = row.get("payload")
+    return (row.get("public_id") == event.get("commitId")
+            and row.get("partition") == context.get("partition")
+            and isinstance(payload, str)
+            and hashlib.sha256(payload.encode()).hexdigest() == event.get("expectedReceiptSha256"))
 
 
 def gateway(directory):
@@ -111,6 +234,14 @@ def gateway(directory):
                     self.send_error(413); return
                 body = self.rfile.read(length)
                 request = json.loads(body)
+                selected = bound_fault(directory, request)
+                if selected and selected["control"]["action"] == "definite_failure":
+                    (directory / "fault-control.json").rename(directory / ("fault-consumed-" + selected["event"]["commitId"] + ".json"))
+                    with (directory / "requests.jsonl").open("a") as journal:
+                        journal.write(json.dumps({"binding":selected["binding"],"event":selected["event"],"forwarded":False,"definite_before_forward":True}) + "\n")
+                    rejected = json.dumps({"error":"index_backpressure","msg":"fixture-owned rejection before forward","retryable":True}).encode()
+                    self.send_response(429); self.send_header("Content-Type","application/json")
+                    self.send_header("Content-Length",str(len(rejected)));self.end_headers();self.wfile.write(rejected);return
                 headers = {"Content-Type": "application/json"}
                 for name in ("x-helix-await-durable", "x-helix-require-writer"):
                     if name in self.headers:
@@ -126,13 +257,22 @@ def gateway(directory):
                 dropped = write and control.exists() and control.read_text().strip().encode() in body
                 if dropped:
                     (directory / "drop-next-write-ack").unlink()
+                strong_drop = bool(selected and selected["control"]["action"] == "lose_ack"
+                                   and status == 200 and matching_native_receipt(json.loads(result), selected["event"]))
+                if strong_drop:
+                    (directory / "fault-control.json").rename(directory / ("fault-consumed-" + selected["event"]["commitId"] + ".json"))
                 # No query payload/credential is logged. Actual upstream status and ack headers are retained.
                 with (directory / "requests.jsonl").open("a") as journal:
                     journal.write(json.dumps({"write": write, "status": status,
                         "durable": headers.get("x-helix-await-durable"),
                         "require_writer": headers.get("x-helix-require-writer"),
-                        "ack_dropped_after_actual_response": dropped}) + "\n")
-                if dropped:
+                        "ack_dropped_after_actual_response": dropped or strong_drop,
+                        "legacy_unattributed":dropped,"forwarded":True,
+                        "binding":selected["binding"] if selected else None,
+                        "event":selected["event"] if selected else None,
+                        "canonical_receipt_correlated":strong_drop,
+                        "client_after_ack":False if strong_drop else None}) + "\n")
+                if dropped or strong_drop:
                     self.close_connection = True
                     self.connection.shutdown(socket.SHUT_RDWR)
                     return
@@ -332,12 +472,13 @@ def provision(directory):
         owned_root.mkdir(mode=0o700)
     with (directory / "server.log").open("wb") as log:
         engine = subprocess.Popen([str(binary)], env=env, stdin=subprocess.DEVNULL, stdout=log, stderr=subprocess.STDOUT, start_new_session=True)
-    state["processes"].append({**process_identity(engine.pid), "role": "engine"}); state_path.write_text(json.dumps(state, indent=2) + "\n")
+    record_child(state, state_path, engine, "engine", str(binary), [str(binary)])
     wait_ready(f"http://127.0.0.1:{engine_port}", engine)
     with (directory / "gateway.log").open("wb") as log:
         front = subprocess.Popen([sys.executable, str(Path(__file__).resolve()), "_gateway", "--output", str(directory)], env=env,
                                  stdin=subprocess.DEVNULL, stdout=log, stderr=subprocess.STDOUT, start_new_session=True)
-    state["processes"].append({**process_identity(front.pid), "role": "gateway"}); state_path.write_text(json.dumps(state, indent=2) + "\n")
+    record_child(state, state_path, front, "gateway", str(Path(sys.executable).resolve()),
+                 [sys.executable, str(Path(__file__).resolve()), "_gateway", "--output", str(directory)])
     wait_ready(state["endpoint"], front)
     print(json.dumps({"HELIX_TEST_ENDPOINT": state["endpoint"], "HELIX_TEST_CREDENTIAL_ENV": state["credential_env"],
                       "credential_file": str(secret), "HELIX_TEST_CONTROL_DIR": str(directory), "state": str(state_path)}))
@@ -348,6 +489,8 @@ def cleanup(directory):
     if state_path.is_symlink():
         raise ValueError("symlinked fixture state is forbidden")
     state = json.loads(state_path.read_text())
+    if state.get("acquisition_pending"):
+        raise RuntimeError("incomplete owned exec acquisition; preserve pending identity for guarded recovery")
     if state.get("root") != str(directory) or state.get("source_revision") != PIN:
         raise ValueError("fixture identity does not match owned cleanup target")
     roles = set()

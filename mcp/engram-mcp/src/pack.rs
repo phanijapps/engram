@@ -25,7 +25,7 @@ use serde::Serialize;
 use serde_json::json;
 use sha2::{Digest, Sha256};
 
-use crate::{bootstrap, config, oneshot, ontology, scope};
+use crate::{config, oneshot, ontology, scope};
 
 /// Entry point for `engram-mcp pack …` argv (after the program name).
 pub fn run(argv: &[String]) -> i32 {
@@ -393,7 +393,7 @@ pub(crate) fn install_pack(
     let entry = catalogue
         .find(entry_id)
         .ok_or_else(|| format!("unknown pack id {entry_id:?} (see `pack list`)"))?;
-    let provider = bootstrap::open_provider(mcp_config)?;
+    let provider = crate::oneshot::open_provider(mcp_config)?;
     let workspace_scope = scope::resolve_scope(
         mcp_config.org.as_deref(),
         mcp_config.domain.as_deref(),
@@ -423,16 +423,16 @@ pub(crate) fn install_pack(
     // FULL structural writes through the existing facade ports (DEC-008).
     let ontology_port = provider
         .require_ontology()
-        .map_err(|e| format!("ontology capability unavailable: {e}"))?;
+        .map_err(|e| format!("ontology capability unavailable: {}", e.to_redacted()))?;
     block_on(ontology_port.put_ontology(converted.ontology.clone()))
-        .map_err(|e| format!("put_ontology: {e}"))?;
+        .map_err(|e| format!("put_ontology: {}", e.to_redacted()))?;
     for class in &converted.classes {
         block_on(ontology_port.put_class(class.clone()))
-            .map_err(|e| format!("put_class {}: {e}", class.label))?;
+            .map_err(|e| format!("put_class: {}", e.to_redacted()))?;
     }
     for property in &converted.properties {
         block_on(ontology_port.put_property(property.clone()))
-            .map_err(|e| format!("put_property {}: {e}", property.label))?;
+            .map_err(|e| format!("put_property: {}", e.to_redacted()))?;
     }
 
     // Taxonomy mirror: one concept scheme per pack + one concept per class,
@@ -440,7 +440,7 @@ pub(crate) fn install_pack(
     // existing TaxonomyRepository port (structural read-back with counts).
     let taxonomy_port = provider
         .require_taxonomy()
-        .map_err(|e| format!("taxonomy capability unavailable: {e}"))?;
+        .map_err(|e| format!("taxonomy capability unavailable: {}", e.to_redacted()))?;
     let scheme_id = ConceptSchemeId::from(format!("pack-{}", entry.id));
     let now = chrono::Utc::now();
     block_on(taxonomy_port.put_concept_scheme(ConceptScheme {
@@ -454,7 +454,7 @@ pub(crate) fn install_pack(
         created_at: now,
         updated_at: None,
     }))
-    .map_err(|e| format!("put_concept_scheme: {e}"))?;
+    .map_err(|e| format!("put_concept_scheme: {}", e.to_redacted()))?;
     // FIND-code-006: concepts and their broader wiring are keyed by the
     // unique class id (labels are display-only — classes can share a label).
     let concept_id =
@@ -476,7 +476,7 @@ pub(crate) fn install_pack(
             created_at: now,
             updated_at: None,
         }))
-        .map_err(|e| format!("put_concept {}: {e}", class.label))?;
+        .map_err(|e| format!("put_concept: {}", e.to_redacted()))?;
     }
     for (child, parent) in pack_concept_broader_pairs(&converted) {
         block_on(taxonomy_port.put_concept_relation(ConceptRelation {
@@ -488,7 +488,7 @@ pub(crate) fn install_pack(
             provenance: converted.ontology.provenance.clone(),
             created_at: now,
         }))
-        .map_err(|e| format!("put_concept_relation: {e}"))?;
+        .map_err(|e| format!("put_concept_relation: {}", e.to_redacted()))?;
     }
 
     // Derived launch slice (DEC-P05) + config emit (DEC-P04).

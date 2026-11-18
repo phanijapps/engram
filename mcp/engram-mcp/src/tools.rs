@@ -3103,3 +3103,540 @@ pub(crate) fn presentation_step(step: &engram_integration::StepOutcome) -> Strin
     }
     line
 }
+
+// --- Canonical selected-provider operations (explicit all profile) ------------
+
+fn canonical_arg<T: serde::de::DeserializeOwned>(args: &Value, key: &str) -> Result<T, ToolError> {
+    serde_json::from_value(args.get(key).cloned().unwrap_or(Value::Null))
+        .map_err(|_| invalid("invalid canonical request"))
+}
+fn canonical_json<T: serde::Serialize>(value: &T) -> Result<Value, ToolError> {
+    serde_json::to_string(value)
+        .map(protocol::text_content)
+        .map_err(|_| internal("canonical response could not be encoded"))
+}
+fn exact_launch_scope(
+    expected: &engram_domain::Scope,
+    actual: &engram_domain::Scope,
+) -> Result<(), ToolError> {
+    if expected != actual {
+        return Err(invalid("scope is outside the MCP launch scope"));
+    }
+    Ok(())
+}
+fn canonical_scope(app: &App, args: &Value) -> Result<(), ToolError> {
+    if !args.is_object() {
+        return Err(invalid("invalid canonical request"));
+    }
+    if let Some(value) = args.get("scope") {
+        let scope: engram_domain::Scope = serde_json::from_value(value.clone())
+            .map_err(|_| invalid("invalid canonical scope"))?;
+        exact_launch_scope(&app.scope, &scope)?;
+    }
+    Ok(())
+}
+fn canonical_unavailable(capability: &str) -> ToolError {
+    internal(
+        engram_runtime::CoreError::CapabilityUnsupported {
+            capability: capability.into(),
+            reason: "not wired".into(),
+        }
+        .to_redacted(),
+    )
+}
+fn canonical_limit(args: &Value, default: usize) -> Result<usize, ToolError> {
+    match args.get("limit") {
+        None => Ok(default),
+        Some(value) => value
+            .as_u64()
+            .and_then(|n| usize::try_from(n).ok())
+            .ok_or_else(|| invalid("invalid canonical limit")),
+    }
+}
+fn canonical_window(args: &Value) -> Result<engram_integration::TimeWindow, ToolError> {
+    let Some(window) = args.get("window") else {
+        return Ok(engram_integration::TimeWindow::open());
+    };
+    if !window.is_object() {
+        return Err(invalid("invalid canonical time window"));
+    }
+    let bound = |key: &str| {
+        serde_json::from_value::<Option<engram_domain::Timestamp>>(
+            window.get(key).cloned().unwrap_or(Value::Null),
+        )
+        .map_err(|_| invalid("invalid canonical time window"))
+    };
+    Ok(engram_integration::TimeWindow {
+        from: bound("from")?,
+        to: bound("to")?,
+    })
+}
+fn archive_scope(app: &App, data: &engram_integration::ImportData) -> Result<(), ToolError> {
+    let scopes = data
+        .memories
+        .iter()
+        .map(|r| &r.scope)
+        .chain(data.knowledge_sources.iter().map(|r| &r.scope))
+        .chain(data.knowledge_documents.iter().map(|r| &r.scope))
+        .chain(data.knowledge_chunks.iter().map(|r| &r.scope))
+        .chain(data.knowledge_entities.iter().map(|r| &r.scope))
+        .chain(data.knowledge_relationships.iter().map(|r| &r.scope))
+        .chain(data.concept_schemes.iter().map(|r| &r.scope))
+        .chain(data.concepts.iter().map(|r| &r.scope))
+        .chain(data.beliefs.iter().map(|r| &r.scope))
+        .chain(data.hierarchy_nodes.iter().map(|r| &r.scope));
+    for value in scopes {
+        let scope: engram_domain::Scope =
+            serde_json::from_str(value).map_err(|_| invalid("invalid canonical archive scope"))?;
+        exact_launch_scope(&app.scope, &scope)?;
+    }
+    Ok(())
+}
+fn ontology_parent(app: &App, id: &engram_domain::OntologyId) -> Result<(), ToolError> {
+    let port = app
+        .provider
+        .require_ontology()
+        .map_err(|e| internal(e.to_redacted()))?;
+    let parent = block_on(port.get_ontology(id, &app.scope))
+        .map_err(|e| internal(e.to_redacted()))?
+        .ok_or_else(|| invalid("ontology is not in the MCP launch scope"))?;
+    exact_launch_scope(&app.scope, &parent.scope)
+}
+fn taxonomy_parent(app: &App, id: &engram_domain::ConceptSchemeId) -> Result<(), ToolError> {
+    let port = app
+        .provider
+        .require_taxonomy()
+        .map_err(|e| internal(e.to_redacted()))?;
+    let parent = block_on(port.get_concept_scheme(id, &app.scope))
+        .map_err(|e| internal(e.to_redacted()))?
+        .ok_or_else(|| invalid("concept scheme is not in the MCP launch scope"))?;
+    exact_launch_scope(&app.scope, &parent.scope)
+}
+
+/// Export the launch scope through the canonical archive-v1 projection.
+pub fn archive_export(app: &App, args: &Value) -> Result<Value, ToolError> {
+    canonical_scope(app, args)?;
+    let port = app
+        .provider
+        .require_export_import()
+        .map_err(|e| internal(e.to_redacted()))?;
+    canonical_json(&block_on(port.export(&app.scope)).map_err(|e| internal(e.to_redacted()))?)
+}
+/// Validate archive-v1 data without applying mutations.
+pub fn archive_dry_run(app: &App, args: &Value) -> Result<Value, ToolError> {
+    canonical_scope(app, args)?;
+    let data: engram_integration::ImportData = canonical_arg(args, "data")?;
+    archive_scope(app, &data)?;
+    let port = app
+        .provider
+        .require_migration()
+        .map_err(|e| internal(e.to_redacted()))?;
+    canonical_json(
+        &port
+            .dry_run_import(&data)
+            .map_err(|e| internal(e.to_redacted()))?,
+    )
+}
+/// Delegate apply to the canonical explicitly unsupported archive-v1 operation.
+pub fn archive_apply(app: &App, args: &Value) -> Result<Value, ToolError> {
+    canonical_scope(app, args)?;
+    let manifest: engram_integration::MigrationManifest = canonical_arg(args, "manifest")?;
+    archive_scope(app, &manifest.import_data)?;
+    let port = app
+        .provider
+        .require_migration()
+        .map_err(|e| internal(e.to_redacted()))?;
+    port.apply_import(&manifest)
+        .map_err(|e| internal(e.to_redacted()))?;
+    // The current canonical service always returns CapabilityUnsupported.
+    Err(internal(
+        engram_runtime::CoreError::CapabilityUnsupported {
+            capability: "archive_apply".into(),
+            reason: "archive v1 apply is unsupported".into(),
+        }
+        .to_redacted(),
+    ))
+}
+/// Resolve or write an entity using the canonical declared identity policy.
+pub fn identity_resolve_or_put_entity(app: &App, args: &Value) -> Result<Value, ToolError> {
+    canonical_scope(app, args)?;
+    let request: engram_domain::EntityWriteRequest = canonical_arg(args, "request")?;
+    exact_launch_scope(&app.scope, &request.entity.scope)?;
+    let port = app
+        .provider
+        .identity()
+        .ok_or_else(|| canonical_unavailable("identity"))?;
+    canonical_json(
+        &block_on(port.resolve_or_put_entity(request)).map_err(|e| internal(e.to_redacted()))?,
+    )
+}
+/// Resolve or write a relationship through its existing canonical typed port.
+pub fn identity_resolve_or_put_relationship(app: &App, args: &Value) -> Result<Value, ToolError> {
+    canonical_scope(app, args)?;
+    let record: KnowledgeRelationship = canonical_arg(args, "relationship")?;
+    exact_launch_scope(&app.scope, &record.scope)?;
+    let port = app
+        .provider
+        .identity()
+        .ok_or_else(|| canonical_unavailable("identity"))?;
+    canonical_json(
+        &block_on(port.resolve_or_put_relationship(record))
+            .map_err(|e| internal(e.to_redacted()))?,
+    )
+}
+
+/// Persist a typed Ontology through the selected canonical repository.
+pub fn ontology_put(app: &App, args: &Value) -> Result<Value, ToolError> {
+    canonical_scope(app, args)?;
+    let record: engram_domain::Ontology = canonical_arg(args, "ontology")?;
+    exact_launch_scope(&app.scope, &record.scope)?;
+    let port = app
+        .provider
+        .require_ontology()
+        .map_err(|e| internal(e.to_redacted()))?;
+    canonical_json(&block_on(port.put_ontology(record)).map_err(|e| internal(e.to_redacted()))?)
+}
+
+/// Persist a typed OntologyClass through the selected canonical repository.
+pub fn ontology_put_class(app: &App, args: &Value) -> Result<Value, ToolError> {
+    canonical_scope(app, args)?;
+    let record: engram_domain::OntologyClass = canonical_arg(args, "class")?;
+    ontology_parent(app, &record.ontology_id)?;
+    let port = app
+        .provider
+        .require_ontology()
+        .map_err(|e| internal(e.to_redacted()))?;
+    canonical_json(&block_on(port.put_class(record)).map_err(|e| internal(e.to_redacted()))?)
+}
+
+/// Persist a typed OntologyProperty through the selected canonical repository.
+pub fn ontology_put_property(app: &App, args: &Value) -> Result<Value, ToolError> {
+    canonical_scope(app, args)?;
+    let record: engram_domain::OntologyProperty = canonical_arg(args, "property")?;
+    ontology_parent(app, &record.ontology_id)?;
+    let port = app
+        .provider
+        .require_ontology()
+        .map_err(|e| internal(e.to_redacted()))?;
+    canonical_json(&block_on(port.put_property(record)).map_err(|e| internal(e.to_redacted()))?)
+}
+
+/// Persist a typed OntologyAxiom through the selected canonical repository.
+pub fn ontology_put_axiom(app: &App, args: &Value) -> Result<Value, ToolError> {
+    canonical_scope(app, args)?;
+    let record: engram_domain::OntologyAxiom = canonical_arg(args, "axiom")?;
+    ontology_parent(app, &record.ontology_id)?;
+    let port = app
+        .provider
+        .require_ontology()
+        .map_err(|e| internal(e.to_redacted()))?;
+    canonical_json(&block_on(port.put_axiom(record)).map_err(|e| internal(e.to_redacted()))?)
+}
+
+/// Persist a typed ConceptScheme through the selected canonical repository.
+pub fn taxonomy_put_scheme(app: &App, args: &Value) -> Result<Value, ToolError> {
+    canonical_scope(app, args)?;
+    let record: engram_domain::ConceptScheme = canonical_arg(args, "scheme")?;
+    exact_launch_scope(&app.scope, &record.scope)?;
+    let port = app
+        .provider
+        .require_taxonomy()
+        .map_err(|e| internal(e.to_redacted()))?;
+    canonical_json(
+        &block_on(port.put_concept_scheme(record)).map_err(|e| internal(e.to_redacted()))?,
+    )
+}
+
+/// Persist a typed Concept through the selected canonical repository.
+pub fn taxonomy_put_concept(app: &App, args: &Value) -> Result<Value, ToolError> {
+    canonical_scope(app, args)?;
+    let record: engram_domain::Concept = canonical_arg(args, "concept")?;
+    taxonomy_parent(app, &record.scheme_id)?;
+    let port = app
+        .provider
+        .require_taxonomy()
+        .map_err(|e| internal(e.to_redacted()))?;
+    canonical_json(&block_on(port.put_concept(record)).map_err(|e| internal(e.to_redacted()))?)
+}
+
+/// Persist a typed ConceptRelation through the selected canonical repository.
+pub fn taxonomy_put_relation(app: &App, args: &Value) -> Result<Value, ToolError> {
+    canonical_scope(app, args)?;
+    let record: engram_domain::ConceptRelation = canonical_arg(args, "relation")?;
+    taxonomy_parent(app, &record.scheme_id)?;
+    let port = app
+        .provider
+        .require_taxonomy()
+        .map_err(|e| internal(e.to_redacted()))?;
+    canonical_json(
+        &block_on(port.put_concept_relation(record)).map_err(|e| internal(e.to_redacted()))?,
+    )
+}
+
+/// Read a durable ontology, distinct from the launch-file ontology_read tool.
+pub fn ontology_get(app: &App, args: &Value) -> Result<Value, ToolError> {
+    canonical_scope(app, args)?;
+    let id = engram_domain::OntologyId::from(req_str(args, "id")?);
+    let port = app
+        .provider
+        .require_ontology()
+        .map_err(|e| internal(e.to_redacted()))?;
+    let record =
+        block_on(port.get_ontology(&id, &app.scope)).map_err(|e| internal(e.to_redacted()))?;
+    if let Some(record) = &record {
+        exact_launch_scope(&app.scope, &record.scope)?;
+    }
+    canonical_json(&record)
+}
+/// Validate graph vocabulary through the canonical ontology port.
+pub fn ontology_validate_graph(app: &App, args: &Value) -> Result<Value, ToolError> {
+    canonical_scope(app, args)?;
+    let graph = engram_domain::KnowledgeGraphId::from(req_str(args, "graphId")?);
+    let ontology = engram_domain::OntologyId::from(req_str(args, "ontologyId")?);
+    ontology_parent(app, &ontology)?;
+    let port = app
+        .provider
+        .require_ontology()
+        .map_err(|e| internal(e.to_redacted()))?;
+    canonical_json(
+        &block_on(port.validate_graph(&graph, &ontology, &app.scope))
+            .map_err(|e| internal(e.to_redacted()))?,
+    )
+}
+/// Read a persisted scheme, distinct from the launch-file taxonomy_read tool.
+pub fn taxonomy_get_scheme(app: &App, args: &Value) -> Result<Value, ToolError> {
+    canonical_scope(app, args)?;
+    let id = engram_domain::ConceptSchemeId::from(req_str(args, "id")?);
+    let port = app
+        .provider
+        .require_taxonomy()
+        .map_err(|e| internal(e.to_redacted()))?;
+    let record = block_on(port.get_concept_scheme(&id, &app.scope))
+        .map_err(|e| internal(e.to_redacted()))?;
+    if let Some(record) = &record {
+        exact_launch_scope(&app.scope, &record.scope)?;
+    }
+    canonical_json(&record)
+}
+/// List concepts only after the owning scheme's launch scope is verified.
+pub fn taxonomy_list_concepts(app: &App, args: &Value) -> Result<Value, ToolError> {
+    canonical_scope(app, args)?;
+    let id = engram_domain::ConceptSchemeId::from(req_str(args, "schemeId")?);
+    taxonomy_parent(app, &id)?;
+    let port = app
+        .provider
+        .require_taxonomy()
+        .map_err(|e| internal(e.to_redacted()))?;
+    canonical_json(
+        &block_on(port.list_concepts(&id, &app.scope)).map_err(|e| internal(e.to_redacted()))?,
+    )
+}
+/// Read canonical provenance for a typed target in the launch scope.
+pub fn provenance_for(app: &App, args: &Value) -> Result<Value, ToolError> {
+    canonical_scope(app, args)?;
+    let target: engram_domain::EvidenceTargetType = canonical_arg(args, "target")?;
+    let port = app
+        .provider
+        .require_provenance()
+        .map_err(|e| internal(e.to_redacted()))?;
+    canonical_json(
+        &block_on(port.provenance_for(target, req_str(args, "id")?, &app.scope))
+            .map_err(|e| internal(e.to_redacted()))?,
+    )
+}
+/// Read canonical evidence links for a typed target in the launch scope.
+pub fn evidence_for(app: &App, args: &Value) -> Result<Value, ToolError> {
+    canonical_scope(app, args)?;
+    let target: engram_domain::EvidenceTargetType = canonical_arg(args, "target")?;
+    let port = app
+        .provider
+        .require_provenance()
+        .map_err(|e| internal(e.to_redacted()))?;
+    canonical_json(
+        &block_on(port.evidence_for(target, req_str(args, "id")?, &app.scope))
+            .map_err(|e| internal(e.to_redacted()))?,
+    )
+}
+/// Query provenance by its stable source key and observed-at window.
+pub fn provenance_by_source(app: &App, args: &Value) -> Result<Value, ToolError> {
+    canonical_scope(app, args)?;
+    let window = canonical_window(args)?;
+    let port = app
+        .provider
+        .require_provenance()
+        .map_err(|e| internal(e.to_redacted()))?;
+    let rows = block_on(port.provenance_by_source(req_str(args, "source")?, &app.scope, window))
+        .map_err(|e| internal(e.to_redacted()))?;
+    canonical_json(&rows.into_iter().map(|entry| json!({"target":entry.target,"targetId":entry.target_id,"provenance":entry.provenance})).collect::<Vec<_>>())
+}
+/// Query scope-bounded evidence using the canonical observed-at window.
+pub fn evidence_by_scope(app: &App, args: &Value) -> Result<Value, ToolError> {
+    canonical_scope(app, args)?;
+    let window = canonical_window(args)?;
+    let limit = canonical_limit(args, 100)?;
+    let port = app
+        .provider
+        .require_provenance()
+        .map_err(|e| internal(e.to_redacted()))?;
+    let rows = block_on(port.evidence_by_scope(&app.scope, window, limit))
+        .map_err(|e| internal(e.to_redacted()))?;
+    canonical_json(&rows.into_iter().map(|entry| json!({"target":entry.target,"targetId":entry.target_id,"provenance":entry.provenance})).collect::<Vec<_>>())
+}
+/// Append evidence through canonical target-kind and policy validation.
+pub fn attach_evidence(app: &App, args: &Value) -> Result<Value, ToolError> {
+    canonical_scope(app, args)?;
+    let target: engram_domain::EvidenceTargetType = canonical_arg(args, "target")?;
+    let evidence: engram_domain::EvidenceRef = canonical_arg(args, "evidence")?;
+    let port = app
+        .provider
+        .require_provenance()
+        .map_err(|e| internal(e.to_redacted()))?;
+    canonical_json(
+        &block_on(port.attach_evidence(target, req_str(args, "id")?, evidence, &app.scope))
+            .map_err(|e| internal(e.to_redacted()))?,
+    )
+}
+/// Return the selected provider's canonical diagnostic snapshot.
+pub fn provider_diagnostics(app: &App, args: &Value) -> Result<Value, ToolError> {
+    canonical_scope(app, args)?;
+    let port = app
+        .provider
+        .require_observability()
+        .map_err(|e| internal(e.to_redacted()))?;
+    canonical_json(&block_on(port.diagnostics()).map_err(|e| internal(e.to_redacted()))?)
+}
+/// Return canonical communities without repeating the clustering algorithm.
+pub fn community_overview(app: &App, args: &Value) -> Result<Value, ToolError> {
+    canonical_scope(app, args)?;
+    let limit = canonical_limit(args, 20)?;
+    let port = app
+        .provider
+        .community_query()
+        .ok_or_else(|| canonical_unavailable("community_query"))?;
+    canonical_json(
+        &block_on(port.overview(&app.scope, limit)).map_err(|e| internal(e.to_redacted()))?,
+    )
+}
+/// Return the canonical eligible community member index.
+pub fn community_member_index(app: &App, args: &Value) -> Result<Value, ToolError> {
+    canonical_scope(app, args)?;
+    let port = app
+        .provider
+        .community_query()
+        .ok_or_else(|| canonical_unavailable("community_query"))?;
+    canonical_json(&block_on(port.member_index(&app.scope)).map_err(|e| internal(e.to_redacted()))?)
+}
+/// Resolve an entity's canonical community, preserving unsupported errors.
+pub fn community_of(app: &App, args: &Value) -> Result<Value, ToolError> {
+    canonical_scope(app, args)?;
+    let port = app
+        .provider
+        .community_query()
+        .ok_or_else(|| canonical_unavailable("community_query"))?;
+    canonical_json(
+        &block_on(port.community_of(&app.scope, req_str(args, "id")?))
+            .map_err(|e| internal(e.to_redacted()))?,
+    )
+}
+/// Return the canonical scope counts without inventing unavailable family counts.
+pub fn community_scope_counts(app: &App, args: &Value) -> Result<Value, ToolError> {
+    canonical_scope(app, args)?;
+    let port = app
+        .provider
+        .community_query()
+        .ok_or_else(|| canonical_unavailable("community_query"))?;
+    canonical_json(&block_on(port.scope_counts(&app.scope)).map_err(|e| internal(e.to_redacted()))?)
+}
+
+#[cfg(test)]
+mod canonical_provider_scope_tests {
+    use super::tests::test_app;
+    use super::*;
+
+    fn empty_archive() -> Value {
+        json!({"memories":[],"knowledge_sources":[],"knowledge_documents":[],"knowledge_chunks":[],
+            "knowledge_entities":[],"knowledge_relationships":[],"concept_schemes":[],"concepts":[],
+            "beliefs":[],"hierarchy_nodes":[],"vectors":[]})
+    }
+    #[test]
+    fn canonical_scope_denies_every_foreign_dimension_and_none_empty_change() {
+        let dir = tempfile::tempdir().unwrap();
+        let app = test_app(dir.path());
+        let mut foreign = Vec::new();
+        let mut scope = app.scope.clone();
+        scope.tenant = "foreign".into();
+        foreign.push(scope);
+        let mut scope = app.scope.clone();
+        scope.subject = Some(String::new());
+        foreign.push(scope);
+        let mut scope = app.scope.clone();
+        scope.workspace = None;
+        foreign.push(scope);
+        let mut scope = app.scope.clone();
+        scope.session = Some(String::new());
+        foreign.push(scope);
+        let mut scope = app.scope.clone();
+        scope.environment = Some(String::new());
+        foreign.push(scope);
+        for scope in foreign {
+            assert_eq!(
+                archive_export(&app, &json!({"scope":scope}))
+                    .unwrap_err()
+                    .code,
+                -32602
+            );
+        }
+        assert!(archive_export(&app, &json!({"scope":app.scope})).is_ok());
+    }
+    #[test]
+    fn canonical_archive_nested_scope_is_checked_and_apply_never_succeeds() {
+        let dir = tempfile::tempdir().unwrap();
+        let app = test_app(dir.path());
+        let mut foreign = app.scope.clone();
+        foreign.session = Some("foreign-session".into());
+        let mut data = empty_archive();
+        data["memories"] = json!([{"id":"foreign","scope":serde_json::to_string(&foreign).unwrap(),
+            "content":"unmodified","timestamp":0,"policy":"{}"}]);
+        assert_eq!(
+            archive_dry_run(&app, &json!({"data":data}))
+                .unwrap_err()
+                .code,
+            -32602
+        );
+        let data: engram_integration::ImportData = serde_json::from_value(empty_archive()).unwrap();
+        let report = app
+            .provider
+            .require_migration()
+            .unwrap()
+            .dry_run_import(&data)
+            .unwrap();
+        let manifest = engram_integration::MigrationManifest {
+            validation_report: report,
+            import_data: data,
+        };
+        let error = archive_apply(&app, &json!({"manifest":manifest})).unwrap_err();
+        assert_eq!(error.code, -32603);
+        assert!(error.message.to_lowercase().contains("unsupported"));
+        let exported = block_on(
+            app.provider
+                .require_export_import()
+                .unwrap()
+                .export(&app.scope),
+        )
+        .unwrap();
+        assert!(exported.memories.is_empty());
+    }
+    #[test]
+    fn malformed_canonical_inputs_do_not_echo_private_enum_or_record_values() {
+        let dir = tempfile::tempdir().unwrap();
+        let app = test_app(dir.path());
+        let error =
+            provenance_for(&app, &json!({"target":"PRIVATE_SENTINEL","id":"x"})).unwrap_err();
+        assert_eq!(error.code, -32602);
+        assert!(!error.message.contains("PRIVATE_SENTINEL"));
+        let error =
+            identity_resolve_or_put_entity(&app, &json!({"request":{"entity":"PRIVATE_SENTINEL"}}))
+                .unwrap_err();
+        assert!(!error.message.contains("PRIVATE_SENTINEL"));
+    }
+}

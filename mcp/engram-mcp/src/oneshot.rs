@@ -927,7 +927,9 @@ mod tests {
 
 /// Reader one-shots and stdio use the same canonical opener. Fixture declarations
 /// are reachable only in the explicitly instrumented artifact profile.
-fn open_provider(config: &config::McpConfig) -> Result<engram_integration::EngramProvider, String> {
+pub(crate) fn open_provider(
+    config: &config::McpConfig,
+) -> Result<engram_integration::EngramProvider, String> {
     #[cfg(feature = "test-controls")]
     {
         return fixture_provider(config, false);
@@ -993,16 +995,23 @@ pub(crate) fn fixture_provider(
     let opened = bootstrap::open_instrumented_provider(config, identity)?;
     let control = opened.control;
     if let Some(n) = f.get("loseAckAfter").and_then(Value::as_u64) {
-        control.lose_mutation_ack_after(n as usize);
+        if f.get("cleanupFailure").and_then(Value::as_bool) == Some(true) {
+            control.lose_mutation_ack_with_cleanup_failure_after(n as usize);
+        } else {
+            control.lose_mutation_ack_after(n as usize);
+        }
     }
     if f.get("definiteFailure").and_then(Value::as_bool) == Some(true) {
         control.reject_next_mutation_definitely();
     }
     let binding = json!({"backend":opened.binding.backend,"mode":opened.binding.mode,"store":opened.binding.logical_store,"scope":opened.binding.scope,"host":expected_host});
+    control.configure_trace_recorder(&owned_root,
+        json!({"host":expected_host,"invocation":field("invocation")?,"sourceRevision":field("sourceRevision")?,"artifactSha256":field("artifactSha256")?,"actual":binding}))
+        .map_err(|error| error.to_string())?;
     // Recorder declarations do not attest source/artifact hashes by themselves.
     FIXTURE_RECORDERS.with(|recorders| recorders.borrow_mut().push(Box::new(move || {
         let snapshot = control.snapshot();
-        let record = json!({"binding":binding,"allSends":snapshot.all_sends,"reconciliationReads":snapshot.reconciliation_reads,"mutationAttempts":snapshot.mutation_attempts,"landedCommits":snapshot.landed_commits});
+        let record = json!({"binding":binding,"allSends":snapshot.all_sends,"reconciliationReads":snapshot.reconciliation_reads,"mutationAttempts":snapshot.mutation_attempts,"landedCommits":snapshot.landed_commits,"events":snapshot.events_json(),"observations":snapshot.observations_json(),"nativeReceipts":snapshot.native_receipts,"cleanupGuardRefusals":snapshot.cleanup_guard_refusals,"recorderFailed":control.recorder_failed()});
         let output = owned_root.join("mcp-fixture-observation.json");
         if let Ok(mut file) = std::fs::OpenOptions::new().write(true).create_new(true).open(output) {
             use std::io::Write;

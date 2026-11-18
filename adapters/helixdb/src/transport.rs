@@ -3,6 +3,19 @@ use crate::error::{Error, Result};
 use helix_db::{QueryRequest, QueryRequestType};
 use serde_json::Value;
 
+#[cfg(feature = "test-controls")]
+pub(crate) type ReceiptValidator = std::sync::Arc<dyn Fn(&Value) -> bool + Send + Sync>;
+#[cfg(feature = "test-controls")]
+pub(crate) fn receipt_hash(value: &Value) -> Option<String> {
+    use sha2::{Digest, Sha256};
+    serde_json::to_vec(value).ok().map(|bytes| {
+        Sha256::digest(bytes)
+            .iter()
+            .map(|byte| format!("{byte:02x}"))
+            .collect()
+    })
+}
+
 #[derive(Clone)]
 pub(crate) struct Operation {
     pub(crate) id: String,
@@ -50,6 +63,25 @@ impl Operation {
 }
 
 pub(crate) trait Transport: Send + Sync {
+    #[cfg(feature = "test-controls")]
+    fn fixture_observed(&self, _observation: engram_runtime::effect::EffectObservation) {}
+    #[cfg(feature = "test-controls")]
+    fn fixture_bind_effects(
+        &self,
+        _operation_id: &str,
+        _effects: Vec<engram_runtime::effect::EffectObservation>,
+        _receipt_hash: Option<String>,
+        _receipt_context: Value,
+        _validate_receipt: ReceiptValidator,
+    ) {
+    }
+    #[cfg(feature = "test-controls")]
+    fn fixture_after_ack(
+        &self,
+        _operation_id: &str,
+        _effects: Vec<engram_runtime::effect::EffectObservation>,
+    ) {
+    }
     fn execute(&self, operation: &Operation) -> Result<Value>;
     fn close(&self) -> Result<()>;
     fn reconcile_read(&self, operation: &Operation) -> Result<Value>;

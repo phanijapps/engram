@@ -1,0 +1,30 @@
+[package]
+name = "engram-provider-e2e"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+publish = false
+
+[dependencies]
+engram-backend-provider = { path = "../../../backends/provider", default-features = false }
+engram-integration = { path = "../../../core/integration", default-features = false, features = ["code-lanes"] }
+engram-domain = { path = "../../../core/domain" }
+engram-runtime = { path = "../../../core/runtime" }
+engram-belief = { path = "../../../core/belief" }
+engram-knowledge = { path = "../../../core/knowledge" }
+futures.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+sha2.workspace = true
+
+[features]
+default = []
+sqlite = ["engram-backend-provider/sqlite"]
+pgvector = ["engram-backend-provider/pgvector"]
+helixdb-service = ["engram-backend-provider/helixdb-service"]
+helixdb-embedded = ["engram-backend-provider/helixdb-embedded"]
+helixdb = ["helixdb-service", "helixdb-embedded"]
+fastembed = ["engram-backend-provider/fastembed"]
+http-embeddings = ["engram-backend-provider/http-embeddings"]
+test-controls = ["engram-backend-provider/test-controls"]

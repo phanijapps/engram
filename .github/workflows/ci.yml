@@ -5,6 +5,38 @@ on:
   push:
     branches:
       - main
+  workflow_dispatch:
+    inputs:
+      helix_e2e:
+        description: "Execute the real Helix native matrix; missing prerequisites fail BLOCKED"
+        type: boolean
+        default: false
+      provider_run_id:
+        description: "Actual producer workflow run ID for the immutable artifact collection"
+        type: string
+      provider_artifact_ids:
+        description: "Actual immutable artifact IDs (comma-separated); no inferred artifact names"
+        type: string
+      provider_manifest:
+        description: "Path inside that collection to artifacts.json; {mode}/{target} placeholders allowed"
+        type: string
+      expected_record_run_id:
+        description: "Actual run delivering the separately pinned build record"
+        type: string
+      expected_record_artifact_id:
+        description: "Actual immutable build-record artifact ID, separate from provider bundles"
+        type: string
+      expected_record_path:
+        description: "Relative build-record path inside its separate artifact"
+        type: string
+      expected_record_sha256:
+        description: "Independent trusted orchestration pin, never taken from artifacts.json"
+        type: string
+      provider_phase:
+        description: "Faults require a separate actual instrumented artifact and owned controls"
+        type: choice
+        options: [operations, faults, all]
+        default: operations
 
 # Lightweight + fast: superseded runs on the same ref are cancelled instead of
 # queueing behind each other.
@@ -156,8 +188,16 @@ jobs:
   typescript:
     name: TypeScript
     runs-on: ubuntu-latest
+    env:
+      TMPDIR: ${{ runner.temp }}/engram-${{ github.run_id }}-${{ github.run_attempt }}-typescript
+      CARGO_BUILD_JOBS: "2"
+      CARGO_PROFILE_DEV_DEBUG: "0"
+      CARGO_PROFILE_TEST_DEBUG: "0"
     steps:
       - uses: actions/checkout@v4
+      - name: Prepare owned temporary root
+        run: mkdir -p "$TMPDIR"
+      - uses: dtolnay/rust-toolchain@1.88.0
       - name: Enable pnpm
         run: corepack enable
       - uses: actions/setup-node@v4
@@ -174,8 +214,14 @@ jobs:
         run: pnpm run build
       - name: Typecheck
         run: pnpm run typecheck
-      - name: Test
-        run: pnpm run test
+      - name: Test ordinary package and Node unit suites
+        # Real multi-provider construction and fault cases belong to the
+        # explicit native fixture lane below. The accepted -t outcome_unknown
+        # command still registers actual cases and fails without its manifest.
+        run: |
+          pnpm --filter '!@engram/node' -r --if-present test
+          node packages/node/test/helpers/build-native-recipes.mjs --providers sqlite,pgvector
+          pnpm --filter @engram/node exec vitest run --exclude test/provider-selection.test.ts --exclude test/helixdb-provider.test.ts
 
   audit:
     name: Security audit (cargo-audit)
@@ -188,3 +234,279 @@ jobs:
           tool: cargo-audit
       - name: Audit dependencies
         run: cargo audit
+
+
+  provider-controls:
+    name: Provider inventory and omission controls (not workflow execution)
+    runs-on: ubuntu-latest
+    env:
+      TMPDIR: ${{ runner.temp }}/engram-provider-controls
+      CARGO_BUILD_JOBS: "2"
+      CARGO_PROFILE_DEV_DEBUG: "0"
+      CARGO_PROFILE_TEST_DEBUG: "0"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: dtolnay/rust-toolchain@1.88.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Prepare owned temporary root
+        run: mkdir -p "$TMPDIR"
+      - name: Pure inventory and negative harness controls
+        run: |
+          python3 -m unittest tools.ci.tests.test_provider_e2e_controls tools.ci.tests.test_bound_code_matrix_controls tools.ci.tests.test_provider_builds
+          python3 tools/ci/run_provider_e2e.py --check-inventory --self-test-omissions
+      - name: Pure operation and host-applicability contracts
+        run: cargo +1.88.0 test -p engram-conformance --no-default-features --test provider_contracts
+
+  helix-provider-e2e:
+    # This opt-in workflow is not inventory PASS or automatic release approval.
+    # Existing SQLite/PG compatibility jobs above remain unchanged.
+    name: Helix ${{ matrix.mode }} / ${{ matrix.target }} actual native workflow
+    if: github.event_name == 'workflow_dispatch' && inputs.helix_e2e
+    needs: [contract, provider-controls]
+    permissions:
+      contents: read
+      actions: read
+    strategy:
+      fail-fast: false
+      matrix:
+        mode: [service, embedded]
+        include:
+          - target: linux-x64-gnu
+            runner: ubuntu-latest
+          - target: linux-arm64-gnu
+            runner: ubuntu-24.04-arm
+          - target: darwin-arm64
+            runner: macos-latest
+          - target: win32-x64
+            runner: windows-latest
+        target: [linux-x64-gnu, linux-arm64-gnu, darwin-arm64, win32-x64]
+    runs-on: ${{ matrix.runner }}
+    defaults:
+      run:
+        shell: bash
+    env:
+      TMPDIR: ${{ runner.temp }}/engram-provider-${{ matrix.target }}-${{ matrix.mode }}
+      CARGO_BUILD_JOBS: "2"
+      CARGO_PROFILE_DEV_DEBUG: "0"
+      CARGO_PROFILE_TEST_DEBUG: "0"
+      PROVIDER_TARGET: ${{ matrix.target }}
+      PROVIDER_MODE: ${{ matrix.mode }}
+      PROVIDER_PHASE: ${{ inputs.provider_phase }}
+      PROVIDER_RUN_ID: ${{ inputs.provider_run_id }}
+      PROVIDER_ARTIFACT_IDS: ${{ inputs.provider_artifact_ids }}
+      PROVIDER_MANIFEST: ${{ inputs.provider_manifest }}
+      EXPECTED_RECORD_RUN_ID: ${{ inputs.expected_record_run_id }}
+      EXPECTED_RECORD_ARTIFACT_ID: ${{ inputs.expected_record_artifact_id }}
+      EXPECTED_RECORD_PATH: ${{ inputs.expected_record_path }}
+      EXPECTED_RECORD_SHA256: ${{ inputs.expected_record_sha256 }}
+      EXPECTED_RECORD_ROOT: ${{ runner.temp }}/provider-build-record-${{ matrix.target }}-${{ matrix.mode }}
+      PROVIDER_INPUT_ROOT: ${{ github.workspace }}/runs/ci-provider-inputs/${{ github.run_id }}/${{ github.run_attempt }}/${{ matrix.target }}/${{ matrix.mode }}
+      PROVIDER_OUTPUT: runs/ci-provider-e2e/${{ github.run_id }}/${{ github.run_attempt }}/${{ matrix.target }}/${{ matrix.mode }}
+      PROVIDER_SERVICE_ROOT: runs/ci-provider-server/${{ github.run_id }}/${{ github.run_attempt }}/${{ matrix.target }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - uses: dtolnay/rust-toolchain@1.88.0
+      - name: Install named standalone-server toolchain
+        if: matrix.mode == 'service'
+        run: rustup toolchain install 1.97.1 --profile minimal
+      - name: Verify pinned Node and pnpm prerequisites
+        run: |
+          node --version
+          test "$(corepack pnpm --version)" = "10.0.0"
+      - name: Verify explicit artifact delivery and actual native target
+        run: |
+          mkdir -p "$TMPDIR"
+          python - <<'PY_CHECK'
+          import os, platform, re
+          target = {('Linux','x86_64'):'linux-x64-gnu', ('Linux','aarch64'):'linux-arm64-gnu',
+                    ('Darwin','arm64'):'darwin-arm64', ('Windows','AMD64'):'win32-x64'}.get((platform.system(),platform.machine()))
+          if target != os.environ['PROVIDER_TARGET']:
+              raise SystemExit('BLOCKED: runner is not the declared native target')
+          if not re.fullmatch(r'[0-9]+', os.environ['PROVIDER_RUN_ID']) or not re.fullmatch(r'[0-9]+(,[0-9]+)*', os.environ['PROVIDER_ARTIFACT_IDS']) or not os.environ['PROVIDER_MANIFEST']:
+              raise SystemExit('BLOCKED: real producer run/artifact IDs and manifest path are required')
+          if not re.fullmatch(r'[0-9]+',os.environ['EXPECTED_RECORD_RUN_ID']) or not re.fullmatch(r'[0-9]+',os.environ['EXPECTED_RECORD_ARTIFACT_ID']) or not re.fullmatch(r'[a-f0-9]{64}',os.environ['EXPECTED_RECORD_SHA256']) or not os.environ['EXPECTED_RECORD_PATH']:
+              raise SystemExit('BLOCKED: independent build-record delivery and SHA256 pin required')
+          if os.environ['EXPECTED_RECORD_ARTIFACT_ID'] in os.environ['PROVIDER_ARTIFACT_IDS'].split(','):
+              raise SystemExit('BLOCKED: expected build record must be delivered separately')
+          PY_CHECK
+      - uses: actions/download-artifact@v4
+        with:
+          artifact-ids: ${{ inputs.provider_artifact_ids }}
+          run-id: ${{ inputs.provider_run_id }}
+          github-token: ${{ github.token }}
+          path: ${{ env.PROVIDER_INPUT_ROOT }}
+          merge-multiple: true
+      - uses: actions/download-artifact@v4
+        with:
+          artifact-ids: ${{ inputs.expected_record_artifact_id }}
+          run-id: ${{ inputs.expected_record_run_id }}
+          github-token: ${{ github.token }}
+          path: ${{ env.EXPECTED_RECORD_ROOT }}
+          merge-multiple: true
+      - name: Resolve real deliveries and independently pinned build record
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python - <<'PY_INPUT'
+          import hashlib, json, os, subprocess, urllib.request
+          from pathlib import Path
+          root = Path(os.environ['PROVIDER_INPUT_ROOT']).resolve()
+          def confined(value, base=root):
+              path = Path(value)
+              if path.is_absolute() or '..' in path.parts:
+                  raise SystemExit('BLOCKED: delivered paths must be confined relative paths')
+              candidate = base / path
+              if candidate.is_symlink() or not candidate.is_file():
+                  raise SystemExit('BLOCKED: missing or symlinked artifact/plan')
+              resolved = candidate.resolve()
+              if not resolved.is_relative_to(base):
+                  raise SystemExit('BLOCKED: artifact/plan escapes the delivered collection')
+              return resolved
+          def sha(path):
+              return hashlib.sha256(path.read_bytes()).hexdigest()
+          def checked(value, expected):
+              path = confined(value)
+              if not isinstance(expected,str) or sha(path) != expected:
+                  raise SystemExit('BLOCKED: delivered bytes do not match original immutable hash')
+              return str(path)
+          def required_profiles(phase):
+              return {'operations': [False], 'faults': [True], 'all': [False, True]}[phase]
+          def selected_profiles(rows, host, mode, target, phase):
+              selected = []
+              for instrumented in required_profiles(phase):
+                  matches = [r for r in rows if r.get('host') == host and r.get('mode') == mode and r.get('target') == target and r.get('instrumented') is instrumented]
+                  if len(matches) != 1:
+                      raise SystemExit('BLOCKED: exactly one artifact per required host/mode/target/profile required')
+                  selected.extend(matches)
+              return selected
+          source = subprocess.check_output(['git','rev-parse','HEAD'],text=True).strip()
+          record_path = confined(os.environ['EXPECTED_RECORD_PATH'],Path(os.environ['EXPECTED_RECORD_ROOT']).resolve())
+          from tools.ci.run_provider_e2e import HOSTS, load_expected_build_record, validate_artifact
+          trusted = load_expected_build_record(record_path,os.environ['EXPECTED_RECORD_SHA256'],root)
+          def github(path):
+              request = urllib.request.Request(os.environ['GITHUB_API_URL']+'/repos/'+os.environ['GITHUB_REPOSITORY']+path,headers={'Authorization':'Bearer '+os.environ['GH_TOKEN'],'Accept':'application/vnd.github+json'})
+              with urllib.request.urlopen(request,timeout=30) as response:
+                  return json.load(response)
+          def verify_delivery(run_id, artifact_ids):
+              run = github('/actions/runs/'+run_id)
+              if run.get('status') != 'completed' or run.get('conclusion') != 'success' or run.get('head_sha') != source or run.get('repository',{}).get('full_name') != os.environ['GITHUB_REPOSITORY']:
+                  raise SystemExit('BLOCKED: delivery repository/commit does not match checkout')
+              for artifact_id in artifact_ids:
+                  artifact = github('/actions/artifacts/'+artifact_id)
+                  if artifact.get('expired') is not False or str(artifact.get('workflow_run',{}).get('id')) != run_id or artifact.get('workflow_run',{}).get('head_sha') != source:
+                      raise SystemExit('BLOCKED: immutable artifact does not belong to expected run/commit')
+          verify_delivery(os.environ['PROVIDER_RUN_ID'],os.environ['PROVIDER_ARTIFACT_IDS'].split(','))
+          verify_delivery(os.environ['EXPECTED_RECORD_RUN_ID'],[os.environ['EXPECTED_RECORD_ARTIFACT_ID']])
+          producer = trusted['producer']
+          if producer.get('repository') != os.environ['GITHUB_REPOSITORY'] or str(producer.get('run_id')) != os.environ['PROVIDER_RUN_ID'] or producer.get('commit') != source:
+              raise SystemExit('BLOCKED: independent producer identity does not match actual delivery')
+          name = os.environ['PROVIDER_MANIFEST'].replace('{mode}',os.environ['PROVIDER_MODE']).replace('{target}',os.environ['PROVIDER_TARGET'])
+          manifest = json.loads(confined(name).read_text())
+          if manifest.get('schema') != 'engram.provider-artifacts.v1' or not manifest.get('artifacts'):
+              raise SystemExit('BLOCKED: actual producer artifact manifest required')
+          selected = []
+          for host in HOSTS:
+              selected.extend(selected_profiles(manifest['artifacts'],host,os.environ['PROVIDER_MODE'],os.environ['PROVIDER_TARGET'],os.environ['PROVIDER_PHASE']))
+          for row in manifest['artifacts']:
+              # Verify original bytes before relocation; never rewrite plan templates.
+              row['path'] = checked(row['path'],row.get('sha256'))
+              for field in ('compiler_record','link_record'):
+                  row[field] = checked(row[field],row.get(field+'_sha256'))
+              if row.get('request_plan') is not None:
+                  row['request_plan'] = checked(row['request_plan'],row.get('request_plan_sha256'))
+              plans = row.get('fault_plans',{})
+              hashes = row.get('fault_plan_sha256',{})
+              if not isinstance(plans,dict) or set(plans) != set(hashes):
+                  raise SystemExit('BLOCKED: every fault template requires its original hash')
+              row['fault_plans'] = {scenario:checked(path,hashes[scenario]) for scenario,path in plans.items()}
+          for row in selected:
+              validate_artifact(row,host=row['host'],mode=os.environ['PROVIDER_MODE'],target=os.environ['PROVIDER_TARGET'],source=source,lock=sha(Path('Cargo.lock')),trusted=trusted,bundle_root=root)
+          manifest['artifacts'] = selected
+          output = root / 'consumed-artifacts.json'
+          with output.open('x') as stream:
+              json.dump(manifest,stream)
+          PY_INPUT
+      - name: Run selected Helix native consumers with owned service cleanup
+        run: |
+          python - <<'PY_RUN'
+          import json, os, platform, subprocess, sys
+          from pathlib import Path
+          command = [sys.executable,'tools/ci/run_provider_e2e.py','--provider','helixdb',
+                     '--mode',os.environ['PROVIDER_MODE'],'--target',os.environ['PROVIDER_TARGET'],
+                     '--phase',os.environ['PROVIDER_PHASE'],'--artifacts',str(Path(os.environ['PROVIDER_INPUT_ROOT'])/'consumed-artifacts.json'),
+                     '--output',os.environ['PROVIDER_OUTPUT'],
+                     '--expected-build-record',str(Path(os.environ['EXPECTED_RECORD_ROOT'])/os.environ['EXPECTED_RECORD_PATH']),
+                     '--expected-build-record-sha256',os.environ['EXPECTED_RECORD_SHA256']]
+          service = os.environ['PROVIDER_MODE'] == 'service'
+          fixture = Path(os.environ['PROVIDER_SERVICE_ROOT'])
+          code = 2
+          try:
+              if service:
+                  if platform.system() != 'Linux':
+                      print('BLOCKED: equivalent native service ownership/control backend is unavailable',file=sys.stderr)
+                      raise RuntimeError('BLOCKED: equivalent native service ownership/control backend is unavailable')
+                  provision = subprocess.run(['/usr/bin/python3','tools/ci/helixdb_server.py','provision','--output',str(fixture)],capture_output=True,text=True)
+                  if provision.returncode:
+                      raise RuntimeError('BLOCKED: owned service provision failed; retained fixture output requires inspection')
+                  state = json.loads((fixture/'state.json').read_text())
+                  os.environ['HELIX_TEST_ENDPOINT'] = state['endpoint']
+                  os.environ['HELIX_TEST_CREDENTIAL_ENV'] = state['credential_env']
+                  os.environ[state['credential_env']] = (fixture/'credential.secret').read_text().strip()
+                  os.environ['HELIX_TEST_CONTROL_DIR'] = str(fixture.resolve())
+              # The runner verifies source/lock/hash/features/profile/target, actual
+              # host operations and native ownership. Missing traces are BLOCKED;
+              # neither runner labels nor cross-compilation establish execution.
+              code = subprocess.run(command).returncode
+          except Exception:
+              print('BLOCKED: native fixture prerequisite or owned execution failed; no retry or replay',file=sys.stderr)
+          finally:
+              if service and (fixture/'state.json').is_file() and not any(Path(os.environ['PROVIDER_OUTPUT']).glob('*/pending-process.json')):
+                  cleanup = subprocess.run(['/usr/bin/python3','tools/ci/helixdb_server.py','cleanup','--output',str(fixture)])
+                  if cleanup.returncode:
+                      print('BLOCKED: cleanup uncertainty; retain exact identity and data',file=sys.stderr)
+                      code = 2
+          raise SystemExit(code)
+          PY_RUN
+      - name: Verify actual invocation compact output completeness
+        if: always()
+        run: |
+          python - <<'PY_OUTPUT'
+          import os, uuid
+          from pathlib import Path
+          root = Path(os.environ['PROVIDER_OUTPUT'])
+          invocations = list(root.iterdir()) if root.is_dir() else []
+          if not invocations:
+              raise SystemExit('BLOCKED: no actual invocation reports produced')
+          for directory in invocations:
+              try:
+                  canonical = str(uuid.UUID(directory.name)) == directory.name
+              except ValueError:
+                  canonical = False
+              if not canonical or directory.is_symlink() or not directory.is_dir():
+                  raise SystemExit('BLOCKED: unexpected invocation output path')
+              for name in ('report.json','operations.jsonl','raw.log'):
+                  path = directory / name
+                  if path.is_symlink() or not path.is_file():
+                      raise SystemExit('BLOCKED: required compact invocation output missing')
+          PY_OUTPUT
+      - name: Retain compact actual reports (never credential files or request payloads)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: helix-${{ matrix.target }}-${{ matrix.mode }}-${{ github.run_id }}-${{ github.run_attempt }}
+          if-no-files-found: error
+          path: |
+            ${{ env.PROVIDER_OUTPUT }}/*/report.json
+            ${{ env.PROVIDER_OUTPUT }}/*/operations.jsonl
+            ${{ env.PROVIDER_OUTPUT }}/*/raw.log
